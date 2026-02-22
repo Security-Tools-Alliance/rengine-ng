@@ -29,6 +29,7 @@ from reNgine.definitions import FOUR_OH_FOUR_URL, PERM_MODIFY_SYSTEM_CONFIGURATI
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import (
     CountryISO,
+    Domain,
     EndPoint,
     IpAddress,
     Port,
@@ -39,7 +40,6 @@ from startScan.models import (
     Technology,
     Vulnerability,
 )
-from targetApp.models import Domain
 
 
 PREFIX_DASHBOARD = "[DASHBOARD]"
@@ -54,8 +54,8 @@ def index(request, slug):
 
     # Get activity feed
     activity_feed = (
-        ScanActivity.objects.filter(scan_of__domain__project=project)
-        .select_related("scan_of", "scan_of__domain")
+        ScanActivity.objects.filter(scan_of__target__project=project)
+        .select_related("scan_of", "scan_of__target")
         .order_by("-time")[:50]
     )
 

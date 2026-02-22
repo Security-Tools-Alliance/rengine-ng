@@ -28,7 +28,7 @@ class TestSecatorRunnerCreate(BaseTestCase):
             "config": {"type": "workflow", "name": "test_workflow"},
             "context": {
                 "scan_history_id": self.data_generator.scan_history.id,
-                "domain_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
             },
             "status": "RUNNING",
         }
@@ -62,7 +62,7 @@ class TestSecatorRunnerCreate(BaseTestCase):
             "config": {"type": "task", "name": "nuclei"},
             "context": {
                 "scan_history_id": self.data_generator.scan_history.id,
-                "domain_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
                 "subscan_id": subscan.id,
             },
             "status": "RUNNING",
@@ -205,7 +205,7 @@ class TestSecatorFindingCreate(BaseTestCase):
             "host": "test.example.com",
             "_context": {
                 "scan_history_id": self.data_generator.scan_history.id,
-                "domain_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
             },
         }
         response = self.client.post(self.url, finding_data, content_type="application/json")
@@ -226,7 +226,7 @@ class TestSecatorFindingCreate(BaseTestCase):
             "severity": "high",
             "_context": {
                 "scan_history_id": self.data_generator.scan_history.id,
-                "domain_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
             },
         }
         response = self.client.post(self.url, finding_data, content_type="application/json")
@@ -245,7 +245,7 @@ class TestSecatorFindingCreate(BaseTestCase):
             "ip": "192.168.1.1",
             "_context": {
                 "scan_history_id": self.data_generator.scan_history.id,
-                "domain_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
             },
         }
         response = self.client.post(self.url, finding_data, content_type="application/json")
@@ -275,7 +275,7 @@ class TestSecatorFindingCreate(BaseTestCase):
             "name": "invalid_subdomain",
             "_context": {
                 "scan_history_id": self.data_generator.scan_history.id,
-                "domain_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
             },
         }
         response = self.client.post(self.url, finding_data, content_type="application/json")
@@ -300,7 +300,7 @@ class TestSecatorFindingUpdate(BaseTestCase):
             "_type": "warning",
             "_context": {
                 "scan_history_id": self.data_generator.scan_history.id,
-                "domain_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
             },
         }
         response = self.client.put(url, update_data, content_type="application/json")
@@ -351,12 +351,13 @@ class TestGetSecatorInputTypesAndTargets(BaseTestCase):
         self.secator_workflow = self.data_generator.create_secator_workflow()
         self.secator_scan = self.data_generator.create_secator_scan()
         self.secator_task = self.data_generator.create_secator_task()
+        self.target = self.data_generator.target
         self.domain = self.data_generator.domain
         self.subdomain = self.data_generator.subdomain
         self.url = reverse("api:get_secator_input_types_targets")
 
-    def test_requires_domain_or_subdomain_ids(self):
-        """API returns 400 when neither domain_id nor subdomain_ids provided."""
+    def test_requires_target_id_or_subdomain_ids(self):
+        """API returns 400 when neither target_id nor subdomain_ids provided."""
         response = self.client.get(
             self.url,
             {"workflow_id": self.secator_workflow.id},
@@ -368,13 +369,13 @@ class TestGetSecatorInputTypesAndTargets(BaseTestCase):
         """API returns 400 when none or multiple of workflow_id/scan_id/task_id provided."""
         response = self.client.get(
             self.url,
-            {"domain_id": self.domain.id},
+            {"target_id": self.target.id},
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         response2 = self.client.get(
             self.url,
             {
-                "domain_id": self.domain.id,
+                "target_id": self.target.id,
                 "workflow_id": self.secator_workflow.id,
                 "scan_id": self.secator_scan.id,
             },
@@ -382,13 +383,13 @@ class TestGetSecatorInputTypesAndTargets(BaseTestCase):
         self.assertEqual(response2.status_code, status.HTTP_400_BAD_REQUEST)
 
     @patch("reNgine.secator.services.input_type_service.InputTypeService.get_input_types")
-    def test_success_with_workflow_id_and_domain_id(self, mock_get_input_types):
-        """API returns input_types and proposed_targets when workflow_id and domain_id provided."""
+    def test_success_with_workflow_id_and_target_id(self, mock_get_input_types):
+        """API returns input_types and proposed_targets when workflow_id and target_id provided."""
         mock_get_input_types.return_value = ["host"]
         response = self.client.get(
             self.url,
             {
-                "domain_id": self.domain.id,
+                "target_id": self.target.id,
                 "workflow_id": self.secator_workflow.id,
             },
         )
@@ -400,13 +401,13 @@ class TestGetSecatorInputTypesAndTargets(BaseTestCase):
         self.assertIn("total_count", response.data)
 
     @patch("reNgine.secator.services.input_type_service.InputTypeService.get_input_types")
-    def test_success_with_scan_name_and_domain_id(self, mock_get_input_types):
-        """API returns data when scan_name and domain_id provided."""
+    def test_success_with_scan_name_and_target_id(self, mock_get_input_types):
+        """API returns data when scan_name and target_id provided."""
         mock_get_input_types.return_value = ["domain"]
         response = self.client.get(
             self.url,
             {
-                "domain_id": self.domain.id,
+                "target_id": self.target.id,
                 "scan_name": "domain",
             },
         )
@@ -414,8 +415,8 @@ class TestGetSecatorInputTypesAndTargets(BaseTestCase):
         self.assertEqual(response.data["input_types"], ["domain"])
 
     @patch("reNgine.secator.services.input_type_service.InputTypeService.get_input_types")
-    def test_resolves_domain_id_from_subdomain_ids(self, mock_get_input_types):
-        """API resolves domain_id from subdomain_ids when domain_id not provided."""
+    def test_resolves_target_id_from_subdomain_ids(self, mock_get_input_types):
+        """API resolves target_id from subdomain_ids when target_id not provided."""
         mock_get_input_types.return_value = ["host"]
         response = self.client.get(
             self.url,

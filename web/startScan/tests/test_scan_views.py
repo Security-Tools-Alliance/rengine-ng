@@ -13,9 +13,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from scanEngine.models import SecatorProfile
-from startScan.models import Command, ScanSchedule, Subdomain
+from startScan.models import Command, Domain, ScanHistory, ScanSchedule, Subdomain
 from startScan.views import (
     SCHEDULE_MODE_REQUIRED_MSG,
+    _domains_for_scan_detail,
     _parse_scheduled_time_utc,
     _validate_schedule_form_post,
 )
@@ -78,6 +79,41 @@ class TestScanLogsView(BaseTestCase):
         response = self.client.get(url, {"scan_id": self.data_generator.scan_history.id, "include_pending": "true"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("hierarchical_structure", response.context)
+
+
+class TestDomainsForScanDetail(BaseTestCase):
+    """Test _domains_for_scan_detail: only current scan and apex/root domains (exclude hostname-style names)."""
+
+    def test_returns_only_domains_for_given_scan(self):
+        """Domains from other scans are not included."""
+        self.data_generator.create_project_base()
+        scan_a = self.data_generator.scan_history
+        Domain.objects.create(name="apex-a.com", insert_date=timezone.now(), scan_history=scan_a)
+        scan_b = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=2,
+            target=self.data_generator.target,
+        )
+        Domain.objects.create(name="apex-b.com", insert_date=timezone.now(), scan_history=scan_b)
+        result = _domains_for_scan_detail(scan_a.id)
+        names = [d.name for d in result]
+        for d in result:
+            self.assertEqual(d.scan_history_id, scan_a.id, "Only domains for scan_a should be returned")
+        self.assertIn("apex-a.com", names)
+        self.assertNotIn("apex-b.com", names)
+
+    def test_excludes_domain_names_with_more_than_two_labels(self):
+        """Hostname-style names (e.g. www.example.com) are excluded so only apex/root domains appear."""
+        self.data_generator.create_project_base()
+        scan = self.data_generator.scan_history
+        Domain.objects.create(name="example.com", insert_date=timezone.now(), scan_history=scan)
+        Domain.objects.create(name="www.example.com", insert_date=timezone.now(), scan_history=scan)
+        Domain.objects.create(name="sub.example.com", insert_date=timezone.now(), scan_history=scan)
+        result = _domains_for_scan_detail(scan.id)
+        names = [d.name for d in result]
+        self.assertIn("example.com", names)
+        self.assertNotIn("www.example.com", names)
+        self.assertNotIn("sub.example.com", names)
 
 
 class TestExportUrls(BaseTestCase):
@@ -155,7 +191,7 @@ class TestStartMultipleScan(BaseTestCase):
         data = {
             "execution_mode": "scan",
             "secator_scan_type": "domain",
-            "list_of_domain_id": str(self.data_generator.domain.id),
+            "list_of_target_id": str(self.data_generator.target.id),
         }
         response = self.client.post(
             reverse(
@@ -176,7 +212,10 @@ class TestSecatorProfilesContext(BaseTestCase):
         response = self.client.get(
             reverse(
                 "start_scan",
-                kwargs={"slug": self.data_generator.project.slug, "domain_id": self.data_generator.domain.id},
+                kwargs={
+                    "slug": self.data_generator.project.slug,
+                    "target_id": self.data_generator.target.id,
+                },
             )
         )
         self.assertEqual(response.status_code, 200)
@@ -617,7 +656,7 @@ class TestScanScheduleModelValidation(BaseTestCase):
     def test_periodic_without_frequency_value_raises(self):
         """Periodic schedule with null frequency_value should raise ValidationError on save."""
         schedule = self.data_generator.build_scan_schedule(
-            self.data_generator.domain,
+            self.data_generator.target,
             self.user,
             schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
         )
@@ -630,7 +669,7 @@ class TestScanScheduleModelValidation(BaseTestCase):
         """Clocked schedule with null scheduled_time should raise ValidationError on save."""
         next_run = timezone.now() + timezone.timedelta(days=1)
         schedule = self.data_generator.build_scan_schedule(
-            self.data_generator.domain,
+            self.data_generator.target,
             self.user,
             schedule_mode=ScanSchedule.SCHEDULE_MODE_CLOCKED,
             next_run=next_run,
@@ -643,7 +682,7 @@ class TestScanScheduleModelValidation(BaseTestCase):
     def test_periodic_valid_saves(self):
         """Periodic schedule with frequency_value and frequency_type should save."""
         schedule = self.data_generator.create_scan_schedule(
-            self.data_generator.domain,
+            self.data_generator.target,
             self.user,
             schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
         )
@@ -652,7 +691,7 @@ class TestScanScheduleModelValidation(BaseTestCase):
     def test_get_frequency_type_display_for_value_singular_when_one(self):
         """Display should be singular (e.g. Minute) when frequency_value is 1."""
         schedule = self.data_generator.build_scan_schedule(
-            self.data_generator.domain,
+            self.data_generator.target,
             self.user,
             frequency_value=1,
         )
@@ -661,7 +700,7 @@ class TestScanScheduleModelValidation(BaseTestCase):
     def test_get_frequency_type_display_for_value_plural_when_not_one(self):
         """Display should be plural (e.g. Minutes) when frequency_value is not 1."""
         schedule = self.data_generator.build_scan_schedule(
-            self.data_generator.domain,
+            self.data_generator.target,
             self.user,
             frequency_value=2,
         )
@@ -670,7 +709,7 @@ class TestScanScheduleModelValidation(BaseTestCase):
     def test_initiated_by_required_raises(self):
         """Schedule with null initiated_by should raise ValidationError on save."""
         schedule = self.data_generator.build_scan_schedule(
-            self.data_generator.domain,
+            self.data_generator.target,
             self.user,
             schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
         )

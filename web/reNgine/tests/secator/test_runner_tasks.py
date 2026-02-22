@@ -4,8 +4,10 @@ Tests for SecatorRunner task execution.
 
 from unittest.mock import MagicMock, patch
 
+from django.utils import timezone
+
 from reNgine.secator.runner import SecatorRunner
-from targetApp.models import Domain
+from startScan.models import Domain, ScanHistory
 from utils.test_base import BaseTestCase
 
 
@@ -16,7 +18,17 @@ class TestSecatorRunnerTasks(BaseTestCase):
         """Set up test data."""
         super().setUp()
         self.runner = SecatorRunner()
-        self.domain = Domain.objects.create(name="testdomain.com")
+        self.data_generator.create_target()
+        scan_history = ScanHistory.objects.create(
+            target=self.data_generator.target,
+            start_scan_date=timezone.now(),
+            scan_status=2,
+        )
+        self.domain = Domain.objects.create(
+            name="testdomain.com",
+            insert_date=timezone.now(),
+            scan_history=scan_history,
+        )
 
     def tearDown(self):
         """Clean up test data."""
@@ -41,7 +53,7 @@ class TestSecatorRunnerTasks(BaseTestCase):
             task_names=task_names,
             targets=["testdomain.com"],
             scan_history_id=1,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             config={},
             profiles={},
         )
@@ -84,7 +96,7 @@ class TestSecatorRunnerTasks(BaseTestCase):
             task_names=task_names,
             targets=["testdomain.com"],
             scan_history_id=1,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             config={},
             profiles={},
         )
@@ -110,7 +122,7 @@ class TestSecatorRunnerTasks(BaseTestCase):
             task_name="subfinder",
             targets=["testdomain.com"],
             scan_history_id=1,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             config={},
             profiles={},
         )
@@ -130,7 +142,7 @@ class TestSecatorRunnerTasks(BaseTestCase):
             task_names=[],
             targets=["testdomain.com"],
             scan_history_id=1,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             config={},
             profiles={},
         )
@@ -156,7 +168,7 @@ class TestSecatorRunnerTasks(BaseTestCase):
             task_names=["httpx"],
             targets=["testdomain.com"],
             scan_history_id=1,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             config={},
             profiles={},
         )

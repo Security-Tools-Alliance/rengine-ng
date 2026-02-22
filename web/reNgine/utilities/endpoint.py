@@ -12,9 +12,9 @@ from urllib.parse import urlparse
 from django.db.models import Q
 
 from reNgine.settings import RENGINE_HOME
+from reNgine.utilities.domain import get_domain_by_id
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import EndPoint, ScanHistory, Subdomain
-from targetApp.models import Domain
 
 from .lookup import get_lookup_keywords
 
@@ -57,7 +57,7 @@ def get_http_urls(
     scan_id = ctx.get("scan_history_id")
     subdomain_id = ctx.get("subdomain_id")
     url_filter = ctx.get("url_filter", "")
-    domain = Domain.objects.filter(pk=domain_id).first()
+    domain = get_domain_by_id(domain_id)
     subdomain = Subdomain.objects.filter(pk=subdomain_id).first()
     scan = ScanHistory.objects.filter(pk=scan_id).first()
     if subdomain:
@@ -85,7 +85,7 @@ def get_http_urls(
             "Searching URLs by domain %s" % (domain,),
             level="debug",
         )
-        query = query.filter(target_domain=domain)
+        query = query.filter(domain=domain)
         log_found = "%s%s endpoints for domain %s" % (log_header, query.count(), domain)
         logger.log_line(PREFIX_ENDPOINT, "GET_HTTP_URLS", log_found, level="debug")
     if scan:
@@ -203,7 +203,7 @@ def get_interesting_endpoints(scan_history=None, target=None):
     # Filter on domain_id, scan_history_id
     query = EndPoint.objects
     if target:
-        query = query.filter(target_domain__id=target)
+        query = query.filter(domain__id=target)
     elif scan_history:
         query = query.filter(scan_history__id=scan_history)
 

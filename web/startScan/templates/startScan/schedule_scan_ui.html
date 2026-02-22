@@ -15,11 +15,11 @@ Schedule Scan
 {% block breadcrumb_title %}
 <li class="breadcrumb-item"><a href="{% url 'list_target' current_project.slug %}">Target</a></li>
 <li class="breadcrumb-item active">Schedule Scan</li>
-<li class="breadcrumb-item active" aria-current="page">{{ domain.name }}</li>
+<li class="breadcrumb-item active" aria-current="page">{{ target.value }}</li>
 {% endblock breadcrumb_title %}
 
 {% block page_title %}
-Scheduling scan for {{ domain.name }}
+Scheduling scan for {{ target.value }}
 {% endblock page_title %}
 
 {% block main_content %}
@@ -29,7 +29,7 @@ Scheduling scan for {{ domain.name }}
       <div class="card-body start-scan-card-body">
         <form method="POST" id="schedule-scan-form" data-secator-id-prefix="schedule_scan">
           {% csrf_token %}
-          <input type="hidden" name="domain_id" value="{{ domain.id }}">
+          <input type="hidden" name="target_id" value="{{ target.id }}">
           {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='schedule_scan_' %}
 
           <div id="schedule-scan-content">
@@ -85,7 +85,7 @@ Scheduling scan for {{ domain.name }}
             {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_title='Scan' embed_selection_container=False %}
             {% include 'startScan/_items/secator_view_toggle.html' with id_prefix='schedule_scan' %}
             {% include 'startScan/_items/secator_selection_layout.html' with id_prefix='schedule_scan' %}
-            {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=domain.name id_prefix='schedule_scan_' %}
+            {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=target.value id_prefix='schedule_scan_' %}
             {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='schedule_scan_' show_random_proxy=False %}
           </div>
 

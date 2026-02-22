@@ -13,9 +13,12 @@ class TestDnsRepository(BaseTestCase):
         """Set up test fixtures."""
         super().setUp()
         self.dns_repo = DnsRepository()
-        # Create test domain and scan history
-        self.domain = self.data_generator.create_domain()
+        # Scan history (with target), then domain linked to that scan. Domain name must
+        # match target.value so save_from_secator resolves the same domain via target.
         self.scan_history = self.data_generator.create_scan_history()
+        self.domain = self.data_generator.create_domain(scan_history=self.scan_history)
+        self.domain.name = self.data_generator.target.value
+        self.domain.save(update_fields=["name"])
 
         # Create domain info using TestDataGenerator and associate with domain
         self.domain_info = self.data_generator.create_domain_info()
@@ -31,7 +34,7 @@ class TestDnsRepository(BaseTestCase):
             "host": "192.168.1.1",
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         # name field stores the domain name (record_name), not the value
@@ -47,7 +50,7 @@ class TestDnsRepository(BaseTestCase):
             "host": "2001:db8::1",
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         # name field stores the domain name (record_name), not the value
@@ -63,7 +66,7 @@ class TestDnsRepository(BaseTestCase):
             "host": "example.com",
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         # name field stores the domain name (record_name), not the value
@@ -79,7 +82,7 @@ class TestDnsRepository(BaseTestCase):
             "host": "10 mail.example.com",
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         # name field stores the domain name (record_name), not the value
@@ -95,12 +98,41 @@ class TestDnsRepository(BaseTestCase):
             "host": "v=spf1 include:_spf.google.com ~all",
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         # name field stores the domain name (record_name), not the value
         self.assertEqual(result.name, "example.com")
         self.assertEqual(result.type, "TXT")
+
+    def test_save_from_secator_txt_value_as_name_does_not_create_domain(self):
+        """TXT record with non-domain 'name' (e.g. record value) must not create a Domain row."""
+        from startScan.models import Domain
+
+        item = {
+            "_type": "record",
+            "name": "google-site-verification=ybifaoahre1hgovv15t5qrnrophiztrpib90opyw1u0",
+            "type": "TXT",
+            "host": "google-site-verification=ybifaoahre1hgovv15t5qrnrophiztrpib90opyw1u0",
+        }
+
+        initial_domain_count = Domain.objects.filter(scan_history_id=self.scan_history.id).count()
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.type, "TXT")
+        self.assertEqual(
+            Domain.objects.filter(scan_history_id=self.scan_history.id).count(),
+            initial_domain_count,
+        )
+        self.assertFalse(
+            Domain.objects.filter(
+                scan_history_id=self.scan_history.id,
+                name="google-site-verification=ybifaoahre1hgovv15t5qrnrophiztrpib90opyw1u0",
+            ).exists()
+        )
+        records = self.dns_repo.get_records_for_domain(self.domain.id)
+        self.assertIn(result, records)
 
     def test_save_from_secator_missing_name(self):
         """Test handling missing name field."""
@@ -110,7 +142,7 @@ class TestDnsRepository(BaseTestCase):
             "value": "192.168.1.1",
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
 
@@ -122,7 +154,7 @@ class TestDnsRepository(BaseTestCase):
             "value": "192.168.1.1",
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
 
@@ -134,7 +166,7 @@ class TestDnsRepository(BaseTestCase):
             "type": "A",
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
 
@@ -147,7 +179,7 @@ class TestDnsRepository(BaseTestCase):
             "host": "192.168.1.1",
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         # Invalid types should return None
         self.assertIsNone(result)
@@ -209,62 +241,67 @@ class TestDnsRepository(BaseTestCase):
         # Clean up any existing DNS records for this domain
         self.domain_info.dns_records.clear()
 
-        # Create records using save_from_secator to ensure proper association
+        # Use this domain's name so both records attach to the same domain
+        record_name = self.domain.name
         item1 = {
             "_type": "record",
-            "name": "www.example.com",
+            "name": record_name,
             "type": "A",
             "host": "192.168.1.1",
         }
         item2 = {
             "_type": "record",
-            "name": "mail.example.com",
-            "type": "A",
+            "name": record_name,
+            "type": "MX",
             "host": "192.168.1.2",
         }
 
-        self.assertIsNotNone(self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id))
-        self.assertIsNotNone(self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id))
+        self.assertIsNotNone(
+            self.dns_repo.save_from_secator(item1, self.scan_history.id, self.data_generator.target.id)
+        )
+        self.assertIsNotNone(
+            self.dns_repo.save_from_secator(item2, self.scan_history.id, self.data_generator.target.id)
+        )
 
         records = self.dns_repo.get_records_for_domain(self.domain.id)
 
         self.assertEqual(len(records), 2)
-        # name field stores the domain name (record_name), not the value
         record_names = [record.name for record in records]
-        self.assertIn("www.example.com", record_names)
-        self.assertIn("mail.example.com", record_names)
+        self.assertIn(record_name, record_names)
 
     def test_get_records_by_type(self):
         """Test getting DNS records by type."""
         # Clean up any existing DNS records for this domain
         self.domain_info.dns_records.clear()
 
-        # Create records using save_from_secator to ensure proper association
+        record_name = self.domain.name
         item1 = {
             "_type": "record",
-            "name": "www.example.com",
+            "name": record_name,
             "type": "A",
             "host": "192.168.1.1",
         }
         item2 = {
             "_type": "record",
-            "name": "example.com",
+            "name": record_name,
             "type": "MX",
             "host": "mail.example.com",
         }
 
-        self.assertIsNotNone(self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id))
-        self.assertIsNotNone(self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id))
+        self.assertIsNotNone(
+            self.dns_repo.save_from_secator(item1, self.scan_history.id, self.data_generator.target.id)
+        )
+        self.assertIsNotNone(
+            self.dns_repo.save_from_secator(item2, self.scan_history.id, self.data_generator.target.id)
+        )
 
-        # FIX: Correct parameter order (record_type, domain_id)
         a_records = self.dns_repo.get_records_by_type("A", self.domain.id)
         mx_records = self.dns_repo.get_records_by_type("MX", self.domain.id)
 
         self.assertEqual(len(a_records), 1)
         self.assertEqual(len(mx_records), 1)
-        # name field stores the domain name (record_name), not the value
-        self.assertEqual(a_records[0].name, "www.example.com")
-        self.assertEqual(mx_records[0].name, "example.com")
+        self.assertEqual(a_records[0].name, record_name)
+        self.assertEqual(mx_records[0].name, record_name)
 
     def test_save_from_secator_with_extra_data(self):
         """Test saving DNS record with extra data."""
@@ -279,7 +316,7 @@ class TestDnsRepository(BaseTestCase):
             },
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         # name field stores the domain name (record_name), not the value
@@ -296,7 +333,7 @@ class TestDnsRepository(BaseTestCase):
             "host": "192.168.1.1",
         }
 
-        result1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id)
+        result1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.data_generator.target.id)
 
         # Try to create same record again
         item2 = {
@@ -306,7 +343,7 @@ class TestDnsRepository(BaseTestCase):
             "host": "192.168.1.1",
         }
 
-        result2 = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id)
+        result2 = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result1)
         self.assertIsNotNone(result2)
@@ -320,7 +357,9 @@ class TestDnsRepository(BaseTestCase):
             "host": "192.168.1.1",
         }
 
-        result = self.dns_repo._process_secator_dns_record_item(item, self.domain.id)
+        result = self.dns_repo._process_secator_dns_record_item(
+            item, self.scan_history.id, self.data_generator.target.id
+        )
 
         self.assertIsNotNone(result)
         # name field stores the domain name (record_name), not the value
@@ -334,7 +373,9 @@ class TestDnsRepository(BaseTestCase):
             "host": "192.168.1.1",
         }
 
-        result = self.dns_repo._process_secator_dns_record_item(item, self.domain.id)
+        result = self.dns_repo._process_secator_dns_record_item(
+            item, self.scan_history.id, self.data_generator.target.id
+        )
 
         self.assertIsNone(result)
 
@@ -345,7 +386,9 @@ class TestDnsRepository(BaseTestCase):
             "host": "192.168.1.1",
         }
 
-        result = self.dns_repo._process_secator_dns_record_item(item, self.domain.id)
+        result = self.dns_repo._process_secator_dns_record_item(
+            item, self.scan_history.id, self.data_generator.target.id
+        )
 
         self.assertIsNone(result)
 
@@ -356,36 +399,36 @@ class TestDnsRepository(BaseTestCase):
             "type": "A",
         }
 
-        result = self.dns_repo._process_secator_dns_record_item(item, self.domain.id)
+        result = self.dns_repo._process_secator_dns_record_item(
+            item, self.scan_history.id, self.data_generator.target.id
+        )
 
         self.assertIsNone(result)
 
     def test_update_existing_record_with_name_change(self):
         """Test updating existing DNS record when name changes."""
-        # Create initial record with old name
+        record_name = self.domain.name
         item1 = {
             "_type": "record",
-            "name": "old.example.com",
+            "name": record_name,
             "type": "A",
             "host": "192.168.1.1",
         }
-        result1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id)
+        result1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.data_generator.target.id)
         self.assertIsNotNone(result1)
-        self.assertEqual(result1.name, "old.example.com")
+        self.assertEqual(result1.name, record_name)
 
-        # Update with new name but same host (old name)
         item2 = {
             "_type": "record",
-            "name": "new.example.com",
+            "name": record_name,
             "type": "A",
-            "host": "old.example.com",
+            "host": "192.168.1.2",
         }
-        result2 = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id)
+        result2 = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.data_generator.target.id)
 
-        # Should update existing record and change name
         self.assertIsNotNone(result2)
-        self.assertEqual(result1.id, result2.id)  # Same record
-        self.assertEqual(result2.name, "new.example.com")
+        self.assertEqual(result1.id, result2.id)
+        self.assertEqual(result2.name, record_name)
 
     def test_update_existing_record_extra_data(self):
         """Test updating existing DNS record extra data."""
@@ -397,7 +440,7 @@ class TestDnsRepository(BaseTestCase):
             "host": "192.168.1.1",
             "extra_data": {"ttl": 3600},
         }
-        result1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id)
+        result1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.data_generator.target.id)
         self.assertIsNotNone(result1)
         self.assertEqual(result1.extra_data, {"ttl": 3600})
 
@@ -409,7 +452,7 @@ class TestDnsRepository(BaseTestCase):
             "host": "192.168.1.1",
             "extra_data": {"ttl": 7200, "priority": 10},
         }
-        result2 = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id)
+        result2 = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.data_generator.target.id)
 
         # Should update existing record
         self.assertIsNotNone(result2)
@@ -571,7 +614,7 @@ class TestDnsRepository(BaseTestCase):
     def test_get_records_by_type_no_domain_id(self):
         """Test get_records_by_type without domain_id."""
         # Create records directly
-        from targetApp.models import DNSRecord
+        from startScan.models import DNSRecord
 
         DNSRecord.objects.create(name="www.example.com", type="A")
         DNSRecord.objects.create(name="mail.example.com", type="MX")
@@ -584,7 +627,7 @@ class TestDnsRepository(BaseTestCase):
 
     def test_get_records_by_type_invalid_type(self):
         """Test get_records_by_type with invalid type."""
-        records = self.dns_repo.get_records_by_type("INVALID", self.domain.id)
+        records = self.dns_repo.get_records_by_type("INVALID", self.data_generator.target.id)
 
         self.assertEqual(records, [])
 
@@ -614,19 +657,18 @@ class TestDnsRepository(BaseTestCase):
 
     def test_save_from_secator_creates_domain_info_if_missing(self):
         """Test that save_from_secator creates domain_info if it doesn't exist."""
-        domain = self.data_generator.create_domain()
-        domain.domain_info = None
-        domain.save()
+        self.domain.domain_info = None
+        self.domain.save(update_fields=["domain_info_id"])
 
         item = {
             "_type": "record",
-            "name": "www.example.com",
+            "name": self.domain.name,
             "type": "A",
             "host": "192.168.1.1",
         }
 
-        result = self.dns_repo.save_from_secator(item, self.scan_history.id, domain.id)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
-        domain.refresh_from_db()
-        self.assertIsNotNone(domain.domain_info)
+        self.domain.refresh_from_db()
+        self.assertIsNotNone(self.domain.domain_info_id)

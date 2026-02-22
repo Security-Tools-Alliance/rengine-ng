@@ -14,21 +14,29 @@ Start Scan
 {% block breadcrumb_title %}
 <li class="breadcrumb-item"><a href="{% url 'list_target' current_project.slug %}">Target</a></li>
 <li class="breadcrumb-item active">Initiate Scan</li>
-<li class="breadcrumb-item active" aria-current="page">{{domain.name}}</li>
+<li class="breadcrumb-item active" aria-current="page">{{ target.value }}</li>
 {% endblock breadcrumb_title %}
 
 {% block page_title %}
-Initiating scan for {{domain.name}}
+Initiating scan for {{ target.value }}
 {% endblock page_title %}
 
 {% block main_content %}
+{{ rengine_target_types|json_script:"rengine-target-types" }}
+<script>
+(function() {
+  const el = document.getElementById('rengine-target-types');
+  window.RENGINE_TARGET_TYPES = el ? JSON.parse(el.textContent) : {};
+})();
+</script>
 <div class="row">
   <div class="col-12">
     <div class="card">
       <div class="card-body start-scan-card-body">
         <form method="POST" id="start-scan-form" data-secator-id-prefix="start_scan">
           {% csrf_token %}
-          <input type="hidden" id="domain_id" name="domain_id" value="{{ domain.id }}">
+          <input type="hidden" id="target_id" name="target_id" value="{{ target.id }}">
+          <input type="hidden" id="target_id_context" value="{{ target.id }}">
           {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='start_scan_' %}
           <div id="select_engine">
             <h4>Choose Execution Mode</h4>
@@ -36,7 +44,7 @@ Initiating scan for {{domain.name}}
             {% include 'startScan/_items/secator_view_toggle.html' with id_prefix='start_scan' %}
             {% include 'startScan/_items/secator_selection_layout.html' with id_prefix='start_scan' %}
             <!-- Scan Options Accordion -->
-            {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=domain.name id_prefix='start_scan_' id_suffix='_start_scan' show_counts=True %}
+            {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=target.value id_prefix='start_scan_' id_suffix='_start_scan' show_counts=True %}
             <!-- Advanced Configuration Accordion -->
             {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_scan_' show_random_proxy=True %}
           </div>
@@ -52,7 +60,7 @@ Initiating scan for {{domain.name}}
 {% block page_level_script %}
 <script>
   window.SECATOR_START_SCAN_URL = "{% url "api:start_scan" %}";
-  window.PROJECT_SLUG = "{{ current_project.slug|default:domain.project.slug }}";
+  window.PROJECT_SLUG = "{{ current_project.slug|default:target.project.slug }}";
   window.SCAN_HISTORY_URL = "{% url "scan_history" current_project.slug %}";
   window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
   window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";

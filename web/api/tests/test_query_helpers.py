@@ -48,9 +48,9 @@ class GetScanStatusQuerysetsTestCase(BaseTestCase):
     def test_pending_scan_in_pending_scans_bucket(self):
         """Scan with scan_status=SCAN_STATUS_PENDING appears in pending_scans."""
         slug = self.data_generator.project.slug
-        domain = self.data_generator.domain
+        target = self.data_generator.target
         scan = ScanHistory.objects.create(
-            domain=domain,
+            target=target,
             start_scan_date=timezone.now(),
             scan_status=SCAN_STATUS_PENDING,
             is_legacy_scan=False,
@@ -63,9 +63,9 @@ class GetScanStatusQuerysetsTestCase(BaseTestCase):
     def test_running_scan_in_current_scans_bucket(self):
         """Scan with scan_status=SCAN_STATUS_RUNNING appears in current_scans."""
         slug = self.data_generator.project.slug
-        domain = self.data_generator.domain
+        target = self.data_generator.target
         scan = ScanHistory.objects.create(
-            domain=domain,
+            target=target,
             start_scan_date=timezone.now(),
             scan_status=SCAN_STATUS_RUNNING,
             is_legacy_scan=False,
@@ -78,9 +78,9 @@ class GetScanStatusQuerysetsTestCase(BaseTestCase):
     def test_completed_scan_in_recently_completed_bucket(self):
         """Scan with scan_status=SCAN_STATUS_COMPLETED appears in recently_completed_scans."""
         slug = self.data_generator.project.slug
-        domain = self.data_generator.domain
+        target = self.data_generator.target
         scan = ScanHistory.objects.create(
-            domain=domain,
+            target=target,
             start_scan_date=timezone.now(),
             scan_status=SCAN_STATUS_COMPLETED,
             is_legacy_scan=False,
@@ -93,9 +93,9 @@ class GetScanStatusQuerysetsTestCase(BaseTestCase):
     def test_failed_scan_in_recently_completed_bucket(self):
         """Scan with scan_status=SCAN_STATUS_FAILED appears in recently_completed_scans."""
         slug = self.data_generator.project.slug
-        domain = self.data_generator.domain
+        target = self.data_generator.target
         scan = ScanHistory.objects.create(
-            domain=domain,
+            target=target,
             start_scan_date=timezone.now(),
             scan_status=SCAN_STATUS_FAILED,
             is_legacy_scan=False,

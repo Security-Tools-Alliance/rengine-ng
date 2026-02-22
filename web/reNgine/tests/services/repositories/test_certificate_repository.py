@@ -7,7 +7,7 @@ from datetime import datetime
 from django.utils import timezone
 
 from reNgine.services.repositories.certificate_repository import CertificateRepository
-from startScan.models import IpAddress
+from startScan.models import Domain, IpAddress, Subdomain
 from utils.test_base import BaseTestCase
 
 
@@ -18,9 +18,9 @@ class TestCertificateRepository(BaseTestCase):
         """Set up test fixtures."""
         super().setUp()
         self.cert_repo = CertificateRepository()
-        # Create test domain and scan history
-        self.domain = self.data_generator.create_domain()
+        # Scan history first, then domain linked for this scan (get_or_create_domain_for_target used in repo)
         self.scan_history = self.data_generator.create_scan_history()
+        self.domain = self.data_generator.create_domain(scan_history=self.scan_history)
 
     def test_save_from_secator_valid_certificate(self):
         """Test saving valid certificate from Secator."""
@@ -32,7 +32,7 @@ class TestCertificateRepository(BaseTestCase):
             "issuer_cn": "Let's Encrypt",
         }
 
-        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.host, "example.com")
@@ -47,16 +47,23 @@ class TestCertificateRepository(BaseTestCase):
             "fingerprint_sha256": "abc123def456",
         }
 
-        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
 
     def test_save_from_secator_with_subdomain_association(self):
         """Test saving certificate with subdomain association."""
-        subdomain = self.data_generator.create_subdomain(
+        # Certificate repo resolves domain by host via get_or_create_domain_for_target(scan_history_id, host),
+        # so we need a domain named "example.com" and a subdomain under it
+        domain_example = Domain.objects.create(
             name="example.com",
             scan_history=self.scan_history,
-            target_domain=self.domain,
+            insert_date=timezone.now(),
+        )
+        subdomain = Subdomain.objects.create(
+            name="example.com",
+            scan_history=self.scan_history,
+            domain=domain_example,
         )
 
         item = {
@@ -65,7 +72,7 @@ class TestCertificateRepository(BaseTestCase):
             "fingerprint_sha256": "abc123def456",
         }
 
-        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.subdomain, subdomain)
@@ -86,7 +93,7 @@ class TestCertificateRepository(BaseTestCase):
             "ip": "192.168.1.1",
         }
 
-        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         # IP association might not work if IP doesn't exist in domain context
@@ -107,7 +114,7 @@ class TestCertificateRepository(BaseTestCase):
             "not_after": not_after,
         }
 
-        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertIsNotNone(result.not_before)
@@ -122,7 +129,7 @@ class TestCertificateRepository(BaseTestCase):
             "subject_cn": "example.com",
         }
 
-        result1 = self.cert_repo.save_from_secator(item1, self.scan_history.id, self.domain.id)
+        result1 = self.cert_repo.save_from_secator(item1, self.scan_history.id, self.data_generator.target.id)
 
         item2 = {
             "_type": "certificate",
@@ -131,7 +138,7 @@ class TestCertificateRepository(BaseTestCase):
             "subject_cn": "example.com",
         }
 
-        result2 = self.cert_repo.save_from_secator(item2, self.scan_history.id, self.domain.id)
+        result2 = self.cert_repo.save_from_secator(item2, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result1)
         self.assertIsNotNone(result2)
@@ -146,7 +153,9 @@ class TestCertificateRepository(BaseTestCase):
             "issuer_cn": "Let's Encrypt",
         }
 
-        result = self.cert_repo._process_secator_certificate_item(item, self.scan_history.id, self.domain.id)
+        result = self.cert_repo._process_secator_certificate_item(
+            item, self.scan_history.id, self.data_generator.target.id
+        )
 
         self.assertIsNotNone(result)
         self.assertEqual(result.host, "example.com")
@@ -158,7 +167,9 @@ class TestCertificateRepository(BaseTestCase):
             "fingerprint_sha256": "abc123def456",
         }
 
-        result = self.cert_repo._process_secator_certificate_item(item, self.scan_history.id, self.domain.id)
+        result = self.cert_repo._process_secator_certificate_item(
+            item, self.scan_history.id, self.data_generator.target.id
+        )
 
         self.assertIsNone(result)
 
@@ -218,7 +229,7 @@ class TestCertificateRepository(BaseTestCase):
             "self_signed": True,
         }
 
-        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertTrue(result.self_signed)
@@ -232,7 +243,7 @@ class TestCertificateRepository(BaseTestCase):
             "trusted": True,
         }
 
-        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertTrue(result.trusted)

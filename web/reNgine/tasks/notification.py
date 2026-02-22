@@ -183,7 +183,7 @@ def send_hackerone_report(vulnerability_id):
     vulnerability = Vulnerability.objects.get(id=vulnerability_id)
     severities = {v: k for k, v in NUCLEI_SEVERITY_MAP.items()}
     # can only send vulnerability report if team_handle exists
-    if len(vulnerability.target_domain.h1_team_handle) != 0:
+    if len(vulnerability.domain.h1_team_handle) != 0:
         hackerone_query = Hackerone.objects.all()
         if hackerone_query.exists():
             hackerone = Hackerone.objects.first()
@@ -202,7 +202,7 @@ def send_hackerone_report(vulnerability_id):
                 "data": {
                     "type": "report",
                     "attributes": {
-                        "team_handle": vulnerability.target_domain.h1_team_handle,
+                        "team_handle": vulnerability.domain.h1_team_handle,
                         "title": f"{vulnerability.name} found in {vulnerability.http_url}",
                         "vulnerability_information": tpl,
                         "severity_rating": severity_value,

@@ -20,6 +20,7 @@ class TestSecatorService(BaseTestCase):
         """Set up test data."""
         super().setUp()
         self.scan_history = self.data_generator.create_scan_history()
+        self.domain = self.data_generator.create_domain(scan_history=self.scan_history)
 
     def test_handle_scan_error_sets_failed_status(self):
         """Test that handle_scan_error sets scan status to FAILED_TASK."""
@@ -139,7 +140,6 @@ class TestSecatorService(BaseTestCase):
     @patch("reNgine.secator.service.threading.Thread")
     def test_start_secator_scan_passes_targets_override_to_initiate(self, mock_thread):
         """Test that start_secator_scan passes targets_override to initiate_secator_scan."""
-        domain = self.data_generator.domain
         mock_scan_repo = Mock()
         mock_scan_repo.create_scan.return_value = self.scan_history.id
 
@@ -149,30 +149,31 @@ class TestSecatorService(BaseTestCase):
 
         mock_thread.side_effect = run_target_and_return_mock
 
-        with patch("reNgine.secator.service.Domain.objects.get", return_value=domain):
-            with patch("reNgine.secator.service.ScanRepository", return_value=mock_scan_repo):
-                with patch("reNgine.secator.service.ScanHistory.objects.get", return_value=self.scan_history):
-                    with patch("reNgine.secator.service.initiate_secator_scan") as mock_initiate:
-                        result = start_secator_scan(
-                            domain_id=domain.id,
-                            user_id=self.user.id,
-                            execution_mode="tasks",
-                            task_ids=[1],
-                            targets_override=["host1.example.com", "host2.example.com"],
-                        )
-                        self.assertTrue(result.get("status"))
-                        mock_initiate.assert_called_once()
-                        call_kwargs = mock_initiate.call_args[1]
-                        self.assertEqual(
-                            call_kwargs.get("targets_override"),
-                            ["host1.example.com", "host2.example.com"],
-                        )
+        with patch("reNgine.secator.service.ScanRepository", return_value=mock_scan_repo):
+            with patch("reNgine.secator.service.ScanHistory.objects.get", return_value=self.scan_history):
+                with patch("reNgine.secator.service.initiate_secator_scan") as mock_initiate:
+                    result = start_secator_scan(
+                        target_id=self.scan_history.target_id,
+                        user_id=self.user.id,
+                        execution_mode="tasks",
+                        task_ids=[1],
+                        targets_override=["host1.example.com", "host2.example.com"],
+                    )
+                    self.assertTrue(result.get("status"))
+                    self.assertEqual(result.get("target_name"), self.data_generator.target.value)
+                    self.assertNotIn("domain_id", result)
+                    self.assertNotIn("domain_name", result)
+                    mock_initiate.assert_called_once()
+                    call_kwargs = mock_initiate.call_args[1]
+                    self.assertEqual(
+                        call_kwargs.get("targets_override"),
+                        ["host1.example.com", "host2.example.com"],
+                    )
 
     @patch("reNgine.secator.service.threading.Thread")
     def test_start_secator_scan_with_scan_history_id_reuses_existing_scan(self, mock_thread):
         """When scan_history_id is provided, no new scan is created and thread uses that id."""
-        domain = self.data_generator.domain
-        self.scan_history.domain_id = domain.id
+        self.scan_history.target_id = self.data_generator.target.id
         self.scan_history.save()
 
         def run_target_and_return_mock(*args, **kwargs):
@@ -181,22 +182,24 @@ class TestSecatorService(BaseTestCase):
 
         mock_thread.side_effect = run_target_and_return_mock
 
-        with patch("reNgine.secator.service.Domain.objects.get", return_value=domain):
-            with patch("reNgine.secator.service.ScanHistory.objects.get", return_value=self.scan_history):
-                with patch("reNgine.secator.service.initiate_secator_scan") as mock_initiate:
-                    result = start_secator_scan(
-                        domain_id=domain.id,
-                        user_id=self.user.id,
-                        execution_mode="tasks",
-                        task_ids=[1],
-                        targets_override=["host1.example.com"],
-                        scan_history_id=self.scan_history.id,
-                    )
-                    self.assertTrue(result.get("status"))
-                    self.assertEqual(result.get("scan_id"), self.scan_history.id)
-                    mock_initiate.assert_called_once()
-                    self.assertEqual(mock_initiate.call_args[1]["scan_history_id"], self.scan_history.id)
-                    self.assertEqual(mock_initiate.call_args[1]["task_ids"], [1])
+        with patch("reNgine.secator.service.ScanHistory.objects.get", return_value=self.scan_history):
+            with patch("reNgine.secator.service.initiate_secator_scan") as mock_initiate:
+                result = start_secator_scan(
+                    target_id=self.scan_history.target_id,
+                    user_id=self.user.id,
+                    execution_mode="tasks",
+                    task_ids=[1],
+                    targets_override=["host1.example.com"],
+                    scan_history_id=self.scan_history.id,
+                )
+                self.assertTrue(result.get("status"))
+                self.assertEqual(result.get("scan_id"), self.scan_history.id)
+                self.assertEqual(result.get("target_name"), self.data_generator.target.value)
+                self.assertNotIn("domain_id", result)
+                self.assertNotIn("domain_name", result)
+                mock_initiate.assert_called_once()
+                self.assertEqual(mock_initiate.call_args[1]["scan_history_id"], self.scan_history.id)
+                self.assertEqual(mock_initiate.call_args[1]["task_ids"], [1])
 
 
 class TestRunPerTaskSecatorScans(BaseTestCase):
@@ -204,7 +207,8 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
 
     def setUp(self):
         super().setUp()
-        self.domain = self.data_generator.domain
+        self.scan_history = self.data_generator.create_scan_history()
+        self.domain = self.data_generator.create_domain(scan_history=self.scan_history)
         self.task = self.data_generator.create_secator_task()
         self.task_type_to_id = {self.task.task_type: self.task.id}
 
@@ -219,7 +223,7 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
         mock_start.return_value = {"status": True, "scan_id": shared_scan_id}
         selected = {self.task.task_type: ["host1.example.com"]}
         result = run_per_task_secator_scans(
-            domain_id=self.domain.id,
+            target_id=self.scan_history.target_id,
             user_id=self.user.id,
             selected_targets_per_task=selected,
             task_type_to_id=self.task_type_to_id,
@@ -240,7 +244,7 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
         selected = {"unknown_task": ["host1.example.com"]}
         with patch("reNgine.secator.service.start_secator_scan") as mock_start:
             result = run_per_task_secator_scans(
-                domain_id=self.domain.id,
+                target_id=self.scan_history.target_id,
                 user_id=self.user.id,
                 selected_targets_per_task=selected,
                 task_type_to_id=self.task_type_to_id,
@@ -259,7 +263,7 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
         selected = {self.task.task_type: []}
         with patch("reNgine.secator.service.start_secator_scan") as mock_start:
             result = run_per_task_secator_scans(
-                domain_id=self.domain.id,
+                target_id=self.scan_history.target_id,
                 user_id=self.user.id,
                 selected_targets_per_task=selected,
                 task_type_to_id=self.task_type_to_id,
@@ -290,7 +294,7 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
             task2_type: ["host2.example.com"],
         }
         result = run_per_task_secator_scans(
-            domain_id=self.domain.id,
+            target_id=self.scan_history.target_id,
             user_id=self.user.id,
             selected_targets_per_task=selected,
             task_type_to_id=self.task_type_to_id,
@@ -318,7 +322,7 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
         mock_start.return_value = {"status": False, "error": "Domain not found"}
         selected = {self.task.task_type: ["host1.example.com"]}
         result = run_per_task_secator_scans(
-            domain_id=self.domain.id,
+            target_id=self.scan_history.target_id,
             user_id=self.user.id,
             selected_targets_per_task=selected,
             task_type_to_id=self.task_type_to_id,
@@ -343,7 +347,7 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
         mock_start.side_effect = ValueError("Invalid config")
         selected = {self.task.task_type: ["host1.example.com"]}
         result = run_per_task_secator_scans(
-            domain_id=self.domain.id,
+            target_id=self.scan_history.target_id,
             user_id=self.user.id,
             selected_targets_per_task=selected,
             task_type_to_id=self.task_type_to_id,
@@ -368,7 +372,7 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
         mock_start.return_value = {"status": True, "scan_id": shared_scan_id}
         selected = {self.task.task_type: ["host.example.com"]}
         result = run_per_task_secator_scans(
-            domain_id=self.domain.id,
+            target_id=self.scan_history.target_id,
             user_id=self.user.id,
             selected_targets_per_task=selected,
             task_type_to_id=None,
@@ -389,7 +393,7 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
         mock_start.return_value = {"status": True, "scan_id": existing_scan.id}
         selected = {self.task.task_type: ["host.example.com"]}
         result = run_per_task_secator_scans(
-            domain_id=self.domain.id,
+            target_id=self.scan_history.target_id,
             user_id=self.user.id,
             selected_targets_per_task=selected,
             task_type_to_id=self.task_type_to_id,
@@ -411,7 +415,7 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
         mock_start.return_value = {"status": True, "scan_id": new_scan_id}
         selected = {self.task.task_type: ["host.example.com"]}
         result = run_per_task_secator_scans(
-            domain_id=self.domain.id,
+            target_id=self.scan_history.target_id,
             user_id=self.user.id,
             selected_targets_per_task=selected,
             task_type_to_id=self.task_type_to_id,

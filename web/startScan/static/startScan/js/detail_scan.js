@@ -164,7 +164,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
                     subdomainName: row['subdomain_name'] || '',
                     port,
                     scanId: row['scan_history_id'] || '',
-                    domainId: row['target_domain_id'] || '',
+                    domainId: row['domain_id'] || '',
                 }) || '-';
             },
         },

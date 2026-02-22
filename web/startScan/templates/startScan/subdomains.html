@@ -10,6 +10,12 @@ All subdomains
 <link href="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/lightbox/css/lightbox.css' %}" rel="stylesheet" />
 <link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
+<style>
+#subdomain_scan_results td.col-action,
+#subdomain_scan_results th.col-action {
+	min-width: 180px;
+}
+</style>
 {% endblock custom_js_css_link %}
 
 {% block main_content %}
@@ -321,6 +327,8 @@ $(document).ready(function() {
 				},
 				// Action
 				{
+					"width": "180px",
+					"className": "col-action",
 					"render": function ( data, type, row ) {
 						return window.RengineDatatableActionRenderers.renderSubdomainActions(row, {
 							urls: window.RENGINE_DATATABLE_ACTION_URLS.subdomain,

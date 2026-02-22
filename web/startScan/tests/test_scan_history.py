@@ -5,7 +5,7 @@ Unit tests for scan_history view and its annotated count subqueries.
 from django.urls import reverse
 
 from reNgine.utilities.db import count_subquery
-from startScan.models import EndPoint, ScanHistory, Subdomain, Vulnerability
+from startScan.models import Domain, EndPoint, ScanHistory, Subdomain, Vulnerability
 from utils.test_base import BaseTestCase
 
 
@@ -21,9 +21,9 @@ class TestScanHistoryCountAnnotations(BaseTestCase):
         subdomain = gen.subdomain
         endpoint = gen.endpoint
         # One subdomain, one endpoint, one vulnerability (severity=1) already created by create_project_full
-        Subdomain.objects.create(name="second.example.com", target_domain=domain, scan_history=sh)
+        Subdomain.objects.create(name="second.example.com", domain=domain, scan_history=sh)
         EndPoint.objects.create(
-            target_domain=domain,
+            domain=domain,
             subdomain=subdomain,
             scan_history=sh,
             discovered_date=gen.scan_history.start_scan_date,
@@ -33,7 +33,7 @@ class TestScanHistoryCountAnnotations(BaseTestCase):
             name="Medium Vuln",
             severity=2,
             discovered_date=sh.start_scan_date,
-            target_domain=domain,
+            domain=domain,
             subdomain=subdomain,
             scan_history=sh,
             endpoint=endpoint,
@@ -42,16 +42,18 @@ class TestScanHistoryCountAnnotations(BaseTestCase):
             name="Critical Vuln",
             severity=4,
             discovered_date=sh.start_scan_date,
-            target_domain=domain,
+            domain=domain,
             subdomain=subdomain,
             scan_history=sh,
             endpoint=endpoint,
         )
         # Now we have: 2 subdomains, 2 endpoints, 3 vulnerabilities (severity 1, 2, 4)
+        # gen.domain is linked to sh, so 1 domain for this scan
         queryset = (
-            ScanHistory.objects.filter(domain__project__slug=slug)
+            ScanHistory.objects.filter(target__project__slug=slug)
             .order_by("-start_scan_date")
             .annotate(
+                domain_count=count_subquery(Domain, "scan_history_id"),
                 subdomain_count=count_subquery(Subdomain, "scan_history_id"),
                 endpoint_count=count_subquery(EndPoint, "scan_history_id"),
                 vuln_count=count_subquery(Vulnerability, "scan_history_id"),
@@ -61,6 +63,7 @@ class TestScanHistoryCountAnnotations(BaseTestCase):
             )
         )
         row = queryset.get(id=sh.id)
+        self.assertEqual(row.domain_count, 1)
         self.assertEqual(row.subdomain_count, 2)
         self.assertEqual(row.endpoint_count, 2)
         self.assertEqual(row.vuln_count, 3)

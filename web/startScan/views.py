@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Case, Count, F, IntegerField, Q, Value, When
 from django.db.models.functions import Coalesce, Lower
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.urls import reverse
@@ -36,6 +36,11 @@ from reNgine.secator.service import run_per_task_secator_scans, start_secator_sc
 from reNgine.services.repositories import EndpointRepository
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.utilities.db import count_subquery
+from reNgine.utilities.domain import (
+    get_domain_for_scan_by_name,
+    get_domains_queryset_for_scan,
+    get_scan_display_name,
+)
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from reNgine.utilities.time import local_to_utc_aware
@@ -50,6 +55,7 @@ from startScan.models import (
     CountryISO,
     CveId,
     CweId,
+    Domain,
     Email,
     Employee,
     EndPoint,
@@ -66,7 +72,8 @@ from startScan.models import (
 from startScan.secator.ajax import render_secator_selection_json
 from startScan.secator.form import build_start_secator_scan_kwargs
 from startScan.secator.profiles import build_secator_profiles_context
-from targetApp.models import Domain, Organization
+from targetApp.constants import RENGINE_TARGET_TYPES_FOR_JS
+from targetApp.models import Organization, Target
 
 
 PREFIX_SCAN = "[STARTSCAN]"
@@ -89,9 +96,35 @@ def _parse_domain_id_list(raw_domain_ids: str) -> tuple[list[int], list[str]]:
     return domain_id_list, invalid_domain_ids
 
 
+def _domains_for_scan_detail(scan_id: int) -> list:
+    """
+    Domains for the scan detail page: only domains belonging to this scan,
+    excluding hostname-style names (e.g. www.example.com) so the card shows apex/root domains.
+    """
+    qs = get_domains_queryset_for_scan(scan_id)
+    return [d for d in qs if len(d.name.split(".")) <= 2]
+
+
+def _parse_target_id_list(raw_target_ids: str) -> tuple[list[int], list[str]]:
+    """Parse comma-separated target IDs; return valid IDs and list of invalid raw values."""
+    raw_ids = [raw.strip() for raw in (raw_target_ids or "").split(",") if raw.strip()]
+
+    target_id_list: list[int] = []
+    invalid: list[str] = []
+
+    for raw_id in raw_ids:
+        casted_id = safe_int_cast(raw_id)
+        if casted_id is None or not Target.objects.filter(pk=casted_id).exists():
+            invalid.append(raw_id)
+        else:
+            target_id_list.append(casted_id)
+
+    return target_id_list, invalid
+
+
 def _run_secator_scan_or_per_task(
     request,
-    domain_id: int,
+    target_id: int,
     secator_kwargs: dict,
     *,
     imported_subdomains: list | None = None,
@@ -110,9 +143,9 @@ def _run_secator_scan_or_per_task(
     scan_history_id = kwargs_copy.pop("scan_history_id", None)
     if selected_targets_per_task and kwargs_copy.get("execution_mode") == "tasks":
         result = run_per_task_secator_scans(
-            domain_id=domain_id,
             user_id=request.user.id,
             selected_targets_per_task=selected_targets_per_task,
+            target_id=target_id,
             task_type_to_id=None,
             imported_subdomains=imported_subdomains or [],
             out_of_scope_subdomains=out_of_scope_subdomains or [],
@@ -125,15 +158,15 @@ def _run_secator_scan_or_per_task(
             logger.log_line(
                 PREFIX_SCAN,
                 "PER_TASK_VALIDATION",
-                "Per-task validation errors for domain_id=%s: %s"
-                % (domain_id, [e["task_type"] for e in result["validation_errors"]]),
+                "Per-task validation errors for target_id=%s: %s"
+                % (target_id, [e["task_type"] for e in result["validation_errors"]]),
                 level="warning",
             )
         return result["success_count"], result["failed_count"]
 
     result = start_secator_scan(
-        domain_id=domain_id,
         user_id=request.user.id,
+        target_id=target_id,
         imported_subdomains=imported_subdomains or [],
         out_of_scope_subdomains=out_of_scope_subdomains or [],
         url_filter=url_filter,
@@ -143,21 +176,21 @@ def _run_secator_scan_or_per_task(
     return (1, 0) if result.get("status") else (0, 1)
 
 
-def _start_secator_scans_for_domain_ids(request, domain_ids: list[int], secator_kwargs: dict) -> tuple[int, int]:
+def _start_secator_scans_for_target_ids(request, target_ids: list[int], secator_kwargs: dict) -> tuple[int, int]:
     scan_count = 0
     failed_count = 0
-    for domain_id in domain_ids:
-        sc, fc = _run_secator_scan_or_per_task(request, domain_id, secator_kwargs)
+    for target_id in target_ids:
+        sc, fc = _run_secator_scan_or_per_task(request, target_id, secator_kwargs)
         scan_count += sc
         failed_count += fc
     return scan_count, failed_count
 
 
-def _schedule_scan_ui_context(domain: Domain) -> dict:
-    """Build context for schedule_scan_ui.html (single domain)."""
+def _schedule_scan_ui_context(target: "Target") -> dict:
+    """Build context for schedule_scan_ui.html (single target)."""
     context = {
         "scan_history_active": "active",
-        "domain": domain,
+        "target": target,
     }
     context |= build_secator_profiles_context()
     return context
@@ -251,7 +284,7 @@ def _parse_scheduled_time_utc(schedule_time_str: str, timezone_offset: int) -> d
 
 def _build_scan_schedule_common(
     name: str,
-    domain: Domain,
+    target: "Target",
     initiated_by,
     imported_subdomains: list,
     out_of_scope_subdomains: list,
@@ -265,7 +298,7 @@ def _build_scan_schedule_common(
     """
     return {
         "name": name,
-        "domain": domain,
+        "target": target,
         "scan_type": scan_type,
         "secator_kwargs": secator_kwargs,
         "initiated_by": initiated_by,
@@ -276,8 +309,9 @@ def _build_scan_schedule_common(
 
 
 def _build_multiple_scan_selection_from_post(request) -> tuple[list[str], str]:
-    list_of_domain_name: list[str] = []
-    list_of_domain_id: list[str] = []
+    """Build list of target display names and comma-separated target IDs from POST (target list checkboxes)."""
+    list_of_target_name: list[str] = []
+    list_of_target_id: list[str] = []
 
     ignored_keys = {
         "list_target_table_length",
@@ -286,16 +320,31 @@ def _build_multiple_scan_selection_from_post(request) -> tuple[list[str], str]:
     for key, value in request.POST.items():
         if key in ignored_keys:
             continue
-        domain_id = safe_int_cast(value)
-        if domain_id is None:
-            messages.warning(request, f"Ignoring invalid domain ID: {value!r}")
+        tid = safe_int_cast(value)
+        if tid is None:
+            messages.warning(request, "Ignoring invalid target ID: %r" % (value,))
             continue
-        domain = get_object_or_404(Domain, id=domain_id)
-        list_of_domain_name.append(domain.name)
-        list_of_domain_id.append(str(domain_id))
+        target = Target.objects.filter(pk=tid).first()
+        if target is None:
+            messages.warning(request, "Target %s not found, ignoring" % (tid,))
+            continue
+        list_of_target_name.append(target.value)
+        list_of_target_id.append(str(tid))
 
-    domain_ids = ",".join(list_of_domain_id)
-    return list_of_domain_name, domain_ids
+    target_ids = ",".join(list_of_target_id)
+    return list_of_target_name, target_ids
+
+
+def _resolve_target_from_domain(domain: Domain) -> Target:
+    """Resolve the Target associated with a Domain via its scan_history, with fallback by name."""
+    if domain.scan_history_id:
+        target = getattr(domain.scan_history, "target", None)
+        if target is not None:
+            return target
+    target = Target.objects.filter(value=domain.name).first()
+    if target is not None:
+        return target
+    raise Http404(f"No Target found for domain {domain.name}")
 
 
 def build_command_hierarchy(commands):
@@ -412,15 +461,16 @@ def build_command_hierarchy(commands):
 
 def scan_history(request, slug):
     host = (
-        ScanHistory.objects.filter(domain__project__slug=slug)
+        ScanHistory.objects.filter(target__project__slug=slug)
         .order_by("-start_scan_date")
-        .select_related("domain", "initiated_by", "scan_type")
+        .select_related("target", "target__project", "initiated_by", "scan_type")
         .prefetch_related(
             "secatorrunner_set__worker",
-            "domain__domains",
+            "target__organizations",
         )
         .annotate(
             # Scalar count subqueries avoid cartesian products vs Count(distinct=...) over joins.
+            domain_count=count_subquery(Domain, "scan_history_id"),
             subdomain_count=count_subquery(Subdomain, "scan_history_id"),
             endpoint_count=count_subquery(EndPoint, "scan_history_id"),
             vuln_count=count_subquery(Vulnerability, "scan_history_id"),
@@ -439,7 +489,7 @@ def scan_history(request, slug):
 
 def subscan_history(request, slug):
     subscans = (
-        SubScan.objects.filter(scan_history__domain__project__slug=slug)
+        SubScan.objects.filter(scan_history__target__project__slug=slug)
         .select_related("secator_runner__worker", "scan_history")
         .prefetch_related("scan_history__secatorrunner_set__worker")
         .order_by("-start_scan_date")
@@ -464,12 +514,12 @@ def scan_logs_view(request, slug):
     if scan_id is not None:
         queryset = Command.objects.filter(
             scan_history__id=scan_id,
-            scan_history__domain__project__slug=slug,
+            scan_history__target__project__slug=slug,
         )
     else:
         queryset = Command.objects.filter(
             activity__id=activity_id,
-            activity__scan_of__domain__project__slug=slug,
+            activity__scan_of__target__project__slug=slug,
         )
 
     # Exclude PENDING status by default unless include_pending is true
@@ -522,20 +572,23 @@ def scan_logs_view(request, slug):
 def detail_scan(request, id, slug):
     ctx = {}
 
-    # Get scan objects (prefetch runners+worker; select_related domain to avoid N+1 for history.domain)
+    # Get scan objects (prefetch runners+worker; select_related target for context and links)
     scan = get_object_or_404(
-        ScanHistory.objects.select_related("domain").prefetch_related("secatorrunner_set__worker"),
+        ScanHistory.objects.select_related("target").prefetch_related("secatorrunner_set__worker"),
         id=id,
     )
-    domain_id = safe_int_cast(scan.domain.id)
+    target_value = (scan.target.value if getattr(scan, "target", None) else "") or ""
+    target_domain = get_domain_for_scan_by_name(scan.id, target_value) if target_value else None
+    scan_display_name = get_scan_display_name(target_value)
+    context_target_id = scan.target_id
     scan_engines = EngineType.objects.annotate(lower_name=Lower("engine_name")).order_by("lower_name")
-    recent_scans = ScanHistory.objects.filter(domain__id=domain_id)
-    last_scans = (
-        ScanHistory.objects.filter(domain__id=domain_id)
-        .filter(tasks__overlap=["subdomain_discovery"])
-        .filter(id__lte=id)
-        .filter(scan_status=2)
+    recent_scans = (
+        ScanHistory.objects.filter(target_id=context_target_id) if context_target_id else ScanHistory.objects.none()
     )
+    last_scans_base = (
+        ScanHistory.objects.filter(target_id=context_target_id) if context_target_id else ScanHistory.objects.none()
+    )
+    last_scans = last_scans_base.filter(tasks__overlap=["subdomain_discovery"]).filter(id__lte=id).filter(scan_status=2)
 
     # Get all kind of objects associated with our ScanHistory object
     emails = Email.objects.filter(emails__in=[scan])
@@ -545,7 +598,7 @@ def detail_scan(request, id, slug):
 
     # Optimize vulnerability queries with prefetch_related to avoid N+1 queries
     vulns = Vulnerability.objects.filter(scan_history=scan).prefetch_related(
-        "cve_ids", "cwe_ids", "tags", "subdomain", "endpoint", "target_domain", "scan_history"
+        "cve_ids", "cwe_ids", "tags", "subdomain", "endpoint", "domain", "scan_history"
     )
 
     vulns_tags = VulnerabilityTags.objects.filter(vuln_tags__in=vulns)
@@ -564,7 +617,7 @@ def detail_scan(request, id, slug):
         many=True,
         context={
             "scan_id": id,
-            "target_id": domain_id,
+            "target_id": context_target_id,
             "ip_subdomain_data": dict(ip_subdomain_data),
         },
     )
@@ -664,6 +717,9 @@ def detail_scan(request, id, slug):
     # Build render context
     ctx = {
         "scan_history_id": id,
+        "context_target_id": context_target_id,
+        "target_domain": target_domain,
+        "scan_display_name": scan_display_name,
         "history": scan,
         "scan_activity": scan_activity,
         "secator_runners": secator_runners,
@@ -696,6 +752,7 @@ def detail_scan(request, id, slug):
         "most_common_vulnerability": common_vulns,
         "asset_countries": asset_countries,
         "has_screenshots": has_screenshots,
+        "domains": _domains_for_scan_detail(id),
     }
 
     # Find number of matched GF patterns (one query then count in Python)
@@ -720,12 +777,13 @@ def detail_scan(request, id, slug):
     # Secator profiles context for subscan modal (Advanced config > profiles)
     ctx.update(build_secator_profiles_context())
     ctx["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
+    ctx["rengine_target_types"] = RENGINE_TARGET_TYPES_FOR_JS
 
     return render(request, "startScan/detail_scan.html", ctx)
 
 
 def all_subdomains(request, slug):
-    subdomains = Subdomain.objects.filter(target_domain__project__slug=slug)
+    subdomains = Subdomain.objects.filter(domain__scan_history__target__project__slug=slug)
     scan_engines = EngineType.objects.annotate(lower_name=Lower("engine_name")).order_by("lower_name")
     alive_subdomains = subdomains.filter(http_status__gt=0)  # TODO: replace this with is_alive() function
     important_subdomains = subdomains.filter(is_important=True).values("name").distinct().count()
@@ -756,8 +814,8 @@ def all_endpoints(request, slug):
     return render(request, "startScan/endpoints.html", context)
 
 
-def start_scan_ui(request, slug, domain_id):
-    domain = get_object_or_404(Domain, id=domain_id)
+def start_scan_ui(request, slug, target_id):
+    target = get_object_or_404(Target, id=target_id)
     if request.method == "POST":
         # Collect all parameters from form
         subdomains_in = request.POST.get("importSubdomainTextArea", "").split()
@@ -771,11 +829,11 @@ def start_scan_ui(request, slug, domain_id):
             secator_kwargs = build_start_secator_scan_kwargs(request.POST)
         except ValueError as exc:
             messages.error(request, str(exc))
-            return redirect("start_scan", slug=slug, domain_id=domain_id)
+            return redirect("start_scan", slug=slug, target_id=target_id)
 
         scan_count, failed_count = _run_secator_scan_or_per_task(
             request,
-            domain.id,
+            target.id,
             secator_kwargs,
             imported_subdomains=subdomains_in,
             out_of_scope_subdomains=subdomains_out,
@@ -783,42 +841,27 @@ def start_scan_ui(request, slug, domain_id):
         )
 
         if scan_count >= 1:
-            messages.add_message(request, messages.INFO, f"Scan Started for {domain.name}")
+            messages.add_message(request, messages.INFO, "Scan Started for %s" % (target.value,))
             return HttpResponseRedirect(reverse("scan_history", kwargs={"slug": slug}))
         error_msg = "Unknown error" if failed_count else "No scan started"
-        messages.add_message(request, messages.ERROR, f"Failed to start scan: {error_msg}")
-        return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug, "domain_id": domain_id}))
+        messages.add_message(request, messages.ERROR, "Failed to start scan: %s" % (error_msg,))
+        return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug, "target_id": target_id}))
 
     # GET request
-    # Get engines based on scan type (default to bug_bounty for backward compatibility)
     scan_type = request.GET.get("scan_type", "internet")
 
-    # Get engines based on scan type
     engine = (
         EngineType.objects.filter(scan_type=scan_type).annotate(lower_name=Lower("engine_name")).order_by("lower_name")
     )
 
-    # Get custom engine count in a single query
     custom_engine_count = EngineType.objects.filter(default_engine=False).count()
 
-    # Check if domain has IP addresses or subdomains (indicating internal network scan)
-    has_ip_content = False
-    if domain.ip_address_cidr:
-        has_ip_content = True
-    else:
-        # Check if domain has subdomains with IP addresses
-        from startScan.models import Subdomain
+    has_ip_content = Subdomain.objects.filter(scan_history__target_id=target.id, ip_addresses__isnull=False).exists()
 
-        subdomains_with_ips = Subdomain.objects.filter(target_domain=domain, ip_addresses__isnull=False).exists()
-        has_ip_content = subdomains_with_ips
-
-    # Handle AJAX requests
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        # Handle Secator AJAX requests
         if request.GET.get("ajax") == "true":
             return render_secator_selection_json(request)
 
-        # Handle request for engine loading (legacy)
         from django.template.loader import render_to_string
 
         engine_html = render_to_string(
@@ -832,11 +875,12 @@ def start_scan_ui(request, slug, domain_id):
 
     context = {
         "scan_history_active": "active",
-        "domain": domain,
+        "target": target,
         "engines": engine,
         "custom_engine_count": custom_engine_count,
         "scan_type": scan_type,
         "has_ip_content": has_ip_content,
+        "rengine_target_types": RENGINE_TARGET_TYPES_FOR_JS,
     }
     context.update(build_secator_profiles_context())
     context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
@@ -848,51 +892,50 @@ def start_multiple_scan(request, slug):
     if request.GET.get("ajax") == "true":
         return render_secator_selection_json(request)
 
-    list_of_domain_name: list[str] = []
-    domain_ids = ""
+    list_of_target_name: list[str] = []
+    target_ids_str = ""
 
     if request.method == "POST":
-        if request.POST.get("list_of_domain_id"):
-            # POST from start_multiple_scan_ui: start scans for selected domains
+        raw_ids = request.POST.get("list_of_domain_id") or request.POST.get("list_of_target_id") or ""
+        if raw_ids:
+            # POST from start_multiple_scan_ui: start scans for selected targets
             try:
                 secator_kwargs = build_start_secator_scan_kwargs(request.POST)
             except ValueError as exc:
                 messages.error(request, str(exc))
                 return redirect("start_multiple_scan", slug=slug)
 
-            domain_id_list, invalid_domain_ids = _parse_domain_id_list(request.POST.get("list_of_domain_id", ""))
-            if invalid_domain_ids:
-                messages.warning(request, f"Ignoring invalid domain ID(s): {', '.join(invalid_domain_ids)}")
+            target_id_list, invalid_ids = _parse_target_id_list(raw_ids)
+            if invalid_ids:
+                messages.warning(request, "Ignoring invalid target ID(s): %s" % (", ".join(invalid_ids),))
 
-            if not domain_id_list:
+            if not target_id_list:
                 messages.error(request, "Please select at least one valid target.")
                 return redirect("start_multiple_scan", slug=slug)
 
-            scan_count, failed_count = _start_secator_scans_for_domain_ids(request, domain_id_list, secator_kwargs)
+            scan_count, failed_count = _start_secator_scans_for_target_ids(request, target_id_list, secator_kwargs)
 
             if scan_count > 0:
-                messages.add_message(request, messages.INFO, f"Started {scan_count} scans for multiple targets")
+                messages.add_message(request, messages.INFO, "Started %s scans for multiple targets" % (scan_count,))
             if failed_count > 0:
-                messages.add_message(request, messages.WARNING, f"Failed to start {failed_count} scans")
+                messages.add_message(request, messages.WARNING, "Failed to start %s scans" % (failed_count,))
 
             return HttpResponseRedirect(reverse("scan_history", kwargs={"slug": slug}))
 
         # POST from targets list: build selection list and render UI
-        list_of_domain_name, domain_ids = _build_multiple_scan_selection_from_post(request)
+        list_of_target_name, target_ids_str = _build_multiple_scan_selection_from_post(request)
 
     # GET request
     scan_type = request.GET.get("scan_type", "internet")
 
-    # Get engines based on scan type
     engines = EngineType.objects.filter(scan_type=scan_type)
 
-    # Get custom engine count in a single query
     custom_engine_count = engines.filter(default_engine=False).count()
     context = {
         "scan_history_active": "active",
         "engines": engines,
-        "domain_list": list_of_domain_name,
-        "domain_ids": domain_ids,
+        "domain_list": list_of_target_name,
+        "domain_ids": target_ids_str,
         "custom_engine_count": custom_engine_count,
         "scan_type": scan_type,
     }
@@ -903,12 +946,12 @@ def start_multiple_scan(request, slug):
 
 def export_subdomains(request, slug, scan_id):
     subdomain_list = Subdomain.objects.filter(scan_history__id=scan_id)
-    scan = ScanHistory.objects.get(id=scan_id)
+    scan = ScanHistory.objects.select_related("target").get(id=scan_id)
     response_body = ""
     for domain in subdomain_list:
         response_body += response_body + domain.name + "\n"
     scan_start_date_str = str(scan.start_scan_date.date())
-    domain_name = scan.domain.name
+    domain_name = get_scan_display_name(scan.target.value if scan.target_id else "")
     response = HttpResponse(response_body, content_type="text/plain")
     response["Content-Disposition"] = f'attachment; filename="subdomains_{domain_name}_{scan_start_date_str}.txt"'
     return response
@@ -916,12 +959,12 @@ def export_subdomains(request, slug, scan_id):
 
 def export_endpoints(request, slug, scan_id):
     endpoint_list = EndPoint.objects.filter(scan_history__id=scan_id)
-    scan = ScanHistory.objects.get(id=scan_id)
+    scan = ScanHistory.objects.select_related("target").get(id=scan_id)
     response_body = ""
     for endpoint in endpoint_list:
         response_body += endpoint.http_url + "\n"
     scan_start_date_str = str(scan.start_scan_date.date())
-    domain_name = scan.domain.name
+    domain_name = get_scan_display_name(scan.target.value if scan.target_id else "")
     response = HttpResponse(response_body, content_type="text/plain")
     response["Content-Disposition"] = f'attachment; filename="endpoints_{domain_name}_{scan_start_date_str}.txt"'
     return response
@@ -929,13 +972,13 @@ def export_endpoints(request, slug, scan_id):
 
 def export_urls(request, slug, scan_id):
     urls_list = Subdomain.objects.filter(scan_history__id=scan_id)
-    scan = ScanHistory.objects.get(id=scan_id)
+    scan = ScanHistory.objects.select_related("target").get(id=scan_id)
     response_body = ""
     for url in urls_list:
         if url.http_url:
             response_body += response_body + url.http_url + "\n"
     scan_start_date_str = str(scan.start_scan_date.date())
-    domain_name = scan.domain.name
+    domain_name = get_scan_display_name(scan.target.value if scan.target_id else "")
     response = HttpResponse(response_body, content_type="text/plain")
     response["Content-Disposition"] = f'attachment; filename="urls_{domain_name}_{scan_start_date_str}.txt"'
     return response
@@ -1040,17 +1083,18 @@ def stop_scan(request, slug, id):
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
 def schedule_scan(request, host_id, slug):
     domain = get_object_or_404(Domain, id=host_id)
+    target = _resolve_target_from_domain(domain)
     if request.method == "POST":
         try:
             secator_kwargs = build_start_secator_scan_kwargs(request.POST)
         except ValueError as exc:
             messages.error(request, str(exc))
-            return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(domain))
+            return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(target))
 
         schedule_error, scheduled_mode = _validate_schedule_form_post(request.POST)
         if schedule_error:
             messages.error(request, schedule_error)
-            return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(domain))
+            return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(target))
 
         subdomains_in = [s.rstrip() for s in request.POST.get("importSubdomainTextArea", "").split() if s]
         subdomains_out = [s.rstrip() for s in request.POST.get("outOfScopeSubdomainTextarea", "").split() if s]
@@ -1062,10 +1106,10 @@ def schedule_scan(request, host_id, slug):
             kwargs_stored["url_filter"] = url_filter
         timestr = datetime.strftime(timezone.now(), "%Y_%m_%d_%H_%M_%S")
         mode_label = secator_kwargs.get("execution_mode", "secator")
-        task_name = f"Secator {mode_label} for {domain.name}: {timestr}"
+        task_name = f"Secator {mode_label} for {target.value}: {timestr}"
         common = _build_scan_schedule_common(
             task_name,
-            domain,
+            target,
             request.user,
             subdomains_in,
             subdomains_out,
@@ -1089,7 +1133,7 @@ def schedule_scan(request, host_id, slug):
             utc_time = _parse_scheduled_time_utc(schedule_time, timezone_offset)
             if utc_time is None:
                 messages.error(request, "Invalid date and time for the one-time scan.")
-                return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(domain))
+                return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(target))
             ScanSchedule.objects.create(
                 **common,
                 schedule_mode=ScanSchedule.SCHEDULE_MODE_CLOCKED,
@@ -1097,10 +1141,10 @@ def schedule_scan(request, host_id, slug):
                 next_run=utc_time,
                 one_off=True,
             )
-        messages.add_message(request, messages.INFO, f"Scan scheduled for {domain.name}")
+        messages.add_message(request, messages.INFO, f"Scan scheduled for {target.value}")
         return HttpResponseRedirect(reverse("scheduled_scan_view", kwargs={"slug": slug}))
 
-    return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(domain))
+    return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(target))
 
 
 def scheduled_scan_view(request, slug):
@@ -1145,7 +1189,7 @@ def change_vuln_status(request, slug, id):
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_all_scan_results(request, slug):
     if request.method == "POST":
-        ScanHistory.objects.filter(domain__project__slug=slug).delete()
+        ScanHistory.objects.filter(target__project__slug=slug).delete()
         message_data = {"status": "true"}
         messages.add_message(request, messages.INFO, "All Scan History successfully deleted!")
     return JsonResponse(message_data)
@@ -1154,7 +1198,7 @@ def delete_all_scan_results(request, slug):
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_all_screenshots(request, slug):
     if request.method == "POST":
-        domains = Domain.objects.filter(project__slug=slug)
+        domains = Domain.objects.filter(scan_history__target__project__slug=slug)
         cleanup_issues = False
         for domain in domains:
             resolved = resolve_results_dir_under_base(RENGINE_RESULTS, domain.name)
@@ -1281,12 +1325,13 @@ def schedule_organization_scan(request, slug, id):
 
         engine_type = int(request.POST["scan_mode"])
         engine = get_object_or_404(EngineType, id=engine_type)
-        for domain in organization.get_domains():
+        targets = list(organization.get_targets())
+        for target in targets:
             timestr = str(datetime.strftime(timezone.now(), "%Y_%m_%d_%H_%M_%S"))
-            task_name = f"{engine.engine_name} for {domain.name}: {timestr}"
+            task_name = f"{engine.engine_name} for {target.value}: {timestr}"
             common = _build_scan_schedule_common(
                 task_name,
-                domain,
+                target,
                 request.user,
                 [],
                 [],
@@ -1326,9 +1371,8 @@ def schedule_organization_scan(request, slug, id):
                     one_off=True,
                 )
 
-        ndomains = len(organization.get_domains())
         messages.add_message(
-            request, messages.INFO, f"Scan started for {ndomains} domains in organization {organization.name}"
+            request, messages.INFO, f"Scan started for {len(targets)} targets in organization {organization.name}"
         )
         return HttpResponseRedirect(reverse("scheduled_scan_view", kwargs={"slug": slug}))
 
@@ -1504,7 +1548,9 @@ def create_report(request, slug, id):
         description = report.executive_summary_description
         description = description.replace("{scan_date}", scan.start_scan_date.strftime("%d %B, %Y"))
         description = description.replace("{company_name}", report.company_name)
-        description = description.replace("{target_name}", scan.domain.name)
+        target_name = scan.target.value if scan.target_id else ""
+        target_description = getattr(scan.target, "description", None) or "" if scan.target_id else ""
+        description = description.replace("{target_name}", target_name)
         description = description.replace("{subdomain_count}", str(subdomains.count()))
         description = description.replace("{vulnerability_count}", str(vulns.count()))
         description = description.replace("{critical_count}", str(vulns.filter(severity=4).count()))
@@ -1513,8 +1559,8 @@ def create_report(request, slug, id):
         description = description.replace("{low_count}", str(vulns.filter(severity=1).count()))
         description = description.replace("{info_count}", str(vulns.filter(severity=0).count()))
         description = description.replace("{unknown_count}", str(vulns.filter(severity=-1).count()))
-        if scan.domain.description:
-            description = description.replace("{target_description}", scan.domain.description)
+        if target_description:
+            description = description.replace("{target_description}", target_description)
 
         # Convert to Markdown
         data["executive_summary_description"] = markdown.markdown(description)

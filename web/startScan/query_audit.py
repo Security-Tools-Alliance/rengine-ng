@@ -86,6 +86,7 @@ def get_audit_queries(samples: Dict[str, Any], app_filter: Optional[str] = None)
         Command as CommandModel,
     )
     from startScan.models import (
+        Domain,
         EndPoint,
         ScanActivity,
         ScanHistory,
@@ -94,7 +95,6 @@ def get_audit_queries(samples: Dict[str, Any], app_filter: Optional[str] = None)
         SubScan,
         Vulnerability,
     )
-    from targetApp.models import Domain
 
     q = quote_identifier
     scan_id = samples["scan_id"]
@@ -318,13 +318,13 @@ def get_audit_queries(samples: Dict[str, Any], app_filter: Optional[str] = None)
                     [activity_id],
                 ),
                 (
-                    "API Subdomain by target_domain_id",
-                    f"SELECT id FROM {q(t_subdomain)} WHERE target_domain_id = %s LIMIT 100",
+                    "API Subdomain by domain_id",
+                    f"SELECT id FROM {q(t_subdomain)} WHERE domain_id = %s LIMIT 100",
                     [domain_id],
                 ),
                 (
-                    "API Vulnerability by target_domain_id",
-                    f"SELECT id FROM {q(t_vuln)} WHERE target_domain_id = %s LIMIT 100",
+                    "API Vulnerability by domain_id",
+                    f"SELECT id FROM {q(t_vuln)} WHERE domain_id = %s LIMIT 100",
                     [domain_id],
                 ),
                 (

@@ -7,6 +7,7 @@ and attempts to access another project's file.
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
+import uuid
 
 from rest_framework import status
 
@@ -22,30 +23,33 @@ class GetProjectForScanFilePathTestCase(BaseTestCase):
     def test_returns_project_when_path_matches_endpoint_screenshot_path(self):
         self.data_generator.create_engine_type()
         self.data_generator.create_project()
+        self.data_generator.create_target()
         self.data_generator.create_domain()
         self.data_generator.create_scan_history()
         self.data_generator.create_subdomain()
-        rel_path = "workspace/domain/screenshots/page.png"
+        rel_path = "workspace/domain/screenshots/%s.png" % uuid.uuid4().hex
         self.data_generator.create_endpoint(screenshot_path=rel_path)
         result = get_project_for_scan_file_path(rel_path)
         self.assertIsNotNone(result)
-        self.assertEqual(result, self.data_generator.project)
+        self.assertEqual(result.id, self.data_generator.project.id)
 
     def test_returns_project_when_path_matches_endpoint_stored_response_path(self):
         self.data_generator.create_engine_type()
         self.data_generator.create_project()
+        self.data_generator.create_target()
         self.data_generator.create_domain()
         self.data_generator.create_scan_history()
         self.data_generator.create_subdomain()
-        rel_path = "workspace/domain/responses/response.html"
+        rel_path = "workspace/domain/responses/%s.html" % uuid.uuid4().hex
         self.data_generator.create_endpoint(stored_response_path=rel_path)
         result = get_project_for_scan_file_path(rel_path)
         self.assertIsNotNone(result)
-        self.assertEqual(result, self.data_generator.project)
+        self.assertEqual(result.id, self.data_generator.project.id)
 
     def test_returns_none_when_endpoint_has_no_scan_history(self):
         self.data_generator.create_engine_type()
         self.data_generator.create_project()
+        self.data_generator.create_target()
         self.data_generator.create_domain()
         self.data_generator.create_scan_history()
         self.data_generator.create_subdomain()
@@ -64,42 +68,46 @@ class GetProjectForScanFilePathTestCase(BaseTestCase):
     def test_returns_project_when_path_matches_technology_stored_response_path(self):
         self.data_generator.create_engine_type()
         self.data_generator.create_project()
+        self.data_generator.create_target()
         self.data_generator.create_domain()
         self.data_generator.create_scan_history()
         self.data_generator.create_subdomain()
         self.data_generator.create_technology()
-        rel_path = "workspace/domain/tech_response.html"
+        rel_path = "workspace/domain/tech_response_%s.html" % uuid.uuid4().hex
         self.data_generator.technology.stored_response_path = rel_path
         self.data_generator.technology.save(update_fields=["stored_response_path"])
         result = get_project_for_scan_file_path(rel_path)
         self.assertIsNotNone(result)
-        self.assertEqual(result, self.data_generator.project)
+        self.assertEqual(result.id, self.data_generator.project.id)
 
-    def test_returns_project_via_technology_target_domain_when_no_scan_history(self):
+    def test_returns_project_via_technology_domain_when_no_scan_history(self):
         self.data_generator.create_engine_type()
         self.data_generator.create_project()
+        self.data_generator.create_target()
         self.data_generator.create_domain()
         self.data_generator.create_scan_history()
         subdomain = self.data_generator.create_subdomain(scan_history=None)
-        tech = Technology.objects.create(name="TechNoScan", stored_response_path="tech/response.html")
+        rel_path = "tech/response_%s.html" % uuid.uuid4().hex
+        tech = Technology.objects.create(name="TechNoScan", stored_response_path=rel_path)
         subdomain.technologies.add(tech)
-        result = get_project_for_scan_file_path("tech/response.html")
+        result = get_project_for_scan_file_path(rel_path)
         self.assertIsNotNone(result)
-        self.assertEqual(result, self.data_generator.project)
+        self.assertEqual(result.id, self.data_generator.project.id)
 
     def test_endpoint_takes_precedence_over_technology_for_same_path(self):
         self.data_generator.create_engine_type()
         self.data_generator.create_project()
+        self.data_generator.create_target()
         self.data_generator.create_domain()
         self.data_generator.create_scan_history()
         self.data_generator.create_subdomain()
-        rel_path = "shared/path/file.txt"
+        rel_path = "shared/path/file_%s.txt" % uuid.uuid4().hex
         self.data_generator.create_endpoint(stored_response_path=rel_path)
         tech = Technology.objects.create(name="OtherTech", stored_response_path=rel_path)
         self.data_generator.subdomain.technologies.add(tech)
         result = get_project_for_scan_file_path(rel_path)
         self.assertIsNotNone(result)
-        self.assertEqual(result, self.data_generator.project)
+        self.assertEqual(result.id, self.data_generator.project.id)
 
 
 class ServeScanFileViewTestCase(BaseTestCase):

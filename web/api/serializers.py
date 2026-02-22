@@ -26,6 +26,7 @@ from startScan.models import (
     Command,
     DirectoryFile,
     DirectoryScan,
+    Domain,
     Dork,
     Email,
     Employee,
@@ -42,10 +43,7 @@ from startScan.models import (
     Vulnerability,
     Waf,
 )
-from targetApp.models import (
-    Domain,
-    Organization,
-)
+from targetApp.models import Organization, Target
 
 
 # Sentinel to distinguish "annotated count missing" from "count present but None" in get_*_count.
@@ -69,6 +67,7 @@ class DomainSerializer(serializers.ModelSerializer):
     insert_date_humanized = serializers.SerializerMethodField()
     start_scan_date = serializers.SerializerMethodField()
     start_scan_date_humanized = serializers.SerializerMethodField()
+    project = serializers.SerializerMethodField()
 
     class Meta:
         model = Domain
@@ -97,9 +96,17 @@ class DomainSerializer(serializers.ModelSerializer):
         except Exception:
             return None
 
+    def get_project(self, obj):
+        if obj.scan_history_id and obj.scan_history.target_id:
+            return obj.scan_history.target.project_id
+        return None
+
     def get_organization(self, obj):
-        if Organization.objects.filter(domains__id=obj.id).exists():
-            return [org.name for org in Organization.objects.filter(domains__id=obj.id)]
+        target_id = obj.scan_history.target_id if obj.scan_history_id else None
+        if not target_id:
+            return []
+        orgs = Organization.objects.filter(targets__id=target_id)
+        return [org.name for org in orgs]
 
     def get_most_recent_scan(self, obj):
         return obj.get_recent_scan_id()
@@ -117,6 +124,59 @@ class DomainSerializer(serializers.ModelSerializer):
     def get_start_scan_date_humanized(self, obj):
         if obj.start_scan_date:
             return naturaltime(obj.start_scan_date).title()
+
+
+class TargetSerializer(serializers.ModelSerializer):
+    """Serializer for Target model (list targets API). Exposes 'name' as alias for 'value' for frontend compat."""
+
+    name = serializers.SerializerMethodField()
+    organization = serializers.SerializerMethodField()
+    most_recent_scan = serializers.SerializerMethodField()
+    insert_date_humanized = serializers.SerializerMethodField()
+    start_scan_date_humanized = serializers.SerializerMethodField()
+    domain_count = serializers.IntegerField(read_only=True, default=0)
+    subdomain_count = serializers.IntegerField(read_only=True, default=0)
+    endpoint_count = serializers.IntegerField(read_only=True, default=0)
+    vulnerability_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Target
+        fields = [
+            "id",
+            "value",
+            "name",
+            "target_type",
+            "description",
+            "insert_date",
+            "start_scan_date",
+            "project",
+            "organization",
+            "most_recent_scan",
+            "insert_date_humanized",
+            "start_scan_date_humanized",
+            "domain_count",
+            "subdomain_count",
+            "endpoint_count",
+            "vulnerability_count",
+        ]
+
+    def get_name(self, obj):
+        return obj.value
+
+    def get_organization(self, obj):
+        return [org.name for org in obj.organizations.all()]
+
+    def get_most_recent_scan(self, obj):
+        from startScan.models import ScanHistory
+
+        sh = ScanHistory.objects.filter(target_id=obj.id).order_by("-id").first()
+        return sh.id if sh else None
+
+    def get_insert_date_humanized(self, obj):
+        return naturaltime(obj.insert_date).title() if obj.insert_date else None
+
+    def get_start_scan_date_humanized(self, obj):
+        return naturaltime(obj.start_scan_date).title() if obj.start_scan_date else None
 
 
 class SubScanResultSerializer(serializers.ModelSerializer):
@@ -143,8 +203,8 @@ class SubScanResultSerializer(serializers.ModelSerializer):
     def get_subdomain_name(self, subscan):
         if subscan.subdomain:
             return subscan.subdomain.name
-        if subscan.scan_history and subscan.scan_history.domain:
-            return f"Domain-level: {subscan.scan_history.domain.name}"
+        if subscan.scan_history and subscan.scan_history.target:
+            return f"Domain-level: {subscan.scan_history.target.value}"
         return ""
 
     def get_task_name(self, subscan):
@@ -180,8 +240,9 @@ class ReconNoteSerializer(serializers.ModelSerializer):
         ]
 
     def get_domain_name(self, note):
-        if note.scan_history:
-            return note.scan_history.domain.name
+        if note.scan_history and note.scan_history.target:
+            return note.scan_history.target.value
+        return ""
 
     def get_subdomain_name(self, note):
         if note.subdomain:
@@ -231,8 +292,8 @@ class SubScanSerializer(serializers.ModelSerializer):
     def get_subdomain_name(self, subscan):
         if subscan.subdomain:
             return subscan.subdomain.name
-        if subscan.scan_history and subscan.scan_history.domain:
-            return f"Domain-level: {subscan.scan_history.domain.name}"
+        if subscan.scan_history and subscan.scan_history.target:
+            return f"Domain-level: {subscan.scan_history.target.value}"
         return ""
 
     def get_total_time_taken(self, subscan):
@@ -425,6 +486,7 @@ class ScanHistorySerializer(serializers.ModelSerializer):
     completed_ago = serializers.SerializerMethodField("get_completed_ago")
     organizations = serializers.SerializerMethodField("get_organizations")
     scan_type_display = serializers.SerializerMethodField("get_scan_type_display")
+    domain = serializers.SerializerMethodField("get_domain_display")
 
     class Meta:
         model = ScanHistory
@@ -445,15 +507,21 @@ class ScanHistorySerializer(serializers.ModelSerializer):
             "tasks",
             "stop_scan_date",
             "error_message",
-            "domain",
+            "target",
             "scan_type",
             "scan_type_display",
             "display_runner_type",
             "display_scan_name",
             "scan_name",
             "runner_type",
+            "domain",
         ]
         depth = 1
+
+    def get_domain_display(self, scan_history):
+        """Return {name: ...} for sidebar/UI compatibility (scan no longer has domain FK)."""
+        name = scan_history.target.value if scan_history.target else ""
+        return {"name": name}
 
     def get_subdomain_count(self, scan_history):
         val = getattr(scan_history, "subdomain_count", _CACHE_MISSING)
@@ -492,7 +560,8 @@ class ScanHistorySerializer(serializers.ModelSerializer):
         return scan_history.get_completed_ago()
 
     def get_organizations(self, scan_history):
-        return [org.name for org in scan_history.domain.get_organization()]
+        target = scan_history.target
+        return [org.name for org in target.get_organization()] if target else []
 
     def get_scan_type_display(self, scan_history):
         """Get scan type display name using scan_name property."""
@@ -538,8 +607,8 @@ class ScanActivitySerializer(serializers.ModelSerializer):
         return scan_activity.status_code
 
     def get_domain_name(self, scan_activity):
-        if scan_activity.scan_of and scan_activity.scan_of.domain:
-            return scan_activity.scan_of.domain.name
+        if scan_activity.scan_of and scan_activity.scan_of.target:
+            return scan_activity.scan_of.target.value
         return "Unknown"
 
     def get_scan_id(self, scan_activity):
@@ -786,6 +855,11 @@ class SecatorWorkerCreateUpdateSerializer(serializers.ModelSerializer):
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
+    domains = serializers.SerializerMethodField()
+
+    def get_domains(self, obj):
+        return OrganizationTargetsSerializer(obj.get_domains(), many=True).data
+
     class Meta:
         model = Organization
         fields = ["id", "name", "description", "insert_date", "domains", "project"]
@@ -1036,7 +1110,7 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
         fields = ["description", "title", "children"]
 
     def get_description(self, scan_history):
-        return scan_history.domain.name
+        return scan_history.target.value if scan_history.target else ""
 
     def get_children(self, history):
         scan_history = ScanHistory.objects.filter(id=history.id)
@@ -1160,7 +1234,7 @@ class SubdomainChangesSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "scan_history",
-            "target_domain",
+            "domain",
             "name",
             "is_imported_subdomain",
             "is_important",
@@ -1202,7 +1276,7 @@ class EndPointChangesSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "scan_history",
-            "target_domain",
+            "domain",
             "subdomain",
             "http_url",
             "page_title",
@@ -1261,7 +1335,7 @@ class MetafinderDocumentSerializer(serializers.ModelSerializer):
         model = MetaFinderDocument
         fields = [
             "id",
-            "target_domain",
+            "domain",
             "scan_history",
             "subdomain",
             "url",
@@ -1359,7 +1433,7 @@ class IpSerializer(serializers.ModelSerializer):
         if scan_id:
             query = query.filter(scan_history_id=scan_id)
         elif target_id:
-            query = query.filter(target_domain_id=target_id)
+            query = query.filter(domain__scan_history__target_id=target_id)
 
         return query.distinct("name")
 
@@ -1441,7 +1515,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "scan_history",
-            "target_domain",
+            "domain",
             "name",
             "is_imported_subdomain",
             "is_important",
@@ -1574,7 +1648,7 @@ class EndpointSerializer(serializers.ModelSerializer):
     techs = TechnologySerializer(many=True)
     subdomain_id = serializers.SerializerMethodField()
     scan_history_id = serializers.SerializerMethodField()
-    target_domain_id = serializers.SerializerMethodField()
+    domain_id = serializers.SerializerMethodField()
     subdomain_name = serializers.SerializerMethodField()
     screenshot_url = serializers.SerializerMethodField()
     stored_response_url = serializers.SerializerMethodField()
@@ -1584,7 +1658,7 @@ class EndpointSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "scan_history",
-            "target_domain",
+            "domain",
             "subdomain",
             "source",
             "http_url",
@@ -1609,7 +1683,7 @@ class EndpointSerializer(serializers.ModelSerializer):
             "headers",
             "subdomain_id",
             "scan_history_id",
-            "target_domain_id",
+            "domain_id",
             "subdomain_name",
         ]
 
@@ -1619,8 +1693,8 @@ class EndpointSerializer(serializers.ModelSerializer):
     def get_scan_history_id(self, obj):
         return obj.scan_history.id if obj.scan_history else None
 
-    def get_target_domain_id(self, obj):
-        return obj.target_domain.id if obj.target_domain else None
+    def get_domain_id(self, obj):
+        return obj.domain.id if obj.domain else None
 
     def get_subdomain_name(self, obj):
         return obj.subdomain.name if obj.subdomain else None
@@ -1684,7 +1758,7 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
             "source",
             "subdomain",
             "endpoint",
-            "target_domain",
+            "domain",
             "template",
             "template_url",
             "template_id",

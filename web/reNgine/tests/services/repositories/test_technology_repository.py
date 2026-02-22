@@ -28,7 +28,7 @@ class TestTechnologyRepository(BaseTestCase):
             "match": "test.example.com",
         }
 
-        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.name, "nginx")
@@ -45,7 +45,7 @@ class TestTechnologyRepository(BaseTestCase):
         endpoint = self.data_generator.create_endpoint(
             http_url="https://test.example.com/admin",
             scan_history=self.scan_history,
-            target_domain=self.domain,
+            domain=self.domain,
             subdomain=subdomain,
         )
 
@@ -55,7 +55,7 @@ class TestTechnologyRepository(BaseTestCase):
             "match": "https://test.example.com/admin",
         }
 
-        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.name, "apache")
@@ -71,7 +71,7 @@ class TestTechnologyRepository(BaseTestCase):
             "match": "test.example.com",
         }
 
-        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
 
@@ -82,7 +82,7 @@ class TestTechnologyRepository(BaseTestCase):
             "name": "nginx",
         }
 
-        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
 
@@ -94,7 +94,7 @@ class TestTechnologyRepository(BaseTestCase):
             "match": "nonexistent.example.com",
         }
 
-        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         # Should still create technology but without association
         self.assertIsNotNone(result)
@@ -159,7 +159,7 @@ class TestTechnologyRepository(BaseTestCase):
             },
         }
 
-        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.name, "nginx")
@@ -179,7 +179,9 @@ class TestTechnologyRepository(BaseTestCase):
             "category": "webserver",
         }
 
-        result = self.tech_repo._process_secator_technology_item(item, self.scan_history.id, self.domain.id)
+        result = self.tech_repo._process_secator_technology_item(
+            item, self.scan_history.id, self.data_generator.target.id
+        )
 
         self.assertIsNotNone(result)
         self.assertEqual(result.name, "nginx")
@@ -196,7 +198,9 @@ class TestTechnologyRepository(BaseTestCase):
             "match": "test.example.com",
         }
 
-        result = self.tech_repo._process_secator_technology_item(item, self.scan_history.id, self.domain.id)
+        result = self.tech_repo._process_secator_technology_item(
+            item, self.scan_history.id, self.data_generator.target.id
+        )
 
         self.assertIsNone(result)
 
@@ -206,6 +210,8 @@ class TestTechnologyRepository(BaseTestCase):
             "name": "nginx",
         }
 
-        result = self.tech_repo._process_secator_technology_item(item, self.scan_history.id, self.domain.id)
+        result = self.tech_repo._process_secator_technology_item(
+            item, self.scan_history.id, self.data_generator.target.id
+        )
 
         self.assertIsNone(result)

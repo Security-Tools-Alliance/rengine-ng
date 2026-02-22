@@ -360,7 +360,7 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
         Exception: Re-raised after logging on channel/DB/serialization failures so callers can handle.
     """
     try:
-        scan = ScanHistory.objects.get(id=scan_history_id)
+        scan = ScanHistory.objects.select_related("target__project").get(id=scan_history_id)
         channel_layer = get_channel_layer()
         if not channel_layer:
             logger.log_line(
@@ -417,8 +417,8 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
             level="debug",
         )
 
-        if scan.domain and scan.domain.project:
-            project_group = "scan-status-project-%s" % (_clean_channel_name(scan.domain.project.slug),)
+        if scan.target_id and scan.target and scan.target.project_id:
+            project_group = "scan-status-project-%s" % (_clean_channel_name(scan.target.project.slug),)
             async_to_sync(channel_layer.group_send)(
                 project_group,
                 {"type": "scan_status_update", "message": message},

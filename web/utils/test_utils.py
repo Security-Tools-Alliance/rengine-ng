@@ -26,13 +26,21 @@ from startScan.models import (
     CountryISO,
     DirectoryFile,
     DirectoryScan,
+    DNSRecord,
+    Domain,
+    DomainInfo,
+    DomainRegistration,
     Dork,
     Email,
     Employee,
     EndPoint,
+    HistoricalIP,
     IpAddress,
     MetaFinderDocument,
+    NameServer,
     Port,
+    Registrar,
+    RelatedDomain,
     ScanActivity,
     ScanHistory,
     ScanSchedule,
@@ -40,19 +48,9 @@ from startScan.models import (
     SubScan,
     Technology,
     Vulnerability,
-)
-from targetApp.models import (
-    DNSRecord,
-    Domain,
-    DomainInfo,
-    DomainRegistration,
-    HistoricalIP,
-    NameServer,
-    Organization,
-    Registrar,
-    RelatedDomain,
     WhoisStatus,
 )
+from targetApp.models import Organization, Target
 
 
 __all__ = ["TestDataGenerator"]
@@ -77,6 +75,7 @@ class TestDataGenerator:
         # Create engine type FIRST to avoid foreign key issues
         self.create_engine_type()
         self.create_project()
+        self.create_target()
         self.create_domain()
         self.create_scan_history()
         self.create_subdomain()
@@ -89,6 +88,7 @@ class TestDataGenerator:
         # Start with engine type to ensure it exists for scan_history
         self.create_engine_type()
         self.create_project()
+        self.create_target()
         self.create_domain()
         self.create_scan_history()
         self.create_subdomain()
@@ -141,13 +141,35 @@ class TestDataGenerator:
         )
         return self.project
 
-    def create_domain(self):
-        """Create and return a test domain."""
+    def create_target(self):
+        """Create and return a test target (type host). Requires project to exist."""
         import uuid
 
         unique_id = str(uuid.uuid4())[:8]
+        value = f"example-{unique_id}.com"
+        self.target = Target.objects.create(
+            project=self.project,
+            value=value,
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        return self.target
+
+    def create_domain(self, scan_history=None):
+        """Create and return a test domain. Optionally linked to a scan (scan_history).
+        Target must exist for create_scan_history; call create_target() after create_project().
+        If target is missing, create_target() is called first.
+        """
+        import uuid
+
+        if not getattr(self, "target", None):
+            self.create_target()
+        unique_id = str(uuid.uuid4())[:8]
+        name = f"example-{unique_id}.com"
         self.domain = Domain.objects.create(
-            name=f"example-{unique_id}.com", project=self.project, insert_date=timezone.now()
+            name=name,
+            insert_date=timezone.now(),
+            scan_history=scan_history,
         )
         return self.domain
 
@@ -159,11 +181,11 @@ class TestDataGenerator:
         """
         # All new scans are Secator scans by default (scan_type=None)
         scan_kwargs = {
-            "domain": self.domain,
             "start_scan_date": timezone.now(),
             "scan_status": 2,
             "is_legacy_scan": is_legacy,
         }
+        scan_kwargs["target"] = getattr(self, "target", None)
 
         # Only assign scan_type for legacy scans
         if is_legacy:
@@ -186,9 +208,12 @@ class TestDataGenerator:
         ]
 
         self.scan_history = ScanHistory.objects.create(**scan_kwargs)
+        if getattr(self, "domain", None) and not self.domain.scan_history_id:
+            self.domain.scan_history = self.scan_history
+            self.domain.save(update_fields=["scan_history_id"])
         return self.scan_history
 
-    def create_subdomain(self, name=None, scan_history=None, target_domain=None, **kwargs):
+    def create_subdomain(self, name=None, scan_history=None, domain=None, **kwargs):
         """Create and return a test subdomain with customizable parameters."""
 
         # Use provided values or defaults
@@ -198,7 +223,7 @@ class TestDataGenerator:
 
         subdomain_data = {
             "name": name,
-            "target_domain": target_domain or self.domain,
+            "domain": domain or self.domain,
             "scan_history": scan_history or self.scan_history,
         }
         subdomain_data.update(kwargs)
@@ -206,9 +231,7 @@ class TestDataGenerator:
         self.subdomain = Subdomain.objects.create(**subdomain_data)
         return self.subdomain
 
-    def create_endpoint(
-        self, name=None, http_url=None, subdomain=None, scan_history=None, target_domain=None, **kwargs
-    ):
+    def create_endpoint(self, name=None, http_url=None, subdomain=None, scan_history=None, domain=None, **kwargs):
         """Create and return a test endpoint with customizable parameters."""
 
         # Use provided values or defaults
@@ -221,7 +244,7 @@ class TestDataGenerator:
             http_url = f"https://{subdomain_name}/{name}"
 
         endpoint_data = {
-            "target_domain": target_domain or self.domain,
+            "domain": domain or self.domain,
             "subdomain": subdomain or self.subdomain,
             "scan_history": scan_history or self.scan_history,
             "discovered_date": timezone.now(),
@@ -239,7 +262,7 @@ class TestDataGenerator:
                 name="Common Vulnerability",
                 severity=1,
                 discovered_date=timezone.now(),
-                target_domain=self.domain,
+                domain=self.domain,
                 subdomain=self.subdomain,
                 scan_history=self.scan_history,
                 endpoint=self.endpoint,
@@ -329,8 +352,8 @@ class TestDataGenerator:
                 "project": self.project,
             },
         )
-        if created:
-            self.organization.domains.add(self.domain)
+        if created and getattr(self.domain, "scan_history_id", None) and self.domain.scan_history.target_id:
+            self.organization.targets.add(self.domain.scan_history.target)
         return self.organization
 
     def create_employee(self, name=None, username=None, designation=None, **kwargs):
@@ -519,7 +542,7 @@ class TestDataGenerator:
             creation_date=timezone.now(),
             modified_date=timezone.now(),
             scan_history=self.scan_history,
-            target_domain=self.domain,
+            domain=self.domain,
             subdomain=self.subdomain,
         )
         return self.metafinder_document
@@ -700,7 +723,7 @@ http_crawl: {}
 
     def build_scan_schedule(
         self,
-        domain,
+        target,
         initiated_by,
         *,
         schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
@@ -718,7 +741,7 @@ http_crawl: {}
             next_run = timezone.now() + timedelta(days=1)
         kwargs = {
             "name": "Test schedule",
-            "domain": domain,
+            "target": target,
             "initiated_by": initiated_by,
             "schedule_mode": schedule_mode,
             "next_run": next_run,
@@ -735,7 +758,7 @@ http_crawl: {}
 
     def create_scan_schedule(
         self,
-        domain,
+        target,
         initiated_by,
         *,
         schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
@@ -751,7 +774,7 @@ http_crawl: {}
         use build_scan_schedule() instead.
         """
         schedule = self.build_scan_schedule(
-            domain,
+            target,
             initiated_by,
             schedule_mode=schedule_mode,
             next_run=next_run,

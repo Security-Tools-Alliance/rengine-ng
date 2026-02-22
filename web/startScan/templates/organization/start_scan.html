@@ -199,9 +199,7 @@ Initiating scan for {{organization.name}}
               {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_title='Scan' embed_selection_container=False %}
               {% include 'startScan/_items/secator_view_toggle.html' with id_prefix='start_org_scan' %}
               {% include 'startScan/_items/secator_selection_layout.html' with id_prefix='start_org_scan' %}
-              {% with first_domain=domain_list|first %}
-              {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=first_domain.name|default:organization.name id_prefix='start_org_scan_' id_suffix='_start_org_scan' %}
-              {% endwith %}
+              {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=organization.name id_prefix='start_org_scan_' id_suffix='_start_org_scan' %}
               {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_org_scan_' show_random_proxy=False %}
               {% include 'startScan/_items/secator_start_scan_button.html' %}
             </div>

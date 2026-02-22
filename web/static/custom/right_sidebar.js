@@ -7,6 +7,18 @@ function getScanName(scan_object) {
   return scan_object.display_runner_type + ': ' + scan_object.display_scan_name;
 }
 
+/**
+ * Get target/domain display name from scan object (API may send domain.name or target.value).
+ * @param {Object} scan_object - Scan object from API
+ * @returns {string} Display name for the scan target
+ */
+function getScanTargetDisplayName(scan_object) {
+  if (!scan_object) return '';
+  const fromDomain = scan_object.domain && typeof scan_object.domain.name !== 'undefined' ? scan_object.domain.name : null;
+  const fromTarget = scan_object.target && typeof scan_object.target.value !== 'undefined' ? scan_object.target.value : null;
+  return fromDomain || fromTarget || '';
+}
+
 function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_stop_activity_url, endpoint_scan_status_url, options) {
   // options: { project, reload, openBar }. Legacy: 5th arg can be project (string), 6th reload, 7th openBar.
   const opts = (options && typeof options === 'object' && !Array.isArray(options))
@@ -76,7 +88,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
         const scan_object = scans.pending[scan];
         const scan_name = getScanName(scan_object);
         $bar.find('#upcoming_scans').append(`
-          <div class="alert alert-warning" role="alert">${htmlEncode(scan_name)} on ${scan_object.domain.name}</div>
+          <div class="alert alert-warning" role="alert">${htmlEncode(scan_name)} on ${htmlEncode(getScanTargetDisplayName(scan_object))}</div>
           `);
       }
     }
@@ -112,7 +124,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
           <div class="card border-primary border mini-card" id="scan-card-${scan_object.id}">
           <a href="/scan/${finalProject}/${scan_object.id}" class="text-reset item-hovered">
           <div class="card-header bg-soft-primary text-primary mini-card-header">
-          ${htmlEncode(scan_name)} on ${typeof htmlEncode === 'function' ? htmlEncode(scan_object.domain.name) : scan_object.domain.name}
+          ${htmlEncode(scan_name)} on ${typeof htmlEncode === 'function' ? htmlEncode(getScanTargetDisplayName(scan_object)) : getScanTargetDisplayName(scan_object)}
           <span class="badge badge-soft-primary float-end">
           ${typeof htmlEncode === 'function' ? htmlEncode(String(scan_object.current_progress)) : scan_object.current_progress}%
           </span>
@@ -180,7 +192,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
             <div class="card border-${color} border mini-card" id="scan-card-${scan_object.id}">
             <a href="/scan/${finalProject}/${scan_object.id}" class="text-reset item-hovered float-end">
             <div class="card-header ${bg_color} text-${color} mini-card-header">
-            ${htmlEncode(completed_scan_name)} on ${htmlEncode(scan_object.domain.name)}
+            ${htmlEncode(completed_scan_name)} on ${htmlEncode(getScanTargetDisplayName(scan_object))}
             </div>
             <div class="card-body mini-card-body">
             <p class="card-text">

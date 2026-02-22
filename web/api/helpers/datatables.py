@@ -79,11 +79,12 @@ DATATABLE_COLUMN_MAP_VULNERABILITY = {
     "15": "open_status",
 }
 
-# Targets list (Domain): indices match targetApp/templates/target/list.html columns.
+# Targets list (Target): indices match targetApp/templates/target/list.html columns.
+# Columns: 0=checkbox, 1=id, 2=name, 3=description, 4=summary, 5=id(added on), 6=start_scan_date, 7=action, 8+=hidden.
 DATATABLE_COLUMN_MAP_TARGETS = {
-    "2": "name",
-    "5": "start_scan_date",
-    "9": "insert_date",
+    "2": "value",
+    "6": "start_scan_date",
+    "10": "insert_date",
 }
 
 

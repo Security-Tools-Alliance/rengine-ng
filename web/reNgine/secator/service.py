@@ -23,7 +23,7 @@ from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.websocket import send_scan_status_update
 from scanEngine.models import SecatorScan, SecatorTask
 from startScan.models import ScanHistory, Subdomain, SubScan
-from targetApp.models import Domain
+from targetApp.models import Target
 
 
 PREFIX_SECATOR_SERVICE = "[SECATOR_SERVICE]"
@@ -76,8 +76,8 @@ def handle_scan_error(scan: ScanHistory, error: Exception) -> None:
 
 
 def start_secator_scan(
-    domain_id: int,
     user_id: int,
+    target_id: int = None,
     execution_mode: str = None,
     workflow_id: int = None,
     task_ids: list = None,
@@ -104,8 +104,8 @@ def start_secator_scan(
     When subscan_id is provided, it is passed to the runner context so findings can link to the SubScan.
 
     Args:
-        domain_id: ID of the target domain
         user_id: ID of the user initiating the scan
+        target_id: ID of the target (required). Scan is always launched from a target.
         execution_mode: workflow|tasks|scan
         workflow_id: Required for workflow mode
         task_ids: Required for tasks mode
@@ -144,15 +144,12 @@ def start_secator_scan(
         if random_proxy:
             secator_config["proxy"] = random_proxy
 
-    # Validate required parameters
-    if not domain_id:
-        return {"status": False, "error": "domain_id is required", "http_status": 400}
-
-    # Verify domain exists
+    if target_id is None:
+        return {"status": False, "error": "target_id is required", "http_status": 400}
     try:
-        domain = Domain.objects.get(id=domain_id)
-    except Domain.DoesNotExist:
-        return {"status": False, "error": f"Domain with ID {domain_id} not found", "http_status": 404}
+        target = Target.objects.get(id=target_id)
+    except Target.DoesNotExist:
+        return {"status": False, "error": "Target with ID %s not found" % (target_id,), "http_status": 404}
 
     if worker_id is not None:
         from scanEngine.models import SecatorWorker
@@ -179,27 +176,23 @@ def start_secator_scan(
                     "http_status": 404,
                 }
 
-            # Use the existing scan configuration
             scan_repo = ScanRepository()
-            scan_history_id = scan_repo.create_scan(
-                host_id=domain_id,
-                engine_id=1,
-                initiated_by_id=user_id,
-            )
+            create_kw = {"engine_id": 1, "initiated_by_id": user_id, "target_id": target.id}
+            scan_history_id = scan_repo.create_scan(**create_kw)
             scan = ScanHistory.objects.get(pk=scan_history_id)
 
             secator_scan_type = secator_scan.name
-
-            # Copy user ID to local variable for thread safety
             initiated_by_id = user_id
 
-            # Launch scan asynchronously in a separate thread
             def launch_scan():
                 try:
+                    init_kw = {
+                        "scan_history_id": scan.id,
+                        "execution_mode": "scan",
+                        "target_id": target.id,
+                    }
                     initiate_secator_scan(
-                        scan_history_id=scan.id,
-                        domain_id=domain_id,
-                        execution_mode="scan",
+                        **init_kw,
                         secator_scan_type=secator_scan_type,
                         imported_subdomains=imported_subdomains,
                         out_of_scope_subdomains=out_of_scope_subdomains,
@@ -209,24 +202,21 @@ def start_secator_scan(
                         initiated_by_id=initiated_by_id,
                         worker_id=worker_id,
                     )
-                    # Do not save scan here - status is managed by Secator hooks via SecatorRunnerUpdate API
-                    # Saving would overwrite the status updated by the hooks
                 except Exception as e:
                     handle_scan_error(scan, e)
 
             scan_thread = threading.Thread(target=launch_scan, daemon=True)
             scan_thread.start()
 
-            # Return immediately without waiting for scan completion
             return {
                 "status": True,
                 "scan_id": scan.id,
                 "scan_status": scan.scan_status,
-                "domain_id": domain.id,
-                "domain_name": domain.name,
+                "target_id": target.id,
+                "target_name": target.value,
                 "secator_scan_id": secator_scan.id,
                 "execution_mode": "scan",
-                "message": f"Scan started successfully for {domain.name}",
+                "message": "Scan started successfully for %s" % (target.value,),
                 "http_status": 200,
             }
 
@@ -239,20 +229,19 @@ def start_secator_scan(
                     "error": f"ScanHistory with ID {scan_history_id} not found",
                     "http_status": 404,
                 }
-            if scan.domain_id != domain_id:
+            if scan.target_id != target.id:
                 return {
                     "status": False,
-                    "error": f"ScanHistory {scan_history_id} does not belong to domain {domain_id}",
+                    "error": "ScanHistory %s does not belong to target %s" % (scan_history_id, target_id),
                     "http_status": 400,
                 }
             initiated_by_id = user_id
 
             def launch_scan():
                 try:
+                    init_kw = {"scan_history_id": scan.id, "execution_mode": execution_mode, "target_id": target.id}
                     initiate_secator_scan(
-                        scan_history_id=scan.id,
-                        domain_id=domain_id,
-                        execution_mode=execution_mode,
+                        **init_kw,
                         workflow_id=workflow_id,
                         task_ids=task_ids,
                         secator_scan_type=secator_scan_type,
@@ -274,34 +263,25 @@ def start_secator_scan(
                 "status": True,
                 "scan_id": scan.id,
                 "scan_status": scan.scan_status,
-                "domain_id": domain.id,
-                "domain_name": domain.name,
+                "target_id": target.id,
+                "target_name": target.value,
                 "execution_mode": execution_mode,
-                "message": f"Scan task started for {domain.name}",
+                "message": "Scan task started for %s" % (target.value,),
                 "http_status": 200,
             }
 
         if execution_mode:
-            # Create scan object first (synchronously)
             scan_repo = ScanRepository()
-            new_scan_history_id = scan_repo.create_scan(
-                host_id=domain_id,
-                engine_id=1,  # Fixed engine ID for all Secator scans
-                initiated_by_id=user_id,
-            )
+            create_kw = {"engine_id": 1, "initiated_by_id": user_id, "target_id": target.id}
+            new_scan_history_id = scan_repo.create_scan(**create_kw)
             scan = ScanHistory.objects.get(pk=new_scan_history_id)
-
-            # Copy user ID to local variable for thread safety
             initiated_by_id = user_id
 
-            # Launch scan asynchronously in a separate thread
-            # Secator will handle Celery tasks internally
             def launch_scan():
                 try:
+                    init_kw = {"scan_history_id": scan.id, "execution_mode": execution_mode, "target_id": target.id}
                     initiate_secator_scan(
-                        scan_history_id=scan.id,
-                        domain_id=domain_id,
-                        execution_mode=execution_mode,
+                        **init_kw,
                         workflow_id=workflow_id,
                         task_ids=task_ids,
                         secator_scan_type=secator_scan_type,
@@ -314,23 +294,20 @@ def start_secator_scan(
                         targets_override=targets_override or None,
                         worker_id=worker_id,
                     )
-                    # Do not save scan here - status is managed by Secator hooks via SecatorRunnerUpdate API
-                    # Saving would overwrite the status updated by the hooks
                 except Exception as e:
                     handle_scan_error(scan, e)
 
             scan_thread = threading.Thread(target=launch_scan, daemon=True)
             scan_thread.start()
 
-            # Return immediately without waiting for scan completion
             return {
                 "status": True,
                 "scan_id": scan.id,
                 "scan_status": scan.scan_status,
-                "domain_id": domain.id,
-                "domain_name": domain.name,
+                "target_id": target.id,
+                "target_name": target.value,
                 "execution_mode": execution_mode,
-                "message": f"Scan started successfully for {domain.name}",
+                "message": "Scan started successfully for %s" % (target.value,),
                 "http_status": 200,
             }
         else:
@@ -358,7 +335,7 @@ def _run_one_per_task_entry(
     shared_scan_id: int,
     subdomains: list,
     scan: ScanHistory | None,
-    domain_id: int,
+    target_id: int,
     user_id: int,
     imported_subdomains: list,
     out_of_scope_subdomains: list,
@@ -381,7 +358,7 @@ def _run_one_per_task_entry(
 
     try:
         result = start_secator_scan(
-            domain_id=domain_id,
+            target_id=target_id,
             user_id=user_id,
             execution_mode="tasks",
             task_ids=[task_id],
@@ -443,10 +420,10 @@ def _run_one_per_task_entry(
 
 
 def run_per_task_secator_scans(
-    domain_id: int,
     user_id: int,
     selected_targets_per_task: dict[str, list[str]],
     *,
+    target_id: int | None = None,
     task_type_to_id: dict[str, int] | None = None,
     imported_subdomains: list | None = None,
     out_of_scope_subdomains: list | None = None,
@@ -464,7 +441,7 @@ def run_per_task_secator_scans(
     and valid for the domain, otherwise creates a new one) and one SubScan/Celery task per
     (task_type, targets) so each task type runs with its own targets while sharing the same scan.
 
-    When scan_history_id is provided and exists for the given domain_id, that ScanHistory is
+    When scan_history_id is provided and exists for the given target_id/domain_id, that ScanHistory is
     reused; otherwise a new one is created (e.g. when launching from target summary where there
     is no single scan). When subdomain_ids is provided, only the first ID is used: one SubScan
     per task is created and linked to that single subdomain; any additional subdomain_ids are
@@ -492,6 +469,25 @@ def run_per_task_secator_scans(
         )
     subdomain_ids_for_subscan = subdomain_ids[:1] if subdomain_ids else []
 
+    if target_id is None:
+        return {
+            "validation_errors": validation_errors,
+            "results": [],
+            "success_count": 0,
+            "failed_count": 0,
+            "scan_id": None,
+        }
+    try:
+        target = Target.objects.get(id=target_id)
+    except Target.DoesNotExist:
+        return {
+            "validation_errors": validation_errors,
+            "results": [],
+            "success_count": 0,
+            "failed_count": 0,
+            "scan_id": None,
+        }
+
     valid_entries = [
         (task_type, targets, task_type_to_id[task_type])
         for task_type, targets in selected_targets_per_task.items()
@@ -508,14 +504,11 @@ def run_per_task_secator_scans(
 
     scan = None
     if scan_history_id is not None:
-        scan = ScanHistory.objects.filter(id=scan_history_id, domain_id=domain_id).first()
+        scan = ScanHistory.objects.filter(id=scan_history_id, target_id=target.id).first()
     if scan is None:
         scan_repo = ScanRepository()
-        shared_scan_id = scan_repo.create_scan(
-            host_id=domain_id,
-            engine_id=1,
-            initiated_by_id=user_id,
-        )
+        create_kw = {"engine_id": 1, "initiated_by_id": user_id, "target_id": target.id}
+        shared_scan_id = scan_repo.create_scan(**create_kw)
         scan = ScanHistory.objects.get(pk=shared_scan_id)
     shared_scan_id = scan.id
     subdomains = list(Subdomain.objects.filter(id__in=subdomain_ids_for_subscan)) if subdomain_ids_for_subscan else []
@@ -533,7 +526,7 @@ def run_per_task_secator_scans(
             shared_scan_id,
             subdomains,
             scan_for_subscans,
-            domain_id,
+            target.id,
             user_id,
             imported_subdomains,
             out_of_scope_subdomains,

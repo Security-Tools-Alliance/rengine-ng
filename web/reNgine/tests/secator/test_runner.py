@@ -58,7 +58,7 @@ tasks:
             mock_execute.return_value = {"status": "success", "result": "test_result"}
 
             result = self.runner.run_workflow(
-                workflow_name="test_subdomain_recon", targets=["example.com"], scan_history_id=1, domain_id=1
+                workflow_name="test_subdomain_recon", targets=["example.com"], scan_history_id=1, target_id=1
             )
 
             # Verify template was loaded
@@ -85,7 +85,7 @@ tasks:
             mock_execute.return_value = {"status": "success", "result": "test_result"}
 
             result = self.runner.run_workflow(
-                workflow_name="test_subdomain_recon", targets=["example.com"], scan_history_id=1, domain_id=1
+                workflow_name="test_subdomain_recon", targets=["example.com"], scan_history_id=1, target_id=1
             )
 
             # Verify template was loaded
@@ -103,7 +103,7 @@ tasks:
     def test_run_workflow_with_nonexistent_workflow(self):
         """Test workflow execution with non-existent workflow."""
         result = self.runner.run_workflow(
-            workflow_name="nonexistent_workflow", targets=["example.com"], scan_history_id=1, domain_id=1
+            workflow_name="nonexistent_workflow", targets=["example.com"], scan_history_id=1, target_id=1
         )
 
         # Should return error status
@@ -130,7 +130,7 @@ tasks:
             mock_execute.return_value = {"status": "success", "result": "test_result"}
 
             result = self.runner.run_workflow(
-                workflow_name="Workflow Without Alias", targets=["example.com"], scan_history_id=1, domain_id=1
+                workflow_name="Workflow Without Alias", targets=["example.com"], scan_history_id=1, target_id=1
             )
 
             # Should succeed since workflow can be loaded by name (alias is optional)

@@ -9,7 +9,7 @@
   Object.assign(window.SecatorScan, {
     /**
      * Performs GET request for input types and proposed targets. No DOM updates.
-     * @param {Object} params - { domain_id, subdomain_ids?, workflow_id?|scan_name? }
+     * @param {Object} params - { target_id?|domain_id?, subdomain_ids?, workflow_id?|scan_name? }
      * @returns {jQuery.Promise}
      */
     requestInputTypesTargets: function(params) {

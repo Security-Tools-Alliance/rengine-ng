@@ -35,7 +35,7 @@ class TestScanOrchestrator(BaseTestCase):
 
         result = self.orchestrator.execute_scan(
             scan_history_id=self.scan_history.id,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             execution_mode="workflow",
             targets=targets,
             config=config,
@@ -47,7 +47,7 @@ class TestScanOrchestrator(BaseTestCase):
             workflow_name="test_workflow",
             targets=targets,
             scan_history_id=self.scan_history.id,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             config=config,
             profiles=profiles,
         )
@@ -63,7 +63,7 @@ class TestScanOrchestrator(BaseTestCase):
 
         result = self.orchestrator.execute_scan(
             scan_history_id=self.scan_history.id,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             execution_mode="tasks",
             targets=targets,
             config=config,
@@ -75,7 +75,7 @@ class TestScanOrchestrator(BaseTestCase):
             task_names=["subfinder", "httpx", "nuclei"],
             targets=targets,
             scan_history_id=self.scan_history.id,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             config=config,
             profiles=profiles,
         )
@@ -96,7 +96,7 @@ class TestScanOrchestrator(BaseTestCase):
 
         result = self.orchestrator.execute_scan(
             scan_history_id=self.scan_history.id,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             execution_mode="scan",
             targets=targets,
             config=config,
@@ -121,7 +121,7 @@ class TestScanOrchestrator(BaseTestCase):
 
             result = self.orchestrator.execute_scan(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 execution_mode="scan",
                 targets=targets,
                 config=config,
@@ -131,7 +131,7 @@ class TestScanOrchestrator(BaseTestCase):
                 scan_type="domain",
                 targets=targets,
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 config=config,
                 profiles=None,
             )
@@ -145,7 +145,7 @@ class TestScanOrchestrator(BaseTestCase):
         with self.assertRaises(ValueError) as context:
             self.orchestrator.execute_scan(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 execution_mode="invalid_mode",
                 targets=targets,
                 config=config,
@@ -160,7 +160,10 @@ class TestScanOrchestrator(BaseTestCase):
 
         with self.assertRaises(ValueError) as context:
             self.orchestrator._execute_workflow(
-                scan_history_id=self.scan_history.id, domain_id=self.domain.id, targets=targets, config=config
+                scan_history_id=self.scan_history.id,
+                target_id=self.domain.scan_history.target_id,
+                targets=targets,
+                config=config,
             )
 
         self.assertIn("workflow_name is required", str(context.exception))
@@ -172,7 +175,10 @@ class TestScanOrchestrator(BaseTestCase):
 
         with self.assertRaises(ValueError) as context:
             self.orchestrator._execute_tasks(
-                scan_history_id=self.scan_history.id, domain_id=self.domain.id, targets=targets, config=config
+                scan_history_id=self.scan_history.id,
+                target_id=self.domain.scan_history.target_id,
+                targets=targets,
+                config=config,
             )
 
         self.assertIn("tasks list is required", str(context.exception))
@@ -189,7 +195,7 @@ class TestScanOrchestrator(BaseTestCase):
         with self.assertRaises(Exception) as context:
             self.orchestrator.execute_scan(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 execution_mode="workflow",
                 targets=targets,
                 config=config,
@@ -210,7 +216,7 @@ class TestScanOrchestrator(BaseTestCase):
         with self.assertRaises(Exception) as context:
             self.orchestrator.execute_scan(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 execution_mode="tasks",
                 targets=targets,
                 config=config,
@@ -228,7 +234,7 @@ class TestScanOrchestrator(BaseTestCase):
         with self.assertRaises(ValueError):
             self.orchestrator.execute_scan(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 execution_mode="invalid_mode",
                 targets=targets,
                 config=config,
@@ -248,7 +254,7 @@ class TestScanOrchestrator(BaseTestCase):
         with self.assertRaises(Exception) as context:
             self.orchestrator.execute_scan(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 execution_mode="invalid_mode",
                 targets=targets,
                 config=config,
@@ -268,7 +274,7 @@ class TestScanOrchestrator(BaseTestCase):
 
             self.orchestrator._execute_workflow(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 targets=targets,
                 config=config,
                 profiles=profiles,
@@ -278,7 +284,7 @@ class TestScanOrchestrator(BaseTestCase):
                 workflow_name="test_workflow",
                 targets=targets,
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 config=config,
                 profiles=profiles,
             )
@@ -294,7 +300,7 @@ class TestScanOrchestrator(BaseTestCase):
 
             self.orchestrator._execute_tasks(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 targets=targets,
                 config=config,
                 profiles=profiles,
@@ -304,7 +310,7 @@ class TestScanOrchestrator(BaseTestCase):
                 task_names=["subfinder", "httpx"],
                 targets=targets,
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 config=config,
                 profiles=profiles,
             )
@@ -318,14 +324,17 @@ class TestScanOrchestrator(BaseTestCase):
             mock_run.return_value = {"status": "success"}
 
             self.orchestrator._execute_workflow(
-                scan_history_id=self.scan_history.id, domain_id=self.domain.id, targets=targets, config=config
+                scan_history_id=self.scan_history.id,
+                target_id=self.domain.scan_history.target_id,
+                targets=targets,
+                config=config,
             )
 
             mock_run.assert_called_once_with(
                 workflow_name="test_workflow",
                 targets=[],
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 config=config,
                 profiles=None,
             )
@@ -341,7 +350,7 @@ class TestScanOrchestrator(BaseTestCase):
 
             self.orchestrator._execute_workflow(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 targets=targets,
                 config=config,
                 profiles=profiles,
@@ -351,7 +360,7 @@ class TestScanOrchestrator(BaseTestCase):
                 workflow_name="test_workflow",
                 targets=targets,
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.domain.scan_history.target_id,
                 config=config,
                 profiles=None,
             )

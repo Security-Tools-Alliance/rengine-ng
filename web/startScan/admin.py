@@ -15,6 +15,9 @@ from startScan.models import (
     CweId,
     DirectoryFile,
     DirectoryScan,
+    Domain,
+    DomainInfo,
+    DomainRegistration,
     Dork,
     Email,
     Employee,
@@ -23,6 +26,8 @@ from startScan.models import (
     LLMVulnerabilityReport,
     MetaFinderDocument,
     Port,
+    Registrar,
+    RelatedDomain,
     S3Bucket,
     ScanActivity,
     ScanHistory,
@@ -36,12 +41,123 @@ from startScan.models import (
 )
 
 
+@admin.register(Domain)
+class DomainAdmin(admin.ModelAdmin):
+    """Admin interface for Domain model (startScan.models)."""
+
+    list_display = [
+        "name",
+        "scan_history",
+        "insert_date",
+        "start_scan_date",
+    ]
+    list_filter = [
+        "insert_date",
+        "start_scan_date",
+    ]
+    search_fields = [
+        "name",
+        "description",
+        "h1_team_handle",
+        "ip_address_cidr",
+    ]
+    readonly_fields = [
+        "insert_date",
+        "start_scan_date",
+    ]
+    fieldsets = (
+        (
+            "Basic Information",
+            {"fields": ("name", "scan_history", "description", "domain_info")},
+        ),
+        (
+            "Scan / Network",
+            {"fields": ("h1_team_handle", "ip_address_cidr", "insert_date", "start_scan_date", "custom_dns_servers")},
+        ),
+        (
+            "Advanced",
+            {"fields": ("request_headers",), "classes": ("collapse",)},
+        ),
+    )
+
+
+@admin.register(DomainInfo)
+class DomainInfoAdmin(admin.ModelAdmin):
+    """Admin interface for DomainInfo model (startScan.models)."""
+
+    list_display = [
+        "id",
+        "dnssec",
+        "registrar",
+        "whois_server",
+    ]
+    list_filter = [
+        "dnssec",
+    ]
+    search_fields = [
+        "whois_server",
+        "geolocation_iso",
+    ]
+    readonly_fields = [
+        "created",
+        "updated",
+        "expires",
+    ]
+    fieldsets = (
+        (
+            "Dates",
+            {"fields": ("created", "updated", "expires")},
+        ),
+        (
+            "DNS / WHOIS",
+            {"fields": ("dnssec", "registrar", "whois_server", "geolocation_iso")},
+        ),
+        (
+            "Contacts",
+            {"fields": ("registrant", "admin", "tech")},
+        ),
+        (
+            "Extra",
+            {"fields": ("extra_data",), "classes": ("collapse",)},
+        ),
+    )
+
+
+@admin.register(RelatedDomain)
+class RelatedDomainAdmin(admin.ModelAdmin):
+    list_display = ["id", "name"]
+    search_fields = ["name"]
+
+
+@admin.register(Registrar)
+class RegistrarAdmin(admin.ModelAdmin):
+    list_display = ["id", "name", "country"]
+    list_filter = ["country"]
+    search_fields = ["name", "email", "url"]
+    fieldsets = (
+        ("Basic Information", {"fields": ("name", "phone", "email", "url")}),
+        ("Address", {"fields": ("address", "country", "fax")}),
+    )
+
+
+@admin.register(DomainRegistration)
+class DomainRegistrationAdmin(admin.ModelAdmin):
+    list_display = ["id", "name", "organization", "country"]
+    list_filter = ["country"]
+    search_fields = ["name", "organization", "email"]
+    fieldsets = (
+        ("Basic Information", {"fields": ("name", "organization", "contact", "type", "id_str")}),
+        ("Address", {"fields": ("address", "city", "state", "zip_code", "country")}),
+        ("Contact", {"fields": ("email", "phone", "fax")}),
+    )
+
+
 @admin.register(ScanHistory)
 class ScanHistoryAdmin(admin.ModelAdmin):
     """Admin interface for ScanHistory model with legacy scan support."""
 
     list_display = [
-        "domain",
+        "target",
         "scan_type",
         "is_legacy_scan",
         "scan_status",
@@ -57,7 +173,7 @@ class ScanHistoryAdmin(admin.ModelAdmin):
         "initiated_by",
     ]
     search_fields = [
-        "domain__name",
+        "target__value",
         "scan_type__name",
         "initiated_by__username",
     ]
@@ -68,7 +184,7 @@ class ScanHistoryAdmin(admin.ModelAdmin):
         "tasks",
     ]
     fieldsets = (
-        ("Scan Information", {"fields": ("domain", "scan_type", "is_legacy_scan", "scan_status")}),
+        ("Scan Information", {"fields": ("target", "scan_type", "is_legacy_scan", "scan_status")}),
         (
             "Execution Details",
             {
@@ -152,7 +268,7 @@ class SubdomainAdmin(admin.ModelAdmin):
 
     list_display = [
         "name",
-        "target_domain",
+        "domain",
         "scan_history",
         "is_important",
         "http_status",
@@ -181,7 +297,7 @@ class SubdomainAdmin(admin.ModelAdmin):
                 "fields": (
                     "name",
                     "scan_history",
-                    "target_domain",
+                    "domain",
                     "is_imported_subdomain",
                     "is_important",
                 )
@@ -294,7 +410,7 @@ class EndPointAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Basic Information",
-            {"fields": ("scan_history", "target_domain", "subdomain", "source", "http_url", "is_default")},
+            {"fields": ("scan_history", "domain", "subdomain", "source", "http_url", "is_default")},
         ),
         (
             "HTTP Response",
@@ -400,7 +516,7 @@ class VulnerabilityAdmin(admin.ModelAdmin):
                     "source",
                     "subdomain",
                     "endpoint",
-                    "target_domain",
+                    "domain",
                     "name",
                     "severity",
                 )
@@ -648,7 +764,7 @@ class MetaFinderDocumentAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Basic Information",
-            {"fields": ("scan_history", "target_domain", "subdomain", "doc_name", "url", "title")},
+            {"fields": ("scan_history", "domain", "subdomain", "doc_name", "url", "title")},
         ),
         (
             "Metadata",
@@ -687,7 +803,7 @@ class EmployeeAdmin(admin.ModelAdmin):
         "username",
         "designation",
         "scan_history",
-        "target_domain",
+        "domain",
     ]
     list_filter = []
     search_fields = [
@@ -706,7 +822,7 @@ class EmployeeAdmin(admin.ModelAdmin):
         ),
         (
             "Associations",
-            {"fields": ("scan_history", "target_domain", "subdomain", "endpoint", "discovered_date", "extra_data")},
+            {"fields": ("scan_history", "domain", "subdomain", "endpoint", "discovered_date", "extra_data")},
         ),
         (
             "Emails",

@@ -12,9 +12,10 @@ from django.utils import timezone
 
 from reNgine.core.validators import is_valid_domain, is_valid_ip
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
+from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import get_module_logger
-from startScan.models import IpAddress, ScanHistory, Subdomain, Technology
-from targetApp.models import Domain
+from startScan.models import Domain, IpAddress, ScanHistory, Subdomain, Technology
+from targetApp.models import Target
 
 
 PREFIX_SUBDOMAIN_REPO = "[SUBDOMAIN_REPO]"
@@ -25,7 +26,7 @@ class SubdomainRepository:
     """Repository for subdomain-related database operations."""
 
     def save_from_secator(
-        self, item: Dict[str, Any], scan_history_id: int, domain_id: int, rengine_context: Dict[str, Any] = None
+        self, item: Dict[str, Any], scan_history_id: int, target_id: int, rengine_context: Dict[str, Any] = None
     ) -> Optional[Subdomain]:
         """
         Save subdomain from Secator result with enriched data.
@@ -33,14 +34,14 @@ class SubdomainRepository:
         Args:
             item: Secator subdomain item
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             rengine_context: Optional reNgine context with imported_subdomains, etc.
 
         Returns:
             Subdomain: Saved subdomain object or None
         """
         try:
-            return self._process_secator_subdomain_item(item, scan_history_id, domain_id, rengine_context)
+            return self._process_secator_subdomain_item(item, scan_history_id, target_id, rengine_context)
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
@@ -70,7 +71,7 @@ class SubdomainRepository:
         self,
         item: Dict[str, Any],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         rengine_context: Dict[str, Any] = None,
     ) -> Optional[Subdomain]:
         subdomain_name = item.get("host") or item.get("target") or item.get("name")
@@ -93,15 +94,24 @@ class SubdomainRepository:
             )
             return None
 
+        domain = self._resolve_domain_for_subdomain(scan_history_id, target_id, subdomain_name)
+        if not domain:
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "SAVE",
+                "Could not resolve domain for target_id=%s, subdomain=%s" % (target_id, subdomain_name),
+                level="warning",
+            )
+            return None
+
         scan_history = ScanHistory.objects.get(id=scan_history_id)
-        domain = Domain.objects.get(id=domain_id)
 
         # Check if this subdomain is in the imported list
         is_imported = self._is_imported_subdomain(subdomain_name, rengine_context or {})
 
         # Prepare enriched defaults
         defaults = {
-            "target_domain": domain,
+            "domain": domain,
             "is_imported_subdomain": is_imported,
             "discovered_date": timezone.now(),
             "verified": item.get("verified", False),
@@ -157,6 +167,13 @@ class SubdomainRepository:
                 subscan.subdomain_subscan_ids.add(subdomain)
         return subdomain
 
+    def _resolve_domain_for_subdomain(
+        self, scan_history_id: int, target_id: int, subdomain_name: str
+    ) -> Optional[Domain]:
+        """Resolve Domain for this scan and subdomain using TLD extraction."""
+        target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
+        return resolve_domain_for_scan(scan_history_id, subdomain_name, target_value, create=True)
+
     def _map_extra_data_to_subdomain_fields(self, extra_data: Dict[str, Any], defaults: Dict[str, Any]) -> None:
         # Map common extra data fields to subdomain fields
         if "http_url" in extra_data:
@@ -197,10 +214,12 @@ class SubdomainRepository:
         """
         try:
             scan_history = ScanHistory.objects.get(id=scan_history_id)
-            domain = Domain.objects.get(id=domain_id)
+            domain = get_domain_by_id(domain_id)
+            if domain is None:
+                return None, False
 
             defaults = {
-                "target_domain": domain,
+                "domain": domain,
                 "is_imported_subdomain": False,
             } | kwargs
             subdomain, created = Subdomain.objects.get_or_create(
@@ -240,13 +259,15 @@ class SubdomainRepository:
         """
         try:
             scan_history = ScanHistory.objects.get(id=scan_history_id)
-            domain = Domain.objects.get(id=domain_id)
+            domain = get_domain_by_id(domain_id)
+            if domain is None:
+                return []
 
             if subdomain_objects := [
                 Subdomain(
                     name=name,
                     scan_history=scan_history,
-                    target_domain=domain,
+                    domain=domain,
                     is_imported_subdomain=False,
                 )
                 for name in subdomains
@@ -338,7 +359,7 @@ class SubdomainRepository:
         """
         Associate IP addresses with subdomain and ensure an endpoint exists for each IP.
         Endpoint creation is idempotent (get_or_create); we avoid duplicate calls for
-        the same (ip, scan_history_id, target_domain_id) within this run via a local cache.
+        the same (ip, scan_history_id, domain_id) within this run via a local cache.
         """
         try:
             extra_data = item.get("extra_data", {})
@@ -350,7 +371,7 @@ class SubdomainRepository:
             endpoint_repo = EndpointRepository()
             created_endpoints_cache: set[tuple[str, int, int]] = set()
             sid = subdomain.scan_history_id
-            did = subdomain.target_domain_id
+            did = subdomain.domain_id
 
             for ip_address in ip_addresses:
                 if is_valid_ip(ip_address):

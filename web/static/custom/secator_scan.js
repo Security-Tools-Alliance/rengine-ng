@@ -375,22 +375,22 @@
         return;
       }
 
-      const {getDomainId, getSubdomainIds} = context;
-      let domainId = typeof getDomainId === 'function' ? getDomainId() : '';
+      const {getTargetId, getSubdomainIds} = context;
+      const targetId = typeof getTargetId === 'function' ? getTargetId() : '';
       const subdomainIds = typeof getSubdomainIds === 'function' ? getSubdomainIds() : [];
-      if (!domainId && (!subdomainIds || !subdomainIds.length)) {
+      if (!targetId && (!subdomainIds || !subdomainIds.length)) {
         $block.show();
         $single.show();
         $tasksContainer.hide().empty();
         $badges.empty();
-        $preview.html('<span class="text-muted">Set domain or select subdomain(s) to see proposed targets.</span>');
+        $preview.html('<span class="text-muted">Set target or select subdomain(s) to see proposed targets.</span>');
         $warning.add($error).add($loading).hide();
         if (typeof onUpdateCount === 'function') onUpdateCount();
         return;
       }
 
       const params = {};
-      if (domainId) params.domain_id = domainId;
+      if (targetId) params.target_id = targetId;
       if (subdomainIds && subdomainIds.length) params.subdomain_ids = subdomainIds.join(',');
       if (executionMode === 'workflow') params.workflow_id = workflowId;
       if (executionMode === 'scan') params.scan_name = scanName;
@@ -437,7 +437,6 @@
         $root.find('#' + prefix + '-input-types-targets').hide();
         return;
       }
-      const domainId = typeof getDomainId === 'function' ? getDomainId() : '';
       const subdomainIds = typeof getSubdomainIds === 'function' ? getSubdomainIds() : [];
       const $selectionContainer = typeof getSelectionContainer === 'function' ? getSelectionContainer() : $();
       const $block = $root.find('#' + prefix + '-input-types-targets');
@@ -467,7 +466,8 @@
       $single.prev('h6').add($single).add($tasksContainer).hide();
 
       const self = this;
-      const baseParams = { domain_id: domainId };
+      const targetIdForTasks = typeof context.getTargetId === 'function' ? context.getTargetId() : '';
+      const baseParams = targetIdForTasks ? { target_id: targetIdForTasks } : {};
       if (subdomainIds && subdomainIds.length) baseParams.subdomain_ids = subdomainIds.join(',');
       this.requestInputTypesTargetsForTasks(taskIds, baseParams)
         .done(function() {
@@ -497,8 +497,9 @@
       if (!prefix || !window.SECATOR_INPUT_TYPES_TARGETS_URL) return;
       const containers = this.getSecatorContainers($form);
       const $selectionContainer = containers.selectionContainer;
+      let targetId = $form.find('input[name="target_id"]').val();
       let domainId = $form.find('input[name="domain_id"]').val();
-      if (!domainId && $form.find('input[name="list_of_domain_id"]').length) {
+      if (!targetId && !domainId && $form.find('input[name="list_of_domain_id"]').length) {
         const listVal = $form.find('input[name="list_of_domain_id"]').val();
         if (listVal) {
           const ids = typeof listVal === 'string' ? listVal.split(',').map(s => s.trim()).filter(Boolean) : [];
@@ -509,6 +510,7 @@
         $root: $form,
         prefix,
         getExecutionMode: () => $form.find('input[name="execution_mode"]').val(),
+        getTargetId: () => targetId || $form.find('input[name="target_id"]').val(),
         getDomainId: () => domainId || $form.find('input[name="domain_id"]').val(),
         getSubdomainIds: () => [],
         getWorkflowId: () => $selectionContainer.find('input[name="workflow_id"]:checked').val(),
@@ -518,7 +520,7 @@
         renderTasksInto: 'cards'
       };
       if (context.getExecutionMode() === 'tasks') {
-        this.fetchInputTypesAndTargetsForFormTasks($form, prefix, domainId || context.getDomainId(), $selectionContainer,
+        this.fetchInputTypesAndTargetsForFormTasks($form, prefix, context.getTargetId(), context.getDomainId(), $selectionContainer,
           $form.find('#' + prefix + '-input-types-targets'), $form.find('#' + prefix + '-targets-single'),
           $form.find('#' + prefix + '-tasks-targets-container'), $form.find('#' + prefix + '-input-types-badges'),
           $form.find('#' + prefix + '-targets-preview'), $form.find('#' + prefix + '-targets-toolbar'),
@@ -529,7 +531,7 @@
       this.fetchInputTypesAndTargetsWithContext(context);
     },
 
-    fetchInputTypesAndTargetsForFormTasks: function($form, prefix, domainId, $selectionContainer, $block, $single, $tasksContainer, $badges, $preview, $toolbar, $warning, $error, $loading) {
+    fetchInputTypesAndTargetsForFormTasks: function($form, prefix, targetId, domainId, $selectionContainer, $block, $single, $tasksContainer, $badges, $preview, $toolbar, $warning, $error, $loading) {
       const checkedTasks = $selectionContainer.find('input[name="task_ids"]:checked');
       if (!checkedTasks.length) {
         $block.hide();
@@ -554,7 +556,12 @@
       $single.prev('h6').add($single).add($tasksContainer).hide();
 
       const self = this;
-      const baseParams = { domain_id: domainId };
+      const baseParams = targetId ? { target_id: targetId } : {};
+      if (Object.keys(baseParams).length === 0) {
+        $loading.hide();
+        $error.text('Set target to load proposed targets.').show();
+        return;
+      }
       const context = { $root: $form, prefix, getSelectionContainer: () => $selectionContainer };
       this.requestInputTypesTargetsForTasks(taskIds, baseParams)
         .done(function() {

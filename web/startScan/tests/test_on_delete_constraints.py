@@ -39,9 +39,9 @@ class TestDomainCascadeDeletion(BaseTestCase):
         self.use_minimal_setup = True
         self.data_generator.create_project_base()
 
-    def test_delete_domain_cascades_to_scan_history(self):
-        """Test that deleting a domain deletes all associated scan histories."""
-        domain = self.data_generator.domain
+    def test_delete_target_cascades_to_scan_history(self):
+        """Test that deleting a target cascades to its scan histories (ScanHistory.target)."""
+        target = self.data_generator.target
         scan_history = self.data_generator.scan_history
 
         scan_history_id = scan_history.id
@@ -49,8 +49,8 @@ class TestDomainCascadeDeletion(BaseTestCase):
         # Verify scan_history exists
         self.assertTrue(ScanHistory.objects.filter(id=scan_history_id).exists())
 
-        # Delete domain
-        domain.delete()
+        # Delete target (CASCADE removes scan histories)
+        target.delete()
 
         # Verify scan_history was deleted
         self.assertFalse(ScanHistory.objects.filter(id=scan_history_id).exists())
@@ -95,7 +95,7 @@ class TestDomainCascadeDeletion(BaseTestCase):
             name="Test Vulnerability",
             severity=1,
             discovered_date=timezone.now(),
-            target_domain=domain,
+            domain=domain,
             subdomain=self.data_generator.subdomain,
             scan_history=self.data_generator.scan_history,
             endpoint=self.data_generator.endpoint,
@@ -134,7 +134,7 @@ class TestDomainCascadeDeletion(BaseTestCase):
         employee = Employee.objects.create(
             name="Test Employee",
             username="testuser",
-            target_domain=domain,
+            domain=domain,
             scan_history=self.data_generator.scan_history,
         )
 
@@ -152,9 +152,7 @@ class TestDomainCascadeDeletion(BaseTestCase):
     def test_delete_domain_cascades_to_exploits(self):
         """Test that deleting a domain deletes all associated exploits."""
         domain = self.data_generator.domain
-        exploit = self.data_generator.create_exploit(
-            target_domain=domain, scan_history=self.data_generator.scan_history
-        )
+        exploit = self.data_generator.create_exploit(domain=domain, scan_history=self.data_generator.scan_history)
 
         exploit_id = exploit.id
 
@@ -260,7 +258,7 @@ class TestScanHistoryCascadeDeletion(BaseTestCase):
             name="Test Vulnerability",
             severity=1,
             discovered_date=timezone.now(),
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             subdomain=self.data_generator.subdomain,
             scan_history=scan_history,
             endpoint=self.data_generator.endpoint,
@@ -332,7 +330,7 @@ class TestScanHistoryCascadeDeletion(BaseTestCase):
         employee = Employee.objects.create(
             name="Test Employee",
             username="testuser",
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             scan_history=scan_history,
         )
 
@@ -350,9 +348,7 @@ class TestScanHistoryCascadeDeletion(BaseTestCase):
     def test_delete_scan_history_cascades_to_exploits(self):
         """Test that deleting a scan_history deletes all associated exploits."""
         scan_history = self.data_generator.scan_history
-        exploit = self.data_generator.create_exploit(
-            target_domain=self.data_generator.domain, scan_history=scan_history
-        )
+        exploit = self.data_generator.create_exploit(domain=self.data_generator.domain, scan_history=scan_history)
 
         exploit_id = exploit.id
 
@@ -457,7 +453,7 @@ class TestSubdomainCascadeDeletion(BaseTestCase):
             name="Test Vulnerability",
             severity=1,
             discovered_date=timezone.now(),
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             subdomain=subdomain,
             scan_history=self.data_generator.scan_history,
         )
@@ -484,7 +480,7 @@ class TestSubdomainCascadeDeletion(BaseTestCase):
             creation_date=timezone.now(),
             modified_date=timezone.now(),
             scan_history=self.data_generator.scan_history,
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             subdomain=subdomain,
         )
 
@@ -505,7 +501,7 @@ class TestSubdomainCascadeDeletion(BaseTestCase):
         employee = Employee.objects.create(
             name="Test Employee",
             username="testuser",
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             subdomain=subdomain,
             scan_history=self.data_generator.scan_history,
         )
@@ -526,7 +522,7 @@ class TestSubdomainCascadeDeletion(BaseTestCase):
         subdomain = self.data_generator.create_subdomain()
         exploit = self.data_generator.create_exploit(
             subdomain=subdomain,
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             scan_history=self.data_generator.scan_history,
         )
 
@@ -602,7 +598,7 @@ class TestEndPointCascadeDeletion(BaseTestCase):
             name="Test Vulnerability",
             severity=1,
             discovered_date=timezone.now(),
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             subdomain=self.data_generator.subdomain,
             endpoint=endpoint,
             scan_history=self.data_generator.scan_history,
@@ -625,7 +621,7 @@ class TestEndPointCascadeDeletion(BaseTestCase):
         employee = Employee.objects.create(
             name="Test Employee",
             username="testuser",
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             subdomain=self.data_generator.subdomain,
             endpoint=endpoint,
             scan_history=self.data_generator.scan_history,
@@ -647,7 +643,7 @@ class TestEndPointCascadeDeletion(BaseTestCase):
         endpoint = self.data_generator.create_endpoint()
         exploit = self.data_generator.create_exploit(
             endpoint=endpoint,
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             subdomain=self.data_generator.subdomain,
             scan_history=self.data_generator.scan_history,
         )
@@ -696,7 +692,7 @@ class TestIpAddressCascadeDeletion(BaseTestCase):
         ip_address = self.data_generator.create_ip_address()
         exploit = self.data_generator.create_exploit(
             ip_address=ip_address,
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             scan_history=self.data_generator.scan_history,
         )
 

@@ -25,7 +25,7 @@ class TestEndPointViewSet(BaseTestCase):
                 "project": self.data_generator.project.slug,
                 "scan_id": self.data_generator.scan_history.id,
                 "subdomain_id": self.data_generator.subdomain.id,
-                "target_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
             },
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -44,7 +44,7 @@ class TestEndPointViewSet(BaseTestCase):
                 "subdomain_id": self.data_generator.subdomain.id,
                 "scan_id": self.data_generator.scan_history.id,
                 "project": self.data_generator.project.slug,
-                "target_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
             },
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)

@@ -47,11 +47,15 @@ class TestDashboardViews(BaseTestCase):
 
     def test_interface_settings_view_post_saves_preference(self):
         """Test the interface settings view POST saves preference and redirects."""
+        from dashboard.models import DATATABLES_PAGE_LENGTH_DEFAULT
         from dashboard.services.user_preferences import get_datatables_display
 
         response = self.client.post(
             reverse("interface_settings"),
-            {"datatables_display": "scroller"},
+            {
+                "datatables_display": "scroller",
+                "datatables_page_length": str(DATATABLES_PAGE_LENGTH_DEFAULT),
+            },
             follow=False,
         )
         self.assertEqual(response.status_code, 302)

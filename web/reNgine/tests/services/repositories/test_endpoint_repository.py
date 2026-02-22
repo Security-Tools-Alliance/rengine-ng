@@ -7,7 +7,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
-from startScan.models import DirectoryScan, EndPoint, ScanHistory, Subdomain, SubScan
+from startScan.models import DirectoryScan, EndPoint, Subdomain, SubScan
 from utils.test_base import BaseTestCase
 
 
@@ -71,6 +71,7 @@ class EndpointRepositoryHttpStatusBreakdownTestCase(BaseTestCase):
     def test_domain_merges_legacy_subdomains_and_secator_endpoints(self):
         """Domain breakdown merges Subdomain and default EndPoint counts."""
         self.data_generator.create_scan_history(is_legacy=True)
+        self.data_generator.create_domain(scan_history=self.data_generator.scan_history)
         self.data_generator.create_subdomain(http_status=200)
         self.data_generator.create_subdomain(name="api.example.com", http_status=404)
         scan_secator = self.data_generator.create_scan_history(is_legacy=False)
@@ -90,6 +91,7 @@ class EndpointRepositoryHttpStatusBreakdownTestCase(BaseTestCase):
     def test_domain_returns_sorted_by_http_status(self):
         """Result is sorted by http_status for stable chart order."""
         self.data_generator.create_scan_history(is_legacy=True)
+        self.data_generator.create_domain(scan_history=self.data_generator.scan_history)
         self.data_generator.create_subdomain(http_status=404)
         self.data_generator.create_subdomain(name="api.example.com", http_status=200)
         result = self.repository.get_http_status_breakdown(self.data_generator.domain)
@@ -97,6 +99,8 @@ class EndpointRepositoryHttpStatusBreakdownTestCase(BaseTestCase):
 
     def test_domain_empty_returns_empty_list(self):
         """Domain with no subdomains/endpoints with status returns empty."""
+        self.data_generator.create_scan_history(is_legacy=True)
+        self.data_generator.create_domain(scan_history=self.data_generator.scan_history)
         domain = self.data_generator.domain
         Subdomain.objects.filter(scan_history=self.data_generator.scan_history).delete()
         EndPoint.objects.filter(scan_history=self.data_generator.scan_history).delete()
@@ -106,6 +110,7 @@ class EndpointRepositoryHttpStatusBreakdownTestCase(BaseTestCase):
     def test_domain_same_subdomain_legacy_and_secator_counted_once(self):
         """Domain: subdomain present in legacy and Secator (default endpoint) counts only once."""
         self.data_generator.create_scan_history(is_legacy=True)
+        self.data_generator.create_domain(scan_history=self.data_generator.scan_history)
         self.data_generator.create_subdomain(name="www.example.com", http_status=200)
         scan_secator = self.data_generator.create_scan_history(is_legacy=False)
         sub_sec = self.data_generator.create_subdomain(name="www.example.com", scan_history=scan_secator)
@@ -129,24 +134,20 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         super().setUp()
         self.repository = EndpointRepository()
 
-        # Use the data_generator from BaseTestCase which already has domain, engine_type, etc.
-        # Create a Secator scan (is_legacy_scan=False, scan_type=None)
-        self.scan_history = ScanHistory.objects.create(
-            domain=self.data_generator.domain,
-            start_scan_date=self.data_generator.scan_history.start_scan_date,
-            is_legacy_scan=False,
-        )
+        # Create a Secator scan, then domain linked to it (needed for _create_endpoints_in_bulk domain_id)
+        self.scan_history = self.data_generator.create_scan_history()
+        self.domain = self.data_generator.create_domain(scan_history=self.scan_history)
 
         # Create a subdomain
         self.subdomain = Subdomain.objects.create(
             name="test.example.com",
             scan_history=self.scan_history,
-            target_domain=self.data_generator.domain,
+            domain=self.domain,
         )
 
     def _save_secator_endpoint(self, url: str, **overrides):
         item = {"url": url, "status_code": 200} | overrides
-        return self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.domain.id)
+        return self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
     def test_first_endpoint_becomes_default(self):
         """Test that the first endpoint for a subdomain becomes is_default=True."""
@@ -247,7 +248,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         }
 
         result = self.repository._process_secator_endpoint_item(
-            item, self.scan_history.id, self.data_generator.domain.id
+            item, self.scan_history.id, self.data_generator.target.id
         )
 
         self.assertIsNotNone(result)
@@ -263,7 +264,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         }
 
         result = self.repository._process_secator_endpoint_item(
-            item, self.scan_history.id, self.data_generator.domain.id
+            item, self.scan_history.id, self.data_generator.target.id
         )
 
         self.assertIsNone(result)
@@ -275,7 +276,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         }
 
         result = self.repository._process_secator_endpoint_item(
-            item, self.scan_history.id, self.data_generator.domain.id
+            item, self.scan_history.id, self.data_generator.target.id
         )
 
         self.assertIsNone(result)
@@ -289,7 +290,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         }
 
         result = self.repository._process_secator_endpoint_item(
-            item, self.scan_history.id, self.data_generator.domain.id
+            item, self.scan_history.id, self.data_generator.target.id
         )
 
         self.assertIsNotNone(result)
@@ -304,7 +305,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         }
 
         result = self.repository._process_secator_endpoint_item(
-            item, self.scan_history.id, self.data_generator.domain.id
+            item, self.scan_history.id, self.data_generator.target.id
         )
 
         self.assertIsNotNone(result)
@@ -325,9 +326,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
             },
         ]
 
-        result = self.repository._create_endpoints_in_bulk(
-            self.scan_history.id, self.data_generator.domain.id, endpoints_data
-        )
+        result = self.repository._create_endpoints_in_bulk(self.scan_history.id, self.domain.id, endpoints_data)
 
         self.assertEqual(len(result), 2)
         created_urls = [ep.http_url for ep in result]
@@ -336,7 +335,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
 
     def test_create_endpoints_in_bulk_empty_list(self):
         """Test _create_endpoints_in_bulk with empty list."""
-        result = self.repository._create_endpoints_in_bulk(self.scan_history.id, self.data_generator.domain.id, [])
+        result = self.repository._create_endpoints_in_bulk(self.scan_history.id, self.domain.id, [])
 
         self.assertEqual(result, [])
 
@@ -347,9 +346,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
             {"http_url": "also-invalid", "http_status": 200},
         ]
 
-        result = self.repository._create_endpoints_in_bulk(
-            self.scan_history.id, self.data_generator.domain.id, endpoints_data
-        )
+        result = self.repository._create_endpoints_in_bulk(self.scan_history.id, self.domain.id, endpoints_data)
 
         self.assertEqual(result, [])
 
@@ -364,7 +361,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         }
 
         result = self.repository._process_secator_endpoint_item(
-            item, self.scan_history.id, self.data_generator.domain.id
+            item, self.scan_history.id, self.data_generator.target.id
         )
 
         self.assertIsNotNone(result)
@@ -384,7 +381,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
             "request_headers": {"User-Agent": "Secator/1.0", "Accept": "text/html"},
         }
 
-        result = self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.domain.id)
+        result = self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         result.refresh_from_db()
@@ -397,19 +394,19 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
     @override_settings(SECATOR_REPORTS_PREFIX="/home/secator/.secator/reports")
     def test_save_from_secator_strips_secator_reports_prefix(self):
         """screenshot_path and stored_response_path are stored without /home/secator/.secator/reports prefix."""
-        full_screenshot = "/home/secator/.secator/reports/2sec/2sec.fr/tasks/200/.outputs/screenshot/foo.png"
-        full_response = "/home/secator/.secator/reports/2sec/2sec.fr/tasks/200/.outputs/response.html"
+        full_screenshot = "/home/secator/.secator/reports/example/example.com/tasks/200/.outputs/screenshot/foo.png"
+        full_response = "/home/secator/.secator/reports/example/example.com/tasks/200/.outputs/response.html"
         item = {
             "url": "https://test.example.com/",
             "status_code": 200,
             "screenshot_path": full_screenshot,
             "stored_response_path": full_response,
         }
-        result = self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.domain.id)
+        result = self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
         self.assertIsNotNone(result)
         result.refresh_from_db()
-        self.assertEqual(result.screenshot_path, "2sec/2sec.fr/tasks/200/.outputs/screenshot/foo.png")
-        self.assertEqual(result.stored_response_path, "2sec/2sec.fr/tasks/200/.outputs/response.html")
+        self.assertEqual(result.screenshot_path, "example/example.com/tasks/200/.outputs/screenshot/foo.png")
+        self.assertEqual(result.stored_response_path, "example/example.com/tasks/200/.outputs/response.html")
 
     def test_build_secator_endpoint_defaults_truncates_long_paths(self):
         """Long screenshot_path and stored_response_path are truncated to 1000 chars."""
@@ -442,7 +439,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         }
 
         result = self.repository._process_secator_endpoint_item(
-            item, self.scan_history.id, self.data_generator.domain.id
+            item, self.scan_history.id, self.data_generator.target.id
         )
 
         self.assertIsNotNone(result)
@@ -457,7 +454,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         }
 
         result = self.repository._process_secator_endpoint_item(
-            item, self.scan_history.id, self.data_generator.domain.id
+            item, self.scan_history.id, self.data_generator.target.id
         )
 
         self.assertIsNotNone(result)
@@ -468,7 +465,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         item = {"url": "https://test.example.com/", "status_code": 200}
 
         result = self.repository._process_secator_endpoint_item(
-            item, self.scan_history.id, self.data_generator.domain.id
+            item, self.scan_history.id, self.data_generator.target.id
         )
 
         self.assertIsNotNone(result)
@@ -516,7 +513,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         result = self.repository.save_from_secator(
             item,
             self.scan_history.id,
-            self.data_generator.domain.id,
+            self.data_generator.target.id,
             rengine_context=rengine_context,
         )
 

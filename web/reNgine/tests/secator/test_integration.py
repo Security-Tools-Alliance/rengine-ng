@@ -13,12 +13,8 @@ class TestSecatorIntegration(BaseTestCase):
         """Set up test data."""
         super().setUp()
         self.scan_history = self.data_generator.create_scan_history()
-
-        from targetApp.models import Domain
-
-        self.domain, _ = Domain.objects.get_or_create(
-            name="test-secator.com", defaults={"project": self.data_generator.project}
-        )
+        self.domain = self.data_generator.create_domain(scan_history=self.scan_history)
+        self.target_id = self.scan_history.target_id
 
     def test_scan_orchestrator_initialization(self):
         """Test ScanOrchestrator initialization."""
@@ -34,7 +30,7 @@ class TestSecatorIntegration(BaseTestCase):
         with self.assertRaises(ValueError) as context:
             orchestrator.execute_scan(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.target_id,
                 execution_mode="invalid_mode",
                 targets=["example.com"],
                 config={},
@@ -49,7 +45,7 @@ class TestSecatorIntegration(BaseTestCase):
         with self.assertRaises(ValueError) as context:
             orchestrator.execute_scan(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.target_id,
                 execution_mode="workflow",
                 targets=["example.com"],
                 config={},
@@ -64,7 +60,7 @@ class TestSecatorIntegration(BaseTestCase):
         with self.assertRaises(ValueError) as context:
             orchestrator.execute_scan(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.target_id,
                 execution_mode="tasks",
                 targets=["example.com"],
                 config={},
@@ -79,7 +75,7 @@ class TestSecatorIntegration(BaseTestCase):
         with self.assertRaises(ValueError) as context:
             orchestrator.execute_scan(
                 scan_history_id=self.scan_history.id,
-                domain_id=self.domain.id,
+                target_id=self.target_id,
                 execution_mode="scan",
                 targets=["example.com"],
                 config={},

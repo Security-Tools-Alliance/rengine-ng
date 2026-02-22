@@ -4,9 +4,11 @@ Tests for SecatorRunner scan execution.
 
 from unittest.mock import MagicMock, patch
 
+from django.utils import timezone
+
 from reNgine.secator.runner import SecatorRunner
 from scanEngine.models import SecatorScan
-from targetApp.models import Domain
+from startScan.models import Domain, ScanHistory
 from utils.test_base import BaseTestCase
 
 
@@ -17,7 +19,17 @@ class TestSecatorRunnerScans(BaseTestCase):
         """Set up test data."""
         super().setUp()
         self.runner = SecatorRunner()
-        self.domain = Domain.objects.create(name="testdomain.com")
+        self.data_generator.create_target()
+        scan_history = ScanHistory.objects.create(
+            target=self.data_generator.target,
+            start_scan_date=timezone.now(),
+            scan_status=2,
+        )
+        self.domain = Domain.objects.create(
+            name="testdomain.com",
+            insert_date=timezone.now(),
+            scan_history=scan_history,
+        )
 
         self.builtin_scan = SecatorScan.objects.create(
             name="domain",
@@ -68,7 +80,7 @@ workflows:
             scan_type="domain",
             targets=["testdomain.com"],
             scan_history_id=1,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             config={},
             profiles={},
         )
@@ -97,7 +109,7 @@ workflows:
             scan_type="custom_test",
             targets=["testdomain.com"],
             scan_history_id=1,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             config={},
             profiles={},
         )
@@ -118,7 +130,7 @@ workflows:
             scan_type="nonexistent",
             targets=["testdomain.com"],
             scan_history_id=1,
-            domain_id=self.domain.id,
+            target_id=self.domain.scan_history.target_id,
             config={},
             profiles={},
         )

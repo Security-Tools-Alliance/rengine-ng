@@ -41,7 +41,7 @@ class TestRunnerLogger(BaseTestCase):
             runner_name="test_workflow",
             targets=["example.com"],
             scan_history_id=123,
-            domain_id=1,
+            target_id=1,
         )
         self.assertGreater(len(self.log_capture), 0)
         self.assertIn("CREATE", str(self.log_capture[0][0]))
@@ -70,7 +70,7 @@ class TestRunnerLogger(BaseTestCase):
 
     def test_log_context(self):
         """Test logging context."""
-        context = {"scan_history_id": 123, "domain_id": 1}
+        context = {"scan_history_id": 123, "target_id": 1}
         self.logger.log_context(context)
         self.assertEqual(len(self.log_capture), 1)
         self.assertIn("CONTEXT", str(self.log_capture[0][0]))

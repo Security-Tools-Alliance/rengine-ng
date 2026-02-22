@@ -13,9 +13,9 @@ class TestIpRepository(BaseTestCase):
         """Set up test fixtures."""
         super().setUp()
         self.ip_repo = IpRepository()
-        # Create test domain and scan history
-        self.domain = self.data_generator.create_domain()
+        # Scan history first (needs target), then domain linked to that scan
         self.scan_history = self.data_generator.create_scan_history()
+        self.domain = self.data_generator.create_domain(scan_history=self.scan_history)
 
     def test_save_from_secator_valid_ipv4(self):
         """Test saving valid IPv4 address from Secator."""
@@ -25,7 +25,7 @@ class TestIpRepository(BaseTestCase):
             "host": "example.com",
         }
 
-        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.address, "192.168.1.1")
@@ -40,7 +40,7 @@ class TestIpRepository(BaseTestCase):
             "host": "example.com",
         }
 
-        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.address, "2001:4860:4860::8888")
@@ -55,7 +55,7 @@ class TestIpRepository(BaseTestCase):
             "host": "example.com",
         }
 
-        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
 
@@ -66,7 +66,7 @@ class TestIpRepository(BaseTestCase):
             "host": "example.com",
         }
 
-        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
 
@@ -78,7 +78,7 @@ class TestIpRepository(BaseTestCase):
             "host": "192.0.2.1",
         }
 
-        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.address, "192.0.2.1")
@@ -107,7 +107,7 @@ class TestIpRepository(BaseTestCase):
         """Test bulk creation of valid IPs."""
         ip_addresses = ["192.168.1.1", "10.0.0.1", "172.16.0.1"]
 
-        result = self.ip_repo.bulk_create(ip_addresses, self.scan_history.id, self.domain.id)
+        result = self.ip_repo.bulk_create(ip_addresses, self.scan_history.id, self.data_generator.domain.id)
 
         self.assertEqual(len(result), 3)
         for ip_obj in result:
@@ -117,7 +117,7 @@ class TestIpRepository(BaseTestCase):
         """Test bulk creation with mixed valid/invalid IPs."""
         ip_addresses = ["192.168.1.1", "invalid-ip", "10.0.0.1"]
 
-        result = self.ip_repo.bulk_create(ip_addresses, self.scan_history.id, self.domain.id)
+        result = self.ip_repo.bulk_create(ip_addresses, self.scan_history.id, self.data_generator.domain.id)
 
         # Should only create valid IPs
         self.assertEqual(len(result), 2)
@@ -180,7 +180,7 @@ class TestIpRepository(BaseTestCase):
         subdomain = self.data_generator.create_subdomain(
             name="test.example.com",
             scan_history=self.scan_history,
-            target_domain=self.domain,
+            domain=self.domain,
         )
 
         # Create IP
@@ -206,7 +206,7 @@ class TestIpRepository(BaseTestCase):
         subdomain = self.data_generator.create_subdomain(
             name="test.example.com",
             scan_history=self.scan_history,
-            target_domain=self.domain,
+            domain=self.domain,
         )
 
         item = {
@@ -215,7 +215,7 @@ class TestIpRepository(BaseTestCase):
             "host": "test.example.com",
         }
 
-        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
 
@@ -231,7 +231,7 @@ class TestIpRepository(BaseTestCase):
             "alive": True,
         }
 
-        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.address, "192.168.1.1")
@@ -244,7 +244,7 @@ class TestIpRepository(BaseTestCase):
             "host": "test.example.com",
         }
 
-        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
 
@@ -254,7 +254,7 @@ class TestIpRepository(BaseTestCase):
             "ip": "invalid-ip",
         }
 
-        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
 
@@ -267,7 +267,7 @@ class TestIpRepository(BaseTestCase):
             "alive": True,
         }
 
-        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.address, "2001:db8::1")
@@ -282,7 +282,7 @@ class TestIpRepository(BaseTestCase):
             "alive": True,
         }
 
-        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         self.assertEqual(result.address, "192.168.1.1")
@@ -294,7 +294,7 @@ class TestIpRepository(BaseTestCase):
         subdomain = self.data_generator.create_subdomain(
             name="test.example.com",
             scan_history=self.scan_history,
-            target_domain=self.domain,
+            domain=self.domain,
         )
 
         item = {
@@ -302,7 +302,7 @@ class TestIpRepository(BaseTestCase):
             "host": "test.example.com",
         }
 
-        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.domain.id)
+        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
         subdomain.refresh_from_db()

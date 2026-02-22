@@ -156,12 +156,14 @@ class SecatorAPILogger(BaseLogger):
         finding_type = finding_data.get("_type", "unknown")
         context = finding_data.get("_context", {})
         scan_history_id = context.get("scan_history_id")
+        target_id = context.get("target_id")
         domain_id = context.get("domain_id")
 
         # INFO level - single line summary
         details = {
             "type": finding_type,
             "scan_id": scan_history_id,
+            "target_id": target_id,
             "domain_id": domain_id,
         }
         if finding_id:
@@ -251,7 +253,7 @@ class SecatorAPILogger(BaseLogger):
         finding_type: str,
         saved_object: Optional[Any],
         scan_history_id: Optional[int],
-        domain_id: Optional[int],
+        target_id: Optional[int],
         success: bool = True,
         error_message: Optional[str] = None,
     ) -> None:
@@ -263,14 +265,14 @@ class SecatorAPILogger(BaseLogger):
             finding_type: Type of finding
             saved_object: Saved object (or None if failed)
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             success: Whether the save was successful
             error_message: Optional error message if save failed
         """
         details = {
             "type": finding_type,
             "scan_id": scan_history_id,
-            "domain_id": domain_id,
+            "target_id": target_id,
         }
 
         if success and saved_object:
@@ -305,7 +307,7 @@ class SecatorAPILogger(BaseLogger):
         elif not success:
             self._logger.debug(
                 f"{prefix_colored} {action_colored} | Save failed for finding type={finding_type}, "
-                f"scan_history_id={scan_history_id}, domain_id={domain_id}. "
+                f"scan_history_id={scan_history_id}, target_id={target_id}. "
                 f"Error: {error_message or 'Repository returned None'}"
             )
 

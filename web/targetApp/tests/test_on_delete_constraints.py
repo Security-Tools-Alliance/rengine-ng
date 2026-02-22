@@ -7,8 +7,9 @@ ensuring no orphaned data remains and no deletion blocks occur.
 
 from django.utils import timezone
 
-from startScan.models import ScanHistory, Subdomain
-from targetApp.models import Domain, DomainInfo, DomainRegistration, Organization, Registrar
+from reNgine.utilities.domain import get_domain_by_id
+from startScan.models import Domain, DomainInfo, DomainRegistration, Registrar, ScanHistory, Subdomain
+from targetApp.models import Organization, Target
 from utils.test_base import BaseTestCase
 
 
@@ -77,13 +78,25 @@ class TestProjectCascadeDeletion(BaseTestCase):
         """Test that deleting a project deletes all domains and their children."""
         project = self.data_generator.project
 
-        # Create multiple domains
+        # Create multiple domains (each linked via scan_history to a target)
+        self.data_generator.create_target()
         domain1 = self.data_generator.create_domain()
-        domain2 = Domain.objects.create(name="example2.com", project=project, insert_date=timezone.now())
+        self.data_generator.create_scan_history()
+        domain1.refresh_from_db()
+        scan_history1 = domain1.scan_history
 
-        # Create children for each domain
-        scan_history1 = ScanHistory.objects.create(domain=domain1, start_scan_date=timezone.now(), scan_status=2)
-        scan_history2 = ScanHistory.objects.create(domain=domain2, start_scan_date=timezone.now(), scan_status=2)
+        target2 = Target.objects.create(
+            value="example2.com",
+            target_type="domain",
+            project=project,
+            insert_date=timezone.now(),
+        )
+        scan_history2 = ScanHistory.objects.create(target=target2, start_scan_date=timezone.now(), scan_status=2)
+        domain2 = Domain.objects.create(
+            name="example2.com",
+            insert_date=timezone.now(),
+            scan_history=scan_history2,
+        )
 
         domain1_id = domain1.id
         domain2_id = domain2.id
@@ -134,7 +147,7 @@ class TestDomainInfoCascadeDeletion(BaseTestCase):
         self.assertFalse(DomainInfo.objects.filter(id=domain_info_id).exists())
 
         # Verify domain was also deleted (CASCADE)
-        self.assertFalse(Domain.objects.filter(id=domain_id).exists())
+        self.assertIsNone(get_domain_by_id(domain_id))
 
 
 class TestDomainInfoRelationsCascadeDeletion(BaseTestCase):

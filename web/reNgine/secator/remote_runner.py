@@ -126,7 +126,7 @@ def revoke_task_on_remote_worker(
 def run_scan_on_worker(
     worker: SecatorWorker,
     scan_history_id: int,
-    domain_id: int,
+    target_id: int,
     workspace_name: str,
     execution_mode: str,
     targets: list[str],
@@ -157,7 +157,7 @@ def run_scan_on_worker(
         job = _build_job_payload(
             worker,
             scan_history_id,
-            domain_id,
+            target_id,
             workspace_name,
             execution_mode,
             targets,
@@ -209,7 +209,7 @@ def _start_tunnel_if_needed(worker: SecatorWorker):
 def _build_job_payload(
     worker: SecatorWorker,
     scan_history_id: int,
-    domain_id: int,
+    target_id: int,
     workspace_name: str,
     execution_mode: str,
     targets: list[str],
@@ -223,7 +223,7 @@ def _build_job_payload(
     """Build the job dict for the remote runner script."""
     context: dict = {
         "scan_history_id": scan_history_id,
-        "domain_id": domain_id,
+        "target_id": target_id,
         "workspace_name": workspace_name,
         "workspace_id": workspace_name,
         "worker_id": worker.id,

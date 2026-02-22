@@ -76,6 +76,7 @@ from reNgine.tasks import (
     send_hackerone_report,
 )
 from reNgine.utilities.db import count_subquery, count_subquery_related
+from reNgine.utilities.domain import get_domain_by_id
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.external import get_open_ai_key
@@ -101,6 +102,7 @@ from startScan.models import (
     Command,
     DirectoryFile,
     DirectoryScan,
+    Domain,
     Dork,
     Email,
     Employee,
@@ -118,7 +120,8 @@ from startScan.models import (
 )
 from startScan.secator.runner_sync import is_all_runners_completed, sync_runner_with_scan_history
 from startScan.secator.sync_service import submit_sync as secator_submit_sync
-from targetApp.models import Domain, Organization
+from targetApp.constants import TARGET_TYPE_HOST
+from targetApp.models import Organization, Target
 
 from .serializers import (
     CommandSerializer,
@@ -154,6 +157,7 @@ from .serializers import (
     SubdomainSerializer,
     SubScanResultSerializer,
     SubScanSerializer,
+    TargetSerializer,
     TechnologyCountSerializer,
     VisualiseDataSerializer,
     VulnerabilitySerializer,
@@ -782,12 +786,12 @@ class QueryInterestingSubdomains(APIView):
     def get(self, request):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
-        domain_id = safe_int_cast(req.query_params.get("target_id"))
+        target_or_domain_id = safe_int_cast(req.query_params.get("target_id"))
 
         if scan_id:
             queryset = get_interesting_subdomains(scan_history=scan_id)
-        elif domain_id:
-            queryset = get_interesting_subdomains(domain_id=domain_id)
+        elif target_or_domain_id:
+            queryset = get_interesting_subdomains(target_id=target_or_domain_id)
         else:
             queryset = get_interesting_subdomains()
 
@@ -797,26 +801,31 @@ class QueryInterestingSubdomains(APIView):
 
 
 class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
-    queryset = Domain.objects.all()
-    serializer_class = DomainSerializer
+    queryset = Target.objects.all()
+    serializer_class = TargetSerializer
     datatable_column_map = DATATABLE_COLUMN_MAP_TARGETS
 
     def get_queryset(self):
+        qs = self.queryset
         if slug := self.request.GET.get("slug", None):
-            self.queryset = self.queryset.filter(project__slug=slug)
-        return self.queryset
+            qs = qs.filter(project__slug=slug)
+        qs = qs.annotate(
+            domain_count=Count("scan_histories__discovered_domains", distinct=True),
+            subdomain_count=Count("scan_histories__subdomain_set", distinct=True),
+            endpoint_count=Count("scan_histories__endpoint_set", distinct=True),
+            vulnerability_count=Count("scan_histories__vulnerability_set", distinct=True),
+        )
+        return qs
 
     def filter_queryset(self, qs):
-        qs = self.queryset.filter()
+        qs = self.get_queryset()
         search_value = self.request.GET.get("search[value]", None)
         if search_value:
             qs = qs.filter(
-                Q(name__icontains=search_value)
+                Q(value__icontains=search_value)
                 | Q(description__icontains=search_value)
-                | Q(domains__name__icontains=search_value)
-            )
-        # DATATABLE_NULLS_LAST_FIELDS includes start_scan_date so never-scanned targets appear last.
-        # No other DataTables view uses nulls_last; other column maps use name/content_length/severity etc.
+                | Q(organizations__name__icontains=search_value)
+            ).distinct()
         return apply_datatables_order(
             qs,
             self.request,
@@ -933,14 +942,14 @@ class FetchMostCommonVulnerability(APIView):
             is_ignore_info = data.get("ignore_info", False)
 
             base_filter = (
-                Vulnerability.objects.filter(target_domain__project__slug=project_slug)
+                Vulnerability.objects.filter(domain__scan_history__target__project__slug=project_slug)
                 if project_slug
                 else Vulnerability.objects.all()
             )
             if scan_history_id:
                 vuln_query = base_filter.filter(scan_history__id=scan_history_id).values("name", "severity")
             elif target_id:
-                vuln_query = base_filter.filter(target_domain__id=target_id).values("name", "severity")
+                vuln_query = base_filter.filter(domain__scan_history__target_id=target_id).values("name", "severity")
             else:
                 vuln_query = base_filter.values("name", "severity")
 
@@ -984,8 +993,8 @@ class FetchMostVulnerable(APIView):
 
         if project_slug:
             project = Project.objects.get(slug=project_slug)
-            subdomains = Subdomain.objects.filter(target_domain__project=project)
-            domains = Domain.objects.filter(project=project)
+            subdomains = Subdomain.objects.filter(domain__scan_history__target__project=project)
+            domains = Domain.objects.filter(scan_history__target__project=project)
         else:
             subdomains = Subdomain.objects.all()
             domains = Domain.objects.all()
@@ -1009,7 +1018,7 @@ class FetchMostVulnerable(APIView):
                     "waf",
                     "directories",
                     "scan_history",
-                    "target_domain",
+                    "domain",
                     *(
                         []
                         if is_ignore_info
@@ -1033,7 +1042,7 @@ class FetchMostVulnerable(APIView):
                 response["result"] = SubdomainSerializer(most_vulnerable_subdomains, many=True, context=ctx).data
 
         elif target_id:
-            subdomain_query = subdomains.filter(target_domain__id=target_id)
+            subdomain_query = subdomains.filter(domain__scan_history__target_id=target_id)
             # Scalar count subquery avoids cartesian products vs annotate(Count(..., distinct=True)).
             vuln_annot = count_subquery(
                 Vulnerability,
@@ -1051,15 +1060,15 @@ class FetchMostVulnerable(APIView):
                     "waf",
                     "directories",
                     "scan_history",
-                    "target_domain",
+                    "domain",
                 )
             )[:limit]
 
             if most_vulnerable_subdomains:
                 response["status"] = True
                 ctx = {}
-                if target_id:
-                    interesting = get_interesting_subdomains(domain_id=target_id)
+                interesting = get_interesting_subdomains(target_id=target_id)
+                if interesting.exists():
                     ctx["datatable_interesting_names"] = set(interesting.values_list("name", flat=True))
                 response["result"] = SubdomainSerializer(most_vulnerable_subdomains, many=True, context=ctx).data
         else:
@@ -1067,7 +1076,7 @@ class FetchMostVulnerable(APIView):
             # previous join-based count: one vuln on two subdomains = two Vulnerability rows = count 2).
             domain_vuln_annot = count_subquery_related(
                 Vulnerability,
-                "subdomain__target_domain_id",
+                "subdomain__domain_id",
                 filter_kwargs={"severity__gt": 0} if is_ignore_info else None,
             )
             most_vulnerable_targets = (
@@ -1180,39 +1189,52 @@ class AddTarget(APIView):
         organization_name = data.get("organization")
         slug = data.get("slug")
 
-        # Validate domain name
         if not validators.domain(domain_name):
             return Response({"status": False, "message": "Invalid domain or IP"}, status=400)
 
         project = Project.objects.get(slug=slug)
 
-        # Check if the domain already exists
-        if Domain.objects.filter(name=domain_name, project=project).exists():
-            return Response({"status": False, "message": "Domain already exists as a target!"}, status=400)
+        if Target.objects.filter(project=project, value=domain_name, target_type=TARGET_TYPE_HOST).exists():
+            return Response({"status": False, "message": "Target already exists!"}, status=400)
 
-        # Create domain object in DB
-        domain, _ = Domain.objects.get_or_create(name=domain_name)
-        domain.project = project
-        domain.h1_team_handle = h1_team_handle
-        domain.description = description
-        if not domain.insert_date:
-            domain.insert_date = timezone.now()
-        domain.save()
+        target, _ = Target.objects.get_or_create(
+            project=project,
+            value=domain_name,
+            target_type=TARGET_TYPE_HOST,
+            defaults={
+                "insert_date": timezone.now(),
+                "description": description,
+                "h1_team_handle": h1_team_handle,
+            },
+        )
 
-        # Create org object in DB
         if organization_name:
             organization_obj, created = Organization.objects.get_or_create(
-                name=organization_name, defaults={"project": project, "insert_date": timezone.now()}
+                name=organization_name,
+                project=project,
+                defaults={"insert_date": timezone.now()},
             )
-            organization_obj.domains.add(domain)
+            if organization_obj.project_id != target.project_id:
+                logger.log_line(
+                    PREFIX_API,
+                    "ADD_TARGET",
+                    "Attempt to attach target from project %s to organization %s (project %s)"
+                    % (target.project_id, organization_obj.id, organization_obj.project_id),
+                    level="warning",
+                )
+                return Response(
+                    {"detail": "Target and organization belong to different projects."},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+            organization_obj.targets.add(target)
 
         return Response(
             {
                 "status": True,
-                "message": "Domain successfully added as target!",
+                "message": "Target successfully added!",
                 "domain_name": domain_name,
-                "domain_id": domain.id,
-                "initiate_scan_url": reverse("start_scan", kwargs={"slug": slug, "domain_id": domain.id}),
+                "target_id": target.id,
+                "initiate_scan_url": reverse("start_scan", kwargs={"slug": slug, "target_id": target.id}),
             }
         )
 
@@ -1296,18 +1318,27 @@ class ListSubScans(APIView):
         subdomain_id = safe_int_cast(data.get("subdomain_id", None))
         scan_history = safe_int_cast(data.get("scan_history_id", None))
         domain_id = safe_int_cast(data.get("domain_id", None))
+        target_id = safe_int_cast(data.get("target_id", None))
         limit = parse_limit_from_request(request)
 
         subscan_base = SubScan.objects.select_related(
-            "scan_history", "scan_history__domain", "subdomain", "engine", "secator_runner"
+            "scan_history", "scan_history__target", "subdomain", "engine", "secator_runner"
         )
         if subdomain_id:
             qs = subscan_base.filter(subdomain__id=subdomain_id).order_by("-stop_scan_date")
         elif scan_history:
             qs = subscan_base.filter(scan_history__id=scan_history).order_by("-stop_scan_date")
-        elif domain_id:
-            scan_history_qs = ScanHistory.objects.filter(domain__id=domain_id)
+        elif target_id:
+            scan_history_qs = ScanHistory.objects.filter(target_id=target_id)
             qs = subscan_base.filter(scan_history__in=scan_history_qs).order_by("-stop_scan_date")
+        elif domain_id:
+            domain = get_domain_by_id(domain_id)
+            target_id = domain.scan_history.target_id if (domain and domain.scan_history_id) else None
+            if target_id is not None:
+                scan_history_qs = ScanHistory.objects.filter(target_id=target_id)
+                qs = subscan_base.filter(scan_history__in=scan_history_qs).order_by("-stop_scan_date")
+            else:
+                qs = subscan_base.none()
         else:
             return Response({"status": False})
 
@@ -1483,7 +1514,7 @@ class StartScan(APIView):
         Start a new Secator scan.
 
         Required parameters:
-            - domain_id (int): ID of the target domain
+            - target_id (int): ID of the target (required).
             - Either secator_scan_id OR execution_mode with associated parameters
 
         Secator parameters:
@@ -1506,10 +1537,14 @@ class StartScan(APIView):
         """
         data = request.data
         if hasattr(data, "get"):
-            domain_id = safe_int_cast(data.get("domain_id"), default=None)
+            target_id = safe_int_cast(data.get("target_id"), default=None)
         else:
-            # Handle case where data is Empty or not a dict-like object
-            domain_id = None
+            target_id = None
+        if target_id is None:
+            return Response(
+                {"status": False, "error": "target_id is required"},
+                status=HTTP_400_BAD_REQUEST,
+            )
 
         # Secator parameters
         if hasattr(data, "get"):
@@ -1561,7 +1596,7 @@ class StartScan(APIView):
         if resolved["use_per_task"]:
             selected_targets_per_task = resolved["selected_targets_per_task"]
             run_result = run_per_task_secator_scans(
-                domain_id=domain_id,
+                target_id=target_id,
                 user_id=request.user.id,
                 selected_targets_per_task=selected_targets_per_task,
                 task_type_to_id=None,
@@ -1636,7 +1671,7 @@ class StartScan(APIView):
             targets_override = None
 
         result = start_secator_scan(
-            domain_id=domain_id,
+            target_id=target_id,
             user_id=request.user.id,
             execution_mode=execution_mode,
             workflow_id=workflow_id,
@@ -1766,11 +1801,13 @@ class InitiateSubTask(APIView):
                 return Response({"status": False, "error": "No valid subdomains found"}, status=404)
 
             # Get unique domains from subdomains
-            domains = subdomains.values_list("target_domain", flat=True).distinct()
+            domains = subdomains.values_list("domain", flat=True).distinct()
             if len(domains) > 1:
                 return Response({"status": False, "error": "All subdomains must belong to the same domain"}, status=400)
 
             domain_id = domains[0]
+            domain = get_domain_by_id(domain_id)
+            target_id_from_domain = domain.scan_history.target_id if (domain and domain.scan_history_id) else None
 
         except Exception as e:
             return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=400)
@@ -1789,8 +1826,13 @@ class InitiateSubTask(APIView):
         scan_results = []
 
         if execution_mode == "tasks" and selected_targets_per_task:
+            if target_id_from_domain is None:
+                return Response(
+                    {"status": False, "error": "Domain has no linked scan/target; cannot run per-task scans"},
+                    status=400,
+                )
             run_result = run_per_task_secator_scans(
-                domain_id=domain_id,
+                target_id=target_id_from_domain,
                 user_id=request.user.id,
                 selected_targets_per_task=selected_targets_per_task,
                 task_type_to_id=task_type_to_id,
@@ -1844,9 +1886,12 @@ class InitiateSubTask(APIView):
         if scan_history_id is not None:
             try:
                 scan = ScanHistory.objects.get(pk=scan_history_id)
-                if scan.domain_id != domain_id:
+                if target_id_from_domain is not None and scan.target_id != target_id_from_domain:
                     return Response(
-                        {"status": False, "error": f"ScanHistory {scan_history_id} does not belong to this domain"},
+                        {
+                            "status": False,
+                            "error": "ScanHistory %s does not belong to this target" % (scan_history_id,),
+                        },
                         status=400,
                     )
                 if execution_mode == "workflow" and workflow_id_for_scan:
@@ -1881,7 +1926,7 @@ class InitiateSubTask(APIView):
 
                 worker_id = get_request_worker_id(request)
                 result = start_secator_scan(
-                    domain_id=domain_id,
+                    target_id=target_id_from_domain,
                     user_id=request.user.id,
                     execution_mode=execution_mode,
                     workflow_id=workflow_id_for_scan,
@@ -1971,6 +2016,7 @@ class GetSecatorInputTypesAndTargets(APIView):
         workflow_id = request.query_params.get("workflow_id")
         scan_id = request.query_params.get("scan_id")
         task_id = request.query_params.get("task_id")
+        target_id_param = request.query_params.get("target_id")
         domain_id_param = request.query_params.get("domain_id")
         subdomain_ids_param = request.query_params.get("subdomain_ids")
 
@@ -1983,7 +2029,16 @@ class GetSecatorInputTypesAndTargets(APIView):
             if isinstance(subdomain_ids, int):
                 subdomain_ids = [subdomain_ids]
 
-        if domain_id_param:
+        target_id = None
+        if target_id_param:
+            try:
+                target_id = int(target_id_param)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "target_id must be an integer"},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+        elif domain_id_param:
             try:
                 domain_id = int(domain_id_param)
             except (TypeError, ValueError):
@@ -1991,9 +2046,16 @@ class GetSecatorInputTypesAndTargets(APIView):
                     {"error": "domain_id must be an integer"},
                     status=HTTP_400_BAD_REQUEST,
                 )
+            domain = get_domain_by_id(domain_id)
+            if not domain or domain.scan_history_id is None:
+                return Response(
+                    {"error": "Domain not found or has no linked scan"},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+            target_id = domain.scan_history.target_id
         elif subdomain_ids:
             domain_ids = list(
-                Subdomain.objects.filter(id__in=subdomain_ids).values_list("target_domain_id", flat=True).distinct()
+                Subdomain.objects.filter(id__in=subdomain_ids).values_list("domain_id", flat=True).distinct()
             )
             if not domain_ids or None in domain_ids:
                 return Response(
@@ -2005,10 +2067,16 @@ class GetSecatorInputTypesAndTargets(APIView):
                     {"error": "All subdomain_ids must belong to the same domain"},
                     status=HTTP_400_BAD_REQUEST,
                 )
-            domain_id = domain_ids[0]
+            domain = get_domain_by_id(domain_ids[0])
+            if not domain or domain.scan_history_id is None:
+                return Response(
+                    {"error": "Domain has no linked scan"},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+            target_id = domain.scan_history.target_id
         else:
             return Response(
-                {"error": "domain_id or subdomain_ids is required"},
+                {"error": "target_id, domain_id, or subdomain_ids is required"},
                 status=HTTP_400_BAD_REQUEST,
             )
 
@@ -2047,7 +2115,7 @@ class GetSecatorInputTypesAndTargets(APIView):
                 else:
                     input_types = InputTypeService.get_input_types(task_name=task_name.strip())
 
-            builder = TargetBuilderService(domain_id=domain_id, subdomain_ids=subdomain_ids)
+            builder = TargetBuilderService(target_id=target_id, subdomain_ids=subdomain_ids)
             targets_by_type = builder.build_targets_by_type(input_types)
             flat_targets = builder.build_flat_targets(input_types)
             total_count = len(flat_targets)
@@ -2401,7 +2469,7 @@ class ListTodoNotes(APIView):
         todo_id = req.query_params.get("todo_id")
         subdomain_id = safe_int_cast(req.query_params.get("subdomain_id"))
         if target_id:
-            notes = notes.filter(scan_history__in=ScanHistory.objects.filter(domain__id=target_id))
+            notes = notes.filter(scan_history__in=ScanHistory.objects.filter(target_id=target_id))
         elif scan_id:
             notes = notes.filter(scan_history__id=scan_id)
         if todo_id:
@@ -2410,7 +2478,7 @@ class ListTodoNotes(APIView):
             notes = notes.filter(subdomain__id=subdomain_id)
 
         notes = notes.select_related(
-            "scan_history", "scan_history__domain", "subdomain", "subdomain__target_domain", "project"
+            "scan_history", "scan_history__target", "subdomain", "subdomain__domain", "project"
         )
         limit = parse_limit_from_request(request)
         total_count = notes.count()
@@ -2431,7 +2499,7 @@ class ListScanHistory(APIView):
         scan_history = ScanHistory.objects.all().order_by("-start_scan_date")
         project = req.query_params.get("project")
         if project:
-            scan_history = scan_history.filter(domain__project__slug=project)
+            scan_history = scan_history.filter(target__project__slug=project)
         scan_history = ScanHistorySerializer(scan_history, many=True)
         return Response(scan_history.data)
 
@@ -2474,7 +2542,7 @@ class ListTargetsInOrganization(APIView):
         organization_id = safe_int_cast(req.query_params.get("organization_id"))
         try:
             organization = Organization.objects.get(id=organization_id)
-            targets = Domain.objects.filter(domains=organization)
+            targets = Domain.objects.filter(scan_history__target__organizations=organization)
             organization_serializer = OrganizationSerializer(organization)
             targets_serializer = OrganizationTargetsSerializer(targets, many=True)
             return Response({"organization": organization_serializer.data, "domains": targets_serializer.data})
@@ -2484,7 +2552,7 @@ class ListTargetsInOrganization(APIView):
 
 class ListTargetsWithoutOrganization(APIView):
     def get(self, request, format=None):
-        targets = Domain.objects.exclude(domains__in=Organization.objects.all())
+        targets = Domain.objects.exclude(scan_history__target__organizations__in=Organization.objects.all())
         targets_serializer = OrganizationTargetsSerializer(targets, many=True)
         return Response({"domains": targets_serializer.data})
 
@@ -2540,7 +2608,7 @@ class ListTechnology(APIView):
 
         # Single subdomain filter reused for both count subquery and Technology filter to avoid drift.
         if target_id := safe_int_cast(req.query_params.get("target_id")):
-            subdomain_filter = Subdomain.objects.filter(target_domain__id=target_id)
+            subdomain_filter = Subdomain.objects.filter(domain__scan_history__target_id=target_id)
         elif scan_id:
             subdomain_filter = Subdomain.objects.filter(scan_history__id=scan_id)
         else:
@@ -2649,7 +2717,9 @@ class ListPorts(APIView):
 
         # Filter based on parameters
         if target_id:
-            port_query = port_query.filter(ip_address__ip_addresses__target_domain__id=target_id).distinct()
+            port_query = port_query.filter(
+                ip_address__ip_addresses__domain__scan_history__target_id=target_id
+            ).distinct()
         elif scan_id:
             port_query = port_query.filter(ip_address__ip_addresses__scan_history__id=scan_id).distinct()
 
@@ -2706,13 +2776,15 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
         tech = req.query_params.get("tech")
 
         subdomains = (
-            Subdomain.objects.filter(target_domain__project__slug=project) if project else Subdomain.objects.all()
+            Subdomain.objects.filter(domain__scan_history__target__project__slug=project)
+            if project
+            else Subdomain.objects.all()
         )
 
         if scan_id:
             subdomain_query = subdomains.filter(scan_history__id=scan_id).distinct("name")
         elif target_id:
-            subdomain_query = subdomains.filter(target_domain__id=target_id).distinct("name")
+            subdomain_query = subdomains.filter(domain__scan_history__target_id=target_id).distinct("name")
         else:
             subdomain_query = subdomains.all().distinct("name")
 
@@ -2734,7 +2806,7 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
             subdomain_query = self.apply_advanced_search(subdomain_query, search_value)
 
         # Optimize queries with select_related and prefetch_related to avoid N+1 queries
-        subdomain_query = subdomain_query.select_related("scan_history", "target_domain").prefetch_related(
+        subdomain_query = subdomain_query.select_related("scan_history", "domain").prefetch_related(
             "ip_addresses",
             "ip_addresses__ports",
             "technologies",
@@ -2833,7 +2905,7 @@ class ListIPs(APIView):
 
         if target_id:
             ips = IpAddress.objects.filter(
-                ip_addresses__in=Subdomain.objects.filter(target_domain__id=target_id)
+                ip_addresses__in=Subdomain.objects.filter(domain__scan_history__target_id=target_id)
             ).distinct()
         elif scan_id:
             ips = IpAddress.objects.filter(
@@ -2914,7 +2986,7 @@ class SubdomainsViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
                 "waf",
                 "directories",
                 "scan_history",
-                "target_domain",
+                "domain",
                 Prefetch(
                     "endpoint_set",
                     queryset=EndPoint.objects.filter(is_default=True),
@@ -2961,13 +3033,11 @@ class SubdomainChangesViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
         project = req.query_params.get("project")
 
         if scan_id:
-            current_scan = ScanHistory.objects.filter(id=scan_id).select_related("domain").first()
-            if not current_scan or not current_scan.domain_id:
+            current_scan = ScanHistory.objects.filter(id=scan_id).select_related("target").first()
+            if not current_scan or not current_scan.target_id:
                 return Subdomain.objects.none()
-            domain = current_scan.domain
-
             scans_with_subdomain_discovery = (
-                ScanHistory.objects.filter(domain=domain)
+                ScanHistory.objects.filter(target_id=current_scan.target_id)
                 .filter(tasks__overlap=["subdomain_discovery"])
                 .filter(scan_status=2)  # SUCCESS
                 .order_by("-start_scan_date")[:2]
@@ -2994,30 +3064,30 @@ class SubdomainChangesViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
                     Subdomain.objects.filter(scan_history=current_scan)
                     .filter(name__in=new_subdomains)
                     .annotate(change=Value("added", output_field=CharField()))
-                    .select_related("scan_history", "target_domain")
+                    .select_related("scan_history", "domain")
                 )
             else:
                 queryset = Subdomain.objects.none()
         elif target_id:
             queryset = (
-                Subdomain.objects.filter(target_domain__id=target_id)
-                .select_related("target_domain")
+                Subdomain.objects.filter(domain__scan_history__target_id=target_id)
+                .select_related("domain")
                 .annotate(change=Value("unknown", output_field=CharField()))
             )
         elif project:
             queryset = (
-                Subdomain.objects.filter(target_domain__project__slug=project)
-                .select_related("target_domain")
+                Subdomain.objects.filter(domain__scan_history__target__project__slug=project)
+                .select_related("domain")
                 .annotate(change=Value("unknown", output_field=CharField()))
             )
         else:
             queryset = (
                 Subdomain.objects.all()
-                .select_related("target_domain")
+                .select_related("domain")
                 .annotate(change=Value("unknown", output_field=CharField()))
             )
 
-        # target_domain is a FK: use select_related only (already applied above). Prefetch M2M and reverse relations.
+        # domain is a FK: use select_related only (already applied above). Prefetch M2M and reverse relations.
         queryset = queryset.prefetch_related(
             "ip_addresses", "ip_addresses__ports", "technologies", "waf", "directories", "scan_history"
         )
@@ -3055,12 +3125,11 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
         if not scan_id:
             return EndPoint.objects.none()
         changes = req.query_params.get("changes")
-        scan = ScanHistory.objects.filter(id=scan_id).select_related("domain").first()
-        if not scan or not scan.domain_id:
+        scan = ScanHistory.objects.filter(id=scan_id).select_related("target").first()
+        if not scan or not scan.target_id:
             return EndPoint.objects.none()
-        domain_id = scan.domain_id
         scan_history = (
-            ScanHistory.objects.filter(domain=domain_id)
+            ScanHistory.objects.filter(target_id=scan.target_id)
             .filter(tasks__overlap=["subdomain_discovery"])
             .filter(id__lte=scan_id)
             .exclude(Q(scan_status=-1) | Q(scan_status=1))
@@ -3074,9 +3143,7 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
         scanned_host_q2 = EndPoint.objects.filter(scan_history__id=last_scan.id).values("http_url")
         added_endpoint = scanned_host_q1.difference(scanned_host_q2)
         removed_endpoints = scanned_host_q2.difference(scanned_host_q1)
-        endpoint_base = EndPoint.objects.select_related("subdomain", "target_domain", "scan_history").prefetch_related(
-            "techs"
-        )
+        endpoint_base = EndPoint.objects.select_related("subdomain", "domain", "scan_history").prefetch_related("techs")
         if changes == "added":
             return (
                 endpoint_base.filter(scan_history__id=scan_id)
@@ -3150,9 +3217,9 @@ class InterestingSubdomainViewSet(DatatablePaginationMixin, viewsets.ModelViewSe
         else:
             self._datatable_interesting_names = None
 
-        # target_domain is FK: use select_related. Then prefetch M2M/reverse relations.
+        # domain is FK: use select_related. Then prefetch M2M/reverse relations.
         if hasattr(queryset, "select_related"):
-            queryset = queryset.select_related("target_domain")
+            queryset = queryset.select_related("domain")
         if hasattr(queryset, "prefetch_related"):
             queryset = queryset.prefetch_related(
                 "ip_addresses",
@@ -3223,7 +3290,7 @@ class InterestingEndpointViewSet(DatatablePaginationMixin, viewsets.ModelViewSet
 
         # FKs: select_related. M2M: prefetch_related (techs, endpoint_subscan_ids).
         if hasattr(queryset, "select_related"):
-            queryset = queryset.select_related("subdomain", "subdomain__target_domain", "target_domain", "scan_history")
+            queryset = queryset.select_related("subdomain", "subdomain__domain", "domain", "scan_history")
         if hasattr(queryset, "prefetch_related"):
             queryset = queryset.prefetch_related("techs", "endpoint_subscan_ids")
 
@@ -3414,7 +3481,7 @@ class ListEndpoints(APIView):
         if scan_id:
             endpoints = EndPoint.objects.filter(scan_history__id=scan_id)
         elif target_id:
-            endpoints = EndPoint.objects.filter(target_domain__id=target_id).distinct()
+            endpoints = EndPoint.objects.filter(domain__scan_history__target_id=target_id).distinct()
         else:
             endpoints = EndPoint.objects.all()
 
@@ -3472,7 +3539,7 @@ class EndPointViewSet(DatatableListMixin, DatatablePaginationMixin, AdvancedSear
         subdomain_id = safe_int_cast(req.query_params.get("subdomain_id"))
         project = req.query_params.get("project")
 
-        endpoints_obj = EndPoint.objects.filter(scan_history__domain__project__slug=project)
+        endpoints_obj = EndPoint.objects.filter(scan_history__target__project__slug=project)
 
         gf_tag = req.query_params.get("gf_tag") if "gf_tag" in req.query_params else None
 
@@ -3483,13 +3550,13 @@ class EndPointViewSet(DatatableListMixin, DatatablePaginationMixin, AdvancedSear
             endpoints = endpoints.filter(scan_history__id=scan_id)
 
         if url_query:
-            endpoints = endpoints.filter(Q(target_domain__name=url_query))
+            endpoints = endpoints.filter(Q(domain__name=url_query))
 
         if gf_tag:
             endpoints = endpoints.filter(matched_gf_patterns__icontains=gf_tag)
 
         if target_id:
-            endpoints = endpoints.filter(target_domain__id=target_id)
+            endpoints = endpoints.filter(domain__scan_history__target_id=target_id)
 
         if subdomain_id:
             endpoints = endpoints.filter(subdomain__id=subdomain_id)
@@ -3625,7 +3692,7 @@ class VulnerabilityViewSet(DatatableListMixin, DatatablePaginationMixin, Advance
         return {
             "general_fields": [
                 lambda sv: Q(http_url__icontains=sv),
-                lambda sv: Q(target_domain__name__icontains=sv),
+                lambda sv: Q(domain__name__icontains=sv),
                 lambda sv: Q(template__icontains=sv),
                 lambda sv: Q(template_id__icontains=sv),
                 lambda sv: Q(name__icontains=sv),
@@ -3677,14 +3744,14 @@ class VulnerabilityViewSet(DatatableListMixin, DatatablePaginationMixin, Advance
         slug = self.request.GET.get("project", None)
 
         if slug:
-            vulnerabilities = Vulnerability.objects.filter(scan_history__domain__project__slug=slug)
+            vulnerabilities = Vulnerability.objects.filter(scan_history__target__project__slug=slug)
         else:
             vulnerabilities = Vulnerability.objects.all()
 
         if scan_id:
             qs = vulnerabilities.filter(scan_history__id=scan_id).distinct()
         elif target_id:
-            qs = vulnerabilities.filter(target_domain__id=target_id).distinct()
+            qs = vulnerabilities.filter(domain__scan_history__target_id=target_id).distinct()
         elif subdomain_name:
             subdomains = Subdomain.objects.filter(name=subdomain_name)
             qs = vulnerabilities.filter(subdomain__in=subdomains).distinct()
@@ -3692,7 +3759,7 @@ class VulnerabilityViewSet(DatatableListMixin, DatatablePaginationMixin, Advance
             qs = vulnerabilities.distinct()
 
         if domain:
-            qs = qs.filter(Q(target_domain__name=domain)).distinct()
+            qs = qs.filter(Q(domain__name=domain)).distinct()
         if vulnerability_name:
             qs = qs.filter(Q(name=vulnerability_name)).distinct()
         if severity:
@@ -3704,10 +3771,10 @@ class VulnerabilityViewSet(DatatableListMixin, DatatablePaginationMixin, Advance
         qs = qs.select_related(
             "subdomain",
             "endpoint",
-            "target_domain",
+            "domain",
             "scan_history",
             "subdomain__scan_history",
-            "subdomain__target_domain",
+            "subdomain__domain",
         ).prefetch_related(
             "cve_ids",
             "cwe_ids",
@@ -3754,7 +3821,7 @@ class GetIpDetails(APIView):
         if scan_id:
             ip_query = ip_query.filter(ip_addresses__scan_history__id=scan_id)
         elif target_id:
-            ip_query = ip_query.filter(ip_addresses__target_domain__id=target_id)
+            ip_query = ip_query.filter(ip_addresses__domain__scan_history__target_id=target_id)
 
         # Preloading relations to optimize performance
         ip_query = ip_query.prefetch_related(
@@ -3935,7 +4002,7 @@ class FetchScreenshots(APIView):
         if scan_id:
             endpoints_with_screenshots = endpoints_with_screenshots.filter(scan_history__id=scan_id)
         elif target_id:
-            endpoints_with_screenshots = endpoints_with_screenshots.filter(scan_history__domain__id=target_id)
+            endpoints_with_screenshots = endpoints_with_screenshots.filter(scan_history__target_id=target_id)
 
         # Filter by subdomain if provided
         if subdomain_id:
@@ -4470,7 +4537,7 @@ class SecatorRunnerCreate(SecatorAPIBase):
         try:
             from rest_framework.exceptions import ParseError
 
-            from startScan.models import Domain, ScanHistory, SecatorRunner, SubScan
+            from startScan.models import ScanHistory, SecatorRunner, SubScan
 
             try:
                 runner_data = request.data
@@ -4498,6 +4565,7 @@ class SecatorRunnerCreate(SecatorAPIBase):
             runner_type = context.get("runner_type") or "unknown"
             runner_name = context.get("runner_name")
             scan_history_id = context.get("scan_history_id")
+            target_id = context.get("target_id")
             domain_id = context.get("domain_id")
 
             # Create runner object in database
@@ -4515,19 +4583,8 @@ class SecatorRunnerCreate(SecatorAPIBase):
                     secator_runner.scan_history = scan_history
                 except ScanHistory.DoesNotExist:
                     self.logger.log_warning(
-                        f"ScanHistory {scan_history_id} not found, skipping link",
+                        "ScanHistory %s not found, skipping link" % (scan_history_id,),
                         {"prefix": self.logger.PREFIX_SYNC, "action": "CREATE", "scan_id": scan_history_id},
-                    )
-
-            # Link to domain if available
-            if domain_id:
-                try:
-                    domain = Domain.objects.get(id=domain_id)
-                    secator_runner.domain = domain
-                except Domain.DoesNotExist:
-                    self.logger.log_warning(
-                        f"Domain {domain_id} not found, skipping link",
-                        {"prefix": self.logger.PREFIX_SYNC, "action": "CREATE", "domain_id": domain_id},
                     )
 
             worker_id = get_request_worker_id(request, context=context)
@@ -4748,7 +4805,7 @@ class SecatorFindingCreate(SecatorAPIBase):
             context_info = self.extract_finding_context(finding_data)
             finding_type = context_info["finding_type"]
             scan_history_id = context_info["scan_history_id"]
-            domain_id = context_info["domain_id"]
+            target_id = context_info["target_id"]
             context = dict(finding_data.get("_context", {}))
             runner_id = context_info.get("runner_id")
             if runner_id is not None:
@@ -4778,44 +4835,48 @@ class SecatorFindingCreate(SecatorAPIBase):
                 finding_id = f"{finding_type}_{int(time.time() * 1000)}"
                 return Response({"status": True, "id": finding_id})
 
-            # Validate scan context
-            is_valid, error_response, scan_history, domain = self.validate_scan_context(
-                scan_history_id, domain_id, finding_type
+            # Validate scan context (target_id required)
+            is_valid, error_response, scan_history, target = self.validate_scan_context(
+                scan_history_id, target_id, finding_type
             )
             if not is_valid:
                 return error_response
+            target_id = target.id
 
             # Instantiate repository and save finding
             repository = repository_class()
             self.logger.log_debug(
-                self.logger.PREFIX_FINDING, "CREATE", f"Using repository: {repository_class.__name__}"
+                self.logger.PREFIX_FINDING, "CREATE", "Using repository: %s" % (repository_class.__name__,)
             )
             self.logger.log_debug(
                 self.logger.PREFIX_FINDING,
                 "CREATE",
-                f"Calling save_from_secator with finding_data (keys: {list(finding_data.keys())})",
+                "Calling save_from_secator with finding_data (keys: %s)" % (list(finding_data.keys()),),
             )
 
             try:
                 if finding_type == "subdomain":
                     self.logger.log_debug(
-                        self.logger.PREFIX_FINDING, "CREATE", f"Saving subdomain with context: {context}"
+                        self.logger.PREFIX_FINDING, "CREATE", "Saving subdomain with context: %s" % (context,)
                     )
                 saved_object = repository.save_from_secator(
-                    finding_data, scan_history_id, domain_id, rengine_context=context
+                    finding_data, scan_history_id, target_id, rengine_context=context
                 )
 
                 # Check if save was successful
                 if saved_object is None:
-                    self.logger.log_finding_save(
-                        "CREATE",
-                        finding_type,
-                        None,
-                        scan_history_id,
-                        domain_id,
-                        success=False,
-                        error_message="Repository returned None - validation error or missing required fields",
-                    )
+                    try:
+                        self.logger.log_finding_save(
+                            "CREATE",
+                            finding_type,
+                            None,
+                            scan_history_id,
+                            target_id,
+                            success=False,
+                            error_message="Repository returned None - validation error or missing required fields",
+                        )
+                    except Exception:
+                        pass
                     return Response(
                         {
                             "status": False,
@@ -4832,7 +4893,7 @@ class SecatorFindingCreate(SecatorAPIBase):
                         finding_type,
                         saved_object,
                         scan_history_id,
-                        domain_id,
+                        target_id,
                         success=True,
                     )
                     return Response({"status": True, "id": finding_id})
@@ -4842,14 +4903,14 @@ class SecatorFindingCreate(SecatorAPIBase):
                         finding_type,
                         saved_object,
                         scan_history_id,
-                        domain_id,
+                        target_id,
                         success=False,
                         error_message="Saved object has no 'id' attribute",
                     )
                     return Response({"status": False, "error": "Saved object has no ID attribute"}, status=500)
 
             except Exception as e:
-                return self.handle_repository_error(e, finding_type, scan_history_id, domain_id)
+                return self.handle_repository_error(e, finding_type, scan_history_id, target_id)
 
         except Exception as e:
             self.logger.log_error(
@@ -4907,7 +4968,7 @@ class SecatorFindingUpdate(SecatorAPIBase):
             context_info = self.extract_finding_context(finding_data)
             finding_type = context_info["finding_type"]
             scan_history_id = context_info["scan_history_id"]
-            domain_id = context_info["domain_id"]
+            target_id = context_info["target_id"]
             context = dict(finding_data.get("_context", {}))
             runner_id = context_info.get("runner_id")
             if runner_id is not None:
@@ -4927,7 +4988,7 @@ class SecatorFindingUpdate(SecatorAPIBase):
 
             if not finding_type:
                 self.logger.log_warning(
-                    f"Missing _type in finding data for finding_id={finding_id}",
+                    "Missing _type in finding data for finding_id=%s" % (finding_id,),
                     {"prefix": self.logger.PREFIX_FINDING, "action": "UPDATE", "id": finding_id},
                 )
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
@@ -4938,17 +4999,20 @@ class SecatorFindingUpdate(SecatorAPIBase):
                 # Check if it's a metadata type that should be ignored
                 if self.is_metadata_type(finding_type):
                     self.logger.log_metadata_ignored(finding_type, finding_id)
-                    return Response({"status": True, "message": f"Ignored metadata type: {finding_type}"}, status=200)
+                    return Response(
+                        {"status": True, "message": "Ignored metadata type: %s" % (finding_type,)}, status=200
+                    )
 
                 self.logger.log_unknown_type("finding", finding_type, finding_id)
-                return Response({"status": False, "error": f"Unknown finding type: {finding_type}"}, status=400)
+                return Response({"status": False, "error": "Unknown finding type: %s" % (finding_type,)}, status=400)
 
-            # Validate scan context
-            is_valid, error_response, scan_history, domain = self.validate_scan_context(
-                scan_history_id, domain_id, finding_type, prefix=self.logger.PREFIX_FINDING
+            # Validate scan context (target_id required)
+            is_valid, error_response, scan_history, target = self.validate_scan_context(
+                scan_history_id, target_id, finding_type, prefix=self.logger.PREFIX_FINDING
             )
             if not is_valid:
                 return error_response
+            target_id = target.id
 
             # Instantiate repository and save finding (upsert: create or update)
             repository = repository_class()
@@ -4969,7 +5033,7 @@ class SecatorFindingUpdate(SecatorAPIBase):
                         level="debug",
                     )
                 saved_object = repository.save_from_secator(
-                    finding_data, scan_history_id, domain_id, rengine_context=context
+                    finding_data, scan_history_id, target_id, rengine_context=context
                 )
 
                 # Check if save was successful
@@ -4979,7 +5043,7 @@ class SecatorFindingUpdate(SecatorAPIBase):
                         finding_type,
                         None,
                         scan_history_id,
-                        domain_id,
+                        target_id,
                         success=False,
                         error_message="Repository returned None - validation error or missing required fields",
                     )
@@ -4999,7 +5063,7 @@ class SecatorFindingUpdate(SecatorAPIBase):
                         finding_type,
                         saved_object,
                         scan_history_id,
-                        domain_id,
+                        target_id,
                         success=True,
                     )
                     return Response({"status": True, "id": saved_finding_id})
@@ -5009,14 +5073,14 @@ class SecatorFindingUpdate(SecatorAPIBase):
                         finding_type,
                         saved_object,
                         scan_history_id,
-                        domain_id,
+                        target_id,
                         success=False,
                         error_message="Saved object has no 'id' attribute",
                     )
                     return Response({"status": False, "error": "Saved object has no ID attribute"}, status=500)
 
             except Exception as e:
-                return self.handle_repository_error(e, finding_type, scan_history_id, domain_id, finding_id)
+                return self.handle_repository_error(e, finding_type, scan_history_id, target_id, finding_id)
 
         except Exception as e:
             self.logger.log_error(

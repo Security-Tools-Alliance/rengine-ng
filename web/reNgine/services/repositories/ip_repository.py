@@ -9,9 +9,10 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
 from reNgine.core.validators import is_valid_ip
+from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress, ScanHistory, Subdomain
-from targetApp.models import Domain
+from targetApp.models import Target
 
 
 PREFIX_IP_REPO = "[IP_REPO]"
@@ -25,7 +26,7 @@ class IpRepository:
         self,
         item: Dict[str, Any],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[IpAddress]:
         """
@@ -34,14 +35,14 @@ class IpRepository:
         Args:
             item: Secator IP item
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             rengine_context: Optional context (e.g. subscan_id for SubScan linking)
 
         Returns:
             IpAddress: Saved IP address object or None
         """
         try:
-            return self._process_secator_ip_item(item, scan_history_id, domain_id, rengine_context or {})
+            return self._process_secator_ip_item(item, scan_history_id, target_id, rengine_context or {})
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_IP_REPO,
@@ -71,7 +72,7 @@ class IpRepository:
         self,
         item: Dict[str, Any],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[IpAddress]:
         rengine_context = rengine_context or {}
@@ -79,9 +80,22 @@ class IpRepository:
         if not ip_address:
             return None
 
-        # Validate scan_history and domain exist
+        target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
+        domain = resolve_domain_for_scan(
+            scan_history_id,
+            target_value,
+            create=True,
+            log_failure={
+                "logger": logger,
+                "prefix": PREFIX_IP_REPO,
+                "extra": "target_id=%s" % (target_id,),
+            },
+        )
+        if not domain:
+            return None
+        domain_id = domain.id
+
         ScanHistory.objects.get(id=scan_history_id)
-        Domain.objects.get(id=domain_id)
 
         version = self._get_ip_version(ip_address)
         protocol = self._resolve_protocol(version, item.get("protocol"))
@@ -204,7 +218,8 @@ class IpRepository:
         try:
             # Validate scan_history and domain exist
             ScanHistory.objects.get(id=scan_history_id)
-            Domain.objects.get(id=domain_id)
+            if get_domain_by_id(domain_id) is None:
+                return []
 
             # Precompute version for each IP to avoid multiple calls
             ip_objects = []

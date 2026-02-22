@@ -36,9 +36,7 @@ Initiate Scan for Multiple Targets
           {% include 'startScan/_items/secator_view_toggle.html' with id_prefix='start_multi_scan' %}
           {% include 'startScan/_items/secator_selection_layout.html' with id_prefix='start_multi_scan' %}
           <!-- Scan Options Accordion -->
-          {% with first_domain=domain_list|first %}
-          {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=first_domain.name|default:'selected targets' id_prefix='start_multi_scan_' id_suffix='_start_multi_scan' %}
-          {% endwith %}
+          {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name='selected targets' id_prefix='start_multi_scan_' id_suffix='_start_multi_scan' %}
           
           <!-- Advanced Configuration Accordion -->
           {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_multi_scan_' show_random_proxy=False %}

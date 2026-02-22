@@ -26,7 +26,7 @@ from reNgine.services.repositories.vulnerability_repository import Vulnerability
 from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.logger import get_secator_api_logger
 from startScan.models import ScanHistory
-from targetApp.models import Domain
+from targetApp.models import Target
 
 
 def _is_validation_like_error(error: Exception) -> bool:
@@ -112,6 +112,7 @@ class SecatorAPIBase(APIView, ABC):
             "runner_type": runner_data.get("config", {}).get("type"),
             "runner_name": runner_data.get("config", {}).get("name") or runner_data.get("name"),
             "scan_history_id": context.get("scan_history_id"),
+            "target_id": context.get("target_id"),
             "domain_id": context.get("domain_id"),
             "subscan_id": context.get("subscan_id"),
             "celery_id": context.get("celery_id"),
@@ -139,6 +140,7 @@ class SecatorAPIBase(APIView, ABC):
         return {
             "finding_type": finding_data.get("_type"),
             "scan_history_id": context.get("scan_history_id"),
+            "target_id": context.get("target_id"),
             "domain_id": context.get("domain_id"),
             "task": context.get("task"),
             "runner_id": runner_id,
@@ -147,21 +149,21 @@ class SecatorAPIBase(APIView, ABC):
     def validate_scan_context(
         self,
         scan_history_id: Optional[int],
-        domain_id: Optional[int],
+        target_id: Optional[int],
         finding_type: Optional[str] = None,
         prefix: Optional[str] = None,
-    ) -> Tuple[bool, Optional[Response], Optional[ScanHistory], Optional[Domain]]:
+    ) -> Tuple[bool, Optional[Response], Optional[ScanHistory], Optional[Target]]:
         """
-        Validate that scan_history_id and domain_id are provided and exist.
+        Validate that scan_history_id and target_id are provided and exist.
 
         Args:
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             finding_type: Optional finding type for error messages
             prefix: Optional log prefix (defaults to PREFIX_FINDING for backward compatibility)
 
         Returns:
-            tuple: (is_valid, error_response, scan_history, domain)
+            tuple: (is_valid, error_response, scan_history, target)
         """
         log_prefix = prefix or self.logger.PREFIX_FINDING
         if not scan_history_id:
@@ -171,51 +173,66 @@ class SecatorAPIBase(APIView, ABC):
                 "Missing scan_history_id in _context",
                 log_prefix,
             )
-        if not domain_id:
-            return self._create_missing_context_error_response(
-                "Missing domain_id in context",
-                finding_type,
-                "Missing domain_id in _context",
-                log_prefix,
-            )
-        # Validate that ScanHistory and Domain exist
         try:
             scan_history = ScanHistory.objects.get(id=scan_history_id)
             self.logger.log_debug(
                 log_prefix,
                 "VALIDATE",
-                f"ScanHistory {scan_history_id} found: {scan_history.scan_name}",
+                "ScanHistory %s found: %s" % (scan_history_id, scan_history.scan_name),
             )
         except ObjectDoesNotExist:
             self.logger.log_error(
-                ObjectDoesNotExist(f"ScanHistory {scan_history_id} not found"),
+                ObjectDoesNotExist("ScanHistory %s not found" % (scan_history_id,)),
                 {"prefix": log_prefix, "action": "VALIDATE", "scan_id": scan_history_id},
                 exc_info=False,
             )
             return (
                 False,
-                Response({"status": False, "error": f"ScanHistory {scan_history_id} not found"}, status=404),
+                Response({"status": False, "error": "ScanHistory %s not found" % (scan_history_id,)}, status=404),
                 None,
                 None,
             )
-
+        if not target_id:
+            return self._create_missing_context_error_response(
+                "Missing target_id in context",
+                finding_type,
+                "Missing target_id in _context",
+                log_prefix,
+            )
         try:
-            domain = Domain.objects.get(id=domain_id)
-            self.logger.log_debug(log_prefix, "VALIDATE", f"Domain {domain_id} found: {domain.name}")
+            target = Target.objects.get(id=target_id)
+            self.logger.log_debug(log_prefix, "VALIDATE", "Target %s found: %s" % (target_id, target.value))
         except ObjectDoesNotExist:
             self.logger.log_error(
-                ObjectDoesNotExist(f"Domain {domain_id} not found"),
-                {"prefix": log_prefix, "action": "VALIDATE", "domain_id": domain_id},
+                ObjectDoesNotExist("Target %s not found" % (target_id,)),
+                {"prefix": log_prefix, "action": "VALIDATE", "target_id": target_id},
                 exc_info=False,
             )
             return (
                 False,
-                Response({"status": False, "error": f"Domain {domain_id} not found"}, status=404),
+                Response({"status": False, "error": "Target %s not found" % (target_id,)}, status=404),
                 scan_history,
                 None,
             )
-
-        return True, None, scan_history, domain
+        if getattr(scan_history, "target_id", None) is not None and scan_history.target_id != target_id:
+            self.logger.log_warning(
+                "ScanHistory %s target_id (%s) does not match context target_id (%s)"
+                % (scan_history_id, scan_history.target_id, target_id),
+                {"prefix": log_prefix, "action": "VALIDATE", "scan_id": scan_history_id, "target_id": target_id},
+            )
+            return (
+                False,
+                Response(
+                    {
+                        "status": False,
+                        "error": "ScanHistory does not belong to the given target",
+                    },
+                    status=400,
+                ),
+                scan_history,
+                None,
+            )
+        return True, None, scan_history, target
 
     def _create_missing_context_error_response(
         self,
@@ -280,7 +297,7 @@ class SecatorAPIBase(APIView, ABC):
         error: Exception,
         finding_type: str,
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         finding_id: Optional[str] = None,
     ) -> Response:
         """
@@ -290,7 +307,7 @@ class SecatorAPIBase(APIView, ABC):
             error: Exception that occurred
             finding_type: Type of finding
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             finding_id: Optional finding ID
 
         Returns:
@@ -301,7 +318,7 @@ class SecatorAPIBase(APIView, ABC):
             "action": "SAVE",
             "type": finding_type,
             "scan_id": scan_history_id,
-            "domain_id": domain_id,
+            "target_id": target_id,
         }
         if finding_id:
             context["id"] = finding_id

@@ -3,8 +3,9 @@ from django.contrib.auth.models import User
 
 from dashboard.models import Project
 from reNgine.validators import validate_domain
+from startScan.models import Domain
 
-from .models import Domain, Organization
+from .models import Organization, Target
 
 
 class AddTargetForm(forms.Form):
@@ -47,23 +48,23 @@ class AddOrganizationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         project = kwargs.pop("project")
         super(AddOrganizationForm, self).__init__(*args, **kwargs)
-        self.fields["domains"] = forms.ModelMultipleChoiceField(
-            queryset=Domain.objects.filter(project__slug=project, domains__isnull=True),
+        self.fields["targets"] = forms.ModelMultipleChoiceField(
+            queryset=Target.objects.filter(project__slug=project),
             widget=forms.SelectMultiple(
                 attrs={
                     "class": "form-control select2-multiple",
                     "data-toggle": "select2",
                     "data-width": "100%",
                     "data-placeholder": "Choose Targets",
-                    "id": "domains",
+                    "id": "targets",
                 }
             ),
-            required=True,
+            required=False,
         )
 
     class Meta:
         model = Organization
-        fields = ["name", "description", "domains"]
+        fields = ["name", "description", "targets"]
 
     name = forms.CharField(
         required=True,
@@ -85,11 +86,6 @@ class AddOrganizationForm(forms.ModelForm):
             }
         ),
     )
-
-    def clean_domains(self):
-        if domains := self.cleaned_data.get("domains"):
-            return [int(domain.id) for domain in domains]
-        return []
 
 
 class UpdateTargetForm(forms.ModelForm):
@@ -134,10 +130,59 @@ class UpdateTargetForm(forms.ModelForm):
         self.initial["h1_team_handle"] = h1_team_handle
 
 
+class UpdateTargetModelForm(forms.ModelForm):
+    """ModelForm for Target (value read-only, description and h1_team_handle editable)."""
+
+    class Meta:
+        model = Target
+        fields = ["value", "description", "h1_team_handle"]
+
+    value = forms.CharField(
+        required=True,
+        disabled=True,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "targetValue",
+            }
+        ),
+    )
+    description = forms.CharField(
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "targetDescription",
+            }
+        ),
+    )
+    h1_team_handle = forms.CharField(
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "h1_team_handle",
+            }
+        ),
+    )
+
+
 class UpdateOrganizationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super(UpdateOrganizationForm, self).__init__(*args, **kwargs)
-        self.fields["domains"].choices = [(domain.id, domain.name) for domain in Domain.objects.all()]
+        project = getattr(self.instance, "project", None)
+        target_queryset = Target.objects.filter(project=project) if project else Target.objects.none()
+        self.fields["targets"] = forms.ModelMultipleChoiceField(
+            queryset=target_queryset,
+            widget=forms.SelectMultiple(
+                attrs={
+                    "class": "form-control form-control-lg tagging",
+                    "multiple": "multiple",
+                    "id": "targets",
+                }
+            ),
+            required=False,
+        )
 
     class Meta:
         model = Organization
@@ -163,20 +208,11 @@ class UpdateOrganizationForm(forms.ModelForm):
         ),
     )
 
-    domains = forms.ChoiceField(
-        required=True,
-        widget=forms.Select(
-            attrs={
-                "class": "form-control form-control-lg tagging",
-                "multiple": "multiple",
-                "id": "domains",
-            }
-        ),
-    )
-
-    def set_value(self, organization_value, description_value):
+    def set_value(self, organization_value, description_value, target_list=None):
         self.initial["name"] = organization_value
         self.initial["description"] = description_value
+        if target_list is not None and "targets" in self.fields:
+            self.initial["targets"] = [int(t) for t in target_list if str(t).isdigit()]
 
 
 class ProjectForm(forms.ModelForm):

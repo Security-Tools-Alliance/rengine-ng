@@ -47,7 +47,7 @@ class RunnerLogger(BaseLogger):
         runner_name: str,
         targets: List[str],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         config: Optional[Dict[str, Any]] = None,
         run_opts: Optional[Dict[str, Any]] = None,
         context: Optional[Dict[str, Any]] = None,
@@ -61,7 +61,7 @@ class RunnerLogger(BaseLogger):
             runner_name: Name of the runner
             targets: List of targets
             scan_history_id: ID of scan history
-            domain_id: ID of domain
+            target_id: ID of target
             config: Optional template configuration
             run_opts: Optional run options
             context: Optional context dictionary
@@ -73,7 +73,7 @@ class RunnerLogger(BaseLogger):
             "name": runner_name,
             "targets_count": len(targets),
             "scan_id": scan_history_id,
-            "domain_id": domain_id,
+            "target_id": target_id,
         }
 
         info_msg = self._format_info_line(

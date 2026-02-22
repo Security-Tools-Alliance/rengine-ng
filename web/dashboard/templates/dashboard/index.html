@@ -122,7 +122,7 @@ Dashboard
 										<strong>{{item.title}}</strong>
 										<br>
 										<span class="text-muted">
-											<b>{% if item.status == 2 %} {% if item.title != 'Scan Completed' %} Completed {% endif %}{% elif item.status == 1 %} Initiated {% elif item.status == 0 %} {% if item.title != 'Scan aborted' %} Aborted {% endif %} {% endif %}</b>for <span class="badge badge-soft-info">{{item.scan_of.domain.name}}</span>
+											<b>{% if item.status == 2 %} {% if item.title != 'Scan Completed' %} Completed {% endif %}{% elif item.status == 1 %} Initiated {% elif item.status == 0 %} {% if item.title != 'Scan aborted' %} Aborted {% endif %} {% endif %}</b>for <span class="badge badge-soft-info">{{ item.scan_of.target.value|default:"" }}</span>
 										</span>
 										<br>
 										<span>{{item.time|naturaltime}}</span>

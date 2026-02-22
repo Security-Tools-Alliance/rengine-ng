@@ -9,7 +9,8 @@ from django.utils import timezone
 from dashboard.models import User
 from reNgine.definitions import INITIATED_TASK
 from reNgine.utilities.logger import get_module_logger
-from startScan.models import Domain, ScanActivity, ScanHistory, SubScan
+from startScan.models import ScanActivity, ScanHistory, SubScan
+from targetApp.models import Target
 
 
 PREFIX_SCAN_REPO = "[SCAN_REPO]"
@@ -268,20 +269,20 @@ class ScanRepository:
             )
             return False
 
-    def create_scan(self, host_id, engine_id, initiated_by_id=None):
+    def create_scan(self, engine_id, initiated_by_id=None, target_id=None):
         """
         Create a new scan object with pending status.
 
         Args:
-            host_id: ID of Domain model
             engine_id: ID of EngineType model
             initiated_by_id: ID of User model (Optional)
+            target_id: ID of Target model (required).
 
         Returns:
             int: ID of the created scan history
         """
         try:
-            return self._create_scan_history_entry(engine_id, host_id, initiated_by_id)
+            return self._create_scan_history_entry(engine_id, initiated_by_id=initiated_by_id, target_id=target_id)
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_SCAN_REPO,
@@ -299,33 +300,31 @@ class ScanRepository:
             )
             raise
 
-    def _create_scan_history_entry(self, engine_id: int, host_id: int, initiated_by_id: int = None) -> int:
-        # Get current time
+    def _create_scan_history_entry(
+        self,
+        engine_id: int,
+        initiated_by_id: int = None,
+        target_id: int = None,
+    ) -> int:
+        if target_id is None:
+            raise ValueError("create_scan requires target_id")
         current_scan_time = timezone.now()
-
-        # Fetch domain object
-        domain = Domain.objects.get(pk=host_id)
-
-        # Create scan history (all new scans are Secator scans, no scan_type assigned)
+        target = Target.objects.get(pk=target_id)
         scan = ScanHistory()
         scan.scan_status = INITIATED_TASK
-        scan.domain = domain
+        scan.target = target
         scan.start_scan_date = current_scan_time
-
         if initiated_by_id:
             user = User.objects.get(pk=initiated_by_id)
             scan.initiated_by = user
-
         scan.save()
-
-        # Update domain's last scan date
-        domain.start_scan_date = current_scan_time
-        domain.save()
+        target.start_scan_date = current_scan_time
+        target.save(update_fields=["start_scan_date"])
 
         logger.log_line(
             PREFIX_SCAN_REPO,
             "CREATE",
-            "Created scan %s for domain %s" % (scan.id, domain.name),
+            "Created scan %s for target %s" % (scan.id, target.id),
             level="info",
         )
         return scan.id

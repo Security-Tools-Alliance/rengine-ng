@@ -45,7 +45,7 @@ def _run_secator_with_secator_kwargs(
 
     if use_per_task:
         result = run_per_task_secator_scans(
-            domain_id=schedule.domain_id,
+            target_id=schedule.target_id,
             user_id=user_id,
             selected_targets_per_task=selected_targets_per_task,
             imported_subdomains=imported,
@@ -56,7 +56,7 @@ def _run_secator_with_secator_kwargs(
         success = result.get("success_count", 0) >= 1
     else:
         result = start_secator_scan(
-            domain_id=schedule.domain_id,
+            target_id=schedule.target_id,
             user_id=user_id,
             imported_subdomains=imported,
             out_of_scope_subdomains=out_of_scope,
@@ -82,7 +82,7 @@ def _run_secator_with_scan_type(
     if not schedule.scan_type_id:
         raise RuntimeError("Schedule has no scan_type and no secator_kwargs")
     result = start_secator_scan(
-        domain_id=schedule.domain_id,
+        target_id=schedule.target_id,
         user_id=user_id,
         execution_mode="scan",
         secator_scan_type=schedule.scan_type.engine_name,

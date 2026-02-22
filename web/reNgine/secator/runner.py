@@ -20,7 +20,7 @@ from reNgine.core.path import is_safe_path
 from reNgine.settings import SECATOR_RESULTS
 from reNgine.utilities.logger import get_runner_logger
 from startScan.models import ScanHistory
-from targetApp.models import Domain
+from targetApp.models import Target
 
 
 class SecatorRunner:
@@ -91,7 +91,7 @@ class SecatorRunner:
         config,
         targets: List[str],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         run_config: Dict[str, Any] = None,
         profiles: Dict[str, str] = None,
         runner_name: str = None,
@@ -104,7 +104,7 @@ class SecatorRunner:
             config: Template configuration
             targets: List of targets
             scan_history_id: ID of scan history
-            domain_id: ID of domain
+            target_id: ID of target
             run_config: Configuration dictionary
             profiles: Speed/stealth profiles
             runner_name: Optional runner name for logging
@@ -119,30 +119,30 @@ class SecatorRunner:
             # Log targets
             self.runner_logger.log_targets(targets, runner_type)
 
-            # Get domain and setup results directory
-            domain = Domain.objects.get(id=domain_id)
+            # Get target and setup results directory
+            target = Target.objects.get(id=target_id)
 
             # Get project and create workspace path
             from reNgine.core.validators import sanitize_path_component
 
-            domain_name_sanitized = sanitize_path_component(domain.name)
-            if project := domain.project:
+            target_value_sanitized = sanitize_path_component(target.value)
+            if project := target.project:
                 project_slug_sanitized = sanitize_path_component(project.slug)
-                workspace = f"{project_slug_sanitized}/{domain_name_sanitized}"
+                workspace = f"{project_slug_sanitized}/{target_value_sanitized}"
             else:
-                # Fallback if no project (should not happen in normal operation)
-                workspace = domain_name_sanitized
+                workspace = target_value_sanitized
                 self.runner_logger.log_warning(
-                    f"No project for domain {domain.name}, using domain name as workspace",
-                    {"prefix": self.runner_logger.PREFIX, "action": "WORKSPACE", "domain": domain.name},
+                    "No project for target %s, using target value as workspace" % (target.value,),
+                    {"prefix": self.runner_logger.PREFIX, "action": "WORKSPACE", "target": target.value},
                 )
 
-            domain_results_dir = os.path.abspath(os.path.join(SECATOR_RESULTS, domain_name_sanitized))
-            if not is_safe_path(SECATOR_RESULTS, domain_results_dir):
+            target_results_dir = os.path.abspath(os.path.join(SECATOR_RESULTS, target_value_sanitized))
+            if not is_safe_path(SECATOR_RESULTS, target_results_dir):
                 raise ValueError(
-                    f"Domain results path would escape SECATOR_RESULTS base; domain.name may be invalid: {domain.name}"
+                    "Target results path would escape SECATOR_RESULTS base; target.value may be invalid: %s"
+                    % (target.value,)
                 )
-            os.makedirs(domain_results_dir, exist_ok=True)
+            os.makedirs(target_results_dir, exist_ok=True)
 
             # Prepare configuration - only keep what orchestrator needs
             if run_config is None:
@@ -166,10 +166,10 @@ class SecatorRunner:
 
             # Create runner with hooks
             try:
-                # Prepare context with scan_history_id, domain_id and workspace_name for Secator API hooks
+                # Prepare context with scan_history_id, target_id and workspace_name for Secator API hooks
                 context = {
                     "scan_history_id": scan_history_id,
-                    "domain_id": domain_id,
+                    "target_id": target_id,
                     "workspace_name": workspace,
                 }
                 if run_config and run_config.get("subscan_id") is not None:
@@ -198,7 +198,7 @@ class SecatorRunner:
                     runner_name=runner_name,
                     targets=targets,
                     scan_history_id=scan_history_id,
-                    domain_id=domain_id,
+                    target_id=target_id,
                     config=config_dict,
                     run_opts=run_opts,
                     context=context,
@@ -269,7 +269,7 @@ class SecatorRunner:
             self.runner_logger.log_runner_error(
                 runner_type,
                 e,
-                {"runner_name": runner_name, "scan_history_id": scan_history_id, "domain_id": domain_id},
+                {"runner_name": runner_name, "scan_history_id": scan_history_id, "target_id": target_id},
             )
             return {
                 "status": "error",
@@ -284,7 +284,7 @@ class SecatorRunner:
         workflow_name: str,
         targets: List[str],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         config: Dict[str, Any] = None,
         profiles: Dict[str, str] = None,
     ) -> Dict[str, Any]:
@@ -297,7 +297,7 @@ class SecatorRunner:
                 config=template,
                 targets=targets,
                 scan_history_id=scan_history_id,
-                domain_id=domain_id,
+                target_id=target_id,
                 run_config=config,
                 profiles=profiles,
                 runner_name=workflow_name,
@@ -317,7 +317,7 @@ class SecatorRunner:
         task_names: List[str],
         targets: List[str],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         config: Dict[str, Any] = None,
         profiles: Dict[str, str] = None,
     ) -> Dict[str, Any]:
@@ -328,7 +328,7 @@ class SecatorRunner:
             task_names: List of task names to execute
             targets: List of targets
             scan_history_id: ID of scan history
-            domain_id: ID of domain
+            target_id: ID of target
             config: Configuration dictionary
             profiles: Speed/stealth profiles
 
@@ -348,7 +348,7 @@ class SecatorRunner:
                         config=template,
                         targets=targets,
                         scan_history_id=scan_history_id,
-                        domain_id=domain_id,
+                        target_id=target_id,
                         run_config=config,
                         profiles=profiles,
                         runner_name=task_name,
@@ -402,7 +402,7 @@ class SecatorRunner:
         task_name: str,
         targets: List[str],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         config: Dict[str, Any] = None,
         profiles: Dict[str, str] = None,
     ) -> Dict[str, Any]:
@@ -415,7 +415,7 @@ class SecatorRunner:
             task_names=[task_name],
             targets=targets,
             scan_history_id=scan_history_id,
-            domain_id=domain_id,
+            target_id=target_id,
             config=config,
             profiles=profiles,
         )
@@ -596,7 +596,7 @@ class SecatorRunner:
         scan_type: str,
         targets: List[str],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         config: Dict[str, Any] = None,
         profiles: Dict[str, str] = None,
     ) -> Dict[str, Any]:
@@ -607,7 +607,7 @@ class SecatorRunner:
             scan_type: Type of scan alias (domain, host, network, subdomain, url) for builtin or custom
             targets: List of targets
             scan_history_id: ID of scan history
-            domain_id: ID of domain
+            target_id: ID of target
             config: Configuration dictionary
             profiles: Speed/stealth profiles
 
@@ -622,7 +622,7 @@ class SecatorRunner:
                 config=template,
                 targets=targets,
                 scan_history_id=scan_history_id,
-                domain_id=domain_id,
+                target_id=target_id,
                 run_config=config,
                 profiles=profiles,
                 runner_name=scan_type,

@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 
-from targetApp.models import Domain
+from targetApp.models import Target
 from utils.test_base import BaseTestCase
 
 
@@ -16,8 +16,7 @@ class TestAddTarget(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-
-        Domain.objects.all().delete()
+        self.data_generator.create_project()
 
     def test_add_target(self):
         """Test adding a new target."""
@@ -33,7 +32,10 @@ class TestAddTarget(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["domain_name"], "example.com")
-        self.assertTrue(Domain.objects.filter(name="example.com").exists())
+        self.assertIn("target_id", response.data)
+        self.assertIn("initiate_scan_url", response.data)
+        self.assertIn(f"/target/start/{response.data['target_id']}", response.data["initiate_scan_url"])
+        self.assertTrue(Target.objects.filter(project=self.data_generator.project, value="example.com").exists())
 
         # Test adding duplicate target
         response = self.client.post(api_url, data)
@@ -48,12 +50,15 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
         super().setUp()
 
     def test_list_targets(self):
-        """Test listing targets."""
+        """Test listing targets (API returns Target model; name is alias for value)."""
         api_url = reverse("api:targets-list")
         response = self.client.get(api_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
-        self.assertEqual(response.data["results"][0]["name"], self.data_generator.domain.name)
+        self.assertEqual(
+            response.data["results"][0]["name"],
+            self.data_generator.target.value,
+        )
 
     def test_list_targets_with_slug(self):
         """Test listing targets with project slug."""
@@ -61,15 +66,22 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
         response = self.client.get(api_url, {"slug": self.data_generator.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
-        self.assertEqual(response.data["results"][0]["name"], self.data_generator.domain.name)
+        self.assertEqual(
+            response.data["results"][0]["name"],
+            self.data_generator.target.value,
+        )
 
     def test_list_targets_order_by_name_asc(self):
-        """List targets with order column 2 (name) ascending uses centralised map."""
+        """List targets with order column 2 (value) ascending uses centralised map."""
         project = self.data_generator.project
-        Domain.objects.filter(project=project).delete()
-        Domain.objects.create(project=project, name="zzz-target.local", insert_date=timezone.now())
-        Domain.objects.create(project=project, name="aaa-target.local", insert_date=timezone.now())
-        Domain.objects.create(project=project, name="mmm-target.local", insert_date=timezone.now())
+        Target.objects.filter(project=project).delete()
+        for val in ("zzz-target.local", "aaa-target.local", "mmm-target.local"):
+            Target.objects.create(
+                project=project,
+                value=val,
+                target_type="host",
+                insert_date=timezone.now(),
+            )
         api_url = reverse("api:targets-list")
         response = self.client.get(
             api_url,
@@ -80,33 +92,36 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
         self.assertEqual(names, ["aaa-target.local", "mmm-target.local", "zzz-target.local"])
 
     def test_list_targets_order_by_start_scan_date_nulls_last(self):
-        """List targets with order column 5 (start_scan_date) uses nulls_last."""
+        """List targets with order column 6 (start_scan_date) uses nulls_last."""
         project = self.data_generator.project
-        Domain.objects.filter(project=project).delete()
+        Target.objects.filter(project=project).delete()
         older = timezone.now() - timezone.timedelta(days=2)
         newer = timezone.now() - timezone.timedelta(days=1)
-        Domain.objects.create(
+        Target.objects.create(
             project=project,
-            name="null-date.local",
+            value="null-date.local",
+            target_type="host",
             insert_date=timezone.now(),
             start_scan_date=None,
         )
-        Domain.objects.create(
+        Target.objects.create(
             project=project,
-            name="old-scan.local",
+            value="old-scan.local",
+            target_type="host",
             insert_date=timezone.now(),
             start_scan_date=older,
         )
-        Domain.objects.create(
+        Target.objects.create(
             project=project,
-            name="new-scan.local",
+            value="new-scan.local",
+            target_type="host",
             insert_date=timezone.now(),
             start_scan_date=newer,
         )
         api_url = reverse("api:targets-list")
         response_asc = self.client.get(
             api_url,
-            {"slug": project.slug, "order[0][column]": "5", "order[0][dir]": "asc"},
+            {"slug": project.slug, "order[0][column]": "6", "order[0][dir]": "asc"},
         )
         self.assertEqual(response_asc.status_code, status.HTTP_200_OK)
         names_asc = [r["name"] for r in response_asc.data["results"]]
@@ -121,7 +136,7 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
 
         response_desc = self.client.get(
             api_url,
-            {"slug": project.slug, "order[0][column]": "5", "order[0][dir]": "desc"},
+            {"slug": project.slug, "order[0][column]": "6", "order[0][dir]": "desc"},
         )
         self.assertEqual(response_desc.status_code, status.HTTP_200_OK)
         names_desc = [r["name"] for r in response_desc.data["results"]]

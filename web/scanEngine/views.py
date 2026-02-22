@@ -825,7 +825,7 @@ def secator_scan_detail(request, scan_id):
             scan_type__isnull=False,
             is_legacy_scan=False,
         )
-        .select_related("domain__project")
+        .select_related("target__project")
         .prefetch_related("secatorrunner_set__worker")
         .order_by("-start_scan_date")[:10]
     )

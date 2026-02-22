@@ -10,7 +10,7 @@ Update Target
 {% endblock custom_js_css_link %}
 
 {% block page_title %}
-Update Target   {{ form.name.value }}
+Update Target   {{ form.value.value }}
 {% endblock page_title %}
 
 {% block main_content %}
@@ -24,22 +24,22 @@ Update Target   {{ form.name.value }}
           <div class="row mb-3">
             <div class="col-6">
               <div>
-                <label for="simpleinput" class="form-label">Domain name</label>
-                {{ form.name }}
+                <label for="simpleinput" class="form-label">Target value</label>
+                {{ form.value }}
                 {% if form.errors %}
                 <div class="invalid-feedback" style="display: block;">
-                  {{ form.errors.name|striptags }}
+                  {{ form.errors.value|striptags }}
                 </div>
                 {% endif %}
               </div>
             </div>
             <div class="col-6">
-              <label for="domainDescription" class="form-label">Description (Optional)</label>
+              <label for="targetDescription" class="form-label">Description (Optional)</label>
               {{ form.description }}
             </div>
           </div>
           <div class="col-12">
-            <label for="domainDescription" class="form-label">HackerOne Target Team Handle
+            <label for="h1_team_handle" class="form-label">HackerOne Target Team Handle
               <br>
               This is used to send vulnerability reports to the HackerOne Program automatically. Team handle can be found from the program URL, hackerone.com/team_handle.
             </label>

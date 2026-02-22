@@ -110,7 +110,7 @@ define gpu_config
 	$(eval export DOCKER_RUNTIME)
 endef
 
-.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list
+.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword makemigrations migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list
 
 pull:			## Pull pre-built Docker images from repository.
 	${DOCKER_COMPOSE_FILE_CMD} pull
@@ -188,6 +188,9 @@ ifeq ($(isNonInteractive), true)
 else
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py changepassword
 endif
+
+makemigrations:		## Create Django migrations (connects to PostgreSQL directly, not via PgBouncer).
+	${DOCKER_COMPOSE_FILE_CMD} exec -e POSTGRES_HOST=$(POSTGRES_DIRECT_HOST) -e POSTGRES_PORT=$(POSTGRES_DIRECT_PORT) web poetry -C ${RENGINE_FOLDER} run python3 manage.py makemigrations
 
 migrate:		## Apply Django migrations (connects to PostgreSQL directly, not via PgBouncer).
 	${DOCKER_COMPOSE_FILE_CMD} exec -e POSTGRES_HOST=$(POSTGRES_DIRECT_HOST) -e POSTGRES_PORT=$(POSTGRES_DIRECT_PORT) web poetry -C ${RENGINE_FOLDER} run python3 manage.py migrate
@@ -317,28 +320,26 @@ ruff-fix:		## Fix code issues using ruff linter.
 ruff-unsafe-fix:	## Fix code issues using ruff linter with unsafe fixes.
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run ruff check --fix --unsafe-fixes --config ${RENGINE_HOME_FOLDER}/pyproject.toml ${RENGINE_FOLDER}
 
-# Test commands
-test:			## Run all unit tests for all apps.
-	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test --no-input --keepdb
+# Test commands (KEEPDB=1 to keep test DB, VERBOSITY=1|2|3, defaults: no keepdb, verbosity 1)
+VERBOSITY ?= 1
+TEST_OPTS := --no-input $(if $(filter 1,$(KEEPDB)),--keepdb,) --verbosity $(VERBOSITY)
 
-test-app:		## Run unit tests for specific app(s). Usage: make test-app APPS=app1,app2
+test:			## Run all unit tests for all apps. Options: KEEPDB=1, VERBOSITY=1|2|3
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test $(TEST_OPTS)
+
+test-app:		## Run unit tests for specific app(s). Usage: make test-app APPS=app1,app2 [KEEPDB=1] [VERBOSITY=2]
 	@if [ -z "$(APPS)" ]; then \
 		echo "Error: APPS parameter is required. Usage: make test-app APPS=app1,app2"; \
 		echo "Available apps: api, dashboard, recon_note, reNgine, scanEngine, startScan, targetApp"; \
 		exit 1; \
 	fi
-	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test $(APPS) --no-input --keepdb
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test $(APPS) $(TEST_OPTS)
 
-test-verbose:		## Run all unit tests with verbose output.
-	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test --no-input --keepdb --verbosity 2
+test-verbose:		## Run all unit tests with verbose output (VERBOSITY=2).
+	$(MAKE) test VERBOSITY=2
 
 test-app-verbose:	## Run unit tests for specific app(s) with verbose output. Usage: make test-app-verbose APPS=app1,app2
-	@if [ -z "$(APPS)" ]; then \
-		echo "Error: APPS parameter is required. Usage: make test-app-verbose APPS=app1,app2"; \
-		echo "Available apps: api, dashboard, recon_note, reNgine, scanEngine, startScan, targetApp"; \
-		exit 1; \
-	fi
-	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test $(APPS) --no-input --keepdb --verbosity 2
+	$(MAKE) test-app APPS=$(APPS) VERBOSITY=2
 
 logs:			## Tail all containers logs with -n 1000 (useful for debug).
 	${DOCKER_COMPOSE_FILE_CMD} logs --follow --tail=1000 ${SERVICES}
@@ -374,10 +375,10 @@ help:			## Show this help.
 	@echo "  make ruff-fix                           				Fix code issues using ruff linter"
 	@echo "  make ruff-unsafe-fix                    				Fix code issues using ruff linter with unsafe fixes"
 	@echo ""
-	@echo "Testing:"
-	@echo "  make test                               				Run all unit tests for all apps"
-	@echo "  make test-app APPS=app1,app2            				Run unit tests for specific app(s)"
-	@echo "  make test-verbose                       				Run all unit tests with verbose output"
+	@echo "Testing (default: no keepdb, VERBOSITY=1; use KEEPDB=1 to keep test DB):"
+	@echo "  make test [KEEPDB=1] [VERBOSITY=1|2|3]  				Run all unit tests for all apps"
+	@echo "  make test-app APPS=app1,app2 [KEEPDB=1] [VERBOSITY=2]		Run unit tests for specific app(s)"
+	@echo "  make test-verbose                       				Run all unit tests with verbose output (VERBOSITY=2)"
 	@echo "  make test-app-verbose APPS=app1,app2    				Run unit tests for specific app(s) with verbose output"
 	@echo ""
 	@echo "Examples:"

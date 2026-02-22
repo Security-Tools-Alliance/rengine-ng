@@ -74,23 +74,23 @@ def count_subquery_related(
 
     Use when the outer queryset is not the direct FK of the counted model: the counted
     model links to the outer table through another table (e.g. Vulnerability has
-    subdomain_id; Subdomain has target_domain_id; outer is Domain, so use
-    related_lookup="subdomain__target_domain_id" and outer_ref_name="pk").
+    subdomain_id; Subdomain has domain_id; outer is Domain, so use
+    related_lookup="subdomain__domain_id" and outer_ref_name="pk").
 
     Conventions:
     - outer_ref_name: column on the queryset you are annotating (e.g. "pk" for Domain).
     - related_lookup: Django lookup path on the *counted* model to the outer ref.
-      Must end with the FK to the outer model (e.g. "subdomain__target_domain_id" for
+      Must end with the FK to the outer model (e.g. "subdomain__domain_id" for
       counting Vulnerability per Domain).
 
     Example (count vulnerabilities per domain):
         Domain.objects.annotate(
-            vuln_count=count_subquery_related(Vulnerability, "subdomain__target_domain_id")
+            vuln_count=count_subquery_related(Vulnerability, "subdomain__domain_id")
         )
 
     Args:
         model: Django model class to count (e.g. Vulnerability).
-        related_lookup: Lookup path from model to the outer ref (e.g. "subdomain__target_domain_id").
+        related_lookup: Lookup path from model to the outer ref (e.g. "subdomain__domain_id").
         outer_ref_name: Column name on the outer queryset to match (default "pk").
         filter_kwargs: Optional extra filters (e.g. {"severity__gt": 0}).
         distinct: If True, use Count("id", distinct=True) in the subquery.

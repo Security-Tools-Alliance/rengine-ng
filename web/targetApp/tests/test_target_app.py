@@ -25,6 +25,7 @@ Methods:
     test_delete_non_existent_organization: Tests the deletion of a non-existent organization.
 """
 
+from datetime import timedelta
 import json
 import os
 
@@ -32,8 +33,9 @@ from django.contrib.messages import get_messages
 from django.urls import reverse
 from django.utils import timezone
 
-from startScan.models import Subdomain
-from targetApp.models import Domain, Organization
+from startScan.models import Domain, DomainInfo, RelatedDomain, ScanHistory
+from targetApp.models import Organization, Target
+from targetApp.views import _AggregatedDomainInfo
 from utils.test_base import BaseTestCase
 
 
@@ -73,7 +75,9 @@ class TestTargetAppViews(BaseTestCase):
             },
         )
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(Domain.objects.filter(name="example.com").exists())
+        target = Target.objects.filter(project=self.data_generator.project, value="example.com").first()
+        self.assertIsNotNone(target)
+        self.assertEqual(target.target_type, "host")
 
     def test_add_ip_view(self):
         """
@@ -100,13 +104,9 @@ class TestTargetAppViews(BaseTestCase):
         )
         self.assertEqual(response.status_code, 302)
 
-        # Check that the main target was created
-        self.assertTrue(Domain.objects.filter(name="test-target").exists())
-
-        # Check that subdomains were created under the main target
-        main_target = Domain.objects.get(name="test-target")
-        self.assertTrue(Subdomain.objects.filter(name="example.local", target_domain=main_target).exists())
-        self.assertTrue(Subdomain.objects.filter(name="other-example.local", target_domain=main_target).exists())
+        target = Target.objects.filter(project=self.data_generator.project, value="test-target").first()
+        self.assertIsNotNone(target)
+        self.assertEqual(target.target_type, "host")
 
     def test_add_target_with_invalid_ip(self):
         """
@@ -133,12 +133,12 @@ class TestTargetAppViews(BaseTestCase):
         messages_list = list(get_messages(response.wsgi_request))
         # The new system processes the IP and creates targets successfully
         self.assertIn(
-            "Processing complete: 1 new target(s), 1 new subdomain(s) processed successfully",
+            "1 target(s) processed successfully",
             [str(message) for message in messages_list],
         )
 
         # Verify that the target was actually created
-        self.assertTrue(Domain.objects.filter(name="test-target").exists())
+        self.assertTrue(Target.objects.filter(project=self.data_generator.project, value="test-target").exists())
 
     def test_add_target_with_file(self):
         """
@@ -159,12 +159,11 @@ class TestTargetAppViews(BaseTestCase):
                 format="multipart",
             )
 
-        # Check that the response is correct
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(Domain.objects.filter(name="example.local").exists())
-        self.assertTrue(Domain.objects.filter(name="other-example.local").exists())
-
-        # Clean up the temporary file
+        for name in ("example.local", "other-example.local"):
+            target = Target.objects.filter(project=self.data_generator.project, value=name).first()
+            self.assertIsNotNone(target, msg=f"Target {name} should exist")
+            self.assertEqual(target.target_type, "host")
         os.remove("domains.txt")
 
     def test_add_target_with_empty_file(self):
@@ -195,7 +194,7 @@ class TestTargetAppViews(BaseTestCase):
         )
 
         # Check that no new target was created
-        self.assertFalse(Domain.objects.filter(name="example.local").exists())
+        self.assertFalse(Target.objects.filter(project=self.data_generator.project, value="example.local").exists())
 
         # Clean up the empty file
         os.remove("empty_file.txt")
@@ -208,33 +207,146 @@ class TestTargetAppViews(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "target/list.html")
 
+    def test_target_summary_returns_200(self):
+        """
+        Tests the target summary view returns 200 and uses the summary template.
+        With no domains, domain_info context is None.
+        """
+        self.data_generator.create_scan_history()
+        target = self.data_generator.target
+        response = self.client.get(
+            reverse("target_summary", kwargs={"slug": self.data_generator.project.slug, "id": target.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "target/summary.html")
+        self.assertIn("domain_info", response.context)
+        self.assertIn("domains", response.context)
+
+    def test_target_summary_domain_info_none_when_no_whois(self):
+        """
+        Target summary shows domain_info None when no domain has WHOIS (domain_info).
+        """
+        self.data_generator.create_scan_history()
+        self.data_generator.create_domain(scan_history=self.data_generator.scan_history)
+        target = self.data_generator.target
+        self.assertIsNone(self.data_generator.domain.domain_info_id)
+        response = self.client.get(
+            reverse("target_summary", kwargs={"slug": self.data_generator.project.slug, "id": target.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["domain_info"])
+
+    def test_target_summary_aggregates_related_domains_from_all_scans(self):
+        """
+        Target summary aggregates related_domains from all domains (scans) with domain_info.
+        Deduplicates by name and prefers the most recent scan.
+        """
+        self.data_generator.create_scan_history()
+        target = self.data_generator.target
+        domain1 = self.data_generator.domain
+        domain1.name = "first.example.com"
+        domain1.save()
+        info1 = DomainInfo.objects.create(created=timezone.now())
+        domain1.domain_info = info1
+        domain1.save()
+        rd1 = RelatedDomain.objects.create(name="related-a.local")
+        rd2 = RelatedDomain.objects.create(name="related-b.local")
+        info1.related_domains.add(rd1, rd2)
+
+        older_scan = ScanHistory.objects.create(
+            target=target,
+            start_scan_date=timezone.now() - timedelta(days=2),
+            scan_status=2,
+        )
+        domain2 = Domain.objects.create(
+            name="second.example.com",
+            insert_date=timezone.now(),
+            scan_history=older_scan,
+        )
+        info2 = DomainInfo.objects.create(created=timezone.now())
+        domain2.domain_info = info2
+        domain2.save()
+        info2.related_domains.add(rd1)
+        rd3 = RelatedDomain.objects.create(name="related-c.local")
+        info2.related_domains.add(rd3)
+
+        response = self.client.get(
+            reverse("target_summary", kwargs={"slug": self.data_generator.project.slug, "id": target.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        domain_info = response.context["domain_info"]
+        self.assertIsNotNone(domain_info)
+        self.assertIsInstance(domain_info, _AggregatedDomainInfo)
+        related_list = domain_info.related_domains.all
+        self.assertEqual(related_list.count(), 3)
+        names = [r.name for r in related_list]
+        self.assertIn("related-a.local", names)
+        self.assertIn("related-b.local", names)
+        self.assertIn("related-c.local", names)
+        self.assertEqual(domain_info.related_tlds.all.count(), 0)
+
+    def test_target_summary_deduplicates_domains_by_name(self):
+        """
+        Target summary shows at most one row per domain name (the most recent scan).
+        """
+        self.data_generator.create_scan_history()
+        target = self.data_generator.target
+        self.data_generator.domain.name = "example.com"
+        self.data_generator.domain.save()
+        older_scan = ScanHistory.objects.create(
+            target=target,
+            start_scan_date=timezone.now() - timedelta(days=1),
+            scan_status=2,
+        )
+        Domain.objects.create(
+            name="example.com",
+            insert_date=timezone.now(),
+            scan_history=older_scan,
+        )
+        Domain.objects.create(
+            name="example.com",
+            insert_date=timezone.now(),
+            scan_history=ScanHistory.objects.create(
+                target=target,
+                start_scan_date=timezone.now() - timedelta(days=2),
+                scan_status=2,
+            ),
+        )
+        response = self.client.get(
+            reverse("target_summary", kwargs={"slug": self.data_generator.project.slug, "id": target.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        domains = response.context["domains"]
+        self.assertEqual(len(domains), 1, "Expected one domain when name is example.com in multiple scans")
+        self.assertEqual(domains[0].name, "example.com")
+
     def test_delete_target_view(self):
         """
         Tests the delete target view to ensure a target is deleted successfully.
         """
+        self.data_generator.create_scan_history()
+        target = self.data_generator.target
+        target_id = target.id
         response = self.client.post(
-            reverse(
-                "delete_target", kwargs={"id": self.data_generator.domain.id, "slug": self.data_generator.project.slug}
-            )
+            reverse("delete_target", kwargs={"id": target_id, "slug": self.data_generator.project.slug})
         )
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(Domain.objects.filter(id=self.data_generator.domain.id).exists())
+        self.assertFalse(Target.objects.filter(id=target_id).exists())
 
     def test_update_target_view(self):
         """
         Tests the update target view to ensure a target is updated successfully.
         """
+        self.data_generator.create_scan_history()
+        target = self.data_generator.target
         response = self.client.post(
-            reverse(
-                "update_target", kwargs={"slug": self.data_generator.project.slug, "id": self.data_generator.domain.id}
-            ),
+            reverse("update_target", kwargs={"slug": self.data_generator.project.slug, "id": target.id}),
             {"description": "Updated description", "h1_team_handle": "Updated Handle"},
         )
         self.assertEqual(response.status_code, 302)
-        self.data_generator.domain.refresh_from_db()
-        updated_domain = Domain.objects.get(id=self.data_generator.domain.id)
-        self.assertEqual(updated_domain.description, "Updated description")
-        self.assertEqual(updated_domain.h1_team_handle, "Updated Handle")
+        target.refresh_from_db()
+        self.assertEqual(target.description, "Updated description")
+        self.assertEqual(target.h1_team_handle, "Updated Handle")
 
     def test_update_organization_view_with_invalid_data(self):
         """
@@ -272,21 +384,18 @@ class TestTargetAppViews(BaseTestCase):
         """
         Test attempting to delete a target that does not exist.
         """
-        # Attempt to delete a target with a non-existent ID
-        non_existent_id = self.data_generator.domain.id + 999  # Ensure this ID does not exist
+        non_existent_id = 999999
 
         response = self.client.post(
             reverse("delete_target", kwargs={"id": non_existent_id, "slug": self.data_generator.project.slug}),
-            follow=True,  # Follow the redirect after deletion
+            follow=True,
         )
 
-        # Check that the response is still 200 (indicating the request was processed)
         self.assertEqual(response.status_code, 200)
 
         messages_list = list(get_messages(response.wsgi_request))
-        self.assertIn("Domain not found.", [str(message) for message in messages_list])
+        self.assertIn("Target not found.", [str(message) for message in messages_list])
 
-        # Verify that the existing target is still present
         self.assertTrue(Domain.objects.filter(id=self.data_generator.domain.id).exists())
 
     def test_add_organization_view(self):
@@ -381,11 +490,16 @@ class TestTargetAppViews(BaseTestCase):
         Test adding an organization with a name that already exists.
         """
         existing_name = self.data_generator.organization.name
-        # Create a domain not in any organization (form queryset requires domains__isnull=True)
+        self.data_generator.create_scan_history()
+        extra_scan = ScanHistory.objects.create(
+            target=self.data_generator.target,
+            start_scan_date=timezone.now(),
+            scan_status=2,
+        )
         extra_domain = Domain.objects.create(
             name=f"extra-domain-{self.data_generator.project.slug}.test",
-            project=self.data_generator.project,
             insert_date=timezone.now(),
+            scan_history=extra_scan,
         )
         response = self.client.post(
             reverse("add_organization", kwargs={"slug": self.data_generator.project.slug}),
@@ -600,10 +714,59 @@ class TestValidateDNSServers(BaseTestCase):
         # Should redirect on success
         self.assertEqual(response.status_code, 302)
 
-        # Target should be created with DNS servers
-        self.assertTrue(Domain.objects.filter(name="test-target-dns").exists())
-        target = Domain.objects.get(name="test-target-dns")
-        self.assertEqual(target.custom_dns_servers, "8.8.8.8,1.1.1.1")
+        # Target should be created (Domain/Subdomain are created on scan, not at add)
+        self.assertTrue(Target.objects.filter(project=self.data_generator.project, value="test-target-dns").exists())
+
+    def test_add_single_target_by_type(self):
+        """
+        Tests adding a Target-only via add-single-target (e.g. URL type). No Domain is created.
+        """
+        Target.objects.filter(project=self.data_generator.project).delete()
+        url = reverse("add_target", kwargs={"slug": self.data_generator.project.slug})
+        response = self.client.post(
+            url,
+            {
+                "add-single-target": "submit",
+                "target_type": "url",
+                "target_value": "https://example.com/path",
+                "targetDescription": "Test URL target",
+                "targetH1TeamHandle": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("list_target", kwargs={"slug": self.data_generator.project.slug}),
+        )
+        target = Target.objects.filter(
+            project=self.data_generator.project,
+            value="https://example.com/path",
+            target_type="url",
+        ).first()
+        self.assertIsNotNone(target)
+        self.assertEqual(target.description, "Test URL target")
+        self.assertFalse(Domain.objects.filter(scan_history__target_id=target.id).exists())
+
+    def test_add_single_target_cidr_invalid(self):
+        """Invalid CIDR when adding single target returns redirect with error."""
+        url = reverse("add_target", kwargs={"slug": self.data_generator.project.slug})
+        response = self.client.post(
+            url,
+            {
+                "add-single-target": "submit",
+                "target_type": "cidr_range",
+                "target_value": "not-a-cidr",
+                "targetDescription": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, url)
+        self.assertFalse(
+            Target.objects.filter(
+                project=self.data_generator.project,
+                target_type="cidr_range",
+            ).exists()
+        )
 
 
 # Target deduplication tests removed - require complex implementation

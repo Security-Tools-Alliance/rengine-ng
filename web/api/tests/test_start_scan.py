@@ -17,6 +17,10 @@ class TestStartScanAPI(BaseTestCase):
         """Set up test environment."""
         super().setUp()
         self.url = reverse("api:start_scan")
+        self.data_generator.create_project()
+        self.data_generator.create_target()
+        self.data_generator.create_domain()
+        self.data_generator.create_scan_history()
 
     @patch("api.views.start_secator_scan")
     def test_start_scan_success(self, mock_start_scan):
@@ -33,7 +37,7 @@ class TestStartScanAPI(BaseTestCase):
         }
 
         data = {
-            "domain_id": self.data_generator.domain.id,
+            "target_id": self.data_generator.target.id,
             "execution_mode": "workflow",
             "workflow_id": 1,
         }
@@ -44,8 +48,8 @@ class TestStartScanAPI(BaseTestCase):
         self.assertEqual(response.data["http_status"], 200)
         mock_start_scan.assert_called_once()
 
-    def test_start_scan_missing_domain_id(self):
-        """Test scan start with missing domain_id returns http_status 400."""
+    def test_start_scan_missing_target_id(self):
+        """Test scan start with missing target_id returns 400."""
         data = {
             "execution_mode": "workflow",
             "workflow_id": 1,
@@ -53,14 +57,13 @@ class TestStartScanAPI(BaseTestCase):
         response = self.client.post(self.url, data, content_type="application/json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(response.data["status"])
-        self.assertEqual(response.data["http_status"], 400)
-        self.assertIn("domain_id is required", response.data["error"])
+        self.assertFalse(response.data.get("status", True))
+        self.assertIn("target_id is required", response.data["error"])
 
-    def test_start_scan_domain_not_found(self):
-        """Test scan start with non-existent domain returns http_status 404."""
+    def test_start_scan_target_not_found(self):
+        """Test scan start with non-existent target_id returns http_status 404."""
         data = {
-            "domain_id": 99999,
+            "target_id": 99999,
             "execution_mode": "workflow",
             "workflow_id": 1,
         }
@@ -81,7 +84,7 @@ class TestStartScanAPI(BaseTestCase):
         }
 
         data = {
-            "domain_id": self.data_generator.domain.id,
+            "target_id": self.data_generator.target.id,
             "secator_scan_id": 99999,
         }
         response = self.client.post(self.url, data, content_type="application/json")
@@ -93,7 +96,7 @@ class TestStartScanAPI(BaseTestCase):
     def test_start_scan_missing_execution_mode(self):
         """Test scan start without execution_mode or secator_scan_id returns http_status 400."""
         data = {
-            "domain_id": self.data_generator.domain.id,
+            "target_id": self.data_generator.target.id,
         }
         response = self.client.post(self.url, data, content_type="application/json")
 
@@ -112,7 +115,7 @@ class TestStartScanAPI(BaseTestCase):
         }
 
         data = {
-            "domain_id": self.data_generator.domain.id,
+            "target_id": self.data_generator.target.id,
             "execution_mode": "workflow",
             "workflow_id": 1,
         }
@@ -134,7 +137,7 @@ class TestStartScanAPI(BaseTestCase):
         }
 
         data = {
-            "domain_id": self.data_generator.domain.id,
+            "target_id": self.data_generator.target.id,
             "execution_mode": "workflow",
             "workflow_id": 1,
         }
@@ -155,7 +158,7 @@ class TestStartScanAPI(BaseTestCase):
         }
 
         data = {
-            "domain_id": self.data_generator.domain.id,
+            "target_id": self.data_generator.target.id,
             "execution_mode": "workflow",
             "workflow_id": 1,
         }
@@ -171,7 +174,7 @@ class TestStartScanAPI(BaseTestCase):
         mock_start_scan.return_value = {"status": True, "scan_id": 1, "http_status": 200}
         worker_id = 10
         data = {
-            "domain_id": self.data_generator.domain.id,
+            "target_id": self.data_generator.target.id,
             "execution_mode": "workflow",
             "workflow_id": 1,
             "worker_id": worker_id,
@@ -187,7 +190,7 @@ class TestStartScanAPI(BaseTestCase):
         """When selected_targets is provided for workflow, start_secator_scan receives targets_override."""
         mock_start_scan.return_value = {"status": True, "scan_id": 1, "http_status": 200}
         data = {
-            "domain_id": self.data_generator.domain.id,
+            "target_id": self.data_generator.target.id,
             "execution_mode": "workflow",
             "workflow_id": 1,
             "selected_targets": ["https://example.com", "https://test.example.com"],
@@ -205,7 +208,7 @@ class TestStartScanAPI(BaseTestCase):
         task_type = self.data_generator.secator_task.task_type
         mock_start_scan.return_value = {"status": True, "scan_id": 1}
         data = {
-            "domain_id": self.data_generator.domain.id,
+            "target_id": self.data_generator.target.id,
             "execution_mode": "tasks",
             "task_ids": [self.data_generator.secator_task.id],
             "selected_targets_per_task": {
@@ -232,7 +235,7 @@ class TestStartScanAPI(BaseTestCase):
         worker_id = 7
         mock_start_scan.return_value = {"status": True, "scan_id": 1}
         data = {
-            "domain_id": self.data_generator.domain.id,
+            "target_id": self.data_generator.target.id,
             "execution_mode": "tasks",
             "task_ids": [self.data_generator.secator_task.id],
             "selected_targets_per_task": {

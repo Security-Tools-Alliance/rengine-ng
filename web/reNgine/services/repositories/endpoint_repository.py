@@ -18,9 +18,10 @@ import validators
 from reNgine.core.validators import is_valid_domain, is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
 from reNgine.utilities.distributed_lock import DistributedLock
+from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import get_module_logger
-from startScan.models import DirectoryFile, EndPoint, ScanHistory, Subdomain, Technology
-from targetApp.models import Domain
+from startScan.models import DirectoryFile, Domain, EndPoint, ScanHistory, Subdomain, Technology
+from targetApp.models import Target
 
 
 PREFIX_ENDPOINT_REPO = "[ENDPOINT_REPO]"
@@ -34,7 +35,7 @@ class EndpointRepository:
         self,
         item: Dict[str, Any],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[EndPoint]:
         """
@@ -43,14 +44,14 @@ class EndpointRepository:
         Args:
             item: Secator URL item
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             rengine_context: Optional context (e.g. subscan_id for SubScan linking)
 
         Returns:
             EndPoint: Saved endpoint object or None
         """
         try:
-            return self._process_secator_endpoint_item(item, scan_history_id, domain_id, rengine_context or {})
+            return self._process_secator_endpoint_item(item, scan_history_id, target_id, rengine_context or {})
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
@@ -89,7 +90,7 @@ class EndpointRepository:
         self,
         item: Dict[str, Any],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[EndPoint]:
         ctx = rengine_context or {}
@@ -113,8 +114,23 @@ class EndpointRepository:
             )
             return None
 
+        host = urlparse(http_url).hostname or ""
+        target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
+        domain = resolve_domain_for_scan(
+            scan_history_id,
+            host,
+            target_value,
+            create=True,
+            log_failure={
+                "logger": logger,
+                "prefix": PREFIX_ENDPOINT_REPO,
+                "extra": "target_id=%s, url=%s" % (target_id, http_url),
+            },
+        )
+        if not domain:
+            return None
+
         scan_history = ScanHistory.objects.get(id=scan_history_id)
-        domain = Domain.objects.get(id=domain_id)
         defaults = self._build_secator_endpoint_defaults(item, domain)
 
         endpoint, created = EndPoint.objects.update_or_create(
@@ -185,7 +201,7 @@ class EndpointRepository:
         """Build defaults dict for EndPoint from Secator item."""
         source = self._extract_secator_source(item)
         defaults = {
-            "target_domain": domain,
+            "domain": domain,
             "source": source,
             "http_status": item.get("status_code") or item.get("status") or 0,
             "content_length": item.get("content_length", 0),
@@ -307,10 +323,12 @@ class EndpointRepository:
         """
         try:
             scan_history = ScanHistory.objects.get(id=scan_history_id)
-            domain = Domain.objects.get(id=domain_id)
+            domain = get_domain_by_id(domain_id)
+            if domain is None:
+                return None, False
 
             defaults = {
-                "target_domain": domain,
+                "domain": domain,
                 "http_status": 0,
             } | kwargs
             endpoint, created = EndPoint.objects.get_or_create(
@@ -371,7 +389,9 @@ class EndpointRepository:
         self, scan_history_id: int, domain_id: int, endpoints: List[Dict[str, Any]]
     ) -> List[EndPoint]:
         scan_history = ScanHistory.objects.get(id=scan_history_id)
-        domain = Domain.objects.get(id=domain_id)
+        domain = get_domain_by_id(domain_id)
+        if domain is None:
+            return []
 
         endpoint_objects = []
         for endpoint_data in endpoints:
@@ -381,7 +401,7 @@ class EndpointRepository:
                     EndPoint(
                         http_url=http_url,
                         scan_history=scan_history,
-                        target_domain=domain,
+                        domain=domain,
                         http_status=endpoint_data.get("http_status", 0),
                         content_length=endpoint_data.get("content_length", 0),
                         page_title=endpoint_data.get("page_title", ""),
@@ -457,7 +477,13 @@ class EndpointRepository:
             try:
                 with transaction.atomic():
                     scan_history = ScanHistory.objects.select_for_update().get(id=scan_history_id)
-                    target_domain_id = endpoint.target_domain_id or scan_history.domain_id
+                    target_value = (
+                        Target.objects.filter(id=scan_history.target_id).values_list("value", flat=True).first()
+                        if scan_history.target_id
+                        else None
+                    )
+                    domain = resolve_domain_for_scan(scan_history_id, hostname, (target_value or ""), create=True)
+                    domain_id = endpoint.domain_id or (domain.id if domain else None)
                     subdomain = Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first()
                     if not subdomain:
                         if not auto_create_subdomain:
@@ -478,7 +504,7 @@ class EndpointRepository:
                         subdomain = Subdomain.objects.create(
                             name=hostname,
                             scan_history_id=scan_history_id,
-                            target_domain_id=target_domain_id,
+                            domain_id=domain_id,
                             discovered_date=timezone.now(),
                             http_url=subdomain_http_url,
                         )
@@ -631,14 +657,17 @@ class EndpointRepository:
             return None
 
         scan_history = ScanHistory.objects.get(id=scan_history_id)
-        domain = Domain.objects.get(id=domain_id)
+        domain = get_domain_by_id(domain_id)
+        if domain is None:
+            return None
+
         http_url = f"http://[{ip_address}]" if validators.ipv6(ip_address) else f"http://{ip_address}"
 
         endpoint, created = EndPoint.objects.get_or_create(
             http_url=http_url,
             scan_history=scan_history,
             defaults={
-                "target_domain": domain,
+                "domain": domain,
                 "subdomain": None,
                 "http_status": 0,
                 "discovered_date": timezone.now(),
@@ -821,21 +850,24 @@ class EndpointRepository:
         Legacy subdomains that have at least one default EndPoint (Secator) are excluded from
         Subdomain counts; only default EndPoints and legacy-only subdomains contribute.
         """
+        target_id = scope.scan_history_id and getattr(scope.scan_history, "target_id", None)
+        if not target_id:
+            return []
         subdomain_names_with_default = set(
-            EndPoint.objects.filter(scan_history__domain_id=scope.id, is_default=True)
+            EndPoint.objects.filter(scan_history__target_id=target_id, is_default=True)
             .exclude(subdomain_id__isnull=True)
             .values_list("subdomain__name", flat=True)
             .distinct()
         )
         sub_qs = (
-            Subdomain.objects.filter(target_domain_id=scope.id)
+            Subdomain.objects.filter(domain_id=scope.id)
             .exclude(name__in=subdomain_names_with_default)
             .exclude(http_status=0)
             .values("http_status")
             .annotate(Count("http_status"))
         )
         ep_qs = (
-            EndPoint.objects.filter(scan_history__domain_id=scope.id, is_default=True)
+            EndPoint.objects.filter(scan_history__target_id=target_id, is_default=True)
             .exclude(http_status=0)
             .exclude(http_status__isnull=True)
             .values("http_status")

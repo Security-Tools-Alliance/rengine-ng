@@ -10,15 +10,16 @@ from typing import Any, Dict, Optional, Tuple
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
+from reNgine.utilities.domain import get_or_create_domain_for_target
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
-from startScan.models import ScanHistory
-from targetApp.models import (
+from startScan.models import (
     Domain,
     DomainInfo,
     DomainRegistration,
     NameServer,
     Registrar,
+    ScanHistory,
     WhoisStatus,
 )
 
@@ -34,7 +35,7 @@ class DomainRepository:
         self,
         item: Dict[str, Any],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[DomainInfo]:
         """
@@ -43,14 +44,14 @@ class DomainRepository:
         Args:
             item: Secator Domain item
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             rengine_context: Optional context (unused)
 
         Returns:
             DomainInfo: Saved domain info object or None
         """
         try:
-            return self._process_secator_domain_item(item, scan_history_id, domain_id)
+            return self._process_secator_domain_item(item, scan_history_id, target_id)
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
@@ -77,7 +78,7 @@ class DomainRepository:
             return None
 
     def _process_secator_domain_item(
-        self, item: Dict[str, Any], scan_history_id: int, domain_id: int
+        self, item: Dict[str, Any], scan_history_id: int, target_id: int
     ) -> Optional[DomainInfo]:
         domain_name, whois = self._validate_and_extract_domain_data(item)
         if not domain_name or not whois:
@@ -90,13 +91,23 @@ class DomainRepository:
             )
             return None
 
-        domain = self._validate_domain_and_scan(scan_history_id, domain_id, domain_name)
+        domain = get_or_create_domain_for_target(scan_history_id, domain_name)
         if not domain:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
                 "SAVE",
-                "Domain item rejected: scan/domain validation failed (scan_history_id=%s, domain_id=%s, domain_name=%s)"
-                % (scan_history_id, domain_id, domain_name),
+                "Domain item rejected: could not resolve or create domain (target_id=%s, domain_name=%s)"
+                % (target_id, domain_name),
+                level="warning",
+            )
+            return None
+
+        if not self._validate_scan_and_domain(scan_history_id, domain, domain_name):
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Domain item rejected: scan/domain validation failed (scan_history_id=%s, target_id=%s, domain_name=%s)"
+                % (scan_history_id, target_id, domain_name),
                 level="warning",
             )
             return None
@@ -113,48 +124,60 @@ class DomainRepository:
 
         return domain_info
 
+    def _domain_string_from_item(self, item: Dict[str, Any]) -> Optional[str]:
+        """Extract domain name string from item; supports Secator Domain object or plain string."""
+        raw = item.get("domain")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+        if isinstance(raw, dict):
+            name = raw.get("domain") or raw.get("punycode")
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+            n = raw.get("name") or ""
+            e = raw.get("extension") or ""
+            if n or e:
+                return ("%s.%s" % (n, e)).strip(".") or None
+        return None
+
     def _validate_and_extract_domain_data(self, item: Dict[str, Any]) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         """Validate and extract domain name and WHOIS data from item."""
-        domain_name = item.get("domain")
-        if not isinstance(domain_name, str) or not domain_name.strip():
+        domain_name = self._domain_string_from_item(item)
+        if not domain_name:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
                 "VALIDATE",
-                "Domain item missing or invalid domain field: %s" % (type(domain_name).__name__,),
+                "Domain item missing or invalid domain field",
                 level="warning",
             )
             return None, None
 
         whois = (item.get("extra_data", {}) or {}).get("whois")
         if isinstance(whois, dict):
-            return domain_name.strip(), whois
+            return domain_name, whois
 
         if whois := self._build_whois_from_flat_item(item):
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
                 "VALIDATE",
-                "Using synthetic whois from flat whois-go style item for domain %s" % (domain_name.strip(),),
+                "Using synthetic whois from flat whois-go style item for domain %s" % (domain_name,),
                 level="debug",
             )
-            return domain_name.strip(), whois
+            return domain_name, whois
 
         logger.log_line(
             PREFIX_DOMAIN_REPO,
             "VALIDATE",
-            "Domain item missing extra_data.whois and flat whois-go style fields for domain %s"
-            % (domain_name.strip(),),
+            "Domain item missing extra_data.whois and flat whois-go style fields for domain %s" % (domain_name,),
             level="warning",
         )
         return None, None
 
-    def _validate_domain_and_scan(self, scan_history_id: int, domain_id: int, domain_name: str) -> Optional[Domain]:
-        """Validate scan history and domain, verify domain name matches."""
+    def _validate_scan_and_domain(self, scan_history_id: int, domain: Domain, domain_name: str) -> bool:
+        """Validate scan history exists and domain name matches."""
         try:
             ScanHistory.objects.get(id=scan_history_id)
-            domain = Domain.objects.get(id=domain_id)
-
             expected = (domain.name or "").strip().lower().rstrip(".")
-            got = domain_name.strip().lower().rstrip(".")
+            got = (domain_name or "").strip().lower().rstrip(".")
             if expected != got:
                 logger.log_line(
                     PREFIX_DOMAIN_REPO,
@@ -162,9 +185,8 @@ class DomainRepository:
                     "Domain name mismatch: expected %s, got %s" % (domain.name, domain_name),
                     level="warning",
                 )
-                return None
-
-            return domain
+                return False
+            return True
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
@@ -172,7 +194,7 @@ class DomainRepository:
                 "Object not found: %s" % (e,),
                 level="error",
             )
-            return None
+            return False
 
     def _get_or_create_domain_info(self, domain: Domain) -> Tuple[DomainInfo, bool]:
         """Get or create DomainInfo for domain."""

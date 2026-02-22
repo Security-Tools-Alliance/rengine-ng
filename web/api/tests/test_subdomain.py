@@ -2,10 +2,14 @@
 This file contains the test cases for the API views.
 """
 
+from datetime import timedelta
+
 from django.urls import reverse
 from rest_framework import status
 
-from startScan.models import Subdomain
+from startScan.models import ScanHistory, Subdomain
+from targetApp.constants import TARGET_TYPE_HOST
+from targetApp.models import Target
 from utils.test_base import BaseTestCase
 
 
@@ -17,12 +21,30 @@ class TestQueryInterestingSubdomains(BaseTestCase):
         self.data_generator.create_interesting_lookup_model()
 
     def test_query_interesting_subdomains(self):
-        """Test querying interesting subdomains for a given sca
-        n."""
+        """Test querying interesting subdomains for a given scan."""
         api_url = reverse("api:queryInterestingSubdomains")
         response = self.client.get(api_url, {"scan_id": self.data_generator.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("admin.example.com", [sub["name"] for sub in response.data])
+
+    def test_query_interesting_subdomains_by_target_id_success(self):
+        """Test querying interesting subdomains by target_id when target has a domain."""
+        api_url = reverse("api:queryInterestingSubdomains")
+        response = self.client.get(api_url, {"target_id": self.data_generator.target.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("admin.example.com", [sub["name"] for sub in response.data])
+
+    def test_query_interesting_subdomains_by_target_id_no_scans_returns_empty(self):
+        """Test that empty list is returned when target_id has no scans."""
+        target_no_scans = Target.objects.create(
+            value="noscans.example.com",
+            project=self.data_generator.project,
+            target_type=TARGET_TYPE_HOST,
+        )
+        api_url = reverse("api:queryInterestingSubdomains")
+        response = self.client.get(api_url, {"target_id": target_no_scans.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
 
 
 class TestDeleteSubdomain(BaseTestCase):
@@ -58,7 +80,7 @@ class TestListSubdomains(BaseTestCase):
     def test_list_subdomains(self):
         """Test listing subdomains for a target."""
         url = reverse("api:querySubdomains")
-        response = self.client.get(url, {"target_id": self.data_generator.domain.id})
+        response = self.client.get(url, {"target_id": self.data_generator.target.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("subdomains", response.data)
         self.assertGreaterEqual(len(response.data["subdomains"]), 1)
@@ -85,17 +107,28 @@ class TestSubdomainChangesViewSet(BaseTestCase):
     """Test case for subdomain changes viewset."""
 
     def setUp(self):
-        """Set up test environment."""
+        """Set up test environment: current scan, previous scan (same target), and one subdomain in current only."""
         super().setUp()
         self.data_generator.create_scan_history()
+        current_scan = self.data_generator.scan_history
+        self.data_generator.domain.scan_history = current_scan
+        self.data_generator.domain.save(update_fields=["scan_history_id"])
         self.data_generator.create_subdomain("admin1.example.com")
+        # SubdomainChangesViewSet needs 2 scans (current + previous) to compute "added"
+        ScanHistory.objects.create(
+            target=current_scan.target,
+            start_scan_date=current_scan.start_scan_date - timedelta(days=1),
+            scan_status=2,
+            tasks=current_scan.tasks,
+        )
 
     def test_subdomain_changes_viewset(self):
         """Test retrieving subdomain changes for a scan."""
         url = reverse("api:subdomain-changes-list")
         response = self.client.get(url, {"scan_id": self.data_generator.scan_history.id, "changes": "added"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(len(response.data), 1)
+        self.assertIn("results", response.data)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.subdomain.name)
         self.assertEqual(response.data["results"][0]["change"], "added")
 
@@ -134,12 +167,12 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.subdomain.name)
 
     def test_list_subdomains_by_domain(self):
-        """Test listing subdomains by domain."""
+        """Test listing subdomains by target (target_id filters by Target, not Domain)."""
         api_url = reverse("api:subdomain-datatable-list")
         response = self.client.get(
             api_url,
             {
-                "target_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
                 "project": self.data_generator.project.slug,
             },
         )
@@ -187,12 +220,12 @@ class TestInterestingSubdomainViewSet(BaseTestCase):
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.subdomain.name)
 
     def test_list_interesting_subdomains_by_domain(self):
-        """Test listing interesting subdomains by domain."""
+        """Test listing interesting subdomains by target (target_id)."""
         api_url = reverse("api:interesting-subdomains-list")
         response = self.client.get(
             api_url,
             {
-                "target_id": self.data_generator.domain.id,
+                "target_id": self.data_generator.target.id,
                 "project": self.data_generator.project.slug,
                 "scan_id": self.data_generator.scan_history.id,
             },

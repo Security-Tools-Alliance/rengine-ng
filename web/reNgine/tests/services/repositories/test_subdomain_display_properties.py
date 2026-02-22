@@ -19,14 +19,14 @@ class SubdomainDisplayPropertiesTestCase(BaseTestCase):
         # Use the data_generator from BaseTestCase which already has domain, engine_type, etc.
         # Create a Secator scan (scan_type=None for Secator scans)
         self.secator_scan = ScanHistory.objects.create(
-            domain=self.data_generator.domain,
+            target=self.data_generator.target,
             start_scan_date=self.data_generator.scan_history.start_scan_date,
             is_legacy_scan=False,
         )
 
         # Create a legacy scan
         self.legacy_scan = ScanHistory.objects.create(
-            domain=self.data_generator.domain,
+            target=self.data_generator.target,
             scan_type=self.data_generator.engine_type,
             start_scan_date=self.data_generator.scan_history.start_scan_date,
             is_legacy_scan=True,
@@ -36,7 +36,7 @@ class SubdomainDisplayPropertiesTestCase(BaseTestCase):
         self.secator_subdomain = Subdomain.objects.create(
             name="secator.example.com",
             scan_history=self.secator_scan,
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             http_status=404,
             page_title="Subdomain Title",
             content_length=500,
@@ -46,7 +46,7 @@ class SubdomainDisplayPropertiesTestCase(BaseTestCase):
         self.legacy_subdomain = Subdomain.objects.create(
             name="legacy.example.com",
             scan_history=self.legacy_scan,
-            target_domain=self.data_generator.domain,
+            domain=self.data_generator.domain,
             http_status=404,
             page_title="Subdomain Title",
             content_length=500,
@@ -64,7 +64,7 @@ class SubdomainDisplayPropertiesTestCase(BaseTestCase):
             "time": 1.5,
         }
 
-        endpoint = self.repository.save_from_secator(item, self.secator_scan.id, self.data_generator.domain.id)
+        endpoint = self.repository.save_from_secator(item, self.secator_scan.id, self.data_generator.target.id)
         endpoint.refresh_from_db()
 
         # Verify endpoint is default
@@ -104,7 +104,7 @@ class SubdomainDisplayPropertiesTestCase(BaseTestCase):
             "title": "Endpoint Title",
         }
 
-        endpoint = self.repository.save_from_secator(item, self.legacy_scan.id, self.data_generator.domain.id)
+        endpoint = self.repository.save_from_secator(item, self.legacy_scan.id, self.data_generator.target.id)
         endpoint.refresh_from_db()
 
         # Refresh subdomain

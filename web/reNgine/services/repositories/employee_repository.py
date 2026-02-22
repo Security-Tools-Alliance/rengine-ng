@@ -11,9 +11,10 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from reNgine.core.validators import is_valid_domain, is_valid_email, is_valid_url
+from reNgine.utilities.domain import get_domain_by_id, get_or_create_domain_for_target
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import Email, Employee, EndPoint, ScanHistory, Subdomain
-from targetApp.models import Domain
+from targetApp.models import Target
 
 
 PREFIX_EMPLOYEE_REPO = "[EMPLOYEE_REPO]"
@@ -27,7 +28,7 @@ class EmployeeRepository:
         self,
         item: Dict[str, Any],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[Employee]:
         """
@@ -36,14 +37,14 @@ class EmployeeRepository:
         Args:
             item: Secator UserAccount item
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             rengine_context: Optional context (unused)
 
         Returns:
             Employee: Saved employee object or None
         """
         try:
-            return self._process_secator_employee_item(item, scan_history_id, domain_id)
+            return self._process_secator_employee_item(item, scan_history_id, target_id)
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_EMPLOYEE_REPO,
@@ -70,8 +71,19 @@ class EmployeeRepository:
             return None
 
     def _process_secator_employee_item(
-        self, item: Dict[str, Any], scan_history_id: int, domain_id: int
+        self, item: Dict[str, Any], scan_history_id: int, target_id: int
     ) -> Optional[Employee]:
+        target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
+        domain = get_or_create_domain_for_target(scan_history_id, target_value) if target_value else None
+        if not domain:
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "SAVE",
+                "Could not resolve domain for target_id=%s" % (target_id,),
+                level="warning",
+            )
+            return None
+
         username = item.get("username")
         email = item.get("email")
         site_name = item.get("site_name")
@@ -87,7 +99,6 @@ class EmployeeRepository:
             return None
 
         scan_history = ScanHistory.objects.get(id=scan_history_id)
-        domain = Domain.objects.get(id=domain_id)
 
         # Get or create employee
         employee, created = Employee.objects.get_or_create(
@@ -97,7 +108,7 @@ class EmployeeRepository:
                 "name": username or email or "Unknown",
                 "site_name": site_name or "",
                 "url": url or "",
-                "target_domain": domain,
+                "domain": domain,
                 "discovered_date": timezone.now(),
                 "extra_data": item.get("extra_data", {}),
             },
@@ -180,20 +191,20 @@ class EmployeeRepository:
             )
             return None, False
 
-    def bulk_create(self, employees: List[Dict[str, Any]], scan_history_id: int, domain_id: int) -> List[Employee]:
+    def bulk_create(self, employees: List[Dict[str, Any]], scan_history_id: int, target_id: int) -> List[Employee]:
         """
         Bulk create employees.
 
         Args:
             employees: List of employee dictionaries with 'username' and 'email' (or 'emails' list)
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (context)
 
         Returns:
             list: List of created Employee objects
         """
         try:
-            return self._create_employees_in_bulk(scan_history_id, domain_id, employees)
+            return self._create_employees_in_bulk(scan_history_id, target_id, employees)
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_EMPLOYEE_REPO,
@@ -212,12 +223,15 @@ class EmployeeRepository:
             return []
 
     def _create_employees_in_bulk(
-        self, scan_history_id: int, domain_id: int, employees: List[Dict[str, Any]]
+        self, scan_history_id: int, target_id: int, employees: List[Dict[str, Any]]
     ) -> List[Employee]:
         from startScan.models import Email
 
         scan_history = ScanHistory.objects.get(id=scan_history_id)
-        domain = Domain.objects.get(id=domain_id)
+        target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
+        domain = get_or_create_domain_for_target(scan_history_id, target_value) if target_value else None
+        if not domain:
+            return []
 
         created_employees = []
         for employee_data in employees:
@@ -236,7 +250,7 @@ class EmployeeRepository:
                 # Get or create employee (username is unique per domain)
                 employee, created = Employee.objects.get_or_create(
                     username=username,
-                    target_domain=domain,
+                    domain=domain,
                     defaults={
                         "name": username or (email_addresses[0] if email_addresses else "Unknown"),
                         "site_name": employee_data.get("site_name", ""),
@@ -276,8 +290,16 @@ class EmployeeRepository:
             list: List of Employee objects
         """
         try:
-            domain = Domain.objects.get(id=domain_id)
-            return list(Employee.objects.filter(target_domain=domain))
+            domain = get_domain_by_id(domain_id)
+            if domain is None:
+                logger.log_line(
+                    PREFIX_EMPLOYEE_REPO,
+                    "GET_FOR_DOMAIN",
+                    "Domain with ID %s not found" % (domain_id,),
+                    level="error",
+                )
+                return []
+            return list(Employee.objects.filter(domain=domain))
 
         except ObjectDoesNotExist:
             logger.log_line(

@@ -275,7 +275,7 @@ def get_scan_fields(engine, scan, subscan=None, status="RUNNING", tasks=None):
         scan_obj = subscan
     else:
         tasks_h = "• " + "\n• ".join(f"`{task.name}`" for task in tasks) if tasks else ""
-        host = scan.domain.name
+        host = scan.target.value if scan.target_id else ""
         scan_obj = scan
 
     # Find scan elapsed time

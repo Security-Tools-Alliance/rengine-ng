@@ -1,5 +1,12 @@
 {% load permission_tags %}
-
+<style>
+#subdomain_scan_results td.col-action,
+#subdomain_scan_results th.col-action,
+#subdomain_scan_results th:nth-child(24),
+#subdomain_scan_results td:nth-child(24) {
+	min-width: 180px;
+}
+</style>
 <div class="row justify-content-center">
 	<div class="col-xl-8 col-lg-8 col-sm-8">
 		<div class="wrapper">
@@ -29,7 +36,7 @@
 							Initiate Subscan
 						</a>
 						{% endif %}
-						<a class="disabled btn btn-soft-info" data-button="subdomain_btns" data-toggle="tooltip" data-placement="top" title="Download Selected Subdomains" onclick="downloadSelectedSubdomains('{{history.domain.name}}')">
+						<a class="disabled btn btn-soft-info" data-button="subdomain_btns" data-toggle="tooltip" data-placement="top" title="Download Selected Subdomains" onclick="downloadSelectedSubdomains('{% if target_summary %}{{ target.value|escapejs }}{% else %}{{ scan_display_name|escapejs }}{% endif %}')">
 							<i class="fe-download"></i>
 							Download Selected Subdomains
 						</a>
@@ -100,23 +107,7 @@
 								<i class="fe-download"></i>
 							</button>
 							<div class="dropdown-menu" style="">
-								{% if detail_scan %}
-									<a class="dropdown-item" href="javascript:download_subdomains(scan_id={{scan_history_id}}, domain_id=null, domain_name='{{history.domain.name}}')">Download All Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_interesting_subdomains(scan_id={{scan_history_id}}, domain_id=null, domain_name='{{history.domain.name}}');">Download Interesting Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_important_subdomains(scan_id={{scan_history_id}}, domain_id=null, domain_name='{{history.domain.name}}');">Download Important Subdomains</a>
-								{% endif %}
-
-								{% if target_summary %}
-									<a class="dropdown-item" href="javascript:download_subdomains(scan_id=null, domain_id={{target.id}}, domain_name='{{target.name}}')">Download All Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_interesting_subdomains(scan_id=null, domain_id={{target.id}}, domain_name='{{target.name}}');">Download Interesting Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_important_subdomains(scan_id=null, domain_id={{target.id}}, domain_name='{{target.name}}');">Download Important Subdomains</a>
-								{% endif %}
-
-								{% if all_subdomains %}
-									<a class="dropdown-item" href="javascript:download_subdomains()">Download All Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_interesting_subdomains()">Download Interesting Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_important_subdomains()">Download Important Subdomains</a>
-								{% endif %}
+								{% include 'base/_items/_subdomain_download_links.html' %}
 							</div>
 
 						</div>
@@ -169,7 +160,7 @@
 									<th>Is Important</th>
 									<th>Webserver</th>
 									<th>Content Type</th>
-									<th>Action</th>
+									<th class="col-action">Action</th>
 									<th>Directories Count</th>
 									<th>Subscan Count</th>
 									<th>WAF</th>

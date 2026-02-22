@@ -95,11 +95,11 @@ SubScan History
               {% if subscan.subdomain %}
               <span class="" data-toggle="tooltip" data-placement="top" title="Scanned Subdomain">{{ subscan.subdomain.name }}</span>
               {% else %}
-              <span class="text-muted" data-toggle="tooltip" data-placement="top" title="Domain-level scan">Domain-level: {{ subscan.scan_history.domain.name }}</span>
+              <span class="text-muted" data-toggle="tooltip" data-placement="top" title="Domain-level scan">Domain-level: {{ subscan.scan_history.target.value|default:"" }}</span>
               {% endif %}
             </br>
-            <b><span data-toggle="tooltip" data-placement="top" title="Domain">{{ subscan.scan_history.domain.name }}</span></b>
-            {% for organization in subscan.scan_history.domain.get_organization %}
+            <b><span data-toggle="tooltip" data-placement="top" title="Domain">{{ subscan.scan_history.target.value|default:"" }}</span></b>
+            {% for organization in subscan.scan_history.target.get_organization %}
               <span class="badge badge-soft-dark mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Domain {{domain.name}} belongs to organization {{organization.name}}">{{ organization.name }}</span>
             {% endfor %}
           </br>

@@ -19,21 +19,19 @@ Expected relationships (startScan.models / targetApp.models):
   EndPoint
     - screenshot_path, stored_response_path (CharField): stored relative path
     - scan_history (FK -> ScanHistory, null=True)
-    - Project resolution: endpoint.scan_history.domain.project
-    - Required: ScanHistory.domain (FK -> Domain), Domain.project (FK -> Project)
+    - Project resolution: endpoint.scan_history.target.project
+    - Required: ScanHistory.target (FK -> Target), Target.project (FK -> Project)
 
   Technology
     - stored_response_path (CharField): stored relative path
     - No direct FK to Project; linked via Subdomain M2M
     - Project resolution: Subdomain such that tech in subdomain.technologies,
-      then subdomain.scan_history.domain.project or subdomain.target_domain.project
+      then subdomain.scan_history.target.project or
+      subdomain.domain.scan_history.target.project
 
   Subdomain (used for Technology -> Project only)
-    - technologies (M2M to Technology, related_name="technologies"): used as
-      Subdomain.objects.filter(technologies=tech)
-    - scan_history (FK -> ScanHistory, null=True)
-    - target_domain (FK -> Domain, null=True)
-    - Required: ScanHistory.domain, Domain.project
+    - scan_history (FK -> ScanHistory), domain (FK -> Domain).
+    - Domain links to target via scan_history (Domain.scan_history.target).
 """
 
 import mimetypes
@@ -91,40 +89,40 @@ def get_project_for_scan_file_path(relative_path: str):
     Traversal (see module docstring for full schema contract):
 
     1. EndPoint: match on EndPoint.screenshot_path or EndPoint.stored_response_path.
-       Project = endpoint.scan_history.domain.project (requires scan_history FK and
-       ScanHistory.domain FK, Domain.project FK).
+       Project = endpoint.scan_history.target.project (requires scan_history FK and
+       ScanHistory.target FK, Target.project FK).
 
     2. Technology: match on Technology.stored_response_path. Find a Subdomain that
        has this Technology via Subdomain.technologies (M2M). Project =
-       subdomain.scan_history.domain.project or subdomain.target_domain.project.
-       Requires Subdomain.scan_history, Subdomain.target_domain, and Domain.project.
+       subdomain.scan_history.target.project or
+       subdomain.domain.scan_history.target.project when domain.scan_history_id.
     """
-    # 1. EndPoint path: EndPoint.scan_history -> ScanHistory.domain -> Domain.project
+    # 1. EndPoint path: EndPoint.scan_history -> ScanHistory.target -> Target.project
     endpoint = (
         EndPoint.objects.filter(Q(screenshot_path=relative_path) | Q(stored_response_path=relative_path))
-        .select_related("scan_history__domain__project")
+        .select_related("scan_history__target__project")
         .first()
     )
-    if endpoint and endpoint.scan_history and endpoint.scan_history.domain:
-        return endpoint.scan_history.domain.project
+    if endpoint and endpoint.scan_history and endpoint.scan_history.target_id:
+        return endpoint.scan_history.target.project
     # 2. Technology path: Technology.stored_response_path -> Subdomain (via M2M
-    #    Subdomain.technologies) -> Subdomain.scan_history.domain.project or
-    #    Subdomain.target_domain.project
+    #    Subdomain.technologies) -> Subdomain.scan_history.target.project or
+    #    Subdomain.domain.scan_history.target.project
     tech = Technology.objects.filter(stored_response_path=relative_path).first()
     if not tech:
         return None
     if (
         sub := Subdomain.objects.filter(technologies=tech)
         .select_related(
-            "scan_history__domain__project",
-            "target_domain__project",
+            "scan_history__target__project",
+            "domain__scan_history__target__project",
         )
         .first()
     ):
-        if sub.scan_history and sub.scan_history.domain:
-            return sub.scan_history.domain.project
-        if sub.target_domain:
-            return sub.target_domain.project
+        if sub.scan_history and sub.scan_history.target_id:
+            return sub.scan_history.target.project
+        if sub.domain and sub.domain.scan_history_id:
+            return sub.domain.scan_history.target.project
     return None
 
 

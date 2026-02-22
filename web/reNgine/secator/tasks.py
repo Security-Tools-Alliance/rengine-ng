@@ -6,36 +6,35 @@ from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import get_subdomain_from_url
 from startScan.models import ScanHistory
-from targetApp.models import Domain
+from targetApp.models import Target
 
 
 PREFIX_SECATOR_TASKS = "[SECATOR_TASKS]"
 logger = get_module_logger(__name__)
 
 
-def _workspace_for_domain(domain) -> str:
+def _workspace_for_target(target: Target) -> str:
     """
-    Return workspace string for domain.
-    When a project is associated (project_id set), always include project slug or id
-    to avoid workspace collision for identical domain names across projects.
-    Use domain.name alone only when there is no associated project.
+    Return workspace string for target.
+    When a project is associated, include project slug or id to avoid workspace
+    collision for identical target values across projects.
     """
-    if domain.project_id is not None:
+    if target.project_id is not None:
         try:
-            project = domain.project
+            project = target.project
             slug = getattr(project, "slug", None) if project else None
             if slug:
-                return f"{sanitize_path_component(slug)}/{sanitize_path_component(domain.name)}"
-            return f"{domain.project_id}/{sanitize_path_component(domain.name)}"
+                return f"{sanitize_path_component(slug)}/{sanitize_path_component(target.value)}"
+            return f"{target.project_id}/{sanitize_path_component(target.value)}"
         except Exception:
-            return f"{domain.project_id}/{sanitize_path_component(domain.name)}"
-    return sanitize_path_component(domain.name)
+            return f"{target.project_id}/{sanitize_path_component(target.value)}"
+    return sanitize_path_component(target.value)
 
 
 def initiate_secator_scan(
     scan_history_id,
-    domain_id,
-    execution_mode,
+    target_id=None,
+    execution_mode=None,
     workflow_id=None,
     task_ids=None,
     secator_scan_type=None,
@@ -53,7 +52,7 @@ def initiate_secator_scan(
 
     Args:
         scan_history_id (int): ScanHistory id.
-        domain_id (int): Domain id.
+        target_id (int): Target id (required).
         execution_mode (str): workflow|tasks|scan
         workflow_id (int): Required for workflow mode
         task_ids (list): Required for tasks mode
@@ -76,7 +75,10 @@ def initiate_secator_scan(
         from reNgine.secator.services.input_type_service import InputTypeService
         from reNgine.settings import SECATOR_RESULTS
 
-        domain = Domain.objects.get(id=domain_id)
+        if target_id is None:
+            raise ValueError("target_id is required for Secator scan")
+
+        target = Target.objects.get(id=target_id)
         scan_history = ScanHistory.objects.get(id=scan_history_id)
         scan_history.is_legacy_scan = False
         scan_history.save()
@@ -88,7 +90,7 @@ def initiate_secator_scan(
         if execution_mode == "scan" and not secator_scan_type:
             raise ValueError("secator_scan_type required for scan mode")
         if execution_mode not in ["workflow", "tasks", "scan"]:
-            raise ValueError(f"Invalid execution_mode: {execution_mode}")
+            raise ValueError("Invalid execution_mode: %s" % (execution_mode,))
 
         if execution_mode == "workflow":
             input_types = InputTypeService.get_input_types(workflow_id=workflow_id)
@@ -99,7 +101,7 @@ def initiate_secator_scan(
 
             tasks_qs = SecatorTask.objects.filter(id__in=task_ids)
             if not tasks_qs.exists():
-                raise ValueError(f"No active tasks found for IDs {list(task_ids)}")
+                raise ValueError("No active tasks found for IDs %s" % (list(task_ids),))
             task_types = list(tasks_qs.values_list("task_type", flat=True))
             input_types_set = set()
             for task_type in task_types:
@@ -113,8 +115,8 @@ def initiate_secator_scan(
             raw_targets = [str(t).strip() for t in targets_override if t is not None and str(t).strip()]
         else:
             raw_targets = build_enriched_targets(
-                domain_id=domain_id,
                 input_types=input_types,
+                target_id=target_id,
                 subdomain_ids=subdomain_ids or [],
                 out_of_scope_subdomains=out_of_scope_subdomains or [],
                 url_filter=url_filter,
@@ -149,18 +151,19 @@ def initiate_secator_scan(
                 )
         if not validated_targets:
             raise ValueError(
-                f"No valid targets for input_types {input_types}. "
-                "Ensure discovery data (endpoints, subdomains, IPs) exists for this domain."
+                "No valid targets for input_types %s. "
+                "Ensure discovery data (endpoints, subdomains, IPs) exists for this target." % (input_types,)
             )
         targets = validated_targets
 
-        domain_name_sanitized = sanitize_path_component(domain.name)
-        domain_results_dir = os.path.abspath(os.path.join(SECATOR_RESULTS, domain_name_sanitized))
-        if not is_safe_path(SECATOR_RESULTS, domain_results_dir):
+        target_value_sanitized = sanitize_path_component(target.value)
+        target_results_dir = os.path.abspath(os.path.join(SECATOR_RESULTS, target_value_sanitized))
+        if not is_safe_path(SECATOR_RESULTS, target_results_dir):
             raise ValueError(
-                f"Domain results path would escape SECATOR_RESULTS base; domain.name may be invalid: {domain.name}"
+                "Target results path would escape SECATOR_RESULTS base; target.value may be invalid: %s"
+                % (target.value,)
             )
-        os.makedirs(domain_results_dir, exist_ok=True)
+        os.makedirs(target_results_dir, exist_ok=True)
         logger.log_line(
             PREFIX_SECATOR_TASKS,
             "TARGETS",
@@ -218,13 +221,13 @@ def initiate_secator_scan(
             worker = SecatorWorker.objects.get(id=worker_id)
             if not worker.is_active:
                 raise ValueError("Worker is not active")
-            workspace = _workspace_for_domain(domain)
+            workspace = _workspace_for_target(target)
             remote_config = {"proxy": config.get("proxy"), "delay": config.get("delay"), "profiles": profiles}
             try:
                 run_scan_on_worker(
                     worker,
                     scan_history_id=scan_history_id,
-                    domain_id=domain_id,
+                    target_id=target_id,
                     workspace_name=workspace,
                     execution_mode=execution_mode,
                     targets=targets,
@@ -254,7 +257,7 @@ def initiate_secator_scan(
         orchestrator = ScanOrchestrator()
         result = orchestrator.execute_scan(
             scan_history_id=scan_history_id,
-            domain_id=domain_id,
+            target_id=target_id,
             execution_mode=execution_mode,
             targets=targets,
             config=config,
@@ -274,7 +277,7 @@ def initiate_secator_scan(
             "Invalid reference for Secator scan: %s" % (e,),
             level="warning",
         )
-        return {"status": "error", "error": "Invalid scan, domain, or workflow ID"}
+        return {"status": "error", "error": "Invalid scan, target, or workflow ID"}
     except ValueError as e:
         logger.log_line(
             PREFIX_SECATOR_TASKS,
@@ -295,20 +298,20 @@ def initiate_secator_scan(
 
 
 def build_enriched_targets(
-    domain_id: int,
     input_types: list,
+    target_id: int = None,
     subdomain_ids: list = None,
     out_of_scope_subdomains=None,
     url_filter: str = "",
 ):
-    """Build enriched targets list for Secator scan from input_types and domain/subdomain data.
+    """Build enriched targets list for Secator scan from input_types and Target/domain data.
 
-    Uses TargetBuilderService to build targets per input_type (url, host, host:port, ip),
+    Uses TargetBuilderService to build targets per input_type (url, host, host:port, ip, etc.),
     then optionally applies out-of-scope filter and URL path filter.
 
     Args:
-        domain_id: Domain ID
         input_types: List of Secator input type strings (e.g. ['url'], ['host', 'ip'])
+        target_id: Target ID (required).
         subdomain_ids: Optional list of subdomain IDs (for subscan; restricts to these subdomains)
         out_of_scope_subdomains: Optional list of hostnames to exclude from targets
         url_filter: Optional URL path to append to targets (e.g. '/api'). Applied only when
@@ -322,9 +325,12 @@ def build_enriched_targets(
     if out_of_scope_subdomains is None:
         out_of_scope_subdomains = []
 
+    if target_id is None:
+        raise ValueError("target_id is required")
+
     from reNgine.secator.services.target_builder_service import TargetBuilderService
 
-    builder = TargetBuilderService(domain_id=domain_id, subdomain_ids=subdomain_ids)
+    builder = TargetBuilderService(target_id=target_id, subdomain_ids=subdomain_ids)
     targets = builder.build_flat_targets(input_types)
 
     if out_of_scope_subdomains:

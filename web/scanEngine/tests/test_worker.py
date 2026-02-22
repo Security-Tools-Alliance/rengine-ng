@@ -833,7 +833,7 @@ class TestRemoteRunnerContainerPython(BaseTestCase):
             run_scan_on_worker(
                 worker,
                 scan_history_id=1,
-                domain_id=self.data_generator.domain.id,
+                target_id=self.data_generator.target.id,
                 workspace_name="default",
                 execution_mode="workflow",
                 targets=["https://example.com"],
@@ -878,7 +878,7 @@ class TestRemoteRunnerContainerPython(BaseTestCase):
             run_scan_on_worker(
                 worker,
                 scan_history_id=42,
-                domain_id=self.data_generator.domain.id,
+                target_id=self.data_generator.target.id,
                 workspace_name="default",
                 execution_mode="scan",
                 targets=["https://scan.example.com"],
@@ -927,7 +927,7 @@ class TestRemoteRunnerContainerPython(BaseTestCase):
             run_scan_on_worker(
                 worker,
                 scan_history_id=99,
-                domain_id=self.data_generator.domain.id,
+                target_id=self.data_generator.target.id,
                 workspace_name="default",
                 execution_mode="workflow",
                 targets=["https://example.com"],

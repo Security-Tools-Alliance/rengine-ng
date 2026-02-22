@@ -11,10 +11,10 @@ from typing import Any, Dict, Optional
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
+from reNgine.utilities.domain import get_or_create_domain_for_target
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
 from startScan.models import Certificate, IpAddress, ScanHistory, Subdomain
-from targetApp.models import Domain
 
 
 PREFIX_CERT_REPO = "[CERT_REPO]"
@@ -72,7 +72,7 @@ class CertificateRepository:
             raise
 
     def _process_secator_certificate_item(
-        self, item: Dict[str, Any], scan_history_id: int, domain_id: int
+        self, item: Dict[str, Any], scan_history_id: int, target_id: int
     ) -> Optional[Certificate]:
         host = item.get("host")
         fingerprint_sha256 = item.get("fingerprint_sha256", "")
@@ -86,9 +86,17 @@ class CertificateRepository:
             )
             return None
 
-        # Validate scan_history and domain exist
+        domain = get_or_create_domain_for_target(scan_history_id, host) if host else None
+        if not domain:
+            logger.log_line(
+                PREFIX_CERT_REPO,
+                "SAVE",
+                "Could not resolve domain for target_id=%s, host=%s" % (target_id, host),
+                level="warning",
+            )
+            return None
+
         scan_history = ScanHistory.objects.get(id=scan_history_id)
-        domain = Domain.objects.get(id=domain_id)
 
         # Parse datetime fields
         not_before = self._parse_datetime(item.get("not_before"))
@@ -98,7 +106,7 @@ class CertificateRepository:
         subdomain = None
         if host:
             with contextlib.suppress(Exception):
-                subdomain = Subdomain.objects.filter(name=host, target_domain=domain).first()
+                subdomain = Subdomain.objects.filter(name=host, domain=domain).first()
         # Get or create IP address if ip is provided
         ip_address = None
         ip_str = item.get("ip", "")

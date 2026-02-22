@@ -995,17 +995,6 @@ const updateScanTimeline = function(data) {
             return;
         }
         
-        // Update existing timeline items instead of removing them
-        // This preserves Logs links and Stop buttons. Use Map to avoid prototype pollution from item.id/runnerId.
-        const existingItemsMap = new Map();
-        const existingItems = timelineList.querySelectorAll('[data-runner-id]');
-        existingItems.forEach(function(item) {
-            const runnerId = item.getAttribute('data-runner-id');
-            if (runnerId) {
-                existingItemsMap.set(runnerId, item);
-            }
-        });
-        
         // Use timeline data if available (preferred), otherwise use runners
         const itemsToRender = data.timeline || [];
         
@@ -1023,6 +1012,26 @@ const updateScanTimeline = function(data) {
                 itemsToRender.push(timelineItem);
             });
         }
+        
+        // Normalize IDs to string so Map keys are consistent (avoids duplicate nodes when id is number vs string).
+        const currentRunnerIds = new Set(itemsToRender.map(function(item) { return String(item.id); }));
+        // Remove from DOM any timeline items not in the current payload so the list does not accumulate duplicates.
+        const toRemove = [];
+        timelineList.querySelectorAll('[data-runner-id]').forEach(function(node) {
+            if (!currentRunnerIds.has(String(node.getAttribute('data-runner-id')))) {
+                toRemove.push(node);
+            }
+        });
+        toRemove.forEach(function(node) { node.remove(); });
+        
+        // Reuse existing DOM nodes by runner id (string key) to preserve Logs links and Stop buttons.
+        const existingItemsMap = new Map();
+        timelineList.querySelectorAll('[data-runner-id]').forEach(function(item) {
+            const runnerId = item.getAttribute('data-runner-id');
+            if (runnerId) {
+                existingItemsMap.set(String(runnerId), item);
+            }
+        });
         
         // Sort: running first, then error, success, aborted, skipped, other; within each group by hierarchy (scan > workflow > task) then most recent first
         const statusConst = window.RENGINE_SCAN_STATUS || {};
@@ -1072,17 +1081,19 @@ const updateScanTimeline = function(data) {
         const dateTimeLocale = 'en-US';
         
         // Update or add timeline items; new items are stored in map so we can reorder DOM after
+        const idStr = function(id) { return String(id); };
         itemsToRender.forEach(function(item) {
-            let listItem = existingItemsMap.get(item.id);
+            const itemIdStr = idStr(item.id);
+            let listItem = existingItemsMap.get(itemIdStr);
             const isNew = !listItem;
             
             if (isNew) {
                 listItem = document.createElement('li');
-                listItem.setAttribute('data-runner-id', item.id);
+                listItem.setAttribute('data-runner-id', itemIdStr);
                 if (item.activity_id) {
                     listItem.setAttribute('data-activity-id', item.activity_id);
                 }
-                existingItemsMap.set(item.id, listItem);
+                existingItemsMap.set(itemIdStr, listItem);
             } else if (item.activity_id) {
                 listItem.setAttribute('data-activity-id', item.activity_id);
             }
@@ -1194,7 +1205,7 @@ const updateScanTimeline = function(data) {
 
         // Reorder DOM to match sorted order (running first, then by time) so "In progress" moves to top on WebSocket update
         itemsToRender.forEach(function(item) {
-            const listItem = existingItemsMap.get(item.id);
+            const listItem = existingItemsMap.get(idStr(item.id));
             if (listItem) {
                 timelineList.appendChild(listItem);
             }

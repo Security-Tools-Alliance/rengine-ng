@@ -308,7 +308,7 @@ class TestVisualiseData(BaseTestCase):
         response = self.client.get(url, {"scan_id": self.data_generator.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
-        self.assertEqual(response.data["description"], self.data_generator.domain.name)
+        self.assertEqual(response.data["description"], self.data_generator.target.value)
 
 
 class TestListTechnology(BaseTestCase):
@@ -321,7 +321,7 @@ class TestListTechnology(BaseTestCase):
     def test_list_technology(self):
         """Test listing technologies for a target."""
         url = reverse("api:listTechnologies")
-        response = self.client.get(url, {"target_id": self.data_generator.domain.id})
+        response = self.client.get(url, {"target_id": self.data_generator.target.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("technologies", response.data)
         self.assertGreaterEqual(len(response.data["technologies"]), 1)
@@ -397,6 +397,21 @@ class TestListSubScans(BaseTestCase):
         self.assertIn("total_count", response.data)
         self.assertLessEqual(len(response.data.get("results", [])), 1)
         self.assertGreaterEqual(response.data["total_count"], len(response.data.get("results", [])))
+
+    def test_list_subscans_by_target_id(self):
+        """Test listing subscans filtered by target_id returns same scan history subscans."""
+        self.data_generator.scan_history.target = self.data_generator.target
+        self.data_generator.scan_history.save(update_fields=["target_id"])
+        api_url = reverse("api:listSubScans")
+        response = self.client.post(
+            api_url,
+            {"target_id": self.data_generator.target.id},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertIn("results", response.data)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
+        self.assertGreaterEqual(response.data["total_count"], 1)
 
 
 class TestFetchSubscanResults(BaseTestCase):

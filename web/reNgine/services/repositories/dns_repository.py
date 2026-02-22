@@ -8,8 +8,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 
+from reNgine.core.validators import is_valid_domain
+from reNgine.utilities.domain import get_domain_by_id, get_or_create_domain_for_target
 from reNgine.utilities.logger import get_module_logger
-from targetApp.models import DNSRecord, Domain, DomainInfo
+from startScan.models import DNSRecord, Domain, DomainInfo
+from targetApp.models import Target
 
 
 PREFIX_DNS_REPO = "[DNS_REPO]"
@@ -42,7 +45,7 @@ class DnsRepository:
         self,
         item: Dict[str, Any],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[DNSRecord]:
         """
@@ -51,14 +54,14 @@ class DnsRepository:
         Args:
             item: Secator record item
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             rengine_context: Optional context (unused for DNS records)
 
         Returns:
             DNSRecord: Saved DNS record object or None
         """
         try:
-            return self._process_secator_dns_record_item(item, domain_id)
+            return self._process_secator_dns_record_item(item, scan_history_id, target_id)
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_DNS_REPO,
@@ -84,7 +87,9 @@ class DnsRepository:
             )
             return None
 
-    def _process_secator_dns_record_item(self, item: Dict[str, Any], domain_id: int) -> Optional[DNSRecord]:
+    def _process_secator_dns_record_item(
+        self, item: Dict[str, Any], scan_history_id: int, target_id: int
+    ) -> Optional[DNSRecord]:
         record_name = item.get("name")
         record_type = (item.get("type") or "").upper()
         host = item.get("host")
@@ -126,6 +131,19 @@ class DnsRepository:
             )
             return None
 
+        target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
+        domain = get_or_create_domain_for_target(scan_history_id, target_value) if target_value else None
+        if not domain and is_valid_domain(record_name):
+            domain = get_or_create_domain_for_target(scan_history_id, record_name)
+        if not domain:
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "SAVE",
+                "Could not resolve domain for target_id=%s, record name=%s" % (target_id, record_name),
+                level="warning",
+            )
+            return None
+
         # Extract data from item
         name_value = record_name
         extra_data = item.get("extra_data", {}) or {}
@@ -133,7 +151,7 @@ class DnsRepository:
         # Get or create domain info and DNS record atomically to prevent race conditions.
         # select_for_update locks the domain row until the transaction commits.
         with transaction.atomic():
-            domain = Domain.objects.select_for_update().get(id=domain_id)
+            domain = Domain.objects.select_for_update().get(id=domain.id)
             domain_info = domain.domain_info if hasattr(domain, "domain_info") and domain.domain_info else None
             if not domain_info:
                 domain_info = DomainInfo()
@@ -295,7 +313,15 @@ class DnsRepository:
             list: List of DNSRecord objects
         """
         try:
-            domain = Domain.objects.get(id=domain_id)
+            domain = get_domain_by_id(domain_id)
+            if domain is None:
+                logger.log_line(
+                    PREFIX_DNS_REPO,
+                    "GET",
+                    "Domain with ID %s not found" % (domain_id,),
+                    level="error",
+                )
+                return []
             if domain.domain_info:
                 return list(domain.domain_info.dns_records.all())
             logger.log_line(
@@ -306,14 +332,6 @@ class DnsRepository:
             )
             return []
 
-        except ObjectDoesNotExist:
-            logger.log_line(
-                PREFIX_DNS_REPO,
-                "GET",
-                "Domain with ID %s not found" % (domain_id,),
-                level="error",
-            )
-            return []
         except Exception as e:
             logger.log_line(
                 PREFIX_DNS_REPO,
@@ -346,7 +364,15 @@ class DnsRepository:
                 return []
 
             if domain_id:
-                domain = Domain.objects.get(id=domain_id)
+                domain = get_domain_by_id(domain_id)
+                if domain is None:
+                    logger.log_line(
+                        PREFIX_DNS_REPO,
+                        "GET",
+                        "Domain with ID %s not found" % (domain_id,),
+                        level="error",
+                    )
+                    return []
                 if domain.domain_info:
                     # Filter DNS records by type that are associated with this domain's domain_info
                     queryset = domain.domain_info.dns_records.filter(type=record_type)

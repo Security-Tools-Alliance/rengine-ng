@@ -56,7 +56,7 @@
 
     collectFormData: function($form) {
       const executionMode = $form.find('input[name="execution_mode"]').val();
-      const domainId = $form.find('input[name="domain_id"]').val();
+      const targetId = $form.find('input[name="target_id"]').val();
 
       const profileKeys = ['speed', 'evasion', 'general', 'network'];
       const profiles = profileKeys
@@ -71,7 +71,6 @@
       const proxyValue = useRandomProxy ? null : ($form.find('input[name="proxy"]').val() || '');
 
       const formData = {
-        domain_id: parseInt(domainId),
         execution_mode: executionMode,
         imported_subdomains: ($form.find('[id$="importSubdomainFormControlTextarea"], #importSubdomainFormControlTextarea').val() || '').split('\n').filter(s => s.trim()),
         out_of_scope_subdomains: ($form.find('[id$="outOfScopeSubdomainTextarea"], #outOfScopeSubdomainTextarea').val() || '').split('\n').filter(s => s.trim()),
@@ -82,6 +81,7 @@
           profiles: profiles
         }
       };
+      if (targetId) formData.target_id = parseInt(targetId, 10);
 
       if (executionMode === 'workflow') {
         formData.workflow_id = parseInt($form.find('input[name="workflow_id"]:checked').val());

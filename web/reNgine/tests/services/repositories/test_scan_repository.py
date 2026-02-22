@@ -13,9 +13,9 @@ class TestScanRepository(BaseTestCase):
         """Set up test fixtures."""
         super().setUp()
         self.scan_repo = ScanRepository()
-        # Create test domain and scan history
-        self.domain = self.data_generator.create_domain()
+        # Scan history first (needs target), then domain linked to that scan
         self.scan_history = self.data_generator.create_scan_history()
+        self.domain = self.data_generator.create_domain(scan_history=self.scan_history)
 
     def test_update_progress_success(self):
         """Test successful progress update."""
@@ -167,18 +167,17 @@ class TestScanRepository(BaseTestCase):
             self.scan_repo.create_activity(99999, "Test message", 1)
 
     def test_create_scan_success(self):
-        """Test creating a new scan."""
+        """Test creating a new scan with target_id."""
         engine = self.data_generator.engine_type
-        domain = self.data_generator.domain
+        target = self.data_generator.target
 
-        result = self.scan_repo.create_scan(domain.id, engine.id)
+        result = self.scan_repo.create_scan(engine_id=engine.id, target_id=target.id)
 
         self.assertIsNotNone(result)
         from startScan.models import ScanHistory
 
         scan = ScanHistory.objects.get(id=result)
-        self.assertEqual(scan.domain.id, domain.id)
-        # All new scans are Secator scans, scan_type should be None
+        self.assertEqual(scan.target_id, target.id)
         self.assertIsNone(scan.scan_type)
         self.assertFalse(scan.is_legacy_scan)
         from reNgine.definitions import INITIATED_TASK
@@ -190,14 +189,14 @@ class TestScanRepository(BaseTestCase):
         from dashboard.models import User
 
         engine = self.data_generator.engine_type
-        domain = self.data_generator.domain
+        target = self.data_generator.target
         user = User.objects.create_user(
             username="testuser",
             email="test@example.com",
             password="testpass123",
         )
 
-        result = self.scan_repo.create_scan(domain.id, engine.id, user.id)
+        result = self.scan_repo.create_scan(engine_id=engine.id, target_id=target.id, initiated_by_id=user.id)
 
         self.assertIsNotNone(result)
         from startScan.models import ScanHistory
@@ -251,16 +250,15 @@ class TestScanRepository(BaseTestCase):
     def test_create_scan_history_entry(self):
         """Test _create_scan_history_entry method."""
         engine = self.data_generator.engine_type
-        domain = self.data_generator.domain
+        target = self.data_generator.target
 
-        result = self.scan_repo._create_scan_history_entry(engine.id, domain.id)
+        result = self.scan_repo._create_scan_history_entry(engine.id, target_id=target.id)
 
         self.assertIsNotNone(result)
         from startScan.models import ScanHistory
 
         scan = ScanHistory.objects.get(id=result)
-        self.assertEqual(scan.domain.id, domain.id)
-        # All new scans are Secator scans, scan_type should be None
+        self.assertEqual(scan.target_id, target.id)
         self.assertIsNone(scan.scan_type)
         self.assertFalse(scan.is_legacy_scan)
 
@@ -269,14 +267,14 @@ class TestScanRepository(BaseTestCase):
         from dashboard.models import User
 
         engine = self.data_generator.engine_type
-        domain = self.data_generator.domain
+        target = self.data_generator.target
         user = User.objects.create_user(
             username="testuser2",
             email="test2@example.com",
             password="testpass123",
         )
 
-        result = self.scan_repo._create_scan_history_entry(engine.id, domain.id, user.id)
+        result = self.scan_repo._create_scan_history_entry(engine.id, initiated_by_id=user.id, target_id=target.id)
 
         self.assertIsNotNone(result)
         from startScan.models import ScanHistory

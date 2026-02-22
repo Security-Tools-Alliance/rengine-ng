@@ -44,10 +44,10 @@ def get_scan_status_querysets(
 
     # Scalar count subqueries avoid cartesian products that annotate(Count(..., distinct=True)) would cause.
     base_scan = (
-        ScanHistory.objects.filter(domain__project__slug=project_slug)
-        .select_related("domain", "domain__project", "scan_type")
+        ScanHistory.objects.filter(target__project__slug=project_slug)
+        .select_related("target", "target__project", "scan_type")
         .prefetch_related(
-            "domain__domains",
+            "target__organizations",
             "secatorrunner_set",
             "scanactivity_set",
         )
@@ -63,17 +63,17 @@ def get_scan_status_querysets(
     current_scans = base_scan.order_by("-start_scan_date").filter(scan_status__in=SCAN_STATUSES_CURRENT)
     pending_scans = base_scan.order_by("-start_scan_date").filter(scan_status=SCAN_STATUS_PENDING)
 
-    activity_base = ScanActivity.objects.filter(scan_of__domain__project__slug=project_slug).select_related(
-        "scan_of", "scan_of__domain"
+    activity_base = ScanActivity.objects.filter(scan_of__target__project__slug=project_slug).select_related(
+        "scan_of", "scan_of__target"
     )
     recently_completed_tasks = activity_base.order_by("-time", "-pk").filter(
         Q(status=FAILED_TASK) | Q(status=SUCCESS_TASK)
     )[:recently_completed_tasks_limit]
     current_tasks = activity_base.order_by("-time", "-pk").filter(status=RUNNING_TASK)[:max_running_tasks]
     pending_tasks = (
-        SubScan.objects.filter(scan_history__domain__project__slug=project_slug)
+        SubScan.objects.filter(scan_history__target__project__slug=project_slug)
         .filter(status=SCAN_STATUS_PENDING)
-        .select_related("scan_history", "scan_history__domain", "subdomain", "engine", "secator_runner")
+        .select_related("scan_history", "scan_history__target", "subdomain", "engine", "secator_runner")
     )
 
     return {
@@ -109,13 +109,13 @@ def build_subdomain_datatable_queryset(
     from recon_note.models import TodoNote
     from startScan.models import EndPoint, Subdomain, SubScan, Vulnerability
 
-    subdomains = Subdomain.objects.filter(target_domain__project__slug=project_slug)
+    subdomains = Subdomain.objects.filter(domain__scan_history__target__project__slug=project_slug)
     if is_important:
         subdomains = subdomains.filter(is_important=True)
     if target_id:
-        subdomains = subdomains.filter(target_domain__id=target_id)
+        subdomains = subdomains.filter(domain__scan_history__target_id=target_id)
     elif url_query:
-        subdomains = subdomains.filter(Q(target_domain__name=url_query))
+        subdomains = subdomains.filter(Q(domain__name=url_query))
     elif scan_id is not None:
         subdomains = subdomains.filter(scan_history__id=scan_id)
 
@@ -130,7 +130,7 @@ def build_subdomain_datatable_queryset(
         interesting = get_interesting_subdomains(scan_history=scan_id)
         datatable_interesting_names = set(interesting.values_list("name", flat=True))
     elif target_id is not None:
-        interesting = get_interesting_subdomains(domain_id=target_id)
+        interesting = get_interesting_subdomains(target_id=target_id)
         datatable_interesting_names = set(interesting.values_list("name", flat=True))
     else:
         datatable_interesting_names = None

@@ -15,6 +15,7 @@ from reNgine.definitions import (
     SCAN_STATUS_VALUES,
     SUCCESS_TASK,
 )
+from reNgine.utilities.domain import get_domain_for_scan_by_name
 from reNgine.utilities.logger import get_secator_api_logger
 from startScan.models import ScanActivity, ScanHistory, SecatorRunner
 from startScan.secator.runner_sync import sync_runner_with_scan_history
@@ -33,9 +34,10 @@ class SyncRunnerWithScanHistoryTestCase(BaseTestCase):
 
     def _create_runner(self, runner_type="workflow", runner_data=None):
         runner_data = runner_data or {}
+        domain = get_domain_for_scan_by_name(self.scan_history.id, self.data_generator.target.value)
         return SecatorRunner.objects.create(
             scan_history=self.scan_history,
-            domain=self.scan_history.domain,
+            domain=domain,
             runner_type=runner_type,
             runner_name="test-workflow",
             runner_data=runner_data,

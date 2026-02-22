@@ -10,9 +10,10 @@ from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.validators import is_valid_ip, is_valid_port
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
+from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress, Port, ScanHistory
-from targetApp.models import Domain
+from targetApp.models import Target
 
 
 PREFIX_PORT_REPO = "[PORT_REPO]"
@@ -26,7 +27,7 @@ class PortRepository:
         self,
         item: Dict[str, Any],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[Port]:
         """
@@ -35,14 +36,14 @@ class PortRepository:
         Args:
             item: Secator port item
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             rengine_context: Optional context (unused for ports)
 
         Returns:
             Port: Saved port object or None
         """
         try:
-            return self._process_secator_port_item(item, scan_history_id, domain_id)
+            return self._process_secator_port_item(item, scan_history_id, target_id)
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_PORT_REPO,
@@ -68,7 +69,22 @@ class PortRepository:
             )
             return None
 
-    def _process_secator_port_item(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[Port]:
+    def _process_secator_port_item(self, item: Dict[str, Any], scan_history_id: int, target_id: int) -> Optional[Port]:
+        target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
+        domain = resolve_domain_for_scan(
+            scan_history_id,
+            target_value,
+            create=True,
+            log_failure={
+                "logger": logger,
+                "prefix": PREFIX_PORT_REPO,
+                "extra": "target_id=%s" % (target_id,),
+            },
+        )
+        if not domain:
+            return None
+        domain_id = domain.id
+
         raw_port = item.get("port")
         raw_ip = item.get("ip")
         raw_host = item.get("host")
@@ -277,7 +293,8 @@ class PortRepository:
     def _create_ports_in_bulk(self, scan_history_id: int, domain_id: int, ports: List[Dict[str, Any]]) -> List[Port]:
         # Validate scan_history and domain exist
         ScanHistory.objects.get(id=scan_history_id)
-        Domain.objects.get(id=domain_id)
+        if get_domain_by_id(domain_id) is None:
+            return []
 
         port_objects = []
         seen_ips = set()

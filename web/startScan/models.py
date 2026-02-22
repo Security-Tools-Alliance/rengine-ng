@@ -23,7 +23,7 @@ from reNgine.llm.utils import convert_markdown_to_html
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.time import date_to_aware_datetime
 from scanEngine.models import EngineType
-from targetApp.models import Domain
+from targetApp.models import Target
 
 
 PREFIX_SCAN = "[STARTSCAN]"
@@ -52,7 +52,7 @@ class ScanHistory(models.Model):
     start_scan_date = models.DateTimeField()
     scan_status = models.IntegerField(choices=SCAN_STATUSES, default=-1)
     results_dir = models.CharField(max_length=255, blank=True)
-    domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
+    target = models.ForeignKey(Target, on_delete=models.CASCADE, null=True, blank=True, related_name="scan_histories")
     scan_type = models.ForeignKey(EngineType, on_delete=models.CASCADE, null=True, blank=True)
     tasks = ArrayField(models.CharField(max_length=200), null=True)
     stop_scan_date = models.DateTimeField(null=True, blank=True)
@@ -71,7 +71,8 @@ class ScanHistory(models.Model):
     )
 
     def __str__(self):
-        return self.domain.name
+        # Avoid hidden DB access (Domain/target) to prevent N+1 in admin, logs, serializers.
+        return str(self.id)
 
     def get_subdomain_count(self):
         if hasattr(self, "subdomain_count"):
@@ -79,9 +80,9 @@ class ScanHistory(models.Model):
         return Subdomain.objects.filter(scan_history__id=self.id).count()
 
     def get_subdomain_change_count(self):
-        # Previous subdomain_discovery scan for the same domain (not the current scan)
+        # Previous subdomain_discovery scan for the same target (not the current scan)
         last_scan_obj = (
-            ScanHistory.objects.filter(domain=self.domain)
+            ScanHistory.objects.filter(target_id=self.target_id)
             .filter(tasks__overlap=["subdomain_discovery"])
             .filter(start_scan_date__lt=self.start_scan_date)
             .order_by("-start_scan_date")
@@ -89,11 +90,7 @@ class ScanHistory(models.Model):
         )
         if last_scan_obj is None:
             return [0, 0]
-        names_q1 = set(
-            Subdomain.objects.filter(target_domain__id=self.domain.id)
-            .exclude(scan_history__id=last_scan_obj.id)
-            .values_list("name", flat=True)
-        )
+        names_q1 = set(Subdomain.objects.filter(scan_history_id=self.id).values_list("name", flat=True))
         names_q2 = set(Subdomain.objects.filter(scan_history__id=last_scan_obj.id).values_list("name", flat=True))
         new_subdomains = len(names_q2 - names_q1)
         removed_subdomains = len(names_q1 - names_q2)
@@ -108,6 +105,11 @@ class ScanHistory(models.Model):
         if hasattr(self, "vuln_count"):
             return self.vuln_count
         return Vulnerability.objects.filter(scan_history__id=self.id).count()
+
+    def get_domain_count(self):
+        if hasattr(self, "domain_count"):
+            return self.domain_count
+        return self.discovered_domains.count()
 
     def get_unknown_vulnerability_count(self):
         return Vulnerability.objects.filter(scan_history__id=self.id).filter(severity=-1).count()
@@ -493,7 +495,7 @@ class ScanHistory(models.Model):
     @classmethod
     def get_project_counts(cls, project):
         """Get scan statistics for a specific project"""
-        return cls.get_all_counts(cls.objects.filter(domain__project=project))
+        return cls.get_all_counts(cls.objects.filter(target__project=project))
 
     @staticmethod
     def get_counts_by_date(queryset, date_field, since_date):
@@ -511,7 +513,7 @@ class ScanHistory(models.Model):
     @classmethod
     def get_project_timeline(cls, project, date_range, status=None):
         """Get scan timeline data with optional status filter"""
-        queryset = cls.objects.filter(domain__project=project)
+        queryset = cls.objects.filter(target__project=project)
 
         if status is not None:
             queryset = queryset.filter(scan_status=status)
@@ -526,11 +528,352 @@ class ScanHistory(models.Model):
         return results[::-1]
 
 
+# Domain-related models (tables startScan_*). Domain is a finding; link to scan via scan_history.
+class HistoricalIP(models.Model):
+    id = models.AutoField(primary_key=True)
+    ip = models.CharField(max_length=150)
+    location = models.CharField(max_length=500)
+    owner = models.CharField(max_length=500)
+    last_seen = models.CharField(max_length=500)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_historicalip"
+
+    def __str__(self):
+        return self.ip
+
+
+class RelatedDomain(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=250)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_relateddomain"
+
+    def __str__(self):
+        return self.name
+
+
+class Registrar(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=500, null=True, blank=True)
+    phone = models.CharField(max_length=150, null=True, blank=True)
+    email = models.CharField(max_length=350, null=True, blank=True)
+    url = models.CharField(max_length=1000, null=True, blank=True)
+    address = models.CharField(max_length=1000, null=True, blank=True)
+    country = models.CharField(max_length=100, null=True, blank=True)
+    fax = models.CharField(max_length=150, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_registrar"
+
+    def __str__(self):
+        return self.name
+
+
+class DomainRegistration(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=500, null=True, blank=True)
+    organization = models.CharField(max_length=500, null=True, blank=True)
+    contact = models.CharField(max_length=500, null=True, blank=True)
+    type = models.CharField(max_length=100, null=True, blank=True)
+    address = models.CharField(max_length=500, null=True, blank=True)
+    city = models.CharField(max_length=100, null=True, blank=True)
+    state = models.CharField(max_length=100, null=True, blank=True)
+    zip_code = models.CharField(max_length=100, null=True, blank=True)
+    country = models.CharField(max_length=100, null=True, blank=True)
+    email = models.CharField(max_length=500, null=True, blank=True)
+    phone = models.CharField(max_length=150, null=True, blank=True)
+    fax = models.CharField(max_length=150, null=True, blank=True)
+    id_str = models.CharField(max_length=500, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_domainregistration"
+
+    def __str__(self):
+        return self.name
+
+
+class WhoisStatus(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=500)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_whoisstatus"
+
+    def __str__(self):
+        return self.name
+
+
+class NameServer(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=500)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_nameserver"
+
+    def __str__(self):
+        return self.name
+
+
+class DNSRecord(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.TextField()
+    type = models.CharField(max_length=50)
+    extra_data = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_dnsrecord"
+
+    def __str__(self):
+        return self.name
+
+
+class DomainInfoStatusThrough(models.Model):
+    domaininfo = models.ForeignKey("DomainInfo", on_delete=models.CASCADE)
+    whoisstatus = models.ForeignKey(WhoisStatus, on_delete=models.CASCADE)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_domaininfo_status"
+
+
+class DomainInfoNameServersThrough(models.Model):
+    domaininfo = models.ForeignKey("DomainInfo", on_delete=models.CASCADE)
+    nameserver = models.ForeignKey(NameServer, on_delete=models.CASCADE)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_domaininfo_name_servers"
+
+
+class DomainInfoDnsRecordsThrough(models.Model):
+    domaininfo = models.ForeignKey("DomainInfo", on_delete=models.CASCADE)
+    dnsrecord = models.ForeignKey(DNSRecord, on_delete=models.CASCADE)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_domaininfo_dns_records"
+
+
+class DomainInfoRelatedDomainsThrough(models.Model):
+    domaininfo = models.ForeignKey("DomainInfo", on_delete=models.CASCADE)
+    relateddomain = models.ForeignKey(RelatedDomain, on_delete=models.CASCADE, related_name="+")
+
+    class Meta:
+        managed = False
+        db_table = "startScan_domaininfo_related_domains"
+
+
+class DomainInfoRelatedTldsThrough(models.Model):
+    domaininfo = models.ForeignKey("DomainInfo", on_delete=models.CASCADE)
+    relateddomain = models.ForeignKey(RelatedDomain, on_delete=models.CASCADE, related_name="+")
+
+    class Meta:
+        managed = False
+        db_table = "startScan_domaininfo_related_tlds"
+
+
+class DomainInfoSimilarDomainsThrough(models.Model):
+    domaininfo = models.ForeignKey("DomainInfo", on_delete=models.CASCADE)
+    relateddomain = models.ForeignKey(RelatedDomain, on_delete=models.CASCADE, related_name="+")
+
+    class Meta:
+        managed = False
+        db_table = "startScan_domaininfo_similar_domains"
+
+
+class DomainInfoHistoricalIpsThrough(models.Model):
+    domaininfo = models.ForeignKey("DomainInfo", on_delete=models.CASCADE)
+    historicalip = models.ForeignKey(HistoricalIP, on_delete=models.CASCADE)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_domaininfo_historical_ips"
+
+
+class DomainInfo(models.Model):
+    id = models.AutoField(primary_key=True)
+    dnssec = models.BooleanField(default=False)
+    created = models.DateTimeField(null=True, blank=True)
+    updated = models.DateTimeField(null=True, blank=True)
+    expires = models.DateTimeField(null=True, blank=True)
+    geolocation_iso = models.CharField(max_length=10, null=True, blank=True)
+    registrar = models.ForeignKey(Registrar, blank=True, on_delete=models.CASCADE, null=True)
+    registrant = models.ForeignKey(
+        DomainRegistration,
+        blank=True,
+        null=True,
+        on_delete=models.CASCADE,
+        related_name="registrant",
+    )
+    admin = models.ForeignKey(
+        DomainRegistration,
+        blank=True,
+        null=True,
+        on_delete=models.CASCADE,
+        related_name="admin",
+    )
+    tech = models.ForeignKey(
+        DomainRegistration,
+        blank=True,
+        null=True,
+        on_delete=models.CASCADE,
+        related_name="tech",
+    )
+    status = models.ManyToManyField(
+        WhoisStatus,
+        blank=True,
+        through=DomainInfoStatusThrough,
+        related_name="+",
+    )
+    name_servers = models.ManyToManyField(
+        NameServer,
+        blank=True,
+        through=DomainInfoNameServersThrough,
+        related_name="+",
+    )
+    dns_records = models.ManyToManyField(
+        DNSRecord,
+        blank=True,
+        through=DomainInfoDnsRecordsThrough,
+        related_name="+",
+    )
+    whois_server = models.CharField(max_length=150, null=True, blank=True)
+    related_domains = models.ManyToManyField(
+        RelatedDomain,
+        blank=True,
+        related_name="associated_domains",
+        through=DomainInfoRelatedDomainsThrough,
+    )
+    related_tlds = models.ManyToManyField(
+        RelatedDomain,
+        blank=True,
+        related_name="related_tlds",
+        through=DomainInfoRelatedTldsThrough,
+    )
+    similar_domains = models.ManyToManyField(
+        RelatedDomain,
+        blank=True,
+        related_name="similar_domains",
+        through=DomainInfoSimilarDomainsThrough,
+    )
+    historical_ips = models.ManyToManyField(
+        HistoricalIP,
+        blank=True,
+        related_name="similar_domains",
+        through=DomainInfoHistoricalIpsThrough,
+    )
+    extra_data = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_domaininfo"
+
+    def __str__(self):
+        return str(self.id)
+
+
+class Domain(models.Model):
+    """Domain is a finding; discovered in a scan. Linked to scan via scan_history (not target/project)."""
+
+    ORGANIZATIONS_REVERSE_RELATION = "domains"
+
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=300)
+    h1_team_handle = models.CharField(max_length=100, blank=True, null=True)
+    ip_address_cidr = models.CharField(max_length=100, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    insert_date = models.DateTimeField(null=True)
+    start_scan_date = models.DateTimeField(null=True)
+    request_headers = models.JSONField(null=True, blank=True)
+    domain_info = models.ForeignKey(DomainInfo, on_delete=models.CASCADE, null=True, blank=True)
+    scan_history = models.ForeignKey(
+        ScanHistory,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="discovered_domains",
+    )
+    custom_dns_servers = models.CharField(max_length=500, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = "startScan_domain"
+        unique_together = [["scan_history", "name"]]
+
+    def get_recent_scan_id(self):
+        if not self.scan_history_id:
+            return None
+        return self.scan_history_id
+
+    def get_dns_servers(self):
+        if self.custom_dns_servers:
+            return [dns.strip() for dns in self.custom_dns_servers.split(",") if dns.strip()]
+        return []
+
+    def set_dns_servers(self, dns_servers):
+        if isinstance(dns_servers, list):
+            self.custom_dns_servers = ",".join(dns_servers)
+        elif isinstance(dns_servers, str):
+            self.custom_dns_servers = dns_servers
+        else:
+            self.custom_dns_servers = None
+
+    def __str__(self):
+        return str(self.name)
+
+    @classmethod
+    def get_all_counts(cls, queryset):
+        return queryset.aggregate(total=Count("id"))
+
+    @classmethod
+    def get_project_counts(cls, project):
+        return cls.get_all_counts(cls.objects.filter(scan_history__target__project=project))
+
+    @classmethod
+    def get_project_data(cls, project):
+        queryset = cls.objects.filter(scan_history__target__project=project)
+        return {
+            "total_count": queryset.count(),
+            "recent_domains": queryset.order_by("-insert_date")[:10],
+        }
+
+    @staticmethod
+    def get_counts_by_date(queryset, date_field, since_date):
+        counts = (
+            queryset.filter(**{f"{date_field}__gte": since_date})
+            .annotate(date=TruncDay(date_field))
+            .values("date")
+            .annotate(count=Count("id"))
+            .order_by("date")
+        )
+        return {item["date"]: item["count"] for item in counts}
+
+    @classmethod
+    def get_project_timeline(cls, project, date_range):
+        raw_data = cls.get_counts_by_date(
+            cls.objects.filter(scan_history__target__project=project), "insert_date", date_range[0]
+        )
+        results = []
+        for date in date_range:
+            aware_date = date_to_aware_datetime(date)
+            results.append(raw_data.get(aware_date, 0))
+        return results[::-1]
+
+
 class Subdomain(models.Model):
     # TODO: Add endpoint property instead of replicating endpoint fields here
     id = models.AutoField(primary_key=True)
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
-    target_domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=1000)
     is_imported_subdomain = models.BooleanField(default=False)
     is_important = models.BooleanField(default=False, null=True, blank=True)
@@ -595,7 +938,7 @@ class Subdomain(models.Model):
     @property
     def get_vulnerabilities(self):
         vulns = Vulnerability.objects.filter(subdomain__name=self.name).prefetch_related(
-            "cve_ids", "cwe_ids", "tags", "subdomain", "endpoint", "target_domain", "scan_history"
+            "cve_ids", "cwe_ids", "tags", "subdomain", "endpoint", "domain", "scan_history"
         )
         if self.scan_history:
             vulns = vulns.filter(scan_history=self.scan_history)
@@ -606,7 +949,7 @@ class Subdomain(models.Model):
         vulns = (
             Vulnerability.objects.filter(subdomain__name=self.name)
             .exclude(severity=0)
-            .prefetch_related("cve_ids", "cwe_ids", "tags", "subdomain", "endpoint", "target_domain", "scan_history")
+            .prefetch_related("cve_ids", "cwe_ids", "tags", "subdomain", "endpoint", "domain", "scan_history")
         )
         if self.scan_history:
             vulns = vulns.filter(scan_history=self.scan_history)
@@ -798,7 +1141,7 @@ class Subdomain(models.Model):
         from django.db.models import Max
 
         latest_subdomain_ids = (
-            cls.objects.filter(target_domain__project=project)
+            cls.objects.filter(domain__scan_history__target__project=project)
             .values("name")
             .annotate(max_id=Max("id"))
             .values_list("max_id", flat=True)
@@ -823,7 +1166,7 @@ class Subdomain(models.Model):
     def get_project_timeline(cls, project, date_range):
         """Get subdomain timeline data for a specific project"""
         raw_data = cls.get_counts_by_date(
-            cls.objects.filter(scan_history__domain__project=project), "discovered_date", date_range[0]
+            cls.objects.filter(scan_history__target__project=project), "discovered_date", date_range[0]
         )
 
         results = []
@@ -1027,7 +1370,7 @@ class SubScan(models.Model):
     @classmethod
     def get_project_counts(cls, project):
         """Get subscan statistics for a specific project"""
-        return cls.get_all_counts(cls.objects.filter(scan_history__domain__project=project))
+        return cls.get_all_counts(cls.objects.filter(scan_history__target__project=project))
 
     @staticmethod
     def get_counts_by_date(queryset, date_field, since_date):
@@ -1045,7 +1388,7 @@ class SubScan(models.Model):
     @classmethod
     def get_project_timeline(cls, project, date_range, status=None):
         """Get subscan timeline data with optional status filter"""
-        queryset = cls.objects.filter(scan_history__domain__project=project)
+        queryset = cls.objects.filter(scan_history__target__project=project)
 
         if status is not None:
             queryset = queryset.filter(status=status)
@@ -1063,7 +1406,7 @@ class SubScan(models.Model):
 class EndPoint(models.Model):
     id = models.AutoField(primary_key=True)
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
-    target_domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
     source = models.CharField(max_length=200, null=True, blank=True)
     http_url = models.CharField(max_length=30000)
@@ -1118,7 +1461,7 @@ class EndPoint(models.Model):
         from django.db.models import Max
 
         latest_endpoint_ids = (
-            cls.objects.filter(scan_history__domain__project=project)
+            cls.objects.filter(scan_history__target__project=project)
             .values("http_url")
             .annotate(max_id=Max("id"))
             .values_list("max_id", flat=True)
@@ -1143,7 +1486,7 @@ class EndPoint(models.Model):
     def get_project_timeline(cls, project, date_range):
         """Get vulnerability timeline data for a specific project"""
         raw_data = cls.get_counts_by_date(
-            cls.objects.filter(scan_history__domain__project=project), "discovered_date", date_range[0]
+            cls.objects.filter(scan_history__target__project=project), "discovered_date", date_range[0]
         )
 
         results = []
@@ -1254,7 +1597,7 @@ class Vulnerability(models.Model):
     source = models.CharField(max_length=200, null=True, blank=True)
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
     endpoint = models.ForeignKey(EndPoint, on_delete=models.CASCADE, blank=True, null=True)
-    target_domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     template = models.CharField(max_length=100, null=True, blank=True)
     template_url = models.CharField(max_length=2500, null=True, blank=True)
     template_id = models.CharField(max_length=200, null=True, blank=True)
@@ -1318,9 +1661,9 @@ class Vulnerability(models.Model):
     @classmethod
     def get_project_data(cls, project):
         """Get vulnerability data for a specific project"""
-        queryset = cls.objects.filter(scan_history__domain__project=project).order_by("-discovered_date")[:50]
+        queryset = cls.objects.filter(scan_history__target__project=project).order_by("-discovered_date")[:50]
 
-        feed = queryset.select_related("subdomain", "endpoint", "target_domain", "scan_history").prefetch_related(
+        feed = queryset.select_related("subdomain", "endpoint", "domain", "scan_history").prefetch_related(
             "cve_ids", "cwe_ids", "tags"
         )
 
@@ -1348,7 +1691,7 @@ class Vulnerability(models.Model):
     def get_project_timeline(cls, project, date_range):
         """Get vulnerability timeline data for a specific project"""
         raw_data = cls.get_counts_by_date(
-            cls.objects.filter(scan_history__domain__project=project), "discovered_date", date_range[0]
+            cls.objects.filter(scan_history__target__project=project), "discovered_date", date_range[0]
         )
 
         results = []
@@ -1383,7 +1726,7 @@ class Vulnerability(models.Model):
             models.Index(fields=["scan_history_id", "cvss_score"], name="ss_vuln_scan_cvss_idx"),
             models.Index(fields=["scan_history_id", "severity"], name="ss_vuln_scan_severity_idx"),
             models.Index(fields=["scan_history_id", "name"], name="ss_vuln_scan_name_idx"),
-            models.Index(fields=["target_domain_id", "name"], name="ss_vuln_target_name_idx"),
+            models.Index(fields=["domain_id", "name"], name="ss_vuln_target_name_idx"),
             models.Index(fields=["subdomain_id", "severity"], name="ss_vuln_subdomain_severity_idx"),
         ]
 
@@ -1598,7 +1941,7 @@ class Technology(models.Model):
     @classmethod
     def get_project_data(cls, project):
         """Get technology data for a specific project"""
-        subdomain_ids = Subdomain.objects.filter(scan_history__domain__project=project).values_list("id", flat=True)
+        subdomain_ids = Subdomain.objects.filter(scan_history__target__project=project).values_list("id", flat=True)
 
         return {
             "most_used": cls.objects.filter(technologies__in=subdomain_ids)
@@ -1629,7 +1972,7 @@ class CountryISO(models.Model):
     @classmethod
     def get_project_data(cls, project):
         """Get country data for a specific project - OPTIMIZED"""
-        subdomains = Subdomain.objects.filter(scan_history__domain__project=project).values_list("id", flat=True)
+        subdomains = Subdomain.objects.filter(scan_history__target__project=project).values_list("id", flat=True)
 
         ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct()
 
@@ -1662,7 +2005,7 @@ class IpAddress(models.Model):
     @classmethod
     def get_project_data(cls, project):
         """Get IP address data for a specific project"""
-        subdomains = Subdomain.objects.filter(scan_history__domain__project=project).values_list("id", flat=True)
+        subdomains = Subdomain.objects.filter(scan_history__target__project=project).values_list("id", flat=True)
 
         base_query = cls.objects.filter(ip_addresses__in=subdomains).distinct()
 
@@ -1704,7 +2047,7 @@ class Port(models.Model):
     @classmethod
     def get_project_data(cls, project):
         """Get port data for a specific project"""
-        subdomains = Subdomain.objects.filter(scan_history__domain__project=project).values_list("id", flat=True)
+        subdomains = Subdomain.objects.filter(scan_history__target__project=project).values_list("id", flat=True)
 
         ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct()
 
@@ -1754,7 +2097,7 @@ class DirectoryScan(models.Model):
 class MetaFinderDocument(models.Model):
     id = models.AutoField(primary_key=True)
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
-    target_domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
     doc_name = models.CharField(max_length=1000, null=True, blank=True)
     url = models.CharField(max_length=10000, null=True, blank=True)
@@ -1784,7 +2127,7 @@ class Employee(models.Model):
     url = models.CharField(max_length=10000, null=True, blank=True)
     # Associations
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
-    target_domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
     endpoint = models.ForeignKey(EndPoint, on_delete=models.CASCADE, null=True, blank=True)
     discovered_date = models.DateTimeField(null=True, blank=True)
@@ -1810,7 +2153,7 @@ class Exploit(models.Model):
     # Optional links to subdomain/endpoint for additional context
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
     endpoint = models.ForeignKey(EndPoint, on_delete=models.CASCADE, null=True, blank=True)
-    target_domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
     # Additional data
     discovered_date = models.DateTimeField(null=True, blank=True)
@@ -2003,7 +2346,7 @@ class ScanSchedule(models.Model):
     ]
 
     name = models.CharField(max_length=255)
-    domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
+    target = models.ForeignKey("targetApp.Target", on_delete=models.CASCADE)
     scan_type = models.ForeignKey(EngineType, on_delete=models.CASCADE, null=True, blank=True)
     secator_kwargs = models.JSONField(null=True, blank=True)
     initiated_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="scheduled_scans")

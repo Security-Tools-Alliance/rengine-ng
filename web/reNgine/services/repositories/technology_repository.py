@@ -26,7 +26,7 @@ class TechnologyRepository:
         self,
         item: Dict[str, Any],
         scan_history_id: int,
-        domain_id: int,
+        target_id: int,
         rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[Technology]:
         """
@@ -35,14 +35,14 @@ class TechnologyRepository:
         Args:
             item: Secator tag item (represents technology)
             scan_history_id: ID of the scan history
-            domain_id: ID of the domain
+            target_id: ID of the target (reNgine-ng scan context)
             rengine_context: Optional context (unused)
 
         Returns:
             Technology: Saved technology object or None
         """
         try:
-            return self._process_secator_technology_item(item, scan_history_id, domain_id)
+            return self._process_secator_technology_item(item, scan_history_id, target_id)
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_TECH_REPO,
@@ -69,7 +69,7 @@ class TechnologyRepository:
             return None
 
     def _process_secator_technology_item(
-        self, item: Dict[str, Any], scan_history_id: int, domain_id: int
+        self, item: Dict[str, Any], scan_history_id: int, target_id: int
     ) -> Optional[Technology]:
         tech_name = (item.get("name") or "").strip()
         # Secator Tag type uses 'match' field for the target where technology was found
