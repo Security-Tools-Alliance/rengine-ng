@@ -1,3 +1,4 @@
+import shlex
 import validators
 from pathlib import Path
 
@@ -82,25 +83,26 @@ def subdomain_discovery(
         cmd = None
         logger.info(f'Scanning subdomains for {host} with {tool}')
         proxy = get_random_proxy()
+        quoted_host = shlex.quote(host)
         if tool in default_subdomain_tools:
             if tool == 'amass-passive':
                 use_amass_config = config.get(USE_AMASS_CONFIG, False)
-                cmd = f'amass enum -passive -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass.txt')
+                cmd = f'amass enum -passive -d {quoted_host} -o ' + str(Path(self.results_dir) / 'subdomains_amass.txt')
                 cmd += (' -config ' + str(Path.home() / '.config' / 'amass' / 'config.ini')) if use_amass_config else ''
 
             elif tool == 'amass-active':
                 use_amass_config = config.get(USE_AMASS_CONFIG, False)
                 amass_wordlist_name = config.get(AMASS_WORDLIST, AMASS_DEFAULT_WORDLIST_NAME)
                 wordlist_path = str(Path(AMASS_DEFAULT_WORDLIST_PATH) / f'{amass_wordlist_name}.txt')
-                cmd = f'amass enum -active -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass_active.txt')
+                cmd = f'amass enum -active -d {quoted_host} -o ' + str(Path(self.results_dir) / 'subdomains_amass_active.txt')
                 cmd += (' -config ' + str(Path.home() / '.config' / 'amass' / 'config.ini')) if use_amass_config else ''
                 cmd += f' -brute -w {wordlist_path}'
 
             elif tool == 'sublist3r':
-                cmd = f'sublist3r -d {host} -t {threads} -o ' + str(Path(self.results_dir) / 'subdomains_sublister.txt')
+                cmd = f'sublist3r -d {quoted_host} -t {threads} -o ' + str(Path(self.results_dir) / 'subdomains_sublister.txt')
 
             elif tool == 'subfinder':
-                cmd = f'subfinder -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_subfinder.txt')
+                cmd = f'subfinder -d {quoted_host} -o ' + str(Path(self.results_dir) / 'subdomains_subfinder.txt')
                 use_subfinder_config = config.get(USE_SUBFINDER_CONFIG, False)
                 cmd += (' -config ' + str(Path.home() / '.config' / 'subfinder' / 'config.yaml')) if use_subfinder_config else ''
                 cmd += f' -proxy {proxy}' if proxy else ''
@@ -109,20 +111,20 @@ def subdomain_discovery(
                 cmd += ' -silent'
 
             elif tool == 'oneforall':
-                cmd = f'oneforall --target {host} run'
+                cmd = f'oneforall --target {quoted_host} run'
                 cmd_extract = 'cut -d\',\' -f6 ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results' / f'{host}.csv') + ' | tail -n +2 > ' + str(Path(self.results_dir) / 'subdomains_oneforall.txt')
                 cmd_rm = 'rm -rf ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results'/ f'{host}.csv')
                 cmd += f' && {cmd_extract} && {cmd_rm}'
 
             elif tool == 'ctfr':
                 results_file = str(Path(self.results_dir) / 'subdomains_ctfr.txt')
-                cmd = f'ctfr -d {host} -o {results_file}'
+                cmd = f'ctfr -d {quoted_host} -o {results_file}'
                 cmd_extract = f"cat {results_file} | sed 's/\*.//g' | tail -n +12 | uniq | sort > {results_file}"
                 cmd += f' && {cmd_extract}'
 
             elif tool == 'tlsx':
                 results_file = str(Path(self.results_dir) / 'subdomains_tlsx.txt')
-                cmd = f'tlsx -san -cn -silent -ro -host {host}'
+                cmd = f'tlsx -san -cn -silent -ro -host {quoted_host}'
                 cmd += f" | sed -n '/^\([a-zA-Z0-9]\([-a-zA-Z0-9]*[a-zA-Z0-9]\)\?\.\)\+{host}$/p' | uniq | sort"
                 cmd += f' > {results_file}'
 
@@ -148,8 +150,7 @@ def subdomain_discovery(
                 logger.error(f'Missing {{OUTPUT}} placeholders in {tool} configuration. Skipping.')
                 continue
 
-
-            cmd = cmd.replace('{TARGET}', host)
+            cmd = cmd.replace('{TARGET}', quoted_host)
             cmd = cmd.replace('{OUTPUT}', str(Path(self.results_dir) / f'subdomains_{tool}.txt'))
             cmd = cmd.replace('{PATH}', custom_tool.github_clone_path) if '{PATH}' in cmd else cmd
         else:

@@ -268,6 +268,7 @@ def get_gf_patterns(request):
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def rengine_settings(request):
+    from django.conf import settings as django_settings
     total, used, _ = shutil.disk_usage("/")
     total_gb = total // (2**30)
     used_gb = used // (2**30)
@@ -279,7 +280,17 @@ def rengine_settings(request):
         'consumed_percent': int(100 * float(used) / float(total)),
         'settings_nav_active': 'active',
         'rengine_settings_li': 'active',
-        'settings_ul_show': 'show'
+        'settings_ul_show': 'show',
+        # Security configuration status for dashboard display
+        'sec_allowed_hosts': django_settings.ALLOWED_HOSTS,
+        'sec_hsts_seconds': getattr(django_settings, 'SECURE_HSTS_SECONDS', 0),
+        'sec_hsts_subdomains': getattr(django_settings, 'SECURE_HSTS_INCLUDE_SUBDOMAINS', False),
+        'sec_hsts_preload': getattr(django_settings, 'SECURE_HSTS_PRELOAD', False),
+        'sec_session_cookie_secure': getattr(django_settings, 'SESSION_COOKIE_SECURE', False),
+        'sec_csrf_cookie_secure': getattr(django_settings, 'CSRF_COOKIE_SECURE', False),
+        'sec_content_type_nosniff': getattr(django_settings, 'SECURE_CONTENT_TYPE_NOSNIFF', False),
+        'sec_swagger_public': False,  # Locked to IsAuthenticated — see urls.py
+        'sec_debug': django_settings.DEBUG,
     }
 
     return render(request, 'scanEngine/settings/rengine.html', context)

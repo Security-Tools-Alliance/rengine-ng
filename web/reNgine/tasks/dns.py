@@ -164,7 +164,7 @@ def query_whois(ip_domain, force_reload_whois=False):
             tlsx_command = f'tlsx -san -cn -silent -ro -host {ip_domain} -o {output_path}'
             run_command(
                 tlsx_command,
-                shell=True,
+                shell=False,
             )
             tlsx_output = []
             with open(output_path) as f:

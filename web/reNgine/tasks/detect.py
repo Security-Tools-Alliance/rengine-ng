@@ -98,7 +98,7 @@ def run_wafw00f(url):
         wafw00f_command = f'wafw00f {url}'
         return_code, output = run_command(
             cmd=wafw00f_command,
-            shell=True,
+            shell=False,
             remove_ansi_sequence=True
         )
 

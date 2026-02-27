@@ -22,7 +22,135 @@ reNgine-ng Settings
   <div class="col-12">
     <div class="card">
       <div class="card-body">
-        <h4 class="header-title text-danger">Danger Zone</h4>
+        <h4 class="header-title">Security Configuration Status</h4>
+        <p class="text-muted">Read-only view of active security settings. To change values, update the corresponding environment variables and restart the service.</p>
+        <div class="table-responsive">
+          <table class="table table-bordered table-sm">
+            <thead>
+              <tr>
+                <th>Setting</th>
+                <th>Value</th>
+                <th>Status</th>
+                <th>Env Variable</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>ALLOWED_HOSTS</code></td>
+                <td><code>{{ sec_allowed_hosts|join:", " }}</code></td>
+                <td>
+                  {% if '*' in sec_allowed_hosts %}
+                    <span class="badge bg-danger">Wildcard — set ALLOWED_HOSTS</span>
+                  {% else %}
+                    <span class="badge bg-success">Restricted</span>
+                  {% endif %}
+                </td>
+                <td><code>ALLOWED_HOSTS</code></td>
+              </tr>
+              <tr>
+                <td>Debug Mode</td>
+                <td><code>{{ sec_debug }}</code></td>
+                <td>
+                  {% if sec_debug %}
+                    <span class="badge bg-danger">Enabled — disable in production</span>
+                  {% else %}
+                    <span class="badge bg-success">Disabled</span>
+                  {% endif %}
+                </td>
+                <td><code>UI_DEBUG</code></td>
+              </tr>
+              <tr>
+                <td>HSTS Duration</td>
+                <td><code>{{ sec_hsts_seconds }}s</code></td>
+                <td>
+                  {% if sec_hsts_seconds >= 31536000 %}
+                    <span class="badge bg-success">1 year</span>
+                  {% elif sec_hsts_seconds > 0 %}
+                    <span class="badge bg-warning">Set but short</span>
+                  {% else %}
+                    <span class="badge bg-danger">Disabled</span>
+                  {% endif %}
+                </td>
+                <td><code>SECURE_HSTS_SECONDS</code></td>
+              </tr>
+              <tr>
+                <td>HSTS Include Subdomains</td>
+                <td><code>{{ sec_hsts_subdomains }}</code></td>
+                <td>
+                  {% if sec_hsts_subdomains %}
+                    <span class="badge bg-success">Enabled</span>
+                  {% else %}
+                    <span class="badge bg-warning">Disabled</span>
+                  {% endif %}
+                </td>
+                <td><em>settings.py</em></td>
+              </tr>
+              <tr>
+                <td>HSTS Preload</td>
+                <td><code>{{ sec_hsts_preload }}</code></td>
+                <td>
+                  {% if sec_hsts_preload %}
+                    <span class="badge bg-success">Enabled</span>
+                  {% else %}
+                    <span class="badge bg-warning">Disabled</span>
+                  {% endif %}
+                </td>
+                <td><em>settings.py</em></td>
+              </tr>
+              <tr>
+                <td>Secure Session Cookie</td>
+                <td><code>{{ sec_session_cookie_secure }}</code></td>
+                <td>
+                  {% if sec_session_cookie_secure %}
+                    <span class="badge bg-success">Enabled</span>
+                  {% else %}
+                    <span class="badge bg-warning">Disabled (expected in dev)</span>
+                  {% endif %}
+                </td>
+                <td><em>Follows DEBUG flag</em></td>
+              </tr>
+              <tr>
+                <td>Secure CSRF Cookie</td>
+                <td><code>{{ sec_csrf_cookie_secure }}</code></td>
+                <td>
+                  {% if sec_csrf_cookie_secure %}
+                    <span class="badge bg-success">Enabled</span>
+                  {% else %}
+                    <span class="badge bg-warning">Disabled (expected in dev)</span>
+                  {% endif %}
+                </td>
+                <td><em>Follows DEBUG flag</em></td>
+              </tr>
+              <tr>
+                <td>Content-Type Nosniff</td>
+                <td><code>{{ sec_content_type_nosniff }}</code></td>
+                <td>
+                  {% if sec_content_type_nosniff %}
+                    <span class="badge bg-success">Enabled</span>
+                  {% else %}
+                    <span class="badge bg-danger">Disabled</span>
+                  {% endif %}
+                </td>
+                <td><em>settings.py</em></td>
+              </tr>
+              <tr>
+                <td>Swagger / API Docs Auth</td>
+                <td><code>IsAuthenticated</code></td>
+                <td><span class="badge bg-success">Restricted</span></td>
+                <td><em>urls.py</em></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <h4 class="header-title">Disk Usage</h4>
         <div id="chart">
         </div>
         <div class="text-center">

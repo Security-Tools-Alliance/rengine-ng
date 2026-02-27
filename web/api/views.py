@@ -134,6 +134,7 @@ logger = logging.getLogger(__name__)
 
 
 class OllamaManager(APIView):
+    permission_classes = [IsAuthenticated]
     def clean_channel_name(self, name):
         """Clean channel name to only contain valid characters"""
         return re.sub(r'[^a-zA-Z0-9\-\.]', '-', name)
@@ -274,6 +275,7 @@ class OllamaManager(APIView):
             }, status=500)
 
 class OllamaDetailManager(APIView):
+    permission_classes = [IsAuthenticated]
     def delete(self, request, model_name):
         if not model_name:
             return Response({'status': False, 'message': 'Model name is required'}, status=400)
@@ -334,6 +336,7 @@ class OllamaDetailManager(APIView):
             }, status=500)
 
 class AvailableOllamaModels(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         try:
             cache_key = 'ollama_available_models'
@@ -392,6 +395,7 @@ class AvailableOllamaModels(APIView):
             }, status=500)
 
 class LLMAttackSuggestion(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = request
         subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
@@ -502,6 +506,7 @@ class LLMAttackSuggestion(APIView):
             }, status=500)
 
 class LLMVulnerabilityReportGenerator(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         vulnerability_id = safe_int_cast(req.query_params.get('id'))
@@ -608,6 +613,7 @@ class LLMVulnerabilityReportGenerator(APIView):
 
 
 class CreateProjectApi(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         project_name = request.query_params.get('name')
         slug = slugify(project_name)
@@ -625,6 +631,7 @@ class CreateProjectApi(APIView):
             return Response({'status': False, 'message': 'Failed to create project.'}, status=HTTP_400_BAD_REQUEST)
 
 class QueryInterestingSubdomains(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -684,6 +691,7 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
 
 
 class WafDetector(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         url = req.query_params.get('url')
@@ -717,6 +725,7 @@ class WafDetector(APIView):
         return Response(response)
 
 class SearchHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
 
@@ -733,6 +742,7 @@ class SearchHistoryView(APIView):
 
 
 class UniversalSearch(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         query = req.query_params.get('query')
@@ -785,6 +795,7 @@ class UniversalSearch(APIView):
 
 
 class FetchMostCommonVulnerability(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         data = request.data
         response = {'status': False}
@@ -844,6 +855,7 @@ class FetchMostCommonVulnerability(APIView):
         return Response(response)
 
 class FetchMostVulnerable(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         req = self.request
         data = req.data
@@ -974,6 +986,7 @@ class FetchMostVulnerable(APIView):
 
 
 class CVEDetails(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
 
@@ -981,6 +994,9 @@ class CVEDetails(APIView):
 
         if not cve_id:
             return Response({'status': False, 'message': 'CVE ID not provided'})
+
+        if not re.match(r'^CVE-\d{4}-\d+$', cve_id, re.IGNORECASE):
+            return Response({'status': False, 'message': 'Invalid CVE ID format'})
 
         response = requests.get('https://cve.circl.lu/api/cve/' + cve_id)
 
@@ -994,6 +1010,7 @@ class CVEDetails(APIView):
 
 
 class AddReconNote(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         req = self.request
         data = req.data
@@ -1038,6 +1055,7 @@ class AddReconNote(APIView):
             return Response({"status": False, "error": "An error occurred."}, status=400)
 
 class ToggleSubdomainImportantStatus(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         req = self.request
         data = req.data
@@ -1058,6 +1076,7 @@ class ToggleSubdomainImportantStatus(APIView):
 
 
 class AddTarget(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         req = self.request
         data = req.data
@@ -1109,6 +1128,7 @@ class AddTarget(APIView):
 
 
 class FetchSubscanResults(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         # data = req.data
@@ -1155,6 +1175,7 @@ class FetchSubscanResults(APIView):
 
 
 class ListSubScans(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         req = self.request
         data = req.data
@@ -1202,6 +1223,7 @@ class ListSubScans(APIView):
 
 
 class DeleteMultipleRows(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         req = self.request
         data = req.data
@@ -1217,6 +1239,7 @@ class DeleteMultipleRows(APIView):
             return Response({'status': False, 'message': logger.debug(e)}, status=500)
 
 class StopScan(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         req = self.request
         data = req.data
@@ -1282,6 +1305,7 @@ class StopScan(APIView):
 
 
 class InitiateSubTask(APIView):
+    permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
 
     def post(self, request):
@@ -1309,6 +1333,7 @@ class InitiateSubTask(APIView):
 
 
 class DeleteSubdomain(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         subdomain_ids = get_data_from_post_request(request, 'subdomain_ids')
         try:
@@ -1321,6 +1346,7 @@ class DeleteSubdomain(APIView):
             return Response({'status': False, 'message': logger.debug(e)}, status=500)
 
 class DeleteVulnerability(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         vulnerability_ids = get_data_from_post_request(request, 'vulnerability_ids')
 
@@ -1338,6 +1364,7 @@ class DeleteVulnerability(APIView):
             return Response({'status': False, 'message': 'Invalid vulnerability ID provided'}, status=400)
 
 class ListInterestingKeywords(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         keywords = get_lookup_keywords()
@@ -1345,6 +1372,7 @@ class ListInterestingKeywords(APIView):
 
 
 class RengineUpdateCheck(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         github_api = \
@@ -1386,6 +1414,7 @@ class RengineUpdateCheck(APIView):
 
 
 class UninstallTool(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         tool_id = safe_int_cast(req.query_params.get('tool_id'))
@@ -1424,6 +1453,7 @@ class UninstallTool(APIView):
 
 
 class UpdateTool(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         tool_id = safe_int_cast(req.query_params.get('tool_id'))
@@ -1452,6 +1482,7 @@ class UpdateTool(APIView):
 
 
 class GetExternalToolCurrentVersion(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         # toolname is also the command
@@ -1497,6 +1528,7 @@ class GetExternalToolCurrentVersion(APIView):
 
 
 class GithubToolCheckGetLatestRelease(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
 
@@ -1541,6 +1573,7 @@ class GithubToolCheckGetLatestRelease(APIView):
 
 
 class ScanStatus(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         slug = self.request.GET.get('project', None)
@@ -1598,6 +1631,7 @@ class ScanStatus(APIView):
 
 
 class Whois(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         ip_domain = req.query_params.get('ip_domain')
@@ -1612,6 +1646,7 @@ class Whois(APIView):
 
 
 class ReverseWhois(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         lookup_keyword = req.query_params.get('lookup_keyword')
@@ -1621,6 +1656,7 @@ class ReverseWhois(APIView):
 
 
 class DomainIPHistory(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         domain = req.query_params.get('domain')
@@ -1630,6 +1666,7 @@ class DomainIPHistory(APIView):
 
 
 class CMSDetector(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         url = request.query_params.get('url')
         if not url:
@@ -1648,6 +1685,7 @@ class CMSDetector(APIView):
             return Response({'status': False, 'message': 'An unexpected error occurred.'}, status=500)
 
 class IPToDomain(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         ip_address = req.query_params.get('ip_address')
@@ -1688,6 +1726,7 @@ class IPToDomain(APIView):
 
 
 class VulnerabilityReport(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         req = self.request
         vulnerability_id = safe_int_cast(req.query_params.get('vulnerability_id'))
@@ -1695,6 +1734,7 @@ class VulnerabilityReport(APIView):
 
 
 class GetFileContents(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         name = req.query_params.get('name')
@@ -1703,9 +1743,9 @@ class GetFileContents(APIView):
         response['status'] = False
 
         if 'nuclei_config' in req.query_params:
-            path = str(Path.home() / ".config" / "nuclei" / "config.yaml")
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
+            path = Path.home() / ".config" / "nuclei" / "config.yaml"
+            if not path.exists():
+                path.touch()
                 response['message'] = 'File Created!'
             with open(path, "r") as f:
                 response['status'] = True
@@ -1713,9 +1753,9 @@ class GetFileContents(APIView):
             return Response(response)
 
         if 'subfinder_config' in req.query_params:
-            path = str(Path.home() / ".config" / "subfinder" / "config.yaml")
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
+            path = Path.home() / ".config" / "subfinder" / "config.yaml"
+            if not path.exists():
+                path.touch()
                 response['message'] = 'File Created!'
             with open(path, "r") as f:
                 response['status'] = True
@@ -1723,9 +1763,9 @@ class GetFileContents(APIView):
             return Response(response)
 
         if 'naabu_config' in req.query_params:
-            path = str(Path.home() / ".config" / "naabu" / "config.yaml")
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
+            path = Path.home() / ".config" / "naabu" / "config.yaml"
+            if not path.exists():
+                path.touch()
                 response['message'] = 'File Created!'
             with open(path, "r") as f:
                 response['status'] = True
@@ -1733,9 +1773,9 @@ class GetFileContents(APIView):
             return Response(response)
 
         if 'theharvester_config' in req.query_params:
-            path = str(Path.home() / ".config" / 'theHarvester' / 'api-keys.yaml')
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
+            path = Path.home() / ".config" / 'theHarvester' / 'api-keys.yaml'
+            if not path.exists():
+                path.touch()
                 response['message'] = 'File Created!'
             with open(path, "r") as f:
                 response['status'] = True
@@ -1743,9 +1783,9 @@ class GetFileContents(APIView):
             return Response(response)
 
         if 'amass_config' in req.query_params:
-            path = str(Path.home() / ".config" / "amass" / "config.ini")
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
+            path = Path.home() / ".config" / "amass" / "config.ini"
+            if not path.exists():
+                path.touch()
                 response['message'] = 'File Created!'
             with open(path, "r") as f:
                 response['status'] = True
@@ -1770,7 +1810,7 @@ class GetFileContents(APIView):
             safe_dir = str(Path.home() / 'nuclei-templates')
             path = str(Path.home() / 'nuclei-templates' / f'{name}')
             if is_safe_path(safe_dir, path) and os.path.exists(path):
-                with open(path.format(name), "r") as f:
+                with open(path, "r") as f:
                     content = f.read()
                 response['status'] = True
                 response['content'] = content
@@ -1780,9 +1820,9 @@ class GetFileContents(APIView):
             return Response(response)
 
         if 'gau_config' in req.query_params:
-            path = str(Path.home() / ".config" / 'gau' / 'config.toml')
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
+            path = Path.home() / ".config" / 'gau' / 'config.toml'
+            if not path.exists():
+                path.touch()
                 response['message'] = 'File Created!'
             with open(path, "r") as f:
                 response['status'] = True
@@ -1793,6 +1833,7 @@ class GetFileContents(APIView):
         return Response(response)
 
 class GfList(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         try:
             task = run_gf_list.delay()
@@ -1807,6 +1848,7 @@ class GfList(APIView):
             return Response({'error': 'An unexpected error occurred. Please try again later.'}, status=500)
 
 class ListTodoNotes(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         notes = TodoNote.objects.all().order_by('-id')
@@ -1840,6 +1882,7 @@ class ListTodoNotes(APIView):
 
 
 class ListScanHistory(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_history = ScanHistory.objects.all().order_by('-start_scan_date')
@@ -1851,6 +1894,7 @@ class ListScanHistory(APIView):
 
 
 class ListEngines(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         if engine_id := request.GET.get('engine_id'):
             engines = EngineType.objects.filter(id=engine_id)
@@ -1862,6 +1906,7 @@ class ListEngines(APIView):
 
 
 class ListOrganizations(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         organizations = Organization.objects.all()
         organization_serializer = OrganizationSerializer(organizations, many=True)
@@ -1869,6 +1914,7 @@ class ListOrganizations(APIView):
 
 
 class ListTargetsInOrganization(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         organization_id = safe_int_cast(req.query_params.get('organization_id'))
@@ -1880,6 +1926,7 @@ class ListTargetsInOrganization(APIView):
 
 
 class ListTargetsWithoutOrganization(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         targets = Domain.objects.exclude(domains__in=Organization.objects.all())
@@ -1888,6 +1935,7 @@ class ListTargetsWithoutOrganization(APIView):
 
 
 class VisualiseData(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         if scan_id := safe_int_cast(req.query_params.get('scan_id')):
@@ -1931,6 +1979,7 @@ class VisualiseData(APIView):
         return processed_data
 
 class ListTechnology(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -1959,6 +2008,7 @@ class ListTechnology(APIView):
 
 
 class ListDorkTypes(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -1977,6 +2027,7 @@ class ListDorkTypes(APIView):
 
 
 class ListEmails(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -1988,6 +2039,7 @@ class ListEmails(APIView):
 
 
 class ListDorks(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -2011,6 +2063,7 @@ class ListDorks(APIView):
 
 
 class ListEmployees(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -2022,6 +2075,7 @@ class ListEmployees(APIView):
 
 
 class ListPorts(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -2061,6 +2115,7 @@ class ListPorts(APIView):
 
 
 class ListSubdomains(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -2130,6 +2185,7 @@ class ListSubdomains(APIView):
 
 
 class ListOsintUsers(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -2140,6 +2196,7 @@ class ListOsintUsers(APIView):
 
 
 class ListMetadata(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -2150,6 +2207,7 @@ class ListMetadata(APIView):
 
 
 class ListIPs(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
@@ -2846,6 +2904,7 @@ class ListScanLogsViewSet(viewsets.ModelViewSet):
 
 
 class ListEndpoints(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
 
@@ -3482,6 +3541,7 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
         return qs
 
 class GetIpDetails(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         req = self.request
         ip_address = req.query_params.get('ip_address')
@@ -3520,6 +3580,7 @@ class GetIpDetails(APIView):
         return Response(serializer.data)
 
 class UncommonWebPortsView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         from reNgine.definitions import UNCOMMON_WEB_PORTS, COMMON_WEB_PORTS
         return Response({
@@ -3528,6 +3589,7 @@ class UncommonWebPortsView(APIView):
         })
 
 class LLMModelsManager(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         """Get all available LLM models (GPT and Ollama) and currently selected model"""
         try:
@@ -3628,6 +3690,7 @@ def websocket_status(request):
         }, status=500)
 
 class FetchScreenshots(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         """Get screenshots from endpoints for a specific scan or target"""
         req = self.request

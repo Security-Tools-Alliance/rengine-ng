@@ -52,7 +52,9 @@ DEFAULT_THREADS = env.int('DEFAULT_THREADS', default=30)
 DEFAULT_GET_LLM_REPORT = env.bool('DEFAULT_GET_LLM_REPORT', default=True)
 
 # Globals
-ALLOWED_HOSTS = ['*']
+# Restrict to the configured domain. Set ALLOWED_HOSTS env var to a
+# comma-separated list to override (e.g. "example.com,www.example.com").
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[DOMAIN_NAME.split(':')[0]])
 SECRET_KEY = first_run(SECRET_FILE, BASE_DIR)
 
 # Databases
@@ -129,7 +131,6 @@ ROOT_URLCONF = 'reNgine.urls'
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
         'rest_framework_datatables.renderers.DatatablesRenderer',
     ),
     'DEFAULT_FILTER_BACKENDS': (
@@ -139,8 +140,21 @@ REST_FRAMEWORK = {
         'rest_framework_datatables.pagination.DatatablesPageNumberPagination'
     ),
     'PAGE_SIZE': 500,
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
 }
 WSGI_APPLICATION = 'reNgine.wsgi.application'
+
+# Security settings — only meaningful when served behind the TLS proxy.
+# These are no-ops when DEBUG=True so local dev is unaffected.
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=31536000)  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
 
 # Password validation
 # https://docs.djangoproject.com/en/2.2/ref/settings/#auth-password-validators
@@ -385,5 +399,5 @@ CHANNEL_LAYERS = {
     },
 }
 
-# WebSocket settings
-WEBSOCKET_ACCEPT_ALL = True  # For development, change in production
+# WebSocket settings — only allow all origins in debug mode.
+WEBSOCKET_ACCEPT_ALL = DEBUG

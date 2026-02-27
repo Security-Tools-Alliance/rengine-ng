@@ -1,5 +1,6 @@
 import os
 import re
+import shlex
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -132,7 +133,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
         # Log the generated regex for the current URL
         logger.debug(f'Generated regex for domain {base_domain}: {host_regex}')
 
-        cat_input = f'echo "{url}"'
+        cat_input = f'echo {shlex.quote(url)}'
 
         # Generate commands for each tool for the current URL
         for tool in tools:  # Only use tools specified in the config
@@ -269,7 +270,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
         logger.warning(f'Running gf on pattern "{gf_pattern}"')
         gf_output_file = str(Path(self.results_dir) / f'gf_patterns_{gf_pattern}.txt')
         host_regex = f"'https?://{re.escape(self.domain.name)}(:[0-9]+)?(/.*)?$'"
-        cmd = f'cat {self.output_path} | gf {gf_pattern} | grep -Eo {host_regex} >> {gf_output_file}'
+        cmd = f'cat {self.output_path} | gf {shlex.quote(gf_pattern)} | grep -Eo {host_regex} >> {gf_output_file}'
         run_command(
             cmd,
             shell=True,
@@ -393,7 +394,7 @@ def run_gf_list():
         # Run GF list command
         return_code, output = run_command(
             cmd=gf_command,
-            shell=True,
+            shell=False,
             remove_ansi_sequence=True
         )
         

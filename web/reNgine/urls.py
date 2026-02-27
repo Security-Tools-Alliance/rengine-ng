@@ -16,8 +16,8 @@ schema_view = get_schema_view(
       description="reNgine: An Automated reconnaissance framework.",
       contact=openapi.Contact(email="yogesh.ojha11@gmail.com"),
    ),
-   public=True,
-   permission_classes=[permissions.AllowAny],
+   public=False,
+   permission_classes=[permissions.IsAuthenticated],
 )
 
 urlpatterns = [
