@@ -69,7 +69,12 @@
                 </div>
 
                 <div class="text-center mt-4">
-                  <a href="{% url 'logout' %}" class="text-muted"><i class="mdi mdi-logout me-1"></i> Logout</a>
+                  <form method="post" action="{% url 'logout' %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-link text-muted p-0" style="text-decoration: none;">
+                      <i class="mdi mdi-logout me-1"></i> Logout
+                    </button>
+                  </form>
                 </div>
               </div>
             </div>
