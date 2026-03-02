@@ -266,8 +266,22 @@ class OAuthRedirectTests(TestCase):
         url = self.adapter.get_login_redirect_url(request)
         self.assertEqual(url, reverse(expected_view_name))
 
+    def test_oauth_user_first_login_redirects_to_welcome(self):
+        """OAuth user on very first login (last_login is None) redirects to welcome page."""
+        # New user, last_login is None by default
+        request = self._build_request(self.user)
+
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(redirect_url, reverse("oauth_welcome"))
+        self.assertTrue(has_role(self.user, "auditor"))
+
     def test_oauth_user_without_projects_redirects_to_list(self):
-        """OAuth user without any projects redirects to projects list."""
+        """OAuth user without any projects redirects to projects list (after first login)."""
+        # Simulate a returning user (last_login is set after first login)
+        self.user.last_login = timezone.now()
+        self.user.save()
+
         request = self._build_request(self.user)
 
         redirect_url = self.adapter.get_login_redirect_url(request)
@@ -289,7 +303,7 @@ class OAuthRedirectTests(TestCase):
         self.assertEqual(redirect_url, reverse("dashboardIndex", kwargs={"slug": project.slug}))
 
     def test_non_oauth_user_with_projects_redirects_to_dashboard(self):
-        """Non-OAuth user with existing projects redirects to first project dashboard."""
+        """Non-OAuth user assigned to a project redirects to that project's dashboard."""
         user = get_user_model().objects.create_user(
             username="normaluser",
             password="password123",
@@ -297,6 +311,7 @@ class OAuthRedirectTests(TestCase):
         project = Project.objects.create(
             name="First project", description="", slug="first-project", insert_date=timezone.now()
         )
+        project.users.add(user)
 
         request = self._build_request(user)
         redirect_url = self.adapter.get_login_redirect_url(request)
@@ -358,7 +373,11 @@ class OAuthRedirectTests(TestCase):
         self.assertTrue(has_role(self.user, "penetration_tester"))
 
     def test_oauth_user_unassigned_from_project_redirects_to_list(self):
-        """OAuth user not assigned to any project goes to projects list."""
+        """OAuth user not assigned to any project goes to projects list (after first login)."""
+        # Simulate a returning user (last_login is set after first login)
+        self.user.last_login = timezone.now()
+        self.user.save()
+
         # Create a project but don't assign the user
         Project.objects.create(
             name="Unassigned Project", description="", slug="unassigned-project", insert_date=timezone.now()
@@ -369,3 +388,16 @@ class OAuthRedirectTests(TestCase):
 
         # OAuth users without project assignment go to list
         self.assertEqual(redirect_url, reverse("list_projects"))
+
+    def test_oauth_user_deleted_and_recreated_redirects_to_welcome(self):
+        """OAuth user deleted and re-created (fresh account) redirects to welcome page."""
+        # Simulate a brand-new OAuth account (last_login is None)
+        new_user = get_user_model().objects.create_user(username="newgoogleuser", password="!")
+        new_user.set_unusable_password()
+        new_user.save()
+        SocialAccount.objects.create(user=new_user, provider="google", uid="new-oauth-456")
+
+        request = self._build_request(new_user)
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(redirect_url, reverse("oauth_welcome"))
