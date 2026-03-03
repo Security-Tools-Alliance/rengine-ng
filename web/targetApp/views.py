@@ -19,6 +19,13 @@ from rolepermissions.checkers import has_role
 from rolepermissions.decorators import has_permission_decorator
 import validators
 
+from api.helpers.datatables import (
+    TABLE_ID_ORGANIZATION_LIST,
+    TABLE_ID_SCOPE_LIST,
+    TABLE_ID_TARGET_LIST,
+    get_datatable_row_group_config,
+    get_datatable_table_config,
+)
 from api.serializers import IpSerializer
 from dashboard.models import Project
 from reNgine.core.data import get_ips_from_cidr_range
@@ -54,6 +61,7 @@ from startScan.secator.form import parse_secator_profiles_to_dict
 from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.constants import (
     RENGINE_TARGET_TYPES_FOR_JS,
+    SCOPE_TYPE_CHOICES,
     TARGET_TYPE_CIDR_RANGE,
     TARGET_TYPE_FILENAME,
     TARGET_TYPE_HOST,
@@ -748,9 +756,12 @@ def add_target(request, slug):
 
 def list_target(request, slug):
     project = get_object_or_404(Project, slug=slug)
+    dt_config = get_datatable_table_config(TABLE_ID_TARGET_LIST)
     context = {
         "list_target_li": "active",
         "target_data_active": "active",
+        "datatable_filter_select_to_param": dt_config.get("filter_context"),
+        "datatable_row_group_config": get_datatable_row_group_config(TABLE_ID_TARGET_LIST),
         "detail_scan_url": reverse("detail_scan", args=[project.slug, 0]),
         "start_scan_url": reverse("start_scan", args=[project.slug, 0]),
         "schedule_scan_url": reverse("schedule_scan", args=[project.slug, 0]),
@@ -1121,7 +1132,14 @@ def add_organization(request, slug):
 
 def list_organization(request, slug):
     organizations = Organization.objects.for_project(slug).order_by("-insert_date")
-    context = {"organization_active": "active", "organizations": organizations}
+    dt_config = get_datatable_table_config(TABLE_ID_ORGANIZATION_LIST)
+    context = {
+        "organization_active": "active",
+        "organizations": organizations,
+        "datatable_filter_select_to_param": dt_config.get("filter_context"),
+        "datatable_row_group_cookie_key": dt_config.get("row_group_cookie_key"),
+        "datatable_row_group_selector": dt_config.get("row_group_selector"),
+    }
     return render(request, "organization/list.html", context)
 
 
@@ -1205,10 +1223,14 @@ def list_scope(request, slug):
         )
         .order_by("-insert_date")
     )
+    dt_config = get_datatable_table_config(TABLE_ID_SCOPE_LIST)
     context = {
         "scope_active": "active",
         "scopes": scopes,
+        "scope_type_choices": mark_safe(json.dumps([[val, label] for val, label in SCOPE_TYPE_CHOICES])),
         "slug": slug,
+        "datatable_filter_select_to_param": dt_config.get("filter_context"),
+        "datatable_row_group_config": get_datatable_row_group_config(TABLE_ID_SCOPE_LIST),
     }
     return render(request, "scope/list.html", context)
 

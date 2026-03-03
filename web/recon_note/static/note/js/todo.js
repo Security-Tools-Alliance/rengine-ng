@@ -329,7 +329,11 @@ const todoItemListener = function() {
 
 const populateScanHistory = function(project) {
   scan_history_select = document.getElementById('scanHistoryIDropdown');
-  $.getJSON(`/api/listScanHistory/?format=json&project=${project}`, function(data) {
+  const baseUrl = (typeof window.RENGINE_API_LIST_SCAN_HISTORY_URL !== 'undefined' && window.RENGINE_API_LIST_SCAN_HISTORY_URL)
+    ? window.RENGINE_API_LIST_SCAN_HISTORY_URL
+    : '/api/listScanHistory/';
+  const url = baseUrl + '?format=json&project=' + encodeURIComponent(project || '');
+  $.getJSON(url, function(data) {
     for (var history in data){
       const history_object = data[history];
       const option = document.createElement('option');

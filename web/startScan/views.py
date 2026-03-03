@@ -16,6 +16,16 @@ import markdown
 from rolepermissions.decorators import has_permission_decorator
 from weasyprint import CSS, HTML
 
+from api.helpers.datatables import (
+    TABLE_ID_S3_BUCKETS,
+    TABLE_ID_SCAN_HISTORY,
+    TABLE_ID_SUBSCAN_HISTORY,
+    TABLE_ID_VULNERABILITIES,
+    get_datatable_row_group_config,
+    get_datatable_table_config,
+    get_scan_status_filter_labels,
+    get_task_status_filter_labels,
+)
 from api.serializers import IpSerializer
 from reNgine.core.data import safe_int_cast
 from reNgine.core.path import resolve_results_dir_under_base, safe_rmtree
@@ -60,6 +70,7 @@ from startScan.models import (
     Employee,
     EndPoint,
     IpAddress,
+    S3Bucket,
     ScanActivity,
     ScanHistory,
     ScanSchedule,
@@ -481,9 +492,13 @@ def scan_history(request, slug):
         )
     )
 
+    dt_config = get_datatable_table_config(TABLE_ID_SCAN_HISTORY)
     context = {
         "scan_history_active": "active",
         "scan_history": host,
+        "scan_status_filter_labels": get_scan_status_filter_labels(),
+        "datatable_filter_select_to_param": dt_config.get("filter_context"),
+        "datatable_row_group_config": get_datatable_row_group_config(TABLE_ID_SCAN_HISTORY),
     }
     return render(request, "startScan/history.html", context)
 
@@ -495,7 +510,15 @@ def subscan_history(request, slug):
         .prefetch_related("scan_history__secatorrunner_set__worker")
         .order_by("-start_scan_date")
     )
-    context = {"scan_history_active": "active", "subscans": subscans}
+    dt_config = get_datatable_table_config(TABLE_ID_SUBSCAN_HISTORY)
+    context = {
+        "scan_history_active": "active",
+        "subscans": subscans,
+        "task_status_filter_labels": get_task_status_filter_labels(),
+        "datatable_filter_select_to_param": dt_config.get("filter_context"),
+        "datatable_row_group_cookie_key": dt_config.get("row_group_cookie_key"),
+        "datatable_row_group_selector": dt_config.get("row_group_selector"),
+    }
     return render(request, "startScan/subscan_history.html", context)
 
 
@@ -715,6 +738,14 @@ def detail_scan(request, id, slug):
         "screenshot" in tasks or endpoints.filter(screenshot_path__isnull=False).exclude(screenshot_path="").exists()
     )
 
+    s3_bucket_names = sorted(
+        {
+            bucket_name
+            for bucket_name in S3Bucket.objects.filter(buckets__id=id).order_by("name").values_list("name", flat=True)
+            if bucket_name
+        }
+    )
+
     # Build render context
     ctx = {
         "scan_history_id": id,
@@ -754,6 +785,14 @@ def detail_scan(request, id, slug):
         "asset_countries": asset_countries,
         "has_screenshots": has_screenshots,
         "domains": _domains_for_scan_detail(id),
+        "s3_datatable_filter_select_to_param": get_datatable_table_config(TABLE_ID_S3_BUCKETS).get("filter_context"),
+        "s3_bucket_names": s3_bucket_names,
+        "datatable_row_group_cookie_key_vuln": get_datatable_table_config(TABLE_ID_VULNERABILITIES).get(
+            "row_group_cookie_key"
+        ),
+        "datatable_row_group_selector_vuln": get_datatable_table_config(TABLE_ID_VULNERABILITIES).get(
+            "row_group_selector"
+        ),
     }
 
     # Find number of matched GF patterns (one query then count in Python)
@@ -802,11 +841,14 @@ def all_subdomains(request, slug):
 
 
 def detail_vuln_scan(request, slug, id=None):
+    dt_config = get_datatable_table_config(TABLE_ID_VULNERABILITIES)
     if id:
         history = get_object_or_404(ScanHistory, id=id)
         context = {"scan_history_id": id, "history": history}
     else:
         context = {"vuln_scan_active": "true"}
+    context["datatable_row_group_cookie_key"] = dt_config.get("row_group_cookie_key")
+    context["datatable_row_group_selector"] = dt_config.get("row_group_selector")
     return render(request, "startScan/vulnerabilities.html", context)
 
 

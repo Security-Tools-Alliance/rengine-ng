@@ -25,6 +25,7 @@ Organizations
       <div class="p-2">
         <div class="row">
           <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_organization_list.html' id_prefix='organizationList' %}
           </div>
           <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
             {% if user|can:'modify_targets' %}
@@ -52,16 +53,6 @@ Organizations
           </tr>
         </thead>
         <tbody>
-          {% for organization in organizations.all %}
-          <tr>
-            <td class=""><span class="badge badge-soft-dark"><i class="fe-briefcase me-1"></i>{{ organization.name|capfirst }}</span></td>
-            <td class="text-center">{% if organization.description %}<span class="badge badge-soft-secondary"><i class="fe-file-text me-1"></i>{{ organization.description }}</span>{% endif %}</td>
-            <td class="text-center"><span class="badge badge-soft-info" data-toggle="tooltip" data-placement="top" title="Scopes"><i class="fe-crosshair me-1"></i>{{ organization.scopes.count }}</span></td>
-            <td class="text-center"><span class="badge bg-primary badge-link" onclick="get_target_modal({{ organization.id }})" data-toggle="tooltip" data-placement="top" title="Targets"><i class="fe-crosshair me-1"></i>{{ organization.get_domains.count }}</span></td>
-            <td class="text-center"><span class="badge badge-soft-secondary" data-toggle="tooltip" data-placement="top" title="{{ organization.insert_date }}"><i class="fe-clock me-1"></i>{{ organization.insert_date|naturaltime }}</span></td>
-            {% include 'base/_items/datatables_action_cells/organization.html' %}
-          </tr>
-          {% endfor %}
         </tbody>
         </table>
       </div>
@@ -72,20 +63,116 @@ Organizations
 
 
 {% block page_level_script %}
+<script>
+window.ORG_LIST_DATATABLE_URL = "{% url 'api:organizations-datatable-list' %}";
+window.ORG_LIST_PROJECT_SLUG = "{{ current_project.slug|escapejs }}";
+window.ORG_LIST_START_SCAN_BASE = "{% url 'start_organization_scan' current_project.slug 0 %}".replace('/0', '/');
+window.ORG_LIST_SCHEDULE_SCAN_BASE = "{% url 'schedule_organization_scan' current_project.slug 0 %}".replace('/0', '/');
+window.ORG_LIST_UPDATE_BASE = "{% url 'update_organization' current_project.slug 0 %}".replace('/0', '/');
+window.ORG_LIST_DELETE_BASE = "{% url 'delete_organization' current_project.slug 0 %}".replace('/0', '/');
+window.ORG_LIST_CAN_INITIATE_SCANS = {{ user|can:'initiate_scans_subscans'|yesno:"true,false" }};
+window.ORG_LIST_CAN_MODIFY_TARGETS = {{ user|can:'modify_targets'|yesno:"true,false" }};
+</script>
+{{ datatable_filter_select_to_param|json_script:"datatable-filter-params" }}
 <script src="{% static 'targetApp/js/custom_organization.js' %}"></script>
 <script>
 $(document).ready(function() {
-  const listOrgScrollerOpts = window.getRengineDatatableScrollerOptions
-    ? window.getRengineDatatableScrollerOptions("60vh")
-    : {};
-  const list_organization_table = $('#list_organization_table').DataTable(Object.assign({
-    "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-    "lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, 1000, -1], ["30", "50", "100", "200", "500", "1000", "All"]],
-    "pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
-    "initComplete": function(settings, json) {
-      $('[data-toggle="tooltip"]').tooltip();
-    }
-  }, listOrgScrollerOpts));
+  const filterParamsEl = document.getElementById('datatable-filter-params');
+  const filterSelectToParam = filterParamsEl ? JSON.parse(filterParamsEl.textContent) : {};
+  const organizationListColumns = [
+    { data: 'name', name: 'name' },
+    { data: 'description', name: 'description' },
+    { data: 'scope_count', name: 'scope_count' },
+    { data: 'total_targets', name: 'total_targets' },
+    { data: 'insert_date', name: 'insert_date' },
+    { data: 'id', name: 'action' }
+  ];
+  const orgListDefaultOrder = window.getRengineDatatableOrderFromNames(organizationListColumns, [['name', 'asc']]);
+  const list_organization_table = window.initServerSideDataTable('#list_organization_table', window.getRengineDatatableConfig('#list_organization_table', {
+    ajax: {
+      url: window.ORG_LIST_DATATABLE_URL,
+      data: function(d) {
+        d.slug = window.ORG_LIST_PROJECT_SLUG;
+        if (typeof window.buildDatatableFilterPayload === 'function') Object.assign(d, window.buildDatatableFilterPayload(filterSelectToParam));
+      }
+    },
+    columns: organizationListColumns,
+    order: orgListDefaultOrder,
+    columnDefs: [
+      { orderable: false, targets: 'action:name' },
+      {
+        targets: 'name:name',
+        render: function(data) {
+          return window.safeBadge ? window.safeBadge((data || '').charAt(0).toUpperCase() + (data || '').slice(1), 'badge badge-soft-dark', 'fe-briefcase') : ('<span class="badge badge-soft-dark"><i class="fe-briefcase me-1"></i>' + window.safeText((data || '').charAt(0).toUpperCase() + (data || '').slice(1)) + '</span>');
+        }
+      },
+      {
+        targets: 'description:name',
+        className: 'text-center',
+        render: function(data) {
+          return data ? (window.safeBadge ? window.safeBadge(data, 'badge badge-soft-secondary', 'fe-file-text') : ('<span class="badge badge-soft-secondary"><i class="fe-file-text me-1"></i>' + window.safeText(data) + '</span>')) : '';
+        }
+      },
+      {
+        targets: 'scope_count:name',
+        className: 'text-center',
+        render: function(data) {
+          return '<span class="badge badge-soft-info" data-toggle="tooltip" data-placement="top" title="Scopes"><i class="fe-crosshair me-1"></i>' + (data != null ? data : 0) + '</span>';
+        }
+      },
+      {
+        targets: 'total_targets:name',
+        className: 'text-center',
+        render: function(data, type, row) {
+          return '<span class="badge bg-primary badge-link" onclick="get_target_modal(\'' + window.safeAttr(String(row.id)) + '\')" data-toggle="tooltip" data-placement="top" title="Targets"><i class="fe-crosshair me-1"></i>' + (data != null ? data : 0) + '</span>';
+        }
+      },
+      {
+        targets: 'insert_date:name',
+        className: 'text-center',
+        render: function(data, type, row) {
+          const title = row.insert_date ? window.safeText(String(row.insert_date)) : '';
+          const display = row.insert_date_humanized ? window.safeText(row.insert_date_humanized) : (data ? window.safeText(data) : '');
+          return '<span class="badge badge-soft-secondary" data-toggle="tooltip" data-placement="top" title="' + title + '"><i class="fe-clock me-1"></i>' + display + '</span>';
+        }
+      },
+      {
+        targets: 'action:name',
+        className: 'text-center',
+        orderable: false,
+        render: function(data, type, row) {
+          const idEnc = window.safeAttr(String(row.id));
+          let html = '<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">';
+          if (window.ORG_LIST_CAN_INITIATE_SCANS) {
+            html += '<a href="' + window.ORG_LIST_START_SCAN_BASE + idEnc + '" class="btn btn-sm btn-soft-success" data-toggle="tooltip" data-placement="top" title="Quick Scan Entire Organization"><i class="fe-zap"></i></a>';
+            html += '<a href="' + window.ORG_LIST_SCHEDULE_SCAN_BASE + idEnc + '" class="btn btn-sm btn-soft-info open-domain" data-toggle="tooltip" data-placement="top" title="Schedule Scan"><i class="fe-clock"></i></a>';
+          }
+          if (window.ORG_LIST_CAN_MODIFY_TARGETS) {
+            html += '<a href="' + window.ORG_LIST_UPDATE_BASE + idEnc + '" class="btn btn-sm btn-soft-primary open-domain" data-toggle="tooltip" data-placement="top" title="Update Organization"><i class="fe-edit-2"></i></a>';
+            html += '<a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Delete Organization" onclick="delete_organization(\'' + window.ORG_LIST_DELETE_BASE + idEnc + '\'); return false;"><i class="fe-trash-2"></i></a>';
+          }
+          html += '</div>';
+          return html;
+        }
+      }
+    ],
+    drawCallback: window.getRengineDatatableDrawCallbackTooltips ? window.getRengineDatatableDrawCallbackTooltips('#list_organization_table') : function() {}
+  }));
+
+  $.getJSON("{% url 'api:listOrganizations' %}?format=json&project=" + encodeURIComponent(window.ORG_LIST_PROJECT_SLUG || ""), function(data) {
+    var orgs = data.organizations || [];
+    var sel = document.getElementById('filterByName');
+    if (sel) orgs.forEach(function(org) {
+      var opt = document.createElement('option');
+      opt.value = org.name;
+      opt.textContent = org.name;
+      sel.appendChild(opt);
+    });
+  }).fail(function() {});
+  if (window.attachDatatableFilters) {
+    window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('organization_list', list_organization_table, { onApply: function() { list_organization_table.draw(); } }));
+  }
+
   multiCheck(list_organization_table);
 });
 
@@ -97,7 +184,7 @@ function get_target_modal(organization_id) {
     footerHtml: ''
   });
   $.getJSON(`/api/queryTargetsInOrganization/?organization_id=${organization_id}&format=json`, function (data) {
-    const organization_name = htmlEncode(data['organization'][0]['name']);
+    const organization_name = window.safeText(data['organization'][0]['name']);
     const ul = $('<ul id="target-detail-modal-ul"></ul>');
     for (const domain in data['domains']) {
       const domain_obj = data['domains'][domain];

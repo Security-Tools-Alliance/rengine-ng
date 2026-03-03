@@ -31,6 +31,7 @@ from .scan_param_definitions import (
     parse_request_headers_value,
 )
 
+
 PREFIX_SCOPE_PARAMS = "[SCOPE_PARAMS]"
 logger = get_module_logger(__name__)
 
@@ -119,8 +120,7 @@ def resolve_scan_params(
         logger.log_line(
             PREFIX_SCOPE_PARAMS,
             "SCAN_CONFIG",
-            "Non-dict scan_config_override for target %s: %r; treating as empty."
-            % (target_id, raw),
+            "Non-dict scan_config_override for target %s: %r; treating as empty." % (target_id, raw),
             level="warning",
         )
     target_config = _normalize_scan_config_override(raw)
@@ -155,8 +155,7 @@ def build_effective_params_display(
         logger.log_line(
             PREFIX_SCOPE_PARAMS,
             "SCAN_CONFIG",
-            "Non-dict scan_config_override for target %s: %r; treating as empty."
-            % (target_id, raw),
+            "Non-dict scan_config_override for target %s: %r; treating as empty." % (target_id, raw),
             level="warning",
         )
     target_config = _normalize_scan_config_override(raw)

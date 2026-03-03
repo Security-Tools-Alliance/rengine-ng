@@ -9,7 +9,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings as django_settings
 from django.core.cache import cache
-from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Subquery, Value, When
+from django.db.models import Case, CharField, Count, F, IntegerField, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.template.defaultfilters import slugify
@@ -23,25 +23,68 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK, HTTP_202_ACCEPTED, HTTP_400_BAD_REQUEST, HTTP_410_GONE
+from rest_framework.status import (
+    HTTP_200_OK,
+    HTTP_202_ACCEPTED,
+    HTTP_400_BAD_REQUEST,
+    HTTP_404_NOT_FOUND,
+    HTTP_410_GONE,
+)
 from rest_framework.views import APIView
 import validators
 
 from api.helpers.datatables import (
+    DATATABLE_COLUMN_MAP_DIRECTORY,
     DATATABLE_COLUMN_MAP_ENDPOINT,
     DATATABLE_COLUMN_MAP_ENDPOINT_CHANGES,
     DATATABLE_COLUMN_MAP_INTERESTING_ENDPOINT,
     DATATABLE_COLUMN_MAP_INTERESTING_SUBDOMAIN,
+    DATATABLE_COLUMN_MAP_IPS,
+    DATATABLE_COLUMN_MAP_ORGANIZATIONS,
+    DATATABLE_COLUMN_MAP_S3_BUCKETS,
+    DATATABLE_COLUMN_MAP_SCAN_ENGINE,
+    DATATABLE_COLUMN_MAP_SCAN_HISTORY,
+    DATATABLE_COLUMN_MAP_SCHEDULED_SCANS,
+    DATATABLE_COLUMN_MAP_SCOPES,
     DATATABLE_COLUMN_MAP_SUBDOMAIN,
     DATATABLE_COLUMN_MAP_SUBDOMAIN_CHANGES,
+    DATATABLE_COLUMN_MAP_SUBSCAN_HISTORY,
     DATATABLE_COLUMN_MAP_TARGETS,
     DATATABLE_COLUMN_MAP_VULNERABILITY,
+    DATATABLE_COLUMN_MAP_WORDLIST,
     DATATABLE_NULLS_LAST_FIELDS,
+    FILTER_PARAM_BUCKET_NAME,
+    FILTER_PARAM_ENGINE_NAME,
+    FILTER_PARAM_HTTP_STATUS,
+    FILTER_PARAM_NAME,
+    FILTER_PARAM_ORGANIZATION,
+    FILTER_PARAM_PAGE_TITLE,
+    FILTER_PARAM_SCAN_ENGINE,
+    FILTER_PARAM_SCOPE,
+    FILTER_PARAM_SEVERITY,
+    FILTER_PARAM_SOURCE,
+    FILTER_PARAM_STATUS,
+    FILTER_PARAM_SUBDOMAIN,
+    FILTER_PARAM_TARGET,
     apply_datatables_order,
+    apply_filter_list_in,
+    apply_filter_list_in_by_param,
+    apply_filter_scan_status,
+    apply_filter_scope_type,
+    apply_filter_task_status,
+    get_datatable_filter_warnings,
     get_datatables_order_column,
+    get_nuclei_severity_codes_for_labels,
+    get_request_filter_list,
+    get_scan_status_filter_labels,
+    get_task_status_filter_labels,
 )
 from api.helpers.query import build_subdomain_datatable_queryset, get_ip_subdomain_data, get_scan_status_querysets
-from api.mixins import DatatableListMixin, DatatablePaginationMixin, build_datatables_list_response
+from api.mixins import (
+    DatatableListMixin,
+    DatatablePaginationMixin,
+    build_datatables_serverside_response,
+)
 from api.pagination import parse_limit_from_request, parse_pagination_params
 from api.permissions import HasAPIKeyOrIsAuthenticated
 from api.scan_file import get_scan_file_urls
@@ -83,7 +126,14 @@ from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.lookup import get_lookup_keywords
 from reNgine.utilities.subdomain import get_interesting_subdomains
-from scanEngine.models import EngineType, SecatorScan, SecatorTask, SecatorWorker, SecatorWorkflow
+from scanEngine.models import (
+    EngineType,
+    SecatorScan,
+    SecatorTask,
+    SecatorWorker,
+    SecatorWorkflow,
+    Wordlist,
+)
 from scanEngine.services.worker_config_sync import sync_all_custom_configs_to_worker
 from scanEngine.services.worker_deploy import (
     deploy_worker,
@@ -111,8 +161,10 @@ from startScan.models import (
     LLMVulnerabilityReport,
     MetaFinderDocument,
     Port,
+    S3Bucket,
     ScanActivity,
     ScanHistory,
+    ScanSchedule,
     Subdomain,
     SubScan,
     Technology,
@@ -121,7 +173,7 @@ from startScan.models import (
 from startScan.secator.runner_sync import is_all_runners_completed, sync_runner_with_scan_history
 from startScan.secator.sync_service import submit_sync as secator_submit_sync
 from targetApp.constants import TARGET_TYPE_HOST
-from targetApp.models import Organization, Target
+from targetApp.models import Organization, Scope, Target
 
 from .serializers import (
     CommandSerializer,
@@ -136,6 +188,7 @@ from .serializers import (
     EndpointOnlyURLsSerializer,
     EndpointSerializer,
     EngineSerializer,
+    EngineTypeDatatableSerializer,
     InterestingEndPointSerializer,
     InterestingSubdomainSerializer,
     IpSerializer,
@@ -143,24 +196,31 @@ from .serializers import (
     MetafinderDocumentSerializer,
     MetafinderUserSerializer,
     OnlySubdomainNameSerializer,
+    OrganizationDatatableSerializer,
     OrganizationSerializer,
     OrganizationTargetsSerializer,
     ProjectSerializer,
     ReconNoteSerializer,
+    S3BucketDatatableSerializer,
     ScanActivitySerializer,
+    ScanHistoryDatatableSerializer,
     ScanHistorySerializer,
+    ScanScheduleDatatableSerializer,
+    ScopeDatatableSerializer,
     SearchHistorySerializer,
     SecatorWorkerCreateUpdateSerializer,
     SecatorWorkerDetailSerializer,
     SecatorWorkerListSerializer,
     SubdomainChangesSerializer,
     SubdomainSerializer,
+    SubScanDatatableSerializer,
     SubScanResultSerializer,
     SubScanSerializer,
     TargetSerializer,
     TechnologyCountSerializer,
     VisualiseDataSerializer,
     VulnerabilitySerializer,
+    WordlistDatatableSerializer,
 )
 
 
@@ -801,6 +861,8 @@ class QueryInterestingSubdomains(APIView):
 
 
 class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
+    """DataTables list API for targets. Filter params: filter_organization, filter_scope. See wiki datatables-api-filters.md."""
+
     queryset = Target.objects.all()
     serializer_class = TargetSerializer
     datatable_column_map = DATATABLE_COLUMN_MAP_TARGETS
@@ -808,11 +870,13 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         slug = self.request.GET.get("slug", None)
         qs = Target.objects.for_project(slug) if slug else self.queryset
+        first_scope_name = Scope.objects.filter(targets=OuterRef("pk")).order_by("name").values("name")[:1]
         qs = qs.prefetch_related("scopes").annotate(
             domain_count=Count("scan_histories__discovered_domains", distinct=True),
             subdomain_count=Count("scan_histories__subdomain", distinct=True),
             endpoint_count=Count("scan_histories__endpoint", distinct=True),
             vulnerability_count=Count("scan_histories__vulnerability", distinct=True),
+            scope_group_name=Coalesce(Subquery(first_scope_name), Value("No scope")),
         )
         return qs
 
@@ -825,12 +889,95 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
                 | Q(description__icontains=search_value)
                 | Q(organizations__name__icontains=search_value)
             ).distinct()
+        qs = apply_filter_list_in_by_param(
+            qs, self.request, FILTER_PARAM_ORGANIZATION, "organizations__name__in", distinct=True
+        )
+        qs = apply_filter_list_in_by_param(qs, self.request, FILTER_PARAM_SCOPE, "scopes__name__in", distinct=True)
         return apply_datatables_order(
             qs,
             self.request,
             self.datatable_column_map,
             default_order="-id",
             nulls_last_fields=DATATABLE_NULLS_LAST_FIELDS,
+        )
+
+
+class ListScopesDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.GenericViewSet):
+    """DataTables list API for scopes, filtered by project slug. Filter params: filter_organization, filter_scope_type. See wiki datatables-api-filters.md."""
+
+    serializer_class = ScopeDatatableSerializer
+    datatable_column_map = DATATABLE_COLUMN_MAP_SCOPES
+
+    def get_queryset(self):
+        slug = self.request.query_params.get("slug")
+        if not slug:
+            return Scope.objects.none()
+        return (
+            Scope.objects.filter(organization__project__slug=slug)
+            .select_related("organization")
+            .annotate(
+                target_count=Count("targets", distinct=True),
+                worker_count=Count("workers", distinct=True),
+            )
+            .order_by("-insert_date")
+        )
+
+    def filter_queryset(self, qs):
+        search_value = self.request.GET.get("search[value]", None)
+        if search_value:
+            qs = qs.filter(Q(name__icontains=search_value) | Q(organization__name__icontains=search_value)).distinct()
+        qs = apply_filter_list_in_by_param(
+            qs, self.request, FILTER_PARAM_ORGANIZATION, "organization__name__in", distinct=True
+        )
+        qs = apply_filter_scope_type(qs, self.request)
+        return apply_datatables_order(qs, self.request, self.datatable_column_map, default_order="-insert_date")
+
+
+class ListOrganizationsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.GenericViewSet):
+    """DataTables list API for organizations, filtered by project slug. Filter params: filter_name. See wiki datatables-api-filters.md."""
+
+    serializer_class = OrganizationDatatableSerializer
+    datatable_column_map = DATATABLE_COLUMN_MAP_ORGANIZATIONS
+
+    def get_queryset(self):
+        slug = self.request.query_params.get("slug")
+        if not slug:
+            return Organization.objects.none()
+        return (
+            Organization.objects.filter(project__slug=slug)
+            .annotate(
+                scope_count=Count("scopes", distinct=True),
+                total_targets=Count("targets", distinct=True),
+            )
+            .order_by("-insert_date")
+        )
+
+    def filter_queryset(self, qs):
+        search_value = self.request.GET.get("search[value]", None)
+        if search_value:
+            qs = qs.filter(Q(name__icontains=search_value) | Q(description__icontains=search_value)).distinct()
+        qs = apply_filter_list_in_by_param(qs, self.request, FILTER_PARAM_NAME, "name__in", distinct=True)
+        return apply_datatables_order(qs, self.request, self.datatable_column_map, default_order="-insert_date")
+
+
+class ListScheduledScansDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.GenericViewSet):
+    """DataTables list API for scheduled scans (ScanSchedule)."""
+
+    serializer_class = ScanScheduleDatatableSerializer
+    datatable_column_map = DATATABLE_COLUMN_MAP_SCHEDULED_SCANS
+
+    def get_queryset(self):
+        return ScanSchedule.objects.all().order_by("-next_run")
+
+    def filter_queryset(self, qs):
+        search_value = self.request.GET.get("search[value]", None)
+        if search_value:
+            qs = qs.filter(name__icontains=search_value)
+        return apply_datatables_order(
+            qs,
+            self.request,
+            self.datatable_column_map,
+            default_order="-next_run",
         )
 
 
@@ -1300,12 +1447,21 @@ class FetchSubscanResults(APIView):
             level="info",
         )
 
+        subscan_obj = subscan.first()
+        project_slug = ""
+        if subscan_obj.scan_history and getattr(subscan_obj.scan_history, "target", None):
+            target = subscan_obj.scan_history.target
+            if getattr(target, "project", None) and getattr(target.project, "slug", None):
+                project_slug = target.project.slug
+
         return Response(
             {
                 "subscan": subscan_data,
                 "result": subscan_results,
                 "endpoint_url": reverse("api:endpoints-list"),
                 "vulnerability_url": reverse("api:vulnerabilities-list"),
+                "directories_url": reverse("api:directories-list"),
+                "project": project_slug,
             }
         )
 
@@ -1355,6 +1511,114 @@ class ListSubScans(APIView):
         if results:
             response["results"] = results
         return Response(response)
+
+
+class ListSubScansDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.GenericViewSet):
+    """DataTables list API for subscans, filtered by project slug. Filter params: filter_organization, filter_status, filter_target, filter_scan_engine. See wiki datatables-api-filters.md."""
+
+    serializer_class = SubScanDatatableSerializer
+    datatable_column_map = DATATABLE_COLUMN_MAP_SUBSCAN_HISTORY
+
+    def get_queryset(self):
+        project = self.request.query_params.get("project")
+        if not project:
+            return SubScan.objects.none()
+        return (
+            SubScan.objects.filter(scan_history__target__project__slug=project)
+            .select_related("scan_history", "scan_history__target", "subdomain", "engine", "secator_runner")
+            .order_by("-start_scan_date")
+        )
+
+    def filter_queryset(self, qs):
+        req = self.request
+        search_value = req.GET.get("search[value]", None)
+        if search_value:
+            qs = qs.filter(
+                Q(subdomain__name__icontains=search_value) | Q(scan_history__target__value__icontains=search_value)
+            ).distinct()
+        qs = apply_filter_list_in_by_param(
+            qs, req, FILTER_PARAM_ORGANIZATION, "scan_history__target__organizations__name__in", distinct=True
+        )
+        qs = apply_filter_task_status(qs, req)
+        qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_TARGET, "scan_history__target__value__in")
+        qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_SCAN_ENGINE, "engine__engine_name__in")
+        return apply_datatables_order(qs, req, self.datatable_column_map, default_order="-start_scan_date")
+
+
+class ListS3BucketsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.GenericViewSet):
+    """
+    DataTables list API for S3 buckets of a scan (scan_history_id).
+    Filter params: filter_bucket_name. See wiki datatables-api-filters.md.
+    Consuming template: startScan/detail_scan.html (S3 tab). Column map: DATATABLE_COLUMN_MAP_S3_BUCKETS.
+    """
+
+    serializer_class = S3BucketDatatableSerializer
+    datatable_column_map = DATATABLE_COLUMN_MAP_S3_BUCKETS
+
+    def get_queryset(self):
+        scan_history_id = safe_int_cast(self.request.query_params.get("scan_history"))
+        if not scan_history_id:
+            return S3Bucket.objects.none()
+        return S3Bucket.objects.filter(buckets__id=scan_history_id).distinct()
+
+    def filter_queryset(self, qs):
+        req = self.request
+        search_value = req.GET.get("search[value]", "").strip()
+        if search_value:
+            qs = qs.filter(
+                Q(name__icontains=search_value)
+                | Q(region__icontains=search_value)
+                | Q(provider__icontains=search_value)
+            )
+        qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_BUCKET_NAME, "name__in")
+        return apply_datatables_order(qs, req, self.datatable_column_map, default_order="name")
+
+
+class ListWordlistsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.GenericViewSet):
+    """
+    DataTables list API for wordlists. Filter params: filter_name. See wiki datatables-api-filters.md.
+    Consuming template: scanEngine/wordlist/index.html. Column map: DATATABLE_COLUMN_MAP_WORDLIST.
+    """
+
+    serializer_class = WordlistDatatableSerializer
+    datatable_column_map = DATATABLE_COLUMN_MAP_WORDLIST
+    datatable_default_ordering = ("id",)
+
+    def get_queryset(self):
+        return Wordlist.objects.all().order_by("id")
+
+    def filter_queryset(self, qs):
+        req = self.request
+        search_value = req.GET.get("search[value]", "").strip()
+        if search_value:
+            qs = qs.filter(Q(name__icontains=search_value) | Q(short_name__icontains=search_value))
+        qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_NAME, "name__in")
+        return apply_datatables_order(qs, req, self.datatable_column_map, default_order="name")
+
+
+class ListScanEnginesDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.GenericViewSet):
+    """
+    DataTables list API for scan engines (EngineType). Filter params: filter_engine_name. See wiki datatables-api-filters.md.
+    Consuming template: scanEngine/index.html. Column map: DATATABLE_COLUMN_MAP_SCAN_ENGINE.
+    """
+
+    serializer_class = EngineTypeDatatableSerializer
+    datatable_column_map = DATATABLE_COLUMN_MAP_SCAN_ENGINE
+    datatable_default_ordering = ("engine_name",)
+
+    def get_queryset(self):
+        return EngineType.objects.all().order_by("engine_name")
+
+    def filter_queryset(self, qs):
+        req = self.request
+        filter_scan_type = (req.query_params.get("filter_scan_type") or "").strip().lower()
+        if filter_scan_type in ("internet", "internal_network"):
+            qs = qs.filter(scan_type=filter_scan_type)
+        qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_ENGINE_NAME, "engine_name__in")
+        search_value = req.GET.get("search[value]", "").strip()
+        if search_value:
+            qs = qs.filter(engine_name__icontains=search_value)
+        return apply_datatables_order(qs, req, self.datatable_column_map, default_order="engine_name")
 
 
 class DeleteMultipleRows(APIView):
@@ -2492,15 +2756,107 @@ class ListTodoNotes(APIView):
         )
 
 
+class ScanHistoryFilterChoices(APIView):
+    """
+    GET ?project=<slug> - Return filter dropdown choices for scan-history and subscan-history pages.
+
+    Response: organizations (list of org names), scan_status_labels (for scan history),
+    task_status_labels (for subscan history), targets, scan_engines.
+    Used by history.html and subscan_history.html to populate all four filter selects
+    (filterByOrganization, filterByScanStatus, filterByTarget, filterByScanType) from a single
+    API call. Requires project query param. See wiki datatables-api-filters.md.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        project_slug = request.query_params.get("project")
+        if not project_slug:
+            return Response(
+                {"detail": "Query param 'project' (project slug) is required."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        qs = (
+            ScanHistory.objects.filter(target__project__slug=project_slug)
+            .filter(target__isnull=False)
+            .values_list("target__value", "scan_type__engine_name")
+            .distinct()
+        )
+        targets = sorted({v[0] for v in qs if v[0]}, key=str.lower)
+        engines = sorted({v[1] for v in qs if v[1]}, key=str.lower)
+        orgs = list(
+            Organization.objects.for_project(project_slug).order_by("name").values_list("name", flat=True).distinct()
+        )
+        return Response(
+            {
+                "organizations": orgs,
+                "scan_status_labels": get_scan_status_filter_labels(),
+                "task_status_labels": get_task_status_filter_labels(),
+                "targets": targets,
+                "scan_engines": engines,
+            }
+        )
+
+
 class ListScanHistory(APIView):
+    """
+    List scan history. Response format depends on presence of pagination params.
+
+    - With pagination (start + length, or page + page_size): returns DataTables
+      server-side format via build_datatables_serverside_response, with optional
+      search, order, and filters (organization, status, target, scan_engine).
+      Used by the Scan History DataTable (startScan/history.html).
+
+    - Without pagination: returns full list as JSON array using ScanHistorySerializer
+      (id, domain.name, start_scan_date, etc.). Used by the Recon note "Add Task"
+      modal dropdown (recon_note/note/index.html) to populate "Select Scan History".
+
+    Filter query params: filter_organization, filter_status, filter_target, filter_scan_engine.
+    See wiki datatables-api-filters.md and api.helpers.datatables FILTER_PARAM_*.
+    """
+
     def get(self, request, format=None):
         req = self.request
-        scan_history = ScanHistory.objects.all().order_by("-start_scan_date")
+        qs = ScanHistory.objects.all().select_related("target", "initiated_by").prefetch_related("target__scopes")
         project = req.query_params.get("project")
         if project:
-            scan_history = scan_history.filter(target__project__slug=project)
-        scan_history = ScanHistorySerializer(scan_history, many=True)
-        return Response(scan_history.data)
+            qs = qs.filter(target__project__slug=project)
+
+        pagination = parse_pagination_params(
+            start=req.query_params.get("start"),
+            length=req.query_params.get("length"),
+            page=req.query_params.get("page"),
+            page_size=req.query_params.get("page_size"),
+        )
+        if pagination:
+            search_value = req.GET.get("search[value]", None)
+            if search_value:
+                qs = qs.filter(
+                    Q(target__value__icontains=search_value) | Q(initiated_by__username__icontains=search_value)
+                ).distinct()
+
+            qs = apply_filter_list_in_by_param(
+                qs, req, FILTER_PARAM_ORGANIZATION, "target__organizations__name__in", distinct=True
+            )
+            qs = apply_filter_scan_status(qs, req)
+            qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_TARGET, "target__value__in")
+            qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_SCAN_ENGINE, "scan_type__engine_name__in")
+            qs = apply_datatables_order(
+                qs,
+                req,
+                DATATABLE_COLUMN_MAP_SCAN_HISTORY,
+                default_order="-start_scan_date",
+                nulls_last_fields=DATATABLE_NULLS_LAST_FIELDS,
+            )
+            qs = qs.distinct()
+            total_count = qs.count()
+            page_qs = qs[pagination["start"] : pagination["start"] + pagination["length"]]
+            serializer = ScanHistoryDatatableSerializer(page_qs, many=True)
+            return Response(build_datatables_serverside_response(req, total_count, total_count, serializer.data))
+
+        qs = qs.order_by("-start_scan_date")
+        serializer = ScanHistorySerializer(qs, many=True)
+        return Response(serializer.data)
 
 
 class ListEngines(APIView):
@@ -2529,10 +2885,29 @@ class ListEngines(APIView):
 
 
 class ListOrganizations(APIView):
+    """List organizations. When project (slug) is provided, returns only organizations for that project."""
+
     def get(self, request, format=None):
-        organizations = Organization.objects.all()
+        project_slug = request.query_params.get("project")
+        if project_slug:
+            organizations = Organization.objects.for_project(project_slug).order_by("name")
+        else:
+            organizations = Organization.objects.all().order_by("name")
         organization_serializer = OrganizationSerializer(organizations, many=True)
         return Response({"organizations": organization_serializer.data})
+
+
+class ListScopes(APIView):
+    """List scope names for filter dropdowns. When project (slug) is provided, returns only scopes for that project."""
+
+    def get(self, request, format=None):
+        project_slug = request.query_params.get("project")
+        if project_slug:
+            scopes = Scope.objects.filter(organization__project__slug=project_slug).order_by("name").values("name")
+        else:
+            scopes = Scope.objects.all().order_by("name").values("name")
+        scopes_list = [{"name": s["name"]} for s in scopes]
+        return Response({"scopes": scopes_list})
 
 
 class ListTargetsInOrganization(APIView):
@@ -2840,7 +3215,7 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
             else:
                 serializer = SubdomainSerializer(paginated_queryset, many=True, context=serializer_context)
 
-            return Response(build_datatables_list_response(total_count, serializer.data))
+            return Response(build_datatables_serverside_response(req, total_count, total_count, serializer.data))
 
         # Default response (no pagination) - use shared limit parsing and return total_count/limit
         limit = parse_limit_from_request(req)
@@ -2899,7 +3274,6 @@ class ListIPs(APIView):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
         target_id = safe_int_cast(req.query_params.get("target_id"))
-
         port = req.query_params.get("port")
 
         if target_id:
@@ -2916,8 +3290,42 @@ class ListIPs(APIView):
         if port:
             ips = ips.filter(ports__in=Port.objects.filter(number=port)).distinct()
 
+        pagination = parse_pagination_params(
+            start=req.query_params.get("start"),
+            length=req.query_params.get("length"),
+            page=req.query_params.get("page"),
+            page_size=req.query_params.get("page_size"),
+        )
+        if pagination:
+            search_value = (req.GET.get("search[value]") or "").strip()
+            if search_value:
+                ips = ips.filter(address__icontains=search_value)
+            order_str = get_datatables_order_column(req, DATATABLE_COLUMN_MAP_IPS, default_order="address")
+            ips = ips.order_by(order_str)
+            total_count = ips.count()
+            paginated = list(ips[pagination["start"] : pagination["start"] + pagination["length"]])
+            ip_subdomain_data = get_ip_subdomain_data(paginated)
+            serializer = IpSerializer(
+                paginated,
+                many=True,
+                context={
+                    "ip_subdomain_data": ip_subdomain_data,
+                    "scan_id": scan_id,
+                    "target_id": target_id,
+                },
+            )
+            return Response(build_datatables_serverside_response(req, total_count, total_count, serializer.data))
+
         ip_subdomain_data = get_ip_subdomain_data(ips)
-        serializer = IpSerializer(ips, many=True, context={"ip_subdomain_data": ip_subdomain_data})
+        serializer = IpSerializer(
+            ips,
+            many=True,
+            context={
+                "ip_subdomain_data": ip_subdomain_data,
+                "scan_id": scan_id,
+                "target_id": target_id,
+            },
+        )
         return Response({"ips": serializer.data})
 
 
@@ -3392,6 +3800,11 @@ class SubdomainDatatableViewSet(
         search_value = self.request.GET.get("search[value]", None)
         if search_value:
             qs = self.apply_advanced_search(qs, search_value)
+        qs = apply_filter_list_in(
+            qs, "http_status__in", get_request_filter_list(self.request, FILTER_PARAM_HTTP_STATUS)
+        )
+        qs = apply_filter_list_in(qs, "page_title__in", get_request_filter_list(self.request, FILTER_PARAM_PAGE_TITLE))
+        qs = apply_filter_list_in(qs, "name__in", get_request_filter_list(self.request, FILTER_PARAM_SUBDOMAIN))
         order_str = get_datatables_order_column(self.request, self.datatable_column_map, default_order="content_length")
         return qs.order_by(order_str)
 
@@ -3532,7 +3945,7 @@ class EndPointViewSet(DatatableListMixin, DatatablePaginationMixin, AdvancedSear
     def get_queryset(self):
         req = self.request
 
-        scan_id = safe_int_cast(req.query_params.get("scan_history"))
+        scan_id = safe_int_cast(req.query_params.get("scan_history")) or safe_int_cast(req.query_params.get("scan_id"))
         target_id = safe_int_cast(req.query_params.get("target_id"))
         url_query = req.query_params.get("query_param")
         subdomain_id = safe_int_cast(req.query_params.get("subdomain_id"))
@@ -3595,17 +4008,33 @@ class EndPointViewSet(DatatableListMixin, DatatablePaginationMixin, AdvancedSear
         return qs.order_by(order_str)
 
 
-class DirectoryViewSet(viewsets.ModelViewSet):
+class DirectoryViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.ModelViewSet):
+    """List directory files by scan_history or subdomain_id. Supports DataTables server-side (start, length, order, search)."""
+
     queryset = DirectoryFile.objects.none()
     serializer_class = DirectoryFileSerializer
+    datatable_default_ordering = ("id",)
+    datatable_column_map = DATATABLE_COLUMN_MAP_DIRECTORY
+
+    def list(self, request, *args, **kwargs):
+        scan_id = safe_int_cast(request.query_params.get("scan_history")) or safe_int_cast(
+            request.query_params.get("scan_id")
+        )
+        subdomain_id = safe_int_cast(request.query_params.get("subdomain_id"))
+        if not (scan_id or subdomain_id):
+            return Response(
+                {"status": False, "message": "Scan id or subdomain id must be provided."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        return super().list(request, *args, **kwargs)
 
     def get_queryset(self):
         req = self.request
-        scan_id = safe_int_cast(req.query_params.get("scan_history"))
+        scan_id = safe_int_cast(req.query_params.get("scan_history")) or safe_int_cast(req.query_params.get("scan_id"))
         subdomain_id = safe_int_cast(req.query_params.get("subdomain_id"))
 
         if not (scan_id or subdomain_id):
-            return Response({"status": False, "message": "Scan id or subdomain id must be provided."})
+            return DirectoryFile.objects.none()
 
         subdomains = (
             Subdomain.objects.filter(scan_history__id=scan_id) if scan_id else Subdomain.objects.filter(id=subdomain_id)
@@ -3613,6 +4042,15 @@ class DirectoryViewSet(viewsets.ModelViewSet):
         dirs_scans = DirectoryScan.objects.filter(directories__in=subdomains)
 
         return DirectoryFile.objects.filter(directory_files__in=dirs_scans).distinct().order_by("id")
+
+    def filter_queryset(self, qs):
+        search_value = self.request.GET.get("search[value]", None)
+        if search_value:
+            qs = qs.filter(Q(url__icontains=search_value) | Q(name__icontains=search_value)).distinct()
+        order_str = get_datatables_order_column(self.request, self.datatable_column_map, default_order="name")
+        if order_str and order_str.strip():
+            return qs.order_by(order_str)
+        return qs.order_by("id")
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -3800,6 +4238,22 @@ class VulnerabilityViewSet(DatatableListMixin, DatatablePaginationMixin, Advance
         search_value = self.request.GET.get("search[value]", None)
         if search_value:
             qs = self.apply_advanced_search(qs, search_value)
+        filter_severity = get_request_filter_list(self.request, FILTER_PARAM_SEVERITY)
+        codes = get_nuclei_severity_codes_for_labels(filter_severity)
+        if codes:
+            qs = qs.filter(severity__in=codes)
+        filter_status = get_request_filter_list(self.request, FILTER_PARAM_STATUS)
+        if filter_status:
+            status_bool = []
+            for s in filter_status:
+                sl = (s or "").lower()
+                if sl in ("open", "true", "1"):
+                    status_bool.append(True)
+                elif sl in ("resolved", "closed", "false", "0"):
+                    status_bool.append(False)
+            if status_bool:
+                qs = qs.filter(open_status__in=status_bool)
+        qs = apply_filter_list_in(qs, "source__in", get_request_filter_list(self.request, FILTER_PARAM_SOURCE))
         order_str = get_datatables_order_column(self.request, self.datatable_column_map, default_order="-severity")
         return qs.order_by(order_str)
 
@@ -5099,6 +5553,24 @@ class SecatorHealth(APIView):
 
     def get(self, request):
         return Response({"status": "ok"})
+
+
+class DatatableFilterHealth(APIView):
+    """
+    GET /health/datatables-filters/ - Returns DataTables filter warnings (malformed inputs, drift).
+
+    Only available when DEBUG is True. Warnings are collected when apply_filter_list_in or
+    apply_filter_list_in_by_param log; call with ?clear=1 to clear after reading.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not django_settings.DEBUG:
+            return Response({"detail": "Not available when DEBUG is False"}, status=HTTP_404_NOT_FOUND)
+        clear = request.GET.get("clear", "").lower() in ("1", "true", "yes")
+        warnings = get_datatable_filter_warnings(clear=clear)
+        return Response({"warnings": warnings})
 
 
 class SecatorWorkerCheckIn(APIView):

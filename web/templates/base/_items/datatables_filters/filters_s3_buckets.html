@@ -1,0 +1,9 @@
+<div class="">
+  <label for="filterByBucketName" class="form-label">Filter by Bucket Name (multi-select)</label>
+  <select class="form-control" id="filterByBucketName" multiple size="3">
+    {% for name in s3_bucket_names %}
+      <option value="{{ name }}">{{ name }}</option>
+    {% endfor %}
+  </select>
+</div>
+

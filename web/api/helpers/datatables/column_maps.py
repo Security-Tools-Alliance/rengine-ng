@@ -1,21 +1,21 @@
 """
-Shared helpers for DataTables-style list views (column index to order field mapping)
-and central wiring of action column URLs for renderers (subdomain, vulnerability, target).
+DataTables column index -> order field maps and ordering helpers.
 
-Any view that consumes DataTables GET params order[0][column] and order[0][dir]
-must use get_datatables_order_column (or apply_datatables_order) with one of the
-central column maps below. Column maps are the single source of truth for
-index -> model field; frontend table column order must match these indices.
+Keys are DataTables column indices as strings ("0", "1", ...). Values are Django model
+fields or lookups for order_by(). Views use apply_datatables_order(qs, request, DATATABLE_COLUMN_MAP_XXX);
+the index sent in order[0][column] must exist as a key in the map.
+
+Contract: column maps, serializer, and frontend columns array must stay in sync when adding,
+moving, or removing columns. Index N = position in the frontend columns array (0-based).
+Frontend should use name-based columnDefs (targets: "columnName") so render/visibility do not
+depend on indices; only ordering uses indices via this map. See README "Column indices vs names".
 """
-
-from typing import Any, Optional
 
 from django.db.models import F, QuerySet
 from django.http import HttpRequest
-from django.urls import reverse
 
 
-# --- Central column index -> order field maps (must match frontend DataTables column order) ---
+# --- Column index -> order field maps (must match frontend DataTables column order) ---
 
 DATATABLE_COLUMN_MAP_SUBDOMAIN_CHANGES = {
     "0": "name",
@@ -79,13 +79,101 @@ DATATABLE_COLUMN_MAP_VULNERABILITY = {
     "15": "open_status",
 }
 
-# Targets list (Target): indices match targetApp/templates/target/list.html columns.
-# Columns: 0=checkbox, 1=id, 2=name, 3=description, 4=summary, 5=id(added on), 6=start_scan_date, 7=action, 8+=hidden.
+DATATABLE_COLUMN_MAP_IPS = {
+    "0": "address",
+    "1": "alive",
+    "2": "is_cdn",
+}
+
+DATATABLE_COLUMN_MAP_DIRECTORY = {
+    "0": "url",
+    "1": "name",
+    "2": "http_status",
+    "3": "length",
+    "4": "lines",
+    "5": "words",
+}
+
+DATATABLE_COLUMN_MAP_SCOPES = {
+    "0": "name",
+    "1": "organization__name",
+    "2": "scope_type",
+    "3": "start_date",
+    "4": "end_date",
+    "5": "target_count",
+    "6": "worker_count",
+    "7": "insert_date",
+}
+
+DATATABLE_COLUMN_MAP_ORGANIZATIONS = {
+    "0": "name",
+    "1": "description",
+    "2": "scope_count",
+    "3": "total_targets",
+    "4": "insert_date",
+}
+
+DATATABLE_COLUMN_MAP_SCAN_HISTORY = {
+    "1": "id",
+    "2": "target__value",
+    "3": "start_scan_date",
+    "4": "scan_type__engine_name",
+    "5": "id",
+    "6": "start_scan_date",
+    "7": "initiated_by__username",
+    "8": "scan_status",
+    "9": "scan_status",
+    "11": "target__scopes__name",
+}
+
+DATATABLE_COLUMN_MAP_SUBSCAN_HISTORY = {
+    "2": "scan_history__target__value",
+    "3": "engine__engine_name",
+    "4": "id",
+    "5": "start_scan_date",
+    "6": "status",
+    "7": "start_scan_date",
+}
+
+DATATABLE_COLUMN_MAP_SCHEDULED_SCANS = {
+    "0": "name",
+    "1": "frequency_type",
+    "2": "last_run_at",
+    "3": "total_run_count",
+    "4": "one_off",
+    "5": "enabled",
+}
+
 DATATABLE_COLUMN_MAP_TARGETS = {
     "2": "value",
     "6": "start_scan_date",
     "10": "insert_date",
+    "14": "scope_group_name",
 }
+
+DATATABLE_COLUMN_MAP_S3_BUCKETS = {
+    "0": "name",
+    "1": "region",
+    "2": "provider",
+    "4": "num_objects",
+    "5": "size",
+}
+
+DATATABLE_COLUMN_MAP_WORDLIST = {
+    "0": "name",
+    "1": "short_name",
+    "2": "count",
+}
+
+DATATABLE_COLUMN_MAP_SCAN_ENGINE = {
+    "0": "id",
+    "1": "engine_name",
+    "2": "default_engine",
+    "3": "scan_type",
+}
+
+# Fields that should be ordered with nulls last (e.g. never-scanned targets at the end).
+DATATABLE_NULLS_LAST_FIELDS = frozenset({"start_scan_date"})
 
 
 def get_datatables_order_column(
@@ -101,14 +189,6 @@ def get_datatables_order_column(
     "-severity") to indicate default descending. Request direction (asc/desc) is
     always applied when present; when absent, direction is taken from
     default_order only when the fallback was used.
-
-    Args:
-        request: The HTTP request (GET params: order[0][column], order[0][dir]).
-        column_map: Map from column index string to bare model field name, e.g. {"0": "name"}.
-        default_order: Field name when column is missing or not in map; may start with "-" for default desc.
-
-    Returns:
-        Order string for queryset.order_by(), e.g. "name", "-http_status".
     """
     order_col = request.GET.get("order[0][column]", None)
     order_direction = request.GET.get("order[0][dir]", None)
@@ -131,17 +211,13 @@ def get_datatables_order_column(
     return bare_field
 
 
-# Fields that should be ordered with nulls last (e.g. never-scanned targets at the end).
-DATATABLE_NULLS_LAST_FIELDS = frozenset({"start_scan_date"})
-
-
 def apply_datatables_order(
-    queryset: QuerySet[Any],
+    queryset: QuerySet,
     request: HttpRequest,
     column_map: dict[str, str],
     default_order: str = "id",
-    nulls_last_fields: Optional[set[str]] = None,
-) -> QuerySet[Any]:
+    nulls_last_fields: set[str] | frozenset[str] | None = None,
+) -> QuerySet:
     """
     Apply DataTables order params to a queryset.
 
@@ -156,49 +232,3 @@ def apply_datatables_order(
         desc = order_str.startswith("-")
         return queryset.order_by(F(field).desc(nulls_last=True) if desc else F(field).asc(nulls_last=True))
     return queryset.order_by(order_str)
-
-
-def _target_url_base(url: str) -> str:
-    """Strip trailing /0 or /0/ so the frontend can append row.id.
-    Returns base with a trailing slash so that (base + id) yields the correct path (e.g. base/2).
-    Ensures a leading slash so that href values are absolute paths.
-    """
-    u = url.rstrip("/")
-    base = (u[:-1].rstrip("/")) if u.endswith("/0") else u
-    base = base if base.startswith("/") else f"/{base}"
-    return base if base.endswith("/") else f"{base}/"
-
-
-def get_datatable_action_urls(project_slug: str) -> dict:
-    """
-    Build the full dict of action URLs for datatables_action_renderers.js.
-
-    Target URLs are returned as "base" strings (trailing id stripped) so the
-    frontend can append row.id. All other URLs are used as-is.
-
-    Args:
-        project_slug: Current project slug for project-scoped URLs.
-
-    Returns:
-        Dict with keys 'subdomain', 'vulnerability', 'target', each mapping to
-        the URL dict expected by the corresponding renderer.
-    """
-    return {
-        "subdomain": {
-            "attackSurface": reverse("api:llm_get_possible_attacks"),
-            "toggleSubdomain": reverse("api:toggle_subdomain"),
-            "cmsDetector": reverse("api:cms_detector"),
-        },
-        "vulnerability": {
-            "llmReport": reverse("api:llm_vulnerability_report_generator"),
-            "hackeroneReport": reverse("api:vulnerability_report"),
-            "deleteVulnerability": reverse("api:delete_vulnerability"),
-        },
-        "target": {
-            "targetSummaryBase": _target_url_base(reverse("target_summary", args=[project_slug, 0])),
-            "startScanBase": _target_url_base(reverse("start_scan", args=[project_slug, 0])),
-            "scheduleScanBase": _target_url_base(reverse("schedule_scan", args=[project_slug, 0])),
-            "updateTargetBase": _target_url_base(reverse("update_target", args=[project_slug, 0])),
-            "deleteTargetBase": _target_url_base(reverse("delete_target", args=[project_slug, 0])),
-        },
-    }

@@ -13,14 +13,29 @@ from rest_framework.response import Response
 from api.pagination import parse_pagination_params
 
 
-def build_datatables_list_response(total_count: int, results: List[Any]) -> dict:
+def build_datatables_serverside_response(
+    request: Any,
+    records_total: int,
+    records_filtered: int,
+    data: List[Any],
+) -> dict:
     """
-    Build the standard DataTables list JSON shape used by classic and scroller use cases.
+    Build the official DataTables server-side response format.
 
-    Single place for the response payload so count/results (and any future keys like
-    total_count) stay consistent across viewsets and do not diverge.
+    Returns only draw, recordsTotal, recordsFiltered, data as per
+    https://datatables.net/manual/server-side. Draw is cast to int for security (XSS).
     """
-    return {"count": total_count, "results": results}
+    raw_draw = request.GET.get("draw", "1")
+    try:
+        draw = int(raw_draw)
+    except (TypeError, ValueError):
+        draw = 1
+    return {
+        "draw": draw,
+        "recordsTotal": records_total,
+        "recordsFiltered": records_filtered,
+        "data": data,
+    }
 
 
 class DatatablePaginationMixin:
@@ -46,13 +61,14 @@ class DatatableListMixin:
     """
     Mixin that implements list() with support for DataTables (start/length) and REST (page/page_size).
 
-    When start+length or page+page_size are present, returns the standard DataTables
-    list shape via build_datatables_list_response(count, results). Otherwise delegates
+    When start+length or page+page_size are present, returns the official DataTables
+    server-side format via build_datatables_serverside_response. Otherwise delegates
     to default DRF list (paginate_queryset + get_paginated_response or full list).
     """
 
     def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
+        base_queryset = self.get_queryset()
+        filtered_queryset = self.filter_queryset(base_queryset)
         context = {"request": request}
 
         if pagination := parse_pagination_params(
@@ -61,12 +77,17 @@ class DatatableListMixin:
             page=request.query_params.get("page"),
             page_size=request.query_params.get("page_size"),
         ):
-            total_count = queryset.count()
-            paginated_queryset = queryset[pagination["start"] : pagination["start"] + pagination["length"]]
+            records_total = base_queryset.count()
+            records_filtered = filtered_queryset.count()
+            paginated_queryset = filtered_queryset[pagination["start"] : pagination["start"] + pagination["length"]]
             if hasattr(self, "get_list_serializer_context") and callable(self.get_list_serializer_context):
                 context = {**context, **self.get_list_serializer_context(paginated_queryset)}
             serializer = self.get_serializer(paginated_queryset, many=True, context=context)
-            return Response(build_datatables_list_response(total_count, serializer.data))
+            return Response(
+                build_datatables_serverside_response(request, records_total, records_filtered, serializer.data)
+            )
+
+        queryset = filtered_queryset
 
         page = self.paginate_queryset(queryset)
         if page is not None:

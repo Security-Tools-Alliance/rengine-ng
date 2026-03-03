@@ -1,0 +1,19 @@
+{% comment %}
+  Centralized filter dropdown shell. Use with inner_template for the filter rows.
+  Pass id_prefix (e.g. "scanHistory") so IDs are unique when multiple dropdowns exist on one page.
+  Variables: inner_template (required), id_prefix (required for unique IDs), filter_menu_id, filtering_text_id, reset_filters_id (optional overrides when id_prefix not used)
+{% endcomment %}
+<div class="dropdown d-inline-block mt-1">
+  <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" id="{% if id_prefix %}{{ id_prefix }}FilterMenu{% else %}{{ filter_menu_id|default:'filterMenu' }}{% endif %}">
+    Filter <i class="fe-filter"></i>
+  </button>
+  <div id="{% if id_prefix %}{{ id_prefix }}FilteringText{% else %}{{ filtering_text_id|default:'filteringText' }}{% endif %}" class="mt-2"></div>
+  <div class="dropdown-menu" style="width: 30%; min-width: 300px;">
+    <div class="px-4 py-3">
+      <h4 class="headline-title">Filters</h4>
+      {% include inner_template with id_prefix=id_prefix|default:"" %}
+    </div>
+    <div class="dropdown-divider"></div>
+    <a href="#" class="dropdown-item text-primary float-end" id="{% if id_prefix %}{{ id_prefix }}ResetFilters{% else %}{{ reset_filters_id|default:'resetFilters' }}{% endif %}">Reset Filters</a>
+  </div>
+</div>

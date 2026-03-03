@@ -12,6 +12,7 @@ from .views import (
     CreateSecatorTask,
     CreateSecatorWorkflow,
     CVEDetails,
+    DatatableFilterHealth,
     DeleteMultipleRows,
     DeleteSecatorScan,
     DeleteSecatorTask,
@@ -55,17 +56,25 @@ from .views import (
     ListIPs,
     ListMetadata,
     ListOrganizations,
+    ListOrganizationsDatatableViewSet,
     ListOsintUsers,
     ListPorts,
+    ListS3BucketsDatatableViewSet,
+    ListScanEnginesDatatableViewSet,
     ListScanHistory,
     ListScanLogsViewSet,
+    ListScheduledScansDatatableViewSet,
+    ListScopes,
+    ListScopesDatatableViewSet,
     ListSubdomains,
     ListSubScans,
+    ListSubScansDatatableViewSet,
     ListTargetsDatatableViewSet,
     ListTargetsInOrganization,
     ListTargetsWithoutOrganization,
     ListTechnology,
     ListTodoNotes,
+    ListWordlistsDatatableViewSet,
     LLMAttackSuggestion,
     LLMModelsManager,
     LLMVulnerabilityReportGenerator,
@@ -78,6 +87,7 @@ from .views import (
     QueryInterestingSubdomains,
     RengineUpdateCheck,
     ReverseWhois,
+    ScanHistoryFilterChoices,
     ScanStatus,
     SearchHistoryView,
     SecatorFindingCreate,
@@ -110,6 +120,9 @@ from .views import (
 app_name = "api"
 router = routers.DefaultRouter()
 router.register(r"listDatatableSubdomain", SubdomainDatatableViewSet, basename="subdomain-datatable")
+router.register(r"listScopes", ListScopesDatatableViewSet, basename="scopes-datatable")
+router.register(r"listDatatableOrganizations", ListOrganizationsDatatableViewSet, basename="organizations-datatable")
+router.register(r"listScheduledScans", ListScheduledScansDatatableViewSet, basename="scheduled-scans-datatable")
 router.register(r"listTargets", ListTargetsDatatableViewSet, basename="targets")
 router.register(r"listSubdomains", SubdomainsViewSet, basename="subdomains")
 router.register(r"listEndpoints", EndPointViewSet, basename="endpoints")
@@ -151,9 +164,31 @@ urlpatterns = [
     ),
     path("queryTargetsInOrganization/", ListTargetsInOrganization.as_view(), name="queryTargetsInOrganization"),
     path("listOrganizations/", ListOrganizations.as_view(), name="listOrganizations"),
+    path("listScopes/", ListScopes.as_view(), name="listScopes"),
+    path(
+        "listDatatableSubscans/",
+        ListSubScansDatatableViewSet.as_view({"get": "list"}),
+        name="listDatatableSubscans",
+    ),
     path("listEngines/", ListEngines.as_view(), name="listEngines"),
     path("listSubScans/", ListSubScans.as_view(), name="listSubScans"),
     path("listScanHistory/", ListScanHistory.as_view(), name="listScanHistory"),
+    path("scanHistoryFilterChoices/", ScanHistoryFilterChoices.as_view(), name="scanHistoryFilterChoices"),
+    path(
+        "listS3Buckets/",
+        ListS3BucketsDatatableViewSet.as_view({"get": "list"}),
+        name="listS3Buckets",
+    ),
+    path(
+        "listWordlists/",
+        ListWordlistsDatatableViewSet.as_view({"get": "list"}),
+        name="listWordlists",
+    ),
+    path(
+        "listScanEngines/",
+        ListScanEnginesDatatableViewSet.as_view({"get": "list"}),
+        name="listScanEngines",
+    ),
     path("listTodoNotes/", ListTodoNotes.as_view(), name="listTodoNotes"),
     path("listInterestingKeywords/", ListInterestingKeywords.as_view(), name="listInterestingKeywords"),
     # Preview for custom scan assets only (gf_pattern, nuclei_template). Unsupported params return 410 Gone + migration_note.
@@ -234,6 +269,7 @@ urlpatterns = [
     path("secator/findings", SecatorFindingCreate.as_view(), name="secator_finding_create"),
     path("secator/finding/<str:finding_id>", SecatorFindingUpdate.as_view(), name="secator_finding_update"),
     path("secator/health/", SecatorHealth.as_view(), name="secator_health"),
+    path("health/datatables-filters/", DatatableFilterHealth.as_view(), name="datatable_filter_health"),
     path("secator/worker/<int:worker_id>/check/", SecatorWorkerCheckIn.as_view(), name="secator_worker_check"),
 ]
 

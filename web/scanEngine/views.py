@@ -14,6 +14,11 @@ from django.urls import reverse
 import requests
 from rolepermissions.decorators import has_permission_decorator
 
+from api.helpers.datatables import (
+    TABLE_ID_SCAN_ENGINE_LIST,
+    TABLE_ID_WORDLIST_LIST,
+    get_datatable_table_config,
+)
 from api.views import LLMModelsManager
 from dashboard.models import NetlasAPIKey, OpenAiAPIKey
 from reNgine.core.path import safe_unlink
@@ -90,12 +95,16 @@ logger = get_module_logger(__name__)
 def index(request):
     # Get engines based on scan type - filter out legacy engines
     # Legacy engines are kept only for retrocompatibility of old scans
-    engine_type = EngineType.objects.filter(is_legacy=False).order_by("engine_name")
+    engine_type_qs = EngineType.objects.filter(is_legacy=False).order_by("engine_name")
+    engine_names = sorted({engine.engine_name for engine in engine_type_qs if engine.engine_name})
+    dt_config = get_datatable_table_config(TABLE_ID_SCAN_ENGINE_LIST)
     context = {
         "engine_ul_show": "show",
         "engine_li": "active",
         "scan_engine_nav_active": "active",
-        "engine_type": engine_type,
+        "engine_type": engine_type_qs,
+        "datatable_filter_select_to_param": dt_config.get("filter_context"),
+        "engine_name_list": engine_names,
     }
     return render(request, "scanEngine/index.html", context)
 
@@ -197,7 +206,15 @@ def _wordlist_add_page_context(form) -> dict:
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
 def wordlist_list(request):
     wordlists = Wordlist.objects.all().order_by("id")
-    context = {"scan_engine_nav_active": "active", "wordlist_li": "active", "wordlists": wordlists}
+    wordlist_names = sorted({wordlist.name for wordlist in wordlists if wordlist.name})
+    dt_config = get_datatable_table_config(TABLE_ID_WORDLIST_LIST)
+    context = {
+        "scan_engine_nav_active": "active",
+        "wordlist_li": "active",
+        "wordlists": wordlists,
+        "datatable_filter_select_to_param": dt_config.get("filter_context"),
+        "wordlist_name_list": wordlist_names,
+    }
     return render(request, "scanEngine/wordlist/index.html", context)
 
 

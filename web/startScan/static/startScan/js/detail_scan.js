@@ -1,57 +1,116 @@
 function get_ips_from_port(port_number, history_id){
-	document.getElementById("detailScanModalLabel").innerHTML='IPs with port ' + port_number + ' OPEN';
+	const el = document.getElementById("detailScanModalLabel");
+	if (el) el.textContent = "IPs with port " + (typeof window.safeText === "function" ? window.safeText(port_number) : port_number) + " OPEN";
 	fetch('../port/ip/'+port_number+'/'+history_id+'/')
 	.then(response => response.json())
 	.then(data => render_ips(data));
 }
 
 function get_ports_for_ip(ip, history_id){
-	document.getElementById("detailScanModalLabel").innerHTML='Open Ports identified for ' + ip;
+	const el = document.getElementById("detailScanModalLabel");
+	if (el) el.textContent = "Open Ports identified for " + (typeof window.safeText === "function" ? window.safeText(ip) : ip);
 	fetch('../ip/ports/'+ip+'/'+history_id+'/')
 	.then(response => response.json())
 	.then(data => render_ports(data));
 }
 
-function render_ports(data)
-{
-	let port_badge = ''
-	const ip_address_content = document.getElementById("detailScanModalContent");
-	Object.entries(JSON.parse(data)).forEach(([key, value]) => {
-		const badge_color = value[3] ? 'danger' : 'info';
-		let title = value[3] ? 'Uncommon Port - ' + value[2] : value[2];
-		// Add port details if available (state, protocol, host, cpes)
-		if (value[4]) { // state
-			title += `\nState: ${value[4]}`;
-		}
-		if (value[5]) { // protocol
-			title += `\nProtocol: ${value[5]}`;
-		}
-		if (value[6]) { // host
-			title += `\nHost: ${value[6]}`;
-		}
-		if (value[7] && Array.isArray(value[7]) && value[7].length > 0) { // cpes
-			title += `\nCPEs: ${value[7].join(', ')}`;
-		}
-		port_badge += `<span class='m-1 badge  badge-soft-${badge_color} bs-tooltip' title='${title}'>${value[0]}/${value[1]}</span>`;
-	});
-	ip_address_content.innerHTML = port_badge;
-	$('.bs-tooltip').tooltip();
+/**
+ * Renders a safe <a> link. Prefer window.safeLink (escape.js); fallback sanitizes href via
+ * window.sanitizeUrlForHref / window.normalizeSafeLinkUrl when available. Requires escape.js for full safety.
+ */
+function detailScanSafeLink(url, displayText, opts) {
+	if (typeof window.safeLink === "function") {
+		return window.safeLink(url, displayText || "", opts || {});
+	}
+	const safeAttr = typeof window.safeAttr === "function" ? window.safeAttr : function (s) { return s == null ? "" : String(s); };
+	const safeText = typeof window.safeText === "function" ? window.safeText : function (s) { return s == null ? "" : String(s); };
+	const sanitize = typeof window.sanitizeUrlForHref === "function" ? window.sanitizeUrlForHref : (typeof window.normalizeSafeLinkUrl === "function" ? window.normalizeSafeLinkUrl : null);
+	const safeHref = sanitize ? (sanitize(url) || "#") : "#";
+	const text = safeText(displayText != null ? displayText : "");
+	const o = opts || {};
+	let attrs = "href=\"" + safeAttr(safeHref) + "\"";
+	if (o.target) attrs += " target=\"" + safeAttr(o.target) + "\"";
+	if (o.className) attrs += " class=\"" + safeAttr(o.className) + "\"";
+	if (o.title != null) attrs += " title=\"" + safeAttr(o.title) + "\"";
+	return "<a " + attrs + ">" + text + "</a>";
 }
 
-function render_ips(data)
-{
-	let ip_badge = ''
+function detailScanSafeBadge(displayText, badgeClass, iconClass) {
+	if (typeof window.safeBadge === "function") {
+		return window.safeBadge(displayText, badgeClass || "", iconClass || "");
+	}
+	const safeAttr = typeof window.safeAttr === "function" ? window.safeAttr : function (s) { return s == null ? "" : String(s); };
+	const safeText = typeof window.safeText === "function" ? window.safeText : function (s) { return s == null ? "" : String(s); };
+	const cls = safeAttr(badgeClass || "");
+	const icon = (iconClass != null && iconClass !== "") ? "<i class=\"" + safeAttr(iconClass) + " me-1\"></i>" : "";
+	return "<span class=\"" + cls + "\">" + icon + safeText(displayText) + "</span>";
+}
+
+function detailScanSafeBadgeWithTooltip(title, displayText, badgeClass, iconClass) {
+	if (typeof window.safeBadgeWithTooltip === "function") {
+		return window.safeBadgeWithTooltip(title, displayText, badgeClass || "", iconClass || "", "");
+	}
+	const safeAttr = typeof window.safeAttr === "function" ? window.safeAttr : function (s) { return s == null ? "" : String(s); };
+	const safeText = typeof window.safeText === "function" ? window.safeText : function (s) { return s == null ? "" : String(s); };
+	const cls = safeAttr(badgeClass || "");
+	const titleAttr = (title != null && title !== "") ? " title=\"" + safeAttr(title) + "\"" : "";
+	const icon = (iconClass != null && iconClass !== "") ? "<i class=\"" + safeAttr(iconClass) + " me-1\"></i>" : "";
+	return "<span class=\"" + cls + "\"" + titleAttr + ">" + icon + safeText(displayText) + "</span>";
+}
+
+function buildEndpointUrlCellHtml(row, endpointSubdomainUrl) {
+	let techBadge = "";
+	if (row["techs"]) {
+		techBadge = "</br>" + parse_technology(endpointSubdomainUrl, row["techs"], "primary", true, false, true);
+	}
+	let webServer = "";
+	if (row["webserver"]) {
+		webServer = detailScanSafeBadge(row["webserver"], "m-1 badge badge-soft-info", "");
+	}
+	const rawUrl = (row["http_url"] != null && typeof row["http_url"] === "string") ? row["http_url"] : (row["http_url"] ? String(row["http_url"]) : "");
+	const sanitize = typeof window.sanitizeUrlForHref === "function" ? window.sanitizeUrlForHref : (typeof window.normalizeSafeLinkUrl === "function" ? window.normalizeSafeLinkUrl : null);
+	const hrefUrl = sanitize ? (sanitize(rawUrl) || "#") : (rawUrl || "#");
+	const displayText = rawUrl.length > 80 ? rawUrl.slice(0, 77) + "..." : rawUrl;
+	const idVal = typeof window.safeAttr === "function" ? window.safeAttr(String(row["id"])) : String(row["id"]);
+	const linkHtml = detailScanSafeLink(hrefUrl, displayText, { target: "_blank", className: "text-primary", title: rawUrl });
+	const linkWithId = linkHtml.replace("<a ", "<a id=\"url-" + idVal + "\" ");
+	const actionIcons = "<div class=\"float-left subdomain-table-action-icons mt-2\"><span class=\"m-1\"><a href=\"javascript:;\" data-clipboard-action=\"copy\" class=\"badge-link text-primary copyable text-primary\" data-toggle=\"tooltip\" data-placement=\"top\" title=\"Copy Url!\" data-clipboard-target=\"#url-" + idVal + "\" onclick=\"setTooltip(this.id, 'Copied!')\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"feather feather-copy\"><rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\" ry=\"2\"></rect><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"></path></svg></span></a></div>";
+	return "<div class=\"clipboard copy-txt\">" + linkWithId + techBadge + webServer + "<br>" + actionIcons + "</div>";
+}
+
+// normalizeSafeLinkUrl: provided by web/static/custom/datatables/escape.js (load order: escape.js before this script).
+// Do not reimplement URL sanitization here; use window.normalizeSafeLinkUrl or window.sanitizeUrlForHref. See escape.js for allowed schemes.
+
+function render_ports(data) {
+	let port_badge = "";
+	const ip_address_content = document.getElementById("detailScanModalContent");
+	Object.entries(JSON.parse(data)).forEach(([key, value]) => {
+		const badge_color = value[3] ? "danger" : "info";
+		let title = value[3] ? "Uncommon Port - " + value[2] : String(value[2]);
+		if (value[4]) title += "\nState: " + value[4];
+		if (value[5]) title += "\nProtocol: " + value[5];
+		if (value[6]) title += "\nHost: " + value[6];
+		if (value[7] && Array.isArray(value[7]) && value[7].length > 0) title += "\nCPEs: " + value[7].join(", ");
+		const display = (value[0] != null ? value[0] : "") + "/" + (value[1] != null ? value[1] : "");
+		port_badge += detailScanSafeBadgeWithTooltip(title, display, "m-1 badge badge-soft-" + badge_color + " bs-tooltip", "");
+	});
+	ip_address_content.innerHTML = port_badge;
+	$(".bs-tooltip").tooltip();
+	return port_badge;
+}
+
+function render_ips(data) {
+	let ip_badge = "";
 	const content = document.getElementById("detailScanModalContent");
 	Object.entries(JSON.parse(data)).forEach(([key, value]) => {
-		const badge_color = value[1] ? 'warning' : 'info';
-		let title = value[1] ? 'CDN IP Address' : '';
-		if (value[2] !== undefined) { // alive field
-			title += value[2] ? '\nAlive: Yes' : '\nAlive: No';
-		}
-		ip_badge += `<span class='m-1 badge  badge-soft-${badge_color} bs-tooltip' title='${title}'>${value[0]}</span>`
+		const badge_color = value[1] ? "warning" : "info";
+		let title = value[1] ? "CDN IP Address" : "";
+		if (value[2] !== undefined) title += value[2] ? "\nAlive: Yes" : "\nAlive: No";
+		const display = value[0] != null ? value[0] : "";
+		ip_badge += detailScanSafeBadgeWithTooltip(title, display, "m-1 badge badge-soft-" + badge_color + " bs-tooltip", "");
 	});
 	content.innerHTML = ip_badge;
-	$('.bs-tooltip').tooltip();
+	$(".bs-tooltip").tooltip();
 }
 
 
@@ -101,31 +160,10 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
     // Ensure columns count matches thead
     const endpoint_datatable_columns = [
         { 'data': 'id', 'title': 'ID', 'defaultContent': '', 'visible': false, 'searchable': false, 'className': 'endpoint-id-col dt-col-hidden' },
-        { 
+        {
             'data': 'http_url', 'title': 'HTTP URL', 'defaultContent': '',
-            'render': function ( data, type, row ) {
-                let tech_badge = '';
-                let web_server = '';
-                if (row['techs']){
-                    tech_badge = `</br>` + parse_technology(endpoint_subdomain_url, row['techs'], "primary", true, false, true);
-                }
-
-                if (row['webserver']) {
-                    web_server = `<span class='m-1 badge badge-soft-info' data-toggle="tooltip" data-placement="top" title="Web Server">${row['webserver']}</span>`;
-                }
-
-                const url = split_into_lines(data, 70);
-                const action_icons = `
-                <div class="float-left subdomain-table-action-icons mt-2">
-                <span class="m-1">
-                <a href="javascript:;" data-clipboard-action="copy" class="badge-link text-primary copyable text-primary" data-toggle="tooltip" data-placement="top" title="Copy Url!" data-clipboard-target="#url-${row['id']}" id="#url-${row['id']}" onclick="setTooltip(this.id, 'Copied!')">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-copy"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
-                </a>
-                </div>
-                `;
-                tech_badge += web_server;
-
-                return `<div class="clipboard copy-txt">` + "<a href='"+ data +`' id="url-${escapeHtml(row['id'])}" target='_blank' class='text-primary'>`+ url +"</a>" + tech_badge + "<br>" + action_icons ;
+            'render': function (data, type, row) {
+                return buildEndpointUrlCellHtml(row, endpoint_subdomain_url);
             }
         },
         { 
@@ -137,7 +175,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
                 return '';
             }
         },
-        { 'data': 'page_title', 'title': 'Page Title', 'defaultContent': '', 'render': function ( data ) { return htmlEncode(data); } },
+        { 'data': 'page_title', 'title': 'Page Title', 'defaultContent': '', 'render': function ( data ) { return (typeof window.safeText === 'function' ? window.safeText(data) : (data || '')); } },
         { 'data': 'matched_gf_patterns', 'title': 'Tags', 'defaultContent': '', 'render': function ( data ) { return data ? parse_comma_values_into_span(data, "danger", outline=true) : ""; } },
         { 'data': 'content_type', 'title': 'Content Type', 'defaultContent': '' },
         { 'data': 'content_length', 'title': 'Content Length', 'searchable': false, 'defaultContent': '' },
@@ -211,14 +249,21 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 
     generateTableHead('endpoint_results', endpoint_datatable_columns);
 
-    // Precompute indices by data name to avoid hard-coded numbers
+    // Precompute indices by data name to avoid hard-coded numbers. Use global helper or local fallback so -1 only means "column not found".
+    const getColIdx = (cols, name) => {
+        if (typeof window.getColumnIndexByName === 'function') return window.getColumnIndexByName(cols, name);
+        if (!Array.isArray(cols) || cols.length === 0) return -1;
+        const first = cols[0];
+        if (typeof first === 'string') return cols.indexOf(name);
+        return cols.findIndex((c) => c && c.name === name);
+    };
     const colIndexMap = {
-        http_status: get_datatable_col_index('http_status', endpoint_datatable_columns),
-        page_title: get_datatable_col_index('page_title', endpoint_datatable_columns),
-        matched_gf_patterns: get_datatable_col_index('matched_gf_patterns', endpoint_datatable_columns),
-        content_type: get_datatable_col_index('content_type', endpoint_datatable_columns),
-        content_length: get_datatable_col_index('content_length', endpoint_datatable_columns),
-        response_time: get_datatable_col_index('response_time', endpoint_datatable_columns),
+        http_status: getColIdx(endpoint_datatable_columns, 'http_status'),
+        page_title: getColIdx(endpoint_datatable_columns, 'page_title'),
+        matched_gf_patterns: getColIdx(endpoint_datatable_columns, 'matched_gf_patterns'),
+        content_type: getColIdx(endpoint_datatable_columns, 'content_type'),
+        content_length: getColIdx(endpoint_datatable_columns, 'content_length'),
+        response_time: getColIdx(endpoint_datatable_columns, 'response_time'),
     };
 
     // Validate indices; replace -1 with null to avoid runtime issues
@@ -240,41 +285,37 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
         ? window.getRengineDatatableScrollerOptions("60vh")
         : {};
     const endpointLayout = (window.getRengineDatatableLayoutFull && window.getRengineDatatableLayoutFull()) || window.RENGINE_DATATABLE_LAYOUT_FULL;
-    const endpoint_table = $('#endpoint_results').DataTable(Object.assign({
-		"destroy": true,
-		"processing": true,
-        "autoWidth": false,
-        "deferRender": true,
-		"language": { "processing": "Processing... Please wait..." },
-		"layout": endpointLayout,
-		"lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, 1000, -1], ["30", "50", "100", "200", "500", "1000", "All"]],
-		"responsive": true,
-		"pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
-		'serverSide': true,
-		"ajax": {
-				'url': lookup_url,
-		},
-		"rowGroup": {
-			"startRender": function(rows, group) {
+    const endpointTableOpts = Object.assign({
+		destroy: true,
+		processing: true,
+        autoWidth: false,
+        deferRender: true,
+		language: { processing: "Processing... Please wait..." },
+		layout: endpointLayout,
+		lengthMenu: window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]],
+		responsive: true,
+		pageLength: window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
+		serverSide: true,
+		ajax: { url: lookup_url },
+		rowGroup: {
+			startRender: function(rows, group) {
 				return group + ' (' + rows.count() + ' Endpoints)';
 			}
 		},
-        "order": [[ defaultOrderIndex, "desc" ]],
-        "columns": endpoint_datatable_columns,
-        // No columnDefs with index targets to avoid index drift issues
-		"initComplete": function(settings, json) {
-			endpoint_datatable_col_visibility(endpoint_table, endpoint_datatable_columns);
+        order: [[ defaultOrderIndex, "desc" ]],
+        columns: endpoint_datatable_columns,
+		initComplete: function(settings, json) {
+			const tbl = $('#endpoint_results').DataTable();
+			endpoint_datatable_col_visibility(tbl, endpoint_datatable_columns);
 			$(".dtrg-group th:contains('No group')").remove();
 			window.ScreenshotDisplay.attachDelegation('#endpoint_results');
 		},
-		"drawCallback": function () {
+		drawCallback: function () {
 			$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-			// $('.dt-container table').removeClass('table-striped');
-			$('.badge').tooltip({ template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' })
+			$('.badge').tooltip({ template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' });
 			$('.dtrg-group').remove();
 			$('.bs-tooltip').tooltip();
             const clipboard = new Clipboard('.copyable');
-			$('.bs-tooltip').tooltip();
 			clipboard.on('success', function(e) {
 				setTooltip(e.trigger, 'Copied!');
 				hideTooltip(e.trigger);
@@ -283,22 +324,56 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 				$(".dtrg-group th:contains('No group')").remove();
 			}, 1);
 		}
-	}, endpointScrollerOpts));
+	}, endpointScrollerOpts);
+    let endpoint_table;
+    if (typeof window.getRengineDatatableConfig === "function" && typeof window.initServerSideDataTable === "function") {
+        endpoint_table = window.initServerSideDataTable("#endpoint_results", window.getRengineDatatableConfig("#endpoint_results", endpointTableOpts));
+    } else {
+        if (typeof console !== "undefined" && console.warn) {
+            console.warn("detail_scan: getRengineDatatableConfig/initServerSideDataTable not found; ensure datatables/init.js loads before this script.");
+        }
+        endpoint_table = $("#endpoint_results").DataTable(endpointTableOpts);
+    }
 
-    $('input[name=grouping_endpoint_row]').off('change').on('change', function() {
-        if (this.checked) {
-                const col_index = get_datatable_col_index(this.value, endpoint_datatable_columns);
-            const api = $('#endpoint_results').DataTable();
-                api.page.len(-1).draw();
-                api.order([col_index, 'asc']).draw();
-            api.rowGroup().dataSrc(this.value);
-	      Snackbar.show({
-	        text: 'Endpoints grouped by ' + this.value,
-	        pos: 'top-right',
-	        duration: 2500
-	      });
-	    }
-	});
+    const endpointSnackbarMsg = typeof window.getRengineRowGroupSnackbarMessage === 'function'
+        ? window.getRengineRowGroupSnackbarMessage('Grouping cleared', 'Endpoints grouped by {label}')
+        : null;
+    const endpointExpandPageLengthWhenGrouping = true;
+    const applyEndpointGrouping = function (value, showSnackbar) {
+        const api = $('#endpoint_results').DataTable();
+        if (value === '' || value == null) {
+            api.rowGroup().disable();
+            const contentLengthIdx = getColIdx(endpoint_datatable_columns, 'content_length');
+            const responseTimeIdx = getColIdx(endpoint_datatable_columns, 'response_time');
+            const defaultIdx = contentLengthIdx >= 0 ? contentLengthIdx : (responseTimeIdx >= 0 ? responseTimeIdx : 0);
+            api.order([[defaultIdx, 'desc']]).draw();
+            if (showSnackbar !== false && typeof Snackbar !== 'undefined' && Snackbar.show) {
+                let msg = endpointSnackbarMsg ? endpointSnackbarMsg({ value: '', label: 'None' }) : 'Grouping cleared';
+                if (typeof window.htmlEncode === 'function') msg = window.htmlEncode(msg);
+                Snackbar.show({ text: msg, pos: 'top-right', duration: 2500 });
+            }
+            return;
+        }
+        const col_index = getColIdx(endpoint_datatable_columns, value);
+        if (endpointExpandPageLengthWhenGrouping) {
+            api.page.len(-1).draw();
+        }
+        api.order([[col_index, 'asc']]).draw();
+        api.rowGroup().dataSrc(value);
+        if (showSnackbar !== false && typeof Snackbar !== 'undefined' && Snackbar.show) {
+            let msg = endpointSnackbarMsg ? endpointSnackbarMsg({ value: value, label: value }) : ('Endpoints grouped by ' + value);
+            if (typeof window.safeText === 'function') msg = window.safeText(msg);
+            Snackbar.show({ text: msg, pos: 'top-right', duration: 2500 });
+        }
+    };
+    $('input[name=grouping_endpoint_row]').off('change').on('change', function () {
+        if (!this.checked) return;
+        applyEndpointGrouping(this.value, true);
+    });
+    const $checkedEndpointGroup = $('input[name=grouping_endpoint_row]:checked');
+    if ($checkedEndpointGroup.length && ($checkedEndpointGroup.val() === '' || $checkedEndpointGroup.val() == null)) {
+        applyEndpointGrouping('', false);
+    }
 
     $('#endpoint-search-button').off('click').on('click', function () {
         endpoint_table.search($('#endpoints-search').val()).draw() ;
@@ -316,7 +391,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
     filterBindings.forEach(binding => {
         const selector = `input[name=${binding.checkbox}]`;
         $(selector).off('change').on('change', function() {
-            const idx = get_datatable_col_index(binding.column, endpoint_datatable_columns);
+            const idx = getColIdx(endpoint_datatable_columns, binding.column);
             if (idx > -1) {
                 endpoint_table.column(idx).visible($(this).is(':checked'));
             }
@@ -325,203 +400,149 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
     });
 }
 
-function get_subdomain_changes(endpoint, scan_history_id){
-	const subdomainChangesScrollerOpts = window.getRengineDatatableScrollerOptions
-		? window.getRengineDatatableScrollerOptions("60vh")
-		: {};
-	const subdomainChangesLayout = (window.getRengineDatatableLayoutFull && window.getRengineDatatableLayoutFull()) || window.RENGINE_DATATABLE_LAYOUT_FULL;
-	$('#table-subdomain-changes').DataTable(Object.assign({
-		"drawCallback": function() {
-			const pageInfo = this.page && typeof this.page.info === 'function' ? this.page.info() : null;
+function get_subdomain_changes(endpoint, scan_history_id) {
+	const opts = {
+		destroy: true,
+		responsive: true,
+		serverSide: true,
+		ajax: { url: endpoint + "?scan_id=" + encodeURIComponent(scan_history_id) + "&format=datatables" },
+		order: [[3, "desc"]],
+		columns: [
+			{ data: "name" },
+			{ data: "page_title" },
+			{ data: "http_status" },
+			{ data: "content_length" },
+			{ data: "change" },
+			{ data: "http_url" },
+			{ data: "is_cdn" },
+			{ data: "is_interesting" }
+		],
+		info: false,
+		columnDefs: [
+			{ targets: [5, 6, 7], visible: false, searchable: false },
+			{ className: "text-center", targets: [2, 4] },
+			{ targets: 0, render: renderSubdomainChangeNameCell },
+			{ targets: 1, render: function (data) { return data ? (typeof window.safeText === "function" ? window.safeText(data) : data) : ""; } },
+			{ targets: 2, render: renderHttpStatusBadgeSoft },
+			{ targets: 3, render: function (data) { return data ? "<span class=\"text-center\" style=\"display:block; text-align:center; margin:0 auto;\">" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>" : ""; } },
+			{ targets: 4, render: renderChangeAddedRemovedBadge }
+		],
+		drawCallback: function () {
+			const api = typeof this.api === "function" ? this.api() : null;
+			const pageInfo = api && typeof api.page.info === "function" ? api.page.info() : null;
 			const total = pageInfo ? pageInfo.recordsTotal : 0;
 			if (total > 0) {
-				$('#subdomain_change_count').empty();
-				$("#subdomain_change_count").html(`<span class="badge badge-soft-primary me-1">${total}</span>`);
-				$('.recon-changes-tab-show').removeAttr('style');
-				$('#subdomain_changes_alert').html(`${total} Subdomain changes.`);
-			}
-			else{
-				$('#recon_changes_subdomain_div').remove();
+				const totalStr = typeof window.safeText === "function" ? window.safeText(total) : total;
+				const badgeHtml = detailScanSafeBadge(totalStr, "badge badge-soft-primary me-1", "");
+				$("#subdomain_change_count").empty().html(badgeHtml);
+				$(".recon-changes-tab-show").removeAttr("style");
+				$("#subdomain_changes_alert").text(total + " Subdomain changes.");
+			} else {
+				$("#recon_changes_subdomain_div").remove();
 			}
 			$("#subdomain-changes-loader").remove();
-		},
-		"processing": true,
-		"layout": subdomainChangesLayout,
-		"destroy": true,
-		"responsive": true,
-		'serverSide': true,
-		"ajax": `${endpoint}?scan_id=${scan_history_id}&format=datatables`,
-		"order": [[ 3, "desc" ]],
-		"columns": [
-			{'data': 'name'},
-			{'data': 'page_title'},
-			{'data': 'http_status'},
-			{'data': 'content_length'},
-			{'data': 'change'},
-			{'data': 'http_url'},
-			{'data': 'is_cdn'},
-			{'data': 'is_interesting'},
-		],
-		"info": false,
-		"columnDefs": [
-			{
-				"targets": [ 5, 6, 7 ],
-				"visible": false,
-				"searchable": false,
-			},
-			{"className": "text-center", "targets": [ 2, 4 ]},
-			{
-				"render": function ( data, type, row ) {
-					let badges = '';
-					let cdn_badge = '';
-					let interesting_badge = '';
-					if (row['is_cdn'])
-					{
-						cdn_badge = "<span class='m-1 badge  badge-soft-warning'>CDN</span>"
-					}
-					if(row['is_interesting'])
-					{
-						interesting_badge = "<span class='m-1 badge  badge-soft-danger'>Interesting</span>"
-					}
-					if(cdn_badge || interesting_badge)
-					{
-						badges = cdn_badge + interesting_badge + '</br>';
-					}
-					if (row['http_url']) {
-						if (row['cname']) {
-							return badges + `<a href="`+row['http_url']+`" class="text-primary" target="_blank">`+data+`</a><br><span class="text-dark">CNAME<br><span class="text-warning"> ❯ </span>` + row['cname'].replace(',', '<br><span class="text-warning"> ❯ </span>')+`</span>`;
-						}
-						return badges + `<a href="`+row['http_url']+`" class="text-primary" target="_blank">`+data+`</a>`;
-					}
-					return badges + `<a href="https://`+data+`" class="text-primary" target="_blank">`+data+`</a>`;
-				},
-				"targets": 0
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data){
-						return htmlEncode(data);
-					}
-					return "";
-				},
-				"targets": 1,
-			},
-			{
-				"render": function ( data, type, row ) {
-					// display badge based on http status
-					// green for http status 2XX, orange for 3XX and warning for everything else
-					if (data >= 200 && data < 300) {
-						return "<span class='badge  badge-soft-success'>"+data+"</span>";
-					}
-					else if (data >= 300 && data < 400) {
-						return "<span class='badge  badge-soft-warning'>"+data+"</span>";
-					}
-					else if (data == 0){
-						// datatable throws error when no data is returned
-						return "";
-					}
-					return `<span class='badge  badge-soft-danger'>`+data+`</span>`;
-				},
-				"targets": 2,
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data){
-						return `<span class='text-center' style="display:block; text-align:center; margin:0 auto;">${data}</span>`;
-					}
-					return "";
-				},
-				"targets": 3,
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data == 'added'){
-						return `<span class='badge badge-soft-success'><i class="fe-plus-circle"></i> Added</span>`;
-					}
-					else{
-						return `<span class='badge badge-soft-danger'><i class="fe-minus-circle"></i> Removed</span>`;
-					}
-				},
-				"targets": 4,
-			},
-		],
-	}, subdomainChangesScrollerOpts));
+		}
+	};
+	if ($.fn.DataTable.isDataTable("#table-subdomain-changes")) {
+		$("#table-subdomain-changes").DataTable().destroy();
+	}
+	if (typeof window.initDetailScanServerSideTable === "function") {
+		window.initDetailScanServerSideTable("#table-subdomain-changes", opts);
+	} else if (typeof window.getRengineDatatableConfig === "function" && typeof window.initServerSideDataTable === "function") {
+		window.initServerSideDataTable("#table-subdomain-changes", window.getRengineDatatableConfig("#table-subdomain-changes", opts));
+	} else {
+		if (typeof console !== "undefined" && console.warn) {
+			console.warn("detail_scan: getRengineDatatableConfig/initServerSideDataTable not found; ensure datatables/init.js loads before this script.");
+		}
+		$("#table-subdomain-changes").DataTable(opts);
+	}
 }
 
-function get_endpoint_changes(endpoint, scan_history_id){
-	const endpointChangesScrollerOpts = window.getRengineDatatableScrollerOptions
-		? window.getRengineDatatableScrollerOptions("60vh")
-		: {};
-	const endpointChangesLayout = (window.getRengineDatatableLayoutFull && window.getRengineDatatableLayoutFull()) || window.RENGINE_DATATABLE_LAYOUT_FULL;
-	$('#table-endpoint-changes').DataTable(Object.assign({
-		"drawCallback": function() {
-			const pageInfo = this.page && typeof this.page.info === 'function' ? this.page.info() : null;
+function renderSubdomainChangeNameCell(data, type, row) {
+	const linkOpts = { className: "text-primary", target: "_blank" };
+	let badges = "";
+	if (row.is_cdn) badges += detailScanSafeBadge("CDN", "m-1 badge badge-soft-warning", "");
+	if (row.is_interesting) badges += detailScanSafeBadge("Interesting", "m-1 badge badge-soft-danger", "");
+	if (badges) badges += "<br>";
+	const safeTextFn = typeof window.safeText === "function" ? window.safeText : function (s) { return s == null ? "" : String(s); };
+	const display = data != null ? data : "";
+	if (row.http_url) {
+		if (row.cname) {
+			const cnameParts = String(row.cname).split(",").map(function (p) { return safeTextFn(p.trim()); }).join("<br><span class=\"text-warning\"> ❯ </span>");
+			return badges + detailScanSafeLink(row.http_url, display, linkOpts) + "<br><span class=\"text-dark\">CNAME<br><span class=\"text-warning\"> ❯ </span>" + cnameParts + "</span>";
+		}
+		return badges + detailScanSafeLink(row.http_url, display, linkOpts);
+	}
+	return badges + detailScanSafeLink("https://" + (data || ""), display, linkOpts);
+}
+
+function renderHttpStatusBadgeSoft(data) {
+	if (data >= 200 && data < 300) return detailScanSafeBadge(data, "badge badge-soft-success", "");
+	if (data >= 300 && data < 400) return detailScanSafeBadge(data, "badge badge-soft-warning", "");
+	if (data == 0) return "";
+	return detailScanSafeBadge(data, "badge badge-soft-danger", "");
+}
+
+function renderChangeAddedRemovedBadge(data) {
+	return data === "added"
+		? detailScanSafeBadge("Added", "badge badge-soft-success", "fe-plus-circle")
+		: detailScanSafeBadge("Removed", "badge badge-soft-danger", "fe-minus-circle");
+}
+
+function get_endpoint_changes(endpoint, scan_history_id) {
+	const opts = {
+		destroy: true,
+		responsive: true,
+		serverSide: true,
+		ajax: { url: endpoint + "?scan_id=" + encodeURIComponent(scan_history_id) + "&format=datatables" },
+		order: [[3, "desc"]],
+		columns: [
+			{ data: "http_url" },
+			{ data: "page_title" },
+			{ data: "http_status" },
+			{ data: "content_length" },
+			{ data: "change" }
+		],
+		info: false,
+		columnDefs: [
+			{ className: "text-center", targets: [2] },
+			{ targets: 0, render: renderEndpointChangeUrlCell },
+			{ targets: 2, render: renderHttpStatusBadgeSoft },
+			{ targets: 4, render: renderChangeAddedRemovedBadge }
+		],
+		drawCallback: function () {
+			const api = typeof this.api === "function" ? this.api() : null;
+			const pageInfo = api && typeof api.page.info === "function" ? api.page.info() : null;
 			const total = pageInfo ? pageInfo.recordsTotal : 0;
 			if (total > 0) {
-				$("#endpoint_change_count").empty();
-				$("#endpoint_change_count").html(`${total}`);
-				$('.recon-changes-tab-show').removeAttr('style');
-			}
-			else{
+				$("#endpoint_change_count").empty().html(total);
+				$(".recon-changes-tab-show").removeAttr("style");
+			} else {
 				$("#endpoint-changes-div").remove();
 			}
 			$("#endpoint-changes-loader").remove();
-		},
-		"processing": true,
-		"layout": endpointChangesLayout,
-		"destroy": true,
-		"responsive": true,
-		'serverSide': true,
-		"ajax": `${endpoint}?scan_id=${scan_history_id}&format=datatables`,
-		"order": [[ 3, "desc" ]],
-		"columns": [
-			{'data': 'http_url'},
-			{'data': 'page_title'},
-			{'data': 'http_status'},
-			{'data': 'content_length'},
-			{'data': 'change'},
-		],
-		"info": false,
-		"columnDefs": [
-			{"className": "text-center", "targets": [ 2 ]},
-			{
-				"render": function ( data, type, row ) {
-					const url = split_into_lines(data, 70);
-					return "<a href='"+data+"' target='_blank' class='text-primary'>"+url+"</a>";
-				},
-				"targets": 0
-			},
-			{
-				"render": function ( data, type, row ) {
-					// display badge based on http status
-					// green for http status 2XX, orange for 3XX and warning for everything else
-					if (data >= 200 && data < 300) {
-						return "<span class='badge  badge-soft-success'>"+data+"</span>";
-					}
-					else if (data >= 300 && data < 400) {
-						return "<span class='badge  badge-soft-warning'>"+data+"</span>";
-					}
-					else if (data == 0){
-						// datatable throws error when no data is returned
-						return "";
-					}
-					return `<span class='badge  badge-soft-danger'>`+data+`</span>`;
-				},
-				"targets": 2,
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data == 'added'){
-						return `<span class='badge badge-soft-success'><i class="fe-plus-circle"></i> Added</span>`;
-					}
-					else{
-						return `<span class='badge badge-soft-danger'><i class="fe-minus-circle"></i> Removed</span>`;
-					}
-				},
-				"targets": 4,
-			},
-		],
-	}, endpointChangesScrollerOpts));
+		}
+	};
+	if ($.fn.DataTable.isDataTable("#table-endpoint-changes")) {
+		$("#table-endpoint-changes").DataTable().destroy();
+	}
+	if (typeof window.initDetailScanServerSideTable === "function") {
+		window.initDetailScanServerSideTable("#table-endpoint-changes", opts);
+	} else if (typeof window.getRengineDatatableConfig === "function" && typeof window.initServerSideDataTable === "function") {
+		window.initServerSideDataTable("#table-endpoint-changes", window.getRengineDatatableConfig("#table-endpoint-changes", opts));
+	} else {
+		if (typeof console !== "undefined" && console.warn) {
+			console.warn("detail_scan: getRengineDatatableConfig/initServerSideDataTable not found; ensure datatables/init.js loads before this script.");
+		}
+		$("#table-endpoint-changes").DataTable(opts);
+	}
+}
+
+function renderEndpointChangeUrlCell(data) {
+	const raw = (data && typeof data === "string") ? data : (data ? String(data) : "");
+	const hrefUrl = (typeof window.normalizeSafeLinkUrl === "function" ? window.normalizeSafeLinkUrl(raw) : raw) || raw;
+	const displayText = raw.length > 80 ? raw.slice(0, 77) + "..." : raw;
+	return detailScanSafeLink(hrefUrl, displayText, { target: "_blank", className: "text-primary", title: raw });
 }
 
 function get_osint_users(scan_id){
@@ -939,189 +960,73 @@ function get_dork_details(dork_type, scan_id) {
 
 
 function get_vulnerability_modal(endpoint_url, scan_id=null, severity=null, subdomain_id=null, subdomain_name=null){
-	let url = `${endpoint_url}?&format=json`;
-
-	if (scan_id) {
-		url += `&scan_history=${scan_id}`;
-	}
-
-	if (severity != null) {
-		url += `&severity=${severity}`;
-	}
-
-	if (subdomain_id) {
-		url += `&subdomain_id=${subdomain_id}`;
-	}
-
-	let severity_title = '';
-	switch (severity) {
-		case 0: severity_title = 'Informational'; break;
-		case 1: severity_title = 'Low'; break;
-		case 2: severity_title = 'Medium'; break;
-		case 3: severity_title = 'High'; break;
-		case 4: severity_title = 'Critical'; break;
-		default: severity_title = '';
-	}
-
-	const loadingTitle = `Fetching ${severity_title} vulnerabilities for ${subdomain_name}...`;
-	const loadingBody = '<p class="text-muted">Loading...</p>';
+	const title = "Vulnerabilities for " + (subdomain_name || "");
 	if (window.ModalManager) {
-		ModalManager.setXlTitle(loadingTitle);
-		ModalManager.setXlLoading(loadingBody);
-		ModalManager.setXlContent({ footerHtml: '' });
+		ModalManager.setXlTitle(title);
+		ModalManager.setXlContent({ bodyHtml: "", footerHtml: "" });
 		if (!ModalManager.showXlOnly()) {
-			$('#xl-modal-title').html(loadingTitle);
-			$('#xl-modal-content').html(loadingBody);
-			$('#xl-modal-footer').html('');
+			$("#xl-modal-title").html(title);
+			$("#xl-modal-content").empty();
+			$("#xl-modal-footer").empty();
 			ModalManager.showXlOnly();
 		}
 	} else {
-		$('#xl-modal-title').html(loadingTitle);
-		$('#xl-modal-content').html(loadingBody);
-		$('#xl-modal-footer').html('');
-		ModalManager.showXlOnly();
+		$("#xl-modal-title").html(title);
+		$("#xl-modal-content").empty();
+		$("#xl-modal-footer").empty();
+		if (window.ModalManager) ModalManager.showXlOnly();
 	}
-
-	fetch(url, {
-		method: 'GET',
-		credentials: "same-origin",
-		headers: {
-			"X-CSRFToken": getCookie("csrftoken"),
-			'Content-Type': 'application/json'
-		},
-	}).then(response => response.json()).then(function(response) {
-		render_vulnerability_in_xl_modal(endpoint_url, response['count'], subdomain_name, response['results']);
-		if (window.ModalManager) {
-			ModalManager.setXlTitle(subdomain_name);
-		} else {
-			$('#xl-modal-title').html(subdomain_name);
-			ModalManager.showXlOnly();
-		}
-		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-	}).catch(function() {
-		const errTitle = severity_title || 'Error';
-		const errBody = '<p class="text-danger">Error loading data. Please try again.</p>';
-		if (window.ModalManager) {
-			ModalManager.setXlContent({ title: errTitle, bodyHtml: errBody });
-		} else {
-			$('#xl-modal-title').html(errTitle);
-			$('#xl-modal-content').html(errBody);
-			ModalManager.showXlOnly();
-		}
-		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-	});
+	render_vulnerability_in_xl_modal(endpoint_url, scan_id, severity, subdomain_id, subdomain_name);
+	$("body").tooltip({ selector: "[data-toggle=tooltip]" });
 }
 
 
 function get_endpoint_modal(endpoint_url, project, scan_id, subdomain_id, subdomain_name){
-	const loadingTitle = `Fetching Endpoints for ${subdomain_name}...`;
-	const loadingBody = '<p class="text-muted">Loading...</p>';
-	let url = scan_id
-		? `${endpoint_url}?project=${project}&scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
-		: `${endpoint_url}?project=${project}&subdomain_id=${subdomain_id}&format=json`;
-
+	const title = "Endpoints for " + (subdomain_name || "");
 	if (window.ModalManager) {
-		ModalManager.setXlTitle(loadingTitle);
-		ModalManager.setXlLoading(loadingBody);
-		ModalManager.setXlContent({ footerHtml: '' });
+		ModalManager.setXlTitle(title);
+		ModalManager.setXlContent({ bodyHtml: "", footerHtml: "" });
 		if (!ModalManager.showXlOnly()) {
-			$('#xl-modal-title').html(loadingTitle);
-			$('#xl-modal-content').html(loadingBody);
-			$('#xl-modal-footer').html('');
+			$("#xl-modal-title").html(title);
+			$("#xl-modal-content").empty();
+			$("#xl-modal-footer").empty();
 			ModalManager.showXlOnly();
 		}
 	} else {
-		$('#xl-modal-title').html(loadingTitle);
-		$('#xl-modal-content').html(loadingBody);
-		$('#xl-modal-footer').html('');
-		ModalManager.showXlOnly();
+		$("#xl-modal-title").html(title);
+		$("#xl-modal-content").empty();
+		$("#xl-modal-footer").empty();
+		if (window.ModalManager) ModalManager.showXlOnly();
 	}
-
-	fetch(url, {
-		method: 'GET',
-		credentials: "same-origin",
-		headers: {
-			"X-CSRFToken": getCookie("csrftoken"),
-			'Content-Type': 'application/json'
-		},
-	}).then(response => response.json()).then(function(response) {
-		render_endpoint_in_xl_modal(response['count'], subdomain_name, response['results']);
-		if (window.ModalManager) {
-			ModalManager.setXlTitle(subdomain_name);
-		} else {
-			$('#xl-modal-title').html(subdomain_name);
-			ModalManager.showXlOnly();
-		}
-		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-	}).catch(function() {
-		const errTitle = subdomain_name || 'Error';
-		const errBody = '<p class="text-danger">Error loading endpoints. Please try again.</p>';
-		if (window.ModalManager) {
-			ModalManager.setXlContent({ title: errTitle, bodyHtml: errBody });
-		} else {
-			$('#xl-modal-title').html(errTitle);
-			$('#xl-modal-content').html(errBody);
-			ModalManager.showXlOnly();
-		}
-		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-	});
+	render_endpoint_in_xl_modal(subdomain_id, subdomain_name, endpoint_url, project, scan_id);
+	$("body").tooltip({ selector: "[data-toggle=tooltip]" });
 }
 
 function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subdomain_name=null){
-	const loadingTitle = `Fetching Directories for ${subdomain_name}...`;
-	const loadingBody = '<p class="text-muted">Loading...</p>';
-	const url = scan_id
-		? `${endpoint_url}?scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
-		: `${endpoint_url}?subdomain_id=${subdomain_id}&format=json`;
-
+	const title = "Directories for " + (subdomain_name || "");
 	if (window.ModalManager) {
-		ModalManager.setXlTitle(loadingTitle);
-		ModalManager.setXlLoading(loadingBody);
-		ModalManager.setXlContent({ footerHtml: '' });
+		ModalManager.setXlTitle(title);
+		ModalManager.setXlContent({ bodyHtml: "", footerHtml: "" });
 		if (!ModalManager.showXlOnly()) {
-			$('#xl-modal-title').html(loadingTitle);
-			$('#xl-modal-content').html(loadingBody);
-			$('#xl-modal-footer').html('');
+			$("#xl-modal-title").html(title);
+			$("#xl-modal-content").empty();
+			$("#xl-modal-footer").empty();
 			ModalManager.showXlOnly();
 		}
 	} else {
-		$('#xl-modal-title').html(loadingTitle);
-		$('#xl-modal-content').html(loadingBody);
-		$('#xl-modal-footer').html('');
-		ModalManager.showXlOnly();
+		$("#xl-modal-title").html(title);
+		$("#xl-modal-content").empty();
+		$("#xl-modal-footer").empty();
+		if (window.ModalManager) ModalManager.showXlOnly();
 	}
-
-	fetch(url, {
-		method: 'GET',
-		credentials: "same-origin",
-		headers: {
-			"X-CSRFToken": getCookie("csrftoken"),
-			'Content-Type': 'application/json'
-		},
-	}).then(response => response.json()).then(function(response) {
-		render_directories_in_xl_modal(response['count'], subdomain_name, response['results']);
-		if (window.ModalManager) {
-			ModalManager.setXlTitle(subdomain_name);
-		} else {
-			$('#xl-modal-title').html(subdomain_name);
-			ModalManager.showXlOnly();
-		}
-		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-	}).catch(function() {
-		const errTitle = subdomain_name || 'Error';
-		const errBody = '<p class="text-danger">Error loading directories. Please try again.</p>';
-		if (window.ModalManager) {
-			ModalManager.setXlContent({ title: errTitle, bodyHtml: errBody });
-		} else {
-			$('#xl-modal-title').html(errTitle);
-			$('#xl-modal-content').html(errBody);
-			ModalManager.showXlOnly();
-		}
-		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-	});
+	render_directories_in_xl_modal(endpoint_url, scan_id, subdomain_id, subdomain_name);
+	$("body").tooltip({ selector: "[data-toggle=tooltip]" });
 }
 
 function escapeHtml(text) {
+	if (typeof window !== 'undefined' && typeof window.safeText === 'function') {
+		return window.safeText(text);
+	}
 	if (typeof window !== 'undefined' && window.CommandLogHelpers && window.CommandLogHelpers.escapeHtml) {
 		return window.CommandLogHelpers.escapeHtml(text);
 	}
@@ -1362,7 +1267,7 @@ function get_logs_modal(scan_id = null, activity_id = null, project_slug = null,
 		$('#xl-modal-title').html(loadingTitle);
 		$('#xl-modal-content').html(loadingBody);
 		$('#xl-modal-footer').html('');
-		ModalManager.showXlOnly();
+		if (window.ModalManager) ModalManager.showXlOnly();
 	}
 
 	fetch(url)
@@ -1379,7 +1284,7 @@ function get_logs_modal(scan_id = null, activity_id = null, project_slug = null,
 			} else {
 				$('#xl-modal-title').html(title);
 				$('#xl-modal-content').html(bodyHtml);
-				ModalManager.showXlOnly();
+				if (window.ModalManager) ModalManager.showXlOnly();
 			}
 			if (expandForActivity) {
 				window.currentLogsModalContext = {
@@ -1430,7 +1335,7 @@ function get_logs_modal(scan_id = null, activity_id = null, project_slug = null,
 			} else {
 				$('#xl-modal-title').html(title);
 				$('#xl-modal-content').html(errBody);
-				ModalManager.showXlOnly();
+				if (window.ModalManager) ModalManager.showXlOnly();
 			}
 			$("body").tooltip({ selector: '[data-toggle=tooltip]' });
 		});
@@ -2115,9 +2020,10 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 					const screenshotUrl = endpoint.screenshot_url || '';
 					if (screenshotUrl && endpoint.port == port) {
 						screenshotCount++;
+						const safeHttpUrl = window.normalizeSafeLinkUrl(endpoint.http_url);
 						modalContent += `
 						<div class="mb-4 text-center">
-							<h6><a href="${typeof htmlEncode === 'function' ? htmlEncode(endpoint.http_url) : endpoint.http_url}" target="_blank" class="text-primary">${typeof htmlEncode === 'function' ? htmlEncode(endpoint.http_url) : endpoint.http_url}</a></h6>
+							<h6><a href="${window.escapeAttr(safeHttpUrl)}" target="_blank" class="text-primary">${(typeof window.safeText === 'function' ? window.safeText(endpoint.http_url) : endpoint.http_url)}</a></h6>
 							<div class="d-flex justify-content-center">
 								<img src="${screenshotUrl}" class="img-fluid rounded screenshot-popup"
 									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
@@ -2128,7 +2034,7 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 					}
 				}
 			}
-			const safeSubdomain = typeof htmlEncode === 'function' ? htmlEncode(subdomain_name) : subdomain_name;
+			const safeSubdomain = (typeof window.safeText === 'function' ? window.safeText(subdomain_name) : subdomain_name);
 			const title = screenshotCount > 0
 				? `Screenshots for ${safeSubdomain}:${port} (${screenshotCount})`
 				: 'No screenshots';
@@ -2192,11 +2098,12 @@ function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
 					const subdomainScreenshotUrl = endpoint.screenshot_url || '';
 					if (subdomainScreenshotUrl) {
 						screenshotCount++;
+						const safeHttpUrl = window.normalizeSafeLinkUrl(endpoint.http_url);
 						modalContent += `
 						<div class="mb-4 text-center">
 							<h6>
-								<a href="${typeof htmlEncode === 'function' ? htmlEncode(endpoint.http_url) : endpoint.http_url}" target="_blank" class="text-primary">${typeof htmlEncode === 'function' ? htmlEncode(endpoint.http_url) : endpoint.http_url}</a>
-								<span class="badge badge-soft-info ms-2">Port ${typeof htmlEncode === 'function' ? htmlEncode(String(endpoint.port)) : endpoint.port}</span>
+								<a href="${window.escapeAttr(safeHttpUrl)}" target="_blank" class="text-primary">${(typeof window.safeText === 'function' ? window.safeText(endpoint.http_url) : endpoint.http_url)}</a>
+								<span class="badge badge-soft-info ms-2">Port ${(typeof window.safeText === 'function' ? window.safeText(String(endpoint.port)) : String(endpoint.port))}</span>
 							</h6>
 							<div class="d-flex justify-content-center">
 								<img src="${subdomainScreenshotUrl}" class="img-fluid rounded screenshot-popup"

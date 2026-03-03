@@ -38,12 +38,9 @@ def process_target_scan_override_from_post(
     override_form_fallback = None
     override_request_headers_initial = None
     if errors:
-        override_request_headers_initial = post.get(
-            TARGET_OVERRIDE_PREFIX + "request_headers", ""
-        )
+        override_request_headers_initial = post.get(TARGET_OVERRIDE_PREFIX + "request_headers", "")
         override_form_fallback = {
-            param: post.get(TARGET_OVERRIDE_PREFIX + param, "")
-            for param in ORDERED_PARAM_KEYS_FOR_FORM
+            param: post.get(TARGET_OVERRIDE_PREFIX + param, "") for param in ORDERED_PARAM_KEYS_FOR_FORM
         }
     return (
         scan_override,

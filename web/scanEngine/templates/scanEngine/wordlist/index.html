@@ -38,6 +38,7 @@ Wordlists
   <div class="col-12">
     <div class="card">
 			<div class="card-body">
+        {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_wordlist.html' id_prefix='wordlist' %}
         <table id="wordlist_table" class="table dt-responsive w-100">
         <thead>
           <tr>
@@ -48,14 +49,6 @@ Wordlists
           </tr>
         </thead>
         <tbody>
-          {% for wordlist in wordlists.all %}
-          <tr>
-            <td>{{ wordlist.name }}</td>
-            <td>{{ wordlist.short_name }}</td>
-            <td>{{ wordlist.count }}</td>
-            {% include 'base/_items/datatables_action_cells/wordlist.html' %}
-          </tr>
-          {% endfor %}
         </tbody>
       </table>
       </div>
@@ -68,17 +61,46 @@ Wordlists
 {% block page_level_script %}
 <script src="{% static 'scanEngine/js/custom_scan_engine.js' %}"></script>
 <script src="{% static 'targetApp/js/custom_organization.js' %}"></script>
+{{ datatable_filter_select_to_param|json_script:"datatable-filter-params" }}
 <script>
 $(document).ready(function() {
-  var wordlist_table = $('#wordlist_table').DataTable({
-    "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-    "lengthMenu": [5, 10, 20, 50],
-    "pageLength": 50,
-    "initComplete": function(settings, json) {
-      $('[data-toggle="tooltip"]').tooltip();
+  var wordlist_ajax_url = '{% url "api:listWordlists" %}';
+  var wordlist_columns = [
+    { data: 'name', name: 'name' },
+    { data: 'short_name', name: 'short_name' },
+    { data: 'count', name: 'count' },
+    { data: 'action', name: 'action', orderable: false }
+  ];
+  var wordlistFilterParamsEl = document.getElementById('datatable-filter-params');
+  var wordlistFilterSelectToParam = wordlistFilterParamsEl ? JSON.parse(wordlistFilterParamsEl.textContent) : {};
+  var wordlist_table = window.initServerSideDataTable('#wordlist_table', window.getRengineDatatableConfig('#wordlist_table', {
+    ajax: {
+      url: wordlist_ajax_url,
+      data: function(d) {
+        if (window.buildDatatableFilterPayload) {
+          var payload = window.buildDatatableFilterPayload(wordlistFilterSelectToParam);
+          Object.keys(payload).forEach(function(key) {
+            d[key] = payload[key];
+          });
+        }
+      }
+    },
+    columns: wordlist_columns,
+    order: window.getRengineDatatableOrderFromNames(wordlist_columns, [['name', 'asc']]),
+    lengthMenu: [5, 10, 20, 50],
+    pageLength: 50,
+    columnDefs: [
+      { targets: 'action:name', className: 'text-center', render: function(data) { return data || ''; } }
+    ],
+    initComplete: function() {
+      if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('[data-toggle="tooltip"]'));
+      if (typeof multiCheck === 'function') multiCheck(wordlist_table);
     }
-  });
-  multiCheck(wordlist_table);
+  }));
+
+  if (window.attachDatatableFilters) {
+    window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('wordlist_list', wordlist_table, { onApply: function() { wordlist_table.draw(); } }));
+  }
 });
 </script>
 {% endblock page_level_script %}

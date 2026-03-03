@@ -25,6 +25,7 @@ class SecatorConfig(TypedDict, total=False):
     on the kwargs root (e.g. _worker_ids) so they are not logged or serialized
     as part of user config.
     """
+
     proxy: str | None
     delay: int | float
     profiles: list[str]

@@ -1,7 +1,10 @@
 <div class="footer">
   <div class="row justify-content-center">
     <div class="col-12 col-md-8 col-lg-6 justify-content-center text-center">
-      External IP : {{external_ip}}
+      External IP : {{ external_ip }}
+      {% if debug %}
+      <span class="ms-2">| <a href="{% url 'api:datatable_filter_health' %}" target="_blank" rel="noopener">DataTables filter warnings</a></span>
+      {% endif %}
     </div>
   </div>
 </div>

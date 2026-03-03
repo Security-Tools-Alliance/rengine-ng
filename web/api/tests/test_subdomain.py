@@ -99,7 +99,8 @@ class TestSubdomainsViewSet(BaseTestCase):
         url = reverse("api:subdomains-list")
         response = self.client.get(url, {"scan_id": self.data_generator.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(len(response.data), 1)
+        self.assertIn("results", response.data)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.subdomain.name)
 
 
@@ -159,10 +160,11 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
         super().setUp()
 
     def test_list_subdomains(self):
-        """Test listing subdomains."""
+        """Test listing subdomains (no start/length: paginated response with results)."""
         api_url = reverse("api:subdomain-datatable-list")
         response = self.client.get(api_url, {"project": self.data_generator.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("results", response.data)
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.subdomain.name)
 
@@ -177,6 +179,7 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
             },
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("results", response.data)
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.subdomain.name)
 

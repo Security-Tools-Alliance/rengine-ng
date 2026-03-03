@@ -1,7 +1,10 @@
 from collections import defaultdict
+import html
+import json
 
 from django.contrib.humanize.templatetags.humanize import naturalday, naturaltime
 from django.db.models import F, JSONField, Value
+from django.urls import reverse
 from rest_framework import serializers
 import yaml
 
@@ -21,6 +24,7 @@ from reNgine.utilities.subdomain import get_interesting_subdomains
 from scanEngine.models import (
     EngineType,
     SecatorWorker,
+    Wordlist,
 )
 from startScan.models import (
     Command,
@@ -34,8 +38,10 @@ from startScan.models import (
     IpAddress,
     MetaFinderDocument,
     Port,
+    S3Bucket,
     ScanActivity,
     ScanHistory,
+    ScanSchedule,
     SecatorRunner,
     Subdomain,
     SubScan,
@@ -43,7 +49,7 @@ from startScan.models import (
     Vulnerability,
     Waf,
 )
-from targetApp.models import Organization, Target
+from targetApp.models import Organization, Scope, Target
 
 
 # Sentinel to distinguish "annotated count missing" from "count present but None" in get_*_count.
@@ -131,7 +137,7 @@ class TargetSerializer(serializers.ModelSerializer):
 
     name = serializers.SerializerMethodField()
     organization = serializers.SerializerMethodField()
-    scope_names = serializers.SerializerMethodField()
+    scope_group = serializers.SerializerMethodField()
     most_recent_scan = serializers.SerializerMethodField()
     insert_date = serializers.SerializerMethodField()
     insert_date_humanized = serializers.SerializerMethodField()
@@ -154,7 +160,7 @@ class TargetSerializer(serializers.ModelSerializer):
             "start_scan_date",
             "project",
             "organization",
-            "scope_names",
+            "scope_group",
             "most_recent_scan",
             "insert_date_humanized",
             "start_scan_date_humanized",
@@ -170,8 +176,11 @@ class TargetSerializer(serializers.ModelSerializer):
     def get_organization(self, obj):
         return [org.name for org in obj.organizations.all()]
 
-    def get_scope_names(self, obj):
-        return [s.name for s in obj.scopes.all()]
+    def get_scope_group(self, obj):
+        if hasattr(obj, "scope_group_name"):
+            return obj.scope_group_name
+        first = obj.scopes.first()
+        return first.name if first else "No scope"
 
     def get_most_recent_scan(self, obj):
         from startScan.models import ScanHistory
@@ -905,6 +914,423 @@ class OrganizationTargetsSerializer(serializers.ModelSerializer):
         fields = ["name"]
 
 
+class ScopeDatatableSerializer(serializers.ModelSerializer):
+    """Serializer for scope list DataTables API. Expects annotated target_count, worker_count."""
+
+    organization_name = serializers.CharField(source="organization.name", read_only=True)
+    scope_type = serializers.SerializerMethodField()
+    target_count = serializers.IntegerField(read_only=True, default=0)
+    worker_count = serializers.IntegerField(read_only=True, default=0)
+    insert_date_humanized = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Scope
+        fields = [
+            "id",
+            "name",
+            "organization_name",
+            "scope_type",
+            "start_date",
+            "end_date",
+            "target_count",
+            "worker_count",
+            "insert_date",
+            "insert_date_humanized",
+        ]
+
+    def get_scope_type(self, obj):
+        return obj.get_scope_type_display() or ""
+
+    def get_insert_date_humanized(self, obj):
+        return naturaltime(obj.insert_date).title() if obj.insert_date else ""
+
+
+class OrganizationDatatableSerializer(serializers.ModelSerializer):
+    """Serializer for organization list DataTables API. Expects annotated scope_count, total_targets."""
+
+    scope_count = serializers.IntegerField(read_only=True, default=0)
+    total_targets = serializers.IntegerField(read_only=True, default=0)
+    insert_date_humanized = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Organization
+        fields = ["id", "name", "description", "scope_count", "total_targets", "insert_date", "insert_date_humanized"]
+
+    def get_insert_date_humanized(self, obj):
+        return naturaltime(obj.insert_date).title() if obj.insert_date else ""
+
+
+class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
+    """Serializer for scan history list DataTables API. Flat fields for table columns."""
+
+    target_value = serializers.SerializerMethodField()
+    target_id = serializers.SerializerMethodField()
+    organizations = serializers.SerializerMethodField()
+    most_recent_scan = serializers.SerializerMethodField()
+    summary = serializers.SerializerMethodField()
+    scan_engine_text = serializers.SerializerMethodField()
+    worker_name = serializers.SerializerMethodField()
+    last_scan = serializers.SerializerMethodField()
+    initiated_by = serializers.SerializerMethodField()
+    status_text = serializers.SerializerMethodField()
+    progress = serializers.SerializerMethodField()
+    scope_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ScanHistory
+        fields = [
+            "id",
+            "target_value",
+            "target_id",
+            "organizations",
+            "most_recent_scan",
+            "summary",
+            "scan_engine_text",
+            "worker_name",
+            "last_scan",
+            "initiated_by",
+            "status_text",
+            "scan_status",
+            "progress",
+            "scope_name",
+        ]
+
+    def get_target_value(self, obj):
+        return obj.target.value if obj.target else ""
+
+    def get_target_id(self, obj):
+        return obj.target_id if obj.target_id else None
+
+    def get_organizations(self, obj):
+        target = obj.target
+        return [org.name for org in target.get_organization()] if target else []
+
+    def get_most_recent_scan(self, obj):
+        return obj.id
+
+    def get_summary(self, obj):
+        domain_count = obj.get_domain_count() if callable(getattr(obj, "get_domain_count", None)) else 0
+        subdomain_count = obj.get_subdomain_count() if callable(getattr(obj, "get_subdomain_count", None)) else 0
+        endpoint_count = obj.get_endpoint_count() if callable(getattr(obj, "get_endpoint_count", None)) else 0
+        vuln_count = obj.get_vulnerability_count() if callable(getattr(obj, "get_vulnerability_count", None)) else 0
+        return {
+            "domain_count": domain_count,
+            "subdomain_count": subdomain_count,
+            "endpoint_count": endpoint_count,
+            "vulnerability_count": vuln_count,
+        }
+
+    def get_scan_engine_text(self, obj):
+        runner = getattr(obj, "display_runner_type", "") or ""
+        scan_name = getattr(obj, "display_scan_name", "") or ""
+        return f"{runner}: {scan_name}" if runner or scan_name else ""
+
+    def get_worker_name(self, obj):
+        return getattr(obj, "secator_worker_name", None) or "Local"
+
+    def get_last_scan(self, obj):
+        if not obj.start_scan_date:
+            return None
+        return naturalday(obj.start_scan_date).title()
+
+    def get_initiated_by(self, obj):
+        return obj.initiated_by.username if obj.initiated_by else ""
+
+    def get_status_text(self, obj):
+        from reNgine.definitions import SCAN_STATUSES
+
+        status = getattr(obj, "scan_status", None)
+        if status is None:
+            return "Unknown"
+        return dict(SCAN_STATUSES).get(status, "Unknown")
+
+    def get_progress(self, obj):
+        return obj.get_progress() if callable(getattr(obj, "get_progress", None)) else 0
+
+    def get_scope_name(self, obj):
+        if not obj.target:
+            return ""
+        first = obj.target.scopes.first()
+        return first.name if first else ""
+
+
+class SubScanDatatableSerializer(serializers.ModelSerializer):
+    """Serializer for subscan history list DataTables API. Alias fields for column names."""
+
+    target_name = serializers.SerializerMethodField()
+    scan_engine_text = serializers.SerializerMethodField()
+    worker_name = serializers.SerializerMethodField()
+    scan_started = serializers.DateTimeField(source="start_scan_date", read_only=True)
+    status_text = serializers.SerializerMethodField()
+    status_code = serializers.SerializerMethodField()
+    progress = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SubScan
+        fields = [
+            "id",
+            "scan_history",
+            "target_name",
+            "scan_engine_text",
+            "worker_name",
+            "scan_started",
+            "status_text",
+            "status_code",
+            "progress",
+        ]
+
+    def get_target_name(self, obj):
+        if obj.subdomain:
+            return obj.subdomain.name
+        if obj.scan_history and obj.scan_history.target:
+            return f"Domain-level: {obj.scan_history.target.value}"
+        return ""
+
+    def get_scan_engine_text(self, obj):
+        if obj.engine:
+            return obj.engine.engine_name
+        if obj.secator_runner and obj.secator_runner.runner_name:
+            return obj.secator_runner.runner_name
+        return obj.type or ""
+
+    def get_worker_name(self, obj):
+        return getattr(obj.scan_history, "secator_worker_name", None) or "Local"
+
+    def get_status_code(self, obj):
+        return getattr(obj, "status_code", None) if hasattr(obj, "status_code") else getattr(obj, "status", None)
+
+    def get_status_text(self, obj):
+        code = self.get_status_code(obj)
+        return str(code) if code is not None else ""
+
+    def get_progress(self, obj):
+        fn = getattr(obj, "get_progress", None)
+        return fn() if callable(fn) else 0
+
+
+class ScanScheduleDatatableSerializer(serializers.ModelSerializer):
+    """Serializer for scheduled scans list DataTables API."""
+
+    description = serializers.SerializerMethodField()
+    frequency = serializers.SerializerMethodField()
+    last_run = serializers.SerializerMethodField()
+    run_count = serializers.IntegerField(source="total_run_count", read_only=True)
+
+    class Meta:
+        model = ScanSchedule
+        fields = [
+            "id",
+            "description",
+            "frequency",
+            "last_run",
+            "run_count",
+            "one_off",
+            "enabled",
+        ]
+
+    def get_description(self, obj):
+        parts = (obj.name or "").split(":", 1)
+        return parts[0] if parts else ""
+
+    def get_frequency(self, obj):
+        if obj.schedule_mode == "periodic":
+            label = (
+                obj.get_frequency_type_display_for_value()
+                if hasattr(obj, "get_frequency_type_display_for_value")
+                else (obj.get_frequency_type_display() or "")
+            )
+            return f"Every {obj.frequency_value} {label}" if obj.frequency_value else ""
+        if obj.scheduled_time:
+            return f"At {obj.scheduled_time.strftime('%Y-%m-%d %H:%M')} UTC"
+        return "—"
+
+    def get_last_run(self, obj):
+        if not obj.last_run_at:
+            return None
+        return obj.last_run_at.strftime("%Y-%m-%d %H:%M") + " UTC"
+
+
+def _s3_bucket_permission_labels(bucket, prefix):
+    """Build list of permission labels (READ, WRITE, etc.) for auth or all users."""
+    labels = []
+    if getattr(bucket, f"perm_{prefix}_read", 0) == 1:
+        labels.append("READ")
+    if getattr(bucket, f"perm_{prefix}_write", 0) == 1:
+        labels.append("WRITE")
+    if getattr(bucket, f"perm_{prefix}_read_acl", 0) == 1:
+        labels.append("Read_ACP")
+    if getattr(bucket, f"perm_{prefix}_write_acl", 0) == 1:
+        labels.append("WRITE_ACP")
+    if getattr(bucket, f"perm_{prefix}_full_control", 0) == 1:
+        labels.append("FULL_CONTROL")
+    return labels
+
+
+class S3BucketDatatableSerializer(serializers.ModelSerializer):
+    """
+    Serializer for S3 buckets DataTables API.
+
+    Consuming template: startScan/detail_scan.html (S3 tab).
+    Column map: web.api.helpers.datatables.DATATABLE_COLUMN_MAP_S3_BUCKETS.
+    """
+
+    owner = serializers.SerializerMethodField()
+    objects_count = serializers.IntegerField(source="num_objects", read_only=True)
+    bucket_size = serializers.IntegerField(source="size", read_only=True)
+    auth_users_permission = serializers.SerializerMethodField()
+    all_users_permission = serializers.SerializerMethodField()
+
+    class Meta:
+        model = S3Bucket
+        fields = [
+            "name",
+            "region",
+            "provider",
+            "owner",
+            "objects_count",
+            "bucket_size",
+            "auth_users_permission",
+            "all_users_permission",
+        ]
+
+    def get_owner(self, obj):
+        parts = []
+        if obj.owner_id:
+            parts.append(f"ID: {obj.owner_id}")
+        if obj.owner_display_name:
+            parts.append(f"Display Name: {obj.owner_display_name}")
+        return ", ".join(parts) if parts else ""
+
+    def get_auth_users_permission(self, obj):
+        return ", ".join(_s3_bucket_permission_labels(obj, "auth_users"))
+
+    def get_all_users_permission(self, obj):
+        return ", ".join(_s3_bucket_permission_labels(obj, "all_users"))
+
+
+class WordlistDatatableSerializer(serializers.ModelSerializer):
+    """
+    Serializer for wordlist list DataTables API.
+
+    Consuming template: scanEngine/wordlist/index.html.
+    Column map: web.api.helpers.datatables.DATATABLE_COLUMN_MAP_WORDLIST.
+    """
+
+    action = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Wordlist
+        fields = ["id", "name", "short_name", "count", "action"]
+
+    def get_action(self, obj):
+        name_js = json.dumps(obj.name)
+        return (
+            f'<a href="#" class="btn btn-sm btn-soft-danger btnDelWordlist" data-toggle="tooltip" '
+            f'data-placement="top" title="Delete Wordlist" '
+            f"onclick=\"delete_api({obj.id}, {name_js}, 'wordlist'); return false;\">"
+            f'<i class="fe-trash-2"></i></a>'
+        )
+
+
+def _engine_type_tasks_html(engine):
+    """Build task badges HTML for EngineType datatable (matches scanEngine/index.html)."""
+    task_badges = {
+        "subdomain_discovery": (
+            '<span class="badge badge-soft-success task-badge" data-toggle="tooltip" title="Subdomain Discovery"><i class="fas fa-search"></i> SD</span>',
+        ),
+        "waf_detection": (
+            '<span class="badge badge-soft-info task-badge" data-toggle="tooltip" title="WAF Detection"><i class="fas fa-shield-alt"></i> WAF</span>',
+        ),
+        "screenshot": (
+            '<span class="badge badge-soft-primary task-badge" data-toggle="tooltip" title="Screenshot"><i class="fas fa-camera"></i> SS</span>',
+        ),
+        "osint": (
+            '<span class="badge badge-soft-warning task-badge" data-toggle="tooltip" title="OSINT"><i class="fas fa-globe"></i> OSINT</span>',
+        ),
+        "port_scan": (
+            '<span class="badge badge-soft-danger task-badge" data-toggle="tooltip" title="Port Scan"><i class="fas fa-network-wired"></i> PS</span>',
+        ),
+        "dir_file_fuzz": (
+            '<span class="badge badge-soft-secondary task-badge" data-toggle="tooltip" title="Directory &amp; Files Discovery"><i class="fas fa-folder-open"></i> DF</span>',
+        ),
+        "fetch_url": (
+            '<span class="badge badge-soft-dark task-badge" data-toggle="tooltip" title="Fetch URLs"><i class="fas fa-link"></i> URL</span>',
+        ),
+        "vulnerability_scan": (
+            '<span class="badge badge-soft-orange task-badge" data-toggle="tooltip" title="Vulnerability Scan"><i class="fas fa-bug"></i> VULN</span>',
+        ),
+    }
+    tasks = getattr(engine, "tasks", None) or []
+    parts = [task_badges.get(t, (f'<span class="badge badge-soft-secondary task-badge">{t}</span>',))[0] for t in tasks]
+    config_params = getattr(engine, "get_config_parameters", lambda: {})()
+    if config_params:
+        config_display = getattr(engine, "get_config_parameters_display", lambda: "")()
+        config_title = html.escape(config_display) if config_display else ""
+        parts.append(
+            f'<span class="badge badge-soft-purple task-badge config-badge" data-toggle="tooltip" '
+            f'data-placement="top" data-html="true" title="{config_title}">'
+            f'<span class="config-count">{len(config_params)}</span><i class="fas fa-cog"></i> CONFIG</span>'
+        )
+    count = getattr(engine, "get_tasks_count", lambda: 0)()
+    summary = f"{count} task{'s' if count != 1 else ''} enabled"
+    return '<div class="task-badges">' + "".join(parts) + '</div><div class="task-summary">' + summary + "</div>"
+
+
+class EngineTypeDatatableSerializer(serializers.ModelSerializer):
+    """
+    Serializer for scan engine list DataTables API (legacy EngineType).
+
+    Consuming template: scanEngine/index.html.
+    Column map: web.api.helpers.datatables.DATATABLE_COLUMN_MAP_SCAN_ENGINE.
+    """
+
+    engine_name_display = serializers.SerializerMethodField()
+    engine_type_display = serializers.SerializerMethodField()
+    scan_type_display = serializers.SerializerMethodField()
+    tasks_html = serializers.SerializerMethodField()
+    action = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EngineType
+        fields = [
+            "id",
+            "engine_name",
+            "engine_name_display",
+            "engine_type_display",
+            "scan_type_display",
+            "tasks_html",
+            "action",
+        ]
+
+    def get_engine_name_display(self, obj):
+        update_url = reverse("update_engine", args=[obj.id])
+        return (
+            f'<a href="{html.escape(update_url)}" class="open-domain text-primary">{html.escape(obj.engine_name)}</a>'
+        )
+
+    def get_engine_type_display(self, obj):
+        return "Default" if obj.default_engine else "Custom"
+
+    def get_scan_type_display(self, obj):
+        return obj.get_scan_type_display() or (obj.scan_type or "").title()
+
+    def get_tasks_html(self, obj):
+        return _engine_type_tasks_html(obj)
+
+    def get_action(self, obj):
+        update_url = reverse("update_engine", args=[obj.id])
+        duplicate_url = reverse("duplicate_engine", args=[obj.id])
+        name_js = json.dumps(obj.engine_name)
+        return (
+            f'<a href="{html.escape(update_url)}" class="open-domain" data-toggle="tooltip" title="Edit Engine">'
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg></a> '
+            f'<a href="{html.escape(duplicate_url)}" class="text-info" data-toggle="tooltip" title="Duplicate {html.escape(obj.engine_name)} Engine">'
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></a> '
+            f'<a onclick="delete_api({obj.id}, {name_js}, \'scanEngine\')" class="btnDelDomain text-danger" href="#" data-toggle="tooltip" title="Delete {html.escape(obj.engine_name)} Engine">'
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg></a>'
+        )
+
+
 class VisualiseVulnerabilitySerializer(serializers.ModelSerializer):
     description = serializers.SerializerMethodField("get_description")
 
@@ -1513,6 +1939,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
     directories_count = serializers.SerializerMethodField("get_directories_count")
     subscan_count = serializers.SerializerMethodField("get_subscan_count")
     ip_addresses = IpSerializer(many=True)
+    ports = serializers.SerializerMethodField("get_ports")
     waf = WafSerializer(many=True)
     technologies = TechnologySerializer(many=True)
     directories = DirectoryScanSerializer(many=True)
@@ -1546,6 +1973,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
             "page_title",
             "technologies",
             "ip_addresses",
+            "ports",
             "directories",
             "waf",
             "attack_surface",
@@ -1570,6 +1998,14 @@ class SubdomainSerializer(serializers.ModelSerializer):
             return subdomain.name in interesting_names
         scan_id = subdomain.scan_history.id if subdomain.scan_history else None
         return get_interesting_subdomains(scan_id).filter(name=subdomain.name).exists()
+
+    def get_ports(self, subdomain):
+        """Flatten all ports from subdomain's ip_addresses for DataTables 'ports' column."""
+        return [
+            PortSerializer(port).data
+            for ip in subdomain.ip_addresses.prefetch_related("ports").all()
+            for port in ip.ports.all()
+        ]
 
     def get_endpoint_count(self, subdomain):
         val = getattr(subdomain, "endpoint_count", None)

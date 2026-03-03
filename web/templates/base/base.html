@@ -120,7 +120,7 @@
       window.RENGINE_DATATABLE_PAGE_LENGTH = {{ datatables_page_length|default:30 }};
       (function(){
         var el = document.getElementById('rengine-datatable-length-menu');
-        window.RENGINE_DATATABLE_LENGTH_MENU_VALUES = el ? JSON.parse(el.textContent) : [30, 50, 100, 200, 500, 1000, -1];
+        window.RENGINE_DATATABLE_LENGTH_MENU_VALUES = el ? JSON.parse(el.textContent) : {{ datatables_page_length_menu_values }};
       })();
       window.RENGINE_DATATABLE_LAYOUT_FULL_CLASSIC = {
         topStart: 'pageLength',
@@ -185,6 +185,7 @@
 
         window.RENGINE_API_URLS = window.RENGINE_API_URLS || {};
         Object.assign(window.RENGINE_API_URLS, {
+          vulnerabilityReport: '{% url "api:vulnerability_report" %}',
           getFileContents: '{% url "api:getFileContents" %}',
           querySubdomains: '{% url "api:querySubdomains" %}',
           queryInterestingSubdomains: '{% url "api:queryInterestingSubdomains" %}',
@@ -345,7 +346,23 @@
         content: 'Scan Activity',
       });
     </script>
-    <script src="{% static 'custom/datatable_helpers.js' %}"></script>
+    {% comment %}
+    DataTables helper stack: load order must be preserved (see web/static/custom/datatables/README.md).
+    Order: escape → layout → cookies → columns → rowgroup → filters → config → actions → init → tooltips → column_definitions.
+    {% endcomment %}
+    <script src="{% static 'custom/datatables/escape.js' %}"></script>
+    <script src="{% static 'custom/datatables/layout.js' %}"></script>
+    <script src="{% static 'custom/datatables/cookies.js' %}"></script>
+    <script src="{% static 'custom/datatables/columns.js' %}"></script>
+    <script src="{% static 'custom/datatables/rowgroup.js' %}"></script>
+    <script src="{% static 'custom/datatables/filters.js' %}"></script>
+    <script src="{% static 'custom/datatables/config.js' %}"></script>
+    <script src="{% static 'custom/datatables/filter_ids.js' %}"></script>
+    <script src="{% static 'custom/datatables/page_wiring.js' %}"></script>
+    <script src="{% static 'custom/datatables/actions.js' %}"></script>
+    <script src="{% static 'custom/datatables/init.js' %}"></script>
+    <script src="{% static 'custom/datatables/tooltips.js' %}"></script>
+    <script src="{% static 'custom/datatables/column_definitions.js' %}"></script>
     {% if messages %}
       {% for message in messages %}
         <script type="text/javascript">

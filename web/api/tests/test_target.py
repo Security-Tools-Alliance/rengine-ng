@@ -145,3 +145,71 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
         idx_old_d = names_desc.index("old-scan.local")
         self.assertLess(idx_new_d, idx_old_d, "desc: newer before older")
         self.assertLess(idx_old_d, idx_null_d, "desc: nulls last")
+
+    def test_list_targets_includes_scope_group(self):
+        """List targets response includes scope_group (first scope name or 'No scope')."""
+        self.data_generator.create_project()
+        self.data_generator.create_target()
+        api_url = reverse("api:targets-list")
+        response = self.client.get(api_url, {"slug": self.data_generator.project.slug})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
+        first = response.data["results"][0]
+        self.assertIn("scope_group", first)
+        self.assertEqual(first["scope_group"], "No scope")
+
+        self.data_generator.create_organization()
+        self.data_generator.create_scope(name="TestScopeAlpha")
+        response2 = self.client.get(api_url, {"slug": self.data_generator.project.slug})
+        self.assertEqual(response2.status_code, status.HTTP_200_OK)
+        by_name = {r["name"]: r for r in response2.data["results"]}
+        self.assertIn(self.data_generator.target.value, by_name)
+        self.assertEqual(by_name[self.data_generator.target.value]["scope_group"], "TestScopeAlpha")
+
+    def test_list_targets_order_by_scope_group_column_14(self):
+        """List targets with order column 14 (scope_group_name) uses annotation."""
+        from targetApp.models import Organization, Scope
+
+        project = self.data_generator.create_project()
+        Target.objects.filter(project=project).delete()
+        org = Organization.objects.create(name="TestOrgScope", insert_date=timezone.now())
+        Target.objects.create(
+            project=project,
+            value="no-scope.local",
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        scope_a = Scope.objects.create(
+            organization=org,
+            name="A-scope",
+            scope_type="engagement_external",
+            description="",
+        )
+        scope_b = Scope.objects.create(
+            organization=org,
+            name="B-scope",
+            scope_type="engagement_external",
+            description="",
+        )
+        target_a = Target.objects.create(
+            project=project,
+            value="a-scope.local",
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        target_b = Target.objects.create(
+            project=project,
+            value="b-scope.local",
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        scope_a.targets.add(target_a)
+        scope_b.targets.add(target_b)
+        api_url = reverse("api:targets-list")
+        response = self.client.get(
+            api_url,
+            {"slug": project.slug, "order[0][column]": "14", "order[0][dir]": "asc"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        scope_groups = [r["scope_group"] for r in response.data["results"]]
+        self.assertEqual(scope_groups, ["A-scope", "B-scope", "No scope"])

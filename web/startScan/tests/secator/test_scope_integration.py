@@ -108,9 +108,7 @@ class MergeScopeParamsTest(BaseTestCase):
         post = QueryDict("", mutable=True)
         post["scope_id"] = str(scope.id)
 
-        config_result, scope_worker_ids = _merge_scope_params_into_config(
-            config, post, self.data_generator.target.id
-        )
+        config_result, scope_worker_ids = _merge_scope_params_into_config(config, post, self.data_generator.target.id)
 
         self.assertNotIn("_worker_ids", config_result)
 

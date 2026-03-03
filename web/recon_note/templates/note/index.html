@@ -157,6 +157,9 @@ Recon to-do
 {% endblock main_content %}
 
 {% block page_level_script %}
+<script>
+window.RENGINE_API_LIST_SCAN_HISTORY_URL = "{% url 'api:listScanHistory' %}";
+</script>
 <script src="{% static 'plugins/select2/select2.min.js' %}"></script>
 <script src="{% static 'note/js/todo.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>

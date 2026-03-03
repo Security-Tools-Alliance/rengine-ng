@@ -96,11 +96,9 @@ TARGET_OVERRIDE_PREFIX = "override_"
 
 # User-facing copy for request_headers (Scope, Target, target update form, scope form).
 REQUEST_HEADERS_HELP_TEXT = (
-    "Optional HTTP headers as a JSON object, e.g. {\"X-Api-Key\": \"secret\"}. Must be a valid JSON object."
+    'Optional HTTP headers as a JSON object, e.g. {"X-Api-Key": "secret"}. Must be a valid JSON object.'
 )
-REQUEST_HEADERS_ERROR_MUST_BE_OBJECT = (
-    'Request headers must be a JSON object (e.g. {"X-Header": "value"}).'
-)
+REQUEST_HEADERS_ERROR_MUST_BE_OBJECT = 'Request headers must be a JSON object (e.g. {"X-Header": "value"}).'
 REQUEST_HEADERS_ERROR_INVALID_JSON = "Invalid JSON. Changes were not applied."
 
 

@@ -48,6 +48,158 @@ class TestListScanHistory(BaseTestCase):
         self.assertEqual(response.data[0]["id"], self.data_generator.scan_history.id)
 
 
+class TestScanHistoryFilterChoices(BaseTestCase):
+    """Tests for ScanHistoryFilterChoices API (filter dropdowns for scan/subscan history)."""
+
+    def setUp(self):
+        super().setUp()
+
+    def test_returns_400_without_project(self):
+        """GET without project param returns 400."""
+        url = reverse("api:scanHistoryFilterChoices")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", response.data)
+
+    def test_returns_organizations_status_labels_targets_scan_engines(self):
+        """GET with project returns organizations, scan_status_labels, task_status_labels, targets, scan_engines."""
+        url = reverse("api:scanHistoryFilterChoices")
+        response = self.client.get(url, {"project": self.data_generator.project.slug})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("organizations", response.data)
+        self.assertIn("scan_status_labels", response.data)
+        self.assertIn("task_status_labels", response.data)
+        self.assertIn("targets", response.data)
+        self.assertIn("scan_engines", response.data)
+        self.assertIsInstance(response.data["organizations"], list)
+        self.assertIsInstance(response.data["scan_status_labels"], list)
+        self.assertIsInstance(response.data["task_status_labels"], list)
+        self.assertIsInstance(response.data["targets"], list)
+        self.assertIsInstance(response.data["scan_engines"], list)
+
+
+class TestListS3BucketsDatatable(BaseTestCase):
+    """Tests for ListS3BucketsDatatable DataTables API."""
+
+    def setUp(self):
+        super().setUp()
+        from startScan.models import S3Bucket
+
+        self.bucket = S3Bucket.objects.create(
+            name="test-bucket",
+            region="us-east-1",
+            provider="aws",
+        )
+        self.data_generator.scan_history.buckets.add(self.bucket)
+
+    def test_returns_datatables_format_with_scan_history(self):
+        """GET with scan_history returns draw, recordsTotal, recordsFiltered, data."""
+        url = reverse("api:listS3Buckets")
+        response = self.client.get(
+            url,
+            {"scan_history": self.data_generator.scan_history.id, "start": 0, "length": 10},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("draw", response.data)
+        self.assertIn("recordsTotal", response.data)
+        self.assertIn("recordsFiltered", response.data)
+        self.assertIn("data", response.data)
+        self.assertGreaterEqual(response.data["recordsTotal"], 1)
+        self.assertGreaterEqual(len(response.data["data"]), 1)
+        self.assertEqual(response.data["data"][0]["name"], "test-bucket")
+
+    def test_returns_empty_without_scan_history(self):
+        """GET without scan_history returns empty data."""
+        url = reverse("api:listS3Buckets")
+        response = self.client.get(url, {"start": 0, "length": 10})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["recordsTotal"], 0)
+        self.assertEqual(response.data["data"], [])
+
+    def test_optional_filter_bucket_name_filters_results(self):
+        """GET with filter_bucket_name returns only matching buckets."""
+        from api.helpers.datatables import FILTER_PARAM_BUCKET_NAME
+
+        url = reverse("api:listS3Buckets")
+        base_params = {"scan_history": self.data_generator.scan_history.id, "start": 0, "length": 10}
+        response = self.client.get(url, {**base_params, FILTER_PARAM_BUCKET_NAME: "test-bucket"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(response.data["recordsFiltered"], 1)
+        self.assertEqual(response.data["data"][0]["name"], "test-bucket")
+        response2 = self.client.get(url, {**base_params, FILTER_PARAM_BUCKET_NAME: "nonexistent-bucket"})
+        self.assertEqual(response2.status_code, status.HTTP_200_OK)
+        self.assertEqual(response2.data["recordsFiltered"], 0)
+        self.assertEqual(response2.data["data"], [])
+
+
+class TestListWordlistsDatatable(BaseTestCase):
+    """Tests for ListWordlistsDatatable DataTables API."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_wordlist()
+
+    def test_returns_datatables_format(self):
+        """GET with start/length returns DataTables format."""
+        url = reverse("api:listWordlists")
+        response = self.client.get(url, {"start": 0, "length": 10})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("draw", response.data)
+        self.assertIn("recordsTotal", response.data)
+        self.assertIn("recordsFiltered", response.data)
+        self.assertIn("data", response.data)
+        self.assertIsInstance(response.data["data"], list)
+
+    def test_optional_filter_name_filters_results(self):
+        """GET with filter_name returns only matching wordlists."""
+        from api.helpers.datatables import FILTER_PARAM_NAME
+
+        url = reverse("api:listWordlists")
+        wordlist_name = self.data_generator.wordlist.name
+        response = self.client.get(url, {"start": 0, "length": 10, FILTER_PARAM_NAME: wordlist_name})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(response.data["recordsFiltered"], 1)
+        names = [r["name"] for r in response.data["data"]]
+        self.assertIn(wordlist_name, names)
+        response2 = self.client.get(url, {"start": 0, "length": 10, FILTER_PARAM_NAME: "NonExistentWordlist"})
+        self.assertEqual(response2.status_code, status.HTTP_200_OK)
+        self.assertEqual(response2.data["recordsFiltered"], 0)
+
+
+class TestListScanEnginesDatatable(BaseTestCase):
+    """Tests for ListScanEnginesDatatable DataTables API."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_engine_type()
+
+    def test_returns_datatables_format(self):
+        """GET with start/length returns DataTables format."""
+        url = reverse("api:listScanEngines")
+        response = self.client.get(url, {"start": 0, "length": 10})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("draw", response.data)
+        self.assertIn("recordsTotal", response.data)
+        self.assertIn("recordsFiltered", response.data)
+        self.assertIn("data", response.data)
+        self.assertIsInstance(response.data["data"], list)
+
+    def test_optional_filter_engine_name_filters_results(self):
+        """GET with filter_engine_name returns only matching engines."""
+        from api.helpers.datatables import FILTER_PARAM_ENGINE_NAME
+
+        url = reverse("api:listScanEngines")
+        engine_name = self.data_generator.engine_type.engine_name
+        response = self.client.get(url, {"start": 0, "length": 10, FILTER_PARAM_ENGINE_NAME: engine_name})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(response.data["recordsFiltered"], 1)
+        names = [r["engine_name"] for r in response.data["data"]]
+        self.assertIn(engine_name, names)
+        response2 = self.client.get(url, {"start": 0, "length": 10, FILTER_PARAM_ENGINE_NAME: "NonExistentEngine"})
+        self.assertEqual(response2.status_code, status.HTTP_200_OK)
+        self.assertEqual(response2.data["recordsFiltered"], 0)
+
+
 class TestListActivityLogsViewSet(BaseTestCase):
     """Tests for the ListActivityLogsViewSet."""
 
@@ -358,6 +510,14 @@ class TestDirectoryViewSet(BaseTestCase):
         self.assertIn("results", response.data)
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.directory_file.name)
+
+    def test_list_directories_requires_scan_or_subdomain(self):
+        """List without scan_history or subdomain_id returns 400."""
+        api_url = reverse("api:directories-list")
+        response = self.client.get(api_url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data.get("status", True))
+        self.assertIn("message", response.data)
 
 
 class TestListSubScans(BaseTestCase):

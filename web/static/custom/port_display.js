@@ -1,75 +1,160 @@
+function portDisplaySafeAttr(s) {
+    return (typeof window.safeAttr === "function" ? window.safeAttr(s) : (s == null ? "" : String(s)));
+}
+
+function portDisplaySafeText(s) {
+    return (typeof window.safeText === "function" ? window.safeText(s) : (s == null ? "" : String(s)));
+}
+
+function portDisplaySafeBadgeWithTooltip(title, displayText, badgeClass, extraInnerHtml) {
+    if (typeof window.safeBadgeWithTooltip === "function") {
+        const fullClass = "m-1 badge " + (badgeClass != null && badgeClass !== "" ? badgeClass : "") + " bs-tooltip badge-link";
+        return window.safeBadgeWithTooltip(title, displayText, fullClass.trim(), "", extraInnerHtml != null ? extraInnerHtml : "");
+    }
+    const safeTitle = portDisplaySafeAttr(title);
+    const safeText = portDisplaySafeText(displayText);
+    const safeClass = portDisplaySafeAttr(badgeClass || "");
+    const extra = extraInnerHtml != null ? extraInnerHtml : "";
+    return "<span class=\"m-1 badge " + safeClass + " bs-tooltip badge-link\" title=\"" + safeTitle + "\">" + safeText + extra + "</span>";
+}
+
+/**
+ * Renders a safe <a> link. Prefer window.safeLink (escape.js); fallback sanitizes href via
+ * window.sanitizeUrlForHref / window.normalizeSafeLinkUrl when available to avoid XSS if script order changes.
+ */
+function portDisplaySafeLink(href, displayText, opts) {
+    if (typeof window.safeLink === "function") {
+        const out = window.safeLink(href, displayText != null ? displayText : "", opts || {});
+        if (typeof out === "string") return out;
+    }
+    const sanitize = typeof window.sanitizeUrlForHref === "function" ? window.sanitizeUrlForHref : (typeof window.normalizeSafeLinkUrl === "function" ? window.normalizeSafeLinkUrl : null);
+    const safeHref = sanitize ? (sanitize(href) || "#") : "#";
+    const safeText = portDisplaySafeText(displayText != null ? displayText : "");
+    const o = opts || {};
+    let attrs = "href=\"" + portDisplaySafeAttr(safeHref) + "\"";
+    if (o.target) attrs += " target=\"" + portDisplaySafeAttr(o.target) + "\"";
+    if (o.className) attrs += " class=\"" + portDisplaySafeAttr(o.className) + "\"";
+    if (o.title != null) attrs += " title=\"" + portDisplaySafeAttr(o.title) + "\"";
+    return "<a " + attrs + ">" + safeText + "</a>";
+}
+
+function portDisplayHttpStatusWithInteresting(data, row) {
+    const statusHtml = typeof get_http_badge === "function" ? get_http_badge(data) : "";
+    if (row && row.is_interesting) {
+        return statusHtml + portDisplaySafeBadgeWithTooltip("Interesting", "Interesting", "badge badge-soft-danger ms-1", "");
+    }
+    return statusHtml || "-";
+}
+
+function portDisplaySubdomainLinkCell(data, type, row, urlOverride) {
+    const url = urlOverride != null ? urlOverride : (row && row.http_url);
+    const cls = (row && row.http_status >= 400) ? "text-danger" : "";
+    if (url) {
+        return portDisplaySafeLink(url, data != null ? data : "", { target: "_blank", className: cls });
+    }
+    return portDisplaySafeText(data != null ? data : "-");
+}
+
 function renderBadge(data, settings) {
-    let badge = '';
-    
+    let badge = "";
+
     try {
-        const data_obj = typeof data === 'string' 
+        const data_obj = typeof data === "string"
             ? JSON.parse(new DOMParser().parseFromString(data, "text/html").documentElement.textContent)
             : data;
 
         for (const item of data_obj) {
-            const items = item.ports || [item]; // Use ports array for ports, or wrap single item for IPs
-            
+            const items = item.ports || [item];
+
             for (const element of items) {
-                const is_ip = !element.number; // If no port number, it's an IP
-                const badge_color = is_ip 
-                    ? (element.is_cdn ? 'warning' : 'primary')
-                    : (element.is_uncommon ? 'danger' : 'primary');
-                
-                let title = is_ip 
-                    ? (element.is_cdn ? 'CDN IP Address' : 'IP Address')
-                    : `Port ${element.number}`;
-                
+                const is_ip = !element.number;
+                const badge_color = is_ip
+                    ? (element.is_cdn ? "warning" : "primary")
+                    : (element.is_uncommon ? "danger" : "primary");
+
+                let title = is_ip
+                    ? (element.is_cdn ? "CDN IP Address" : "IP Address")
+                    : "Port " + element.number;
+
                 if (is_ip && element.alive !== undefined) {
-                    title += `\nAlive: ${element.alive ? 'Yes' : 'No'}`;
+                    title += "\nAlive: " + (element.alive ? "Yes" : "No");
                 }
-                
                 if (!is_ip) {
-                    if (element.state) {
-                        title += `\nState: ${element.state}`;
-                    }
-                    if (element.protocol) {
-                        title += `\nProtocol: ${element.protocol}`;
-                    }
-                    if (element.host) {
-                        title += `\nHost: ${element.host}`;
-                    }
+                    if (element.state) title += "\nState: " + element.state;
+                    if (element.protocol) title += "\nProtocol: " + element.protocol;
+                    if (element.host) title += "\nHost: " + element.host;
                     if (element.cpes && element.cpes.length > 0) {
-                        title += `\nCPEs: ${element.cpes.join(', ')}`;
+                        title += "\nCPEs: " + element.cpes.join(", ");
                     }
                 }
-                
-                if (element.description) {
-                    title += ` - ${element.description}`;
-                }
+                if (element.description) title += " - " + element.description;
                 if (element.subdomain_count) {
-                    title += `\nFound on ${element.subdomain_count} subdomain${element.subdomain_count > 1 ? 's' : ''}`;
-                    // Add list of subdomain names if available
-                    if (element.subdomain_names) {
-                        title += ':\n• ' + element.subdomain_names.join('\n• ');
+                    title += "\nFound on " + element.subdomain_count + " subdomain" + (element.subdomain_count > 1 ? "s" : "");
+                    if (element.subdomain_names && element.subdomain_names.length > 0) {
+                        title += ":\n• " + element.subdomain_names.join("\n• ");
                     }
                 }
-                
-                let onclick = is_ip
-                    ? `get_ip_details('${settings.api_ports_url}', '${settings.api_subdomains_url}', '${element.address}', ${settings.scan_id}, ${settings.domain_id})`
-                    : `get_port_details('${settings.api_ips_url}', '${settings.api_subdomains_url}', ${element.number}, ${settings.scan_id}, ${settings.domain_id})`;
-                
-                const display_text = is_ip 
-                    ? element.address
-                    : `${element.number}/${element.service_name}`;
-                
-                badge += `<span class='m-1 badge badge-soft-${badge_color} bs-tooltip badge-link' 
-                    title='${title}' 
-                    onclick="${onclick}">
-                    ${display_text}
-                    ${element.subdomain_count ? `<span class="badge bg-${badge_color} ms-1">${element.subdomain_count}</span>` : ''}
-                </span>`;
+
+                const display_text = is_ip ? (element.address || "") : (element.number + "/" + (element.service_name || ""));
+                const countHtml = element.subdomain_count && typeof window.safeBadge === "function"
+                    ? window.safeBadge(String(element.subdomain_count), "badge bg-" + badge_color + " ms-1", "")
+                    : (element.subdomain_count ? "<span class=\"badge bg-" + badge_color + " ms-1\">" + portDisplaySafeText(String(element.subdomain_count)) + "</span>" : "");
+
+                const portsUrl = portDisplaySafeAttr(settings.api_ports_url || "");
+                const subdomainsUrl = portDisplaySafeAttr(settings.api_subdomains_url || "");
+                const ipsUrl = portDisplaySafeAttr(settings.api_ips_url || "");
+                const scanId = settings.scan_id != null ? portDisplaySafeAttr(String(settings.scan_id)) : "";
+                const domainId = settings.domain_id != null ? portDisplaySafeAttr(String(settings.domain_id)) : "";
+                const address = portDisplaySafeAttr(element.address || "");
+                const port = !is_ip && element.number != null ? portDisplaySafeAttr(String(element.number)) : "";
+
+                badge += "<span class=\"m-1 badge badge-soft-" + badge_color + " bs-tooltip badge-link js-port-badge-trigger\" title=\"" + portDisplaySafeAttr(title) + "\" role=\"button\" tabindex=\"0\" data-api-ports-url=\"" + portsUrl + "\" data-api-subdomains-url=\"" + subdomainsUrl + "\" data-api-ips-url=\"" + ipsUrl + "\" data-scan-id=\"" + scanId + "\" data-domain-id=\"" + domainId + "\" data-address=\"" + address + "\" data-port=\"" + port + "\" data-is-ip=\"" + (is_ip ? "true" : "false") + "\">" + portDisplaySafeText(display_text) + countHtml + "</span>";
             }
         }
         return badge;
     } catch (e) {
-        console.error('Error rendering badge:', e);
-        return '';
+        console.error("Error rendering badge:", e);
+        return "";
     }
+}
+
+function attachPortBadgeTriggerListener() {
+    const $ = window.jQuery;
+    if (!$ || typeof $.fn.on !== "function") return;
+    function parseOptionalId(val) {
+        if (val == null || val === "") return null;
+        const n = parseInt(val, 10);
+        return Number.isNaN(n) ? null : n;
+    }
+    function handlePortBadgeClick(el) {
+        const isIp = el.getAttribute("data-is-ip") === "true";
+        const portsUrl = el.getAttribute("data-api-ports-url") || "";
+        const subdomainsUrl = el.getAttribute("data-api-subdomains-url") || "";
+        const ipsUrl = el.getAttribute("data-api-ips-url") || "";
+        const scanId = parseOptionalId(el.getAttribute("data-scan-id"));
+        const domainId = parseOptionalId(el.getAttribute("data-domain-id"));
+        if (isIp) {
+            const address = el.getAttribute("data-address") || "";
+            if (typeof get_ip_details === "function") {
+                get_ip_details(portsUrl, subdomainsUrl, address, scanId, domainId);
+            }
+        } else {
+            const portStr = el.getAttribute("data-port") || "";
+            const port = parseInt(portStr, 10);
+            if (!Number.isNaN(port) && typeof get_port_details === "function") {
+                get_port_details(ipsUrl, subdomainsUrl, port, scanId, domainId);
+            }
+        }
+    }
+    $(document.body).off("click.portBadge keydown.portBadge", ".js-port-badge-trigger").on("click.portBadge", ".js-port-badge-trigger", function (e) {
+        e.preventDefault();
+        handlePortBadgeClick(e.currentTarget);
+    }).on("keydown.portBadge", ".js-port-badge-trigger", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handlePortBadgeClick(e.currentTarget);
+        }
+    });
 }
 
 function get_ips(ip_addresses, port_url, endpoint_subdomains, scan_id=null, domain_id=null) {
@@ -181,94 +266,14 @@ function setupModal(title, tabs) {
     });
 }
 
-function createDataTable(containerId, columns, data, rowRenderer) {
-    const tableId = `${containerId}-datatable`;
-    const table = `
-        <table id="${tableId}" class="table table-striped table-sm">
-            <thead>
-                <tr>
-                    ${columns.map(col => `<th>${col}</th>`).join('')}
-                </tr>
-            </thead>
-            <tbody>
-                ${data.map(item => rowRenderer(item)).join('')}
-            </tbody>
-        </table>
-    `;
-    
-    $(`#${containerId}`).html(table);
-    
-    // Initialize DataTable with configuration
-    const dataTableConfig = {
-        "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-        "pageLength": 25,
-        "lengthMenu": [10, 25, 50, 100],
-        "order": [[0, "asc"]],
-        "drawCallback": function() {
-            window.ScreenshotDisplay.attachDelegation(`#${containerId}`);
-        }
-    };
-    
-    // Destroy existing DataTable if it exists
-    if ($.fn.DataTable.isDataTable(`#${tableId}`)) {
-        $(`#${tableId}`).DataTable().destroy();
-    }
-    
-    // Initialize DataTable
-    $(`#${tableId}`).DataTable(dataTableConfig);
-}
-
-// Enhanced DataTable function with lazy screenshot loading
-function createDataTableWithLazyScreenshots(containerId, columns, data, port, scan_id, domain_id, rowRenderer) {
-    const tableId = `${containerId}-datatable`;
-    const table = `
-        <table id="${tableId}" class="table table-striped table-sm">
-            <thead>
-                <tr>
-                    ${columns.map(col => `<th>${col}</th>`).join('')}
-                </tr>
-            </thead>
-            <tbody>
-                ${data.map(item => rowRenderer(item)).join('')}
-            </tbody>
-        </table>
-    `;
-    
-    $(`#${containerId}`).html(table);
-    
-    // Initialize DataTable with lazy loading configuration
-    const dataTableConfig = {
-        "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-        "pageLength": 25,
-        "lengthMenu": [10, 25, 50, 100],
-        "order": [[0, "asc"]],
-        "initComplete": function() {
-            window.ScreenshotDisplay.attachDelegation(`#${containerId}`);
-        },
-        "drawCallback": function() {
-            // Load screenshots only for visible rows on page change/search/sort
-            loadVisibleScreenshots(containerId, port, scan_id, domain_id);
-        }
-    };
-    
-    // Destroy existing DataTable if it exists
-    if ($.fn.DataTable.isDataTable(`#${tableId}`)) {
-        $(`#${tableId}`).DataTable().destroy();
-    }
-    
-    // Initialize DataTable
-    $(`#${tableId}`).DataTable(dataTableConfig);
-}
-
-// Function to load screenshots only for visible rows
+// Load screenshots only for visible rows (port modal)
 async function loadVisibleScreenshots(containerId, port, scan_id, domain_id) {
     const $visibleCells = $(`#${containerId} .screenshot-cell[data-loading="true"]:visible`);
     
     $visibleCells.each(async function() {
         const $cell = $(this);
-        const $row = $cell.closest('tr');
-        const subdomainId = $row.data('subdomain-id');
-        const subdomainName = $row.data('subdomain-name');
+        const subdomainId = $cell.data('subdomain-id');
+        const subdomainName = $cell.data('subdomain-name');
         
         if (subdomainId && subdomainName) {
             try {
@@ -277,9 +282,8 @@ async function loadVisibleScreenshots(containerId, port, scan_id, domain_id) {
                 
                 // Load screenshot thumbnail
                 const screenshots = await getScreenshotThumbnail(subdomainId, subdomainName, port, scan_id, domain_id, true);
-                
-                // Update cell content
-                $cell.html(screenshots || '-');
+                const html = typeof screenshots === "string" ? screenshots : "-";
+                $cell.html(html);
             } catch (error) {
                 console.error('Error loading screenshot for subdomain:', subdomainName, error);
                 $cell.html('-');
@@ -580,105 +584,172 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
             ]
         );
 
-        // Get IPs
-        $.getJSON(ip_url, function(data) {
-            $('#modal_content_ip').empty();
-            const ips = data.ips || [];
-            $('#modal-ip-count').html(`<b>${ips.length}</b>&nbsp;&nbsp;`);
-
-            if (ips.length > 0) {
-                $('#modal_content_ip').append(`<p>${ips.length} IP Addresses have Port ${port} Open</p>`);
-                createDataTable('modal_content_ip', 
-                    ['IP Address', 'Alive', 'HTTP', 'HTTPS', 'Tags'], 
-                    ips,
-                    (ip) => {
-                        const badge_color = ip.is_cdn ? 'warning' : 'primary';
-                        const tags = ip.is_cdn ? '<span class="badge badge-soft-warning">CDN</span>' : '';
-                        
-                        const isWebPort = webPorts.includes(parseInt(port));
-                        const httpLink = isWebPort ? 
-                            `<a href="http://${ip.address}:${port}" target="_blank" class="badge badge-soft-primary">HTTP</a>` : 
-                            '-';
-                        const httpsLink = isWebPort ? 
-                            `<a href="https://${ip.address}:${port}" target="_blank" class="badge badge-soft-primary">HTTPS</a>` : 
-                            '-';
-
-                        const alive_badge = ip.alive !== undefined 
-                            ? (ip.alive ? '<span class="badge badge-soft-success ms-1">Alive</span>' : '<span class="badge badge-soft-secondary ms-1">Not Alive</span>')
-                            : '';
-
-                        return `
-                            <tr>
-                                <td><span class="text-${badge_color}">${ip.address}</span></td>
-                                <td>${alive_badge || '-'}</td>
-                                <td>${httpLink}</td>
-                                <td>${httpsLink}</td>
-                                <td>${tags}</td>
-                            </tr>
-                        `;
+        // IP tab: server-side DataTable
+        $('#modal_content_ip').empty()
+            .append('<p id="modal_content_ip_info">Loading...</p>')
+            .append(
+                '<table id="modal_content_ip-datatable" class="table table-striped table-sm">' +
+                '<thead><tr><th>IP Address</th><th>Alive</th><th>HTTP</th><th>HTTPS</th><th>Tags</th></tr></thead><tbody></tbody></table>'
+            );
+        const ipTableOpts = {
+            ajax: {
+                url: ip_url,
+                data: function (d) {
+                    d.port = port;
+                    if (scan_id) d.scan_id = scan_id;
+                    if (domain_id) d.target_id = domain_id;
+                }
+            },
+            columns: [
+                { data: "address", name: "address" },
+                { data: "alive", name: "alive" },
+                { data: null, name: "http_link" },
+                { data: null, name: "https_link" },
+                { data: "is_cdn", name: "is_cdn" }
+            ],
+            columnDefs: [
+                {
+                    targets: "address:name",
+                    render: function (data, type, row) {
+                        const badgeClass = row.is_cdn ? "warning" : "primary";
+                        const text = (typeof window.safeText === "function" ? window.safeText(data) : data);
+                        return "<span class=\"text-" + badgeClass + "\">" + text + "</span>";
                     }
-                );
-            } else {
-                $('#modal_content_ip').append("<p>No IP addresses found</p>");
-            }
-            $("#ip-modal-loader").remove();
-        });
-
-        // Get Subdomains
-        $.getJSON(subdomain_url, async function(data) {
-            $('#modal_content_subdomain').empty();
-            const subdomains = data.subdomains || [];
-            $('#modal-subdomain-count').html(`<b>${subdomains.length}</b>&nbsp;&nbsp;`);
-
-            if (subdomains.length > 0) {
-                $('#modal_content_subdomain').append(`<p>${subdomains.length} Subdomains have Port ${port} Open</p>`);
-                
-                // Create DataTable immediately without waiting for screenshots
-                createDataTableWithLazyScreenshots('modal_content_subdomain',
-                    ['Subdomain', 'Status', 'Title', 'Screenshots'],
-                    subdomains,
-                    port, scan_id, domain_id,
-                    (subdomain) => {
-                        const badge_color = subdomain.http_status >= 400 ? 'danger' : '';
-                        const isWebPort = webPorts.includes(parseInt(port));
-                        
-                        let subdomain_url = subdomain.http_url;
-                        if (isWebPort && subdomain_url) {
-                            const url = new URL(subdomain_url);
-                            url.port = port;
-                            subdomain_url = url.toString();
-                        }
-                        
-                        const subdomain_link = subdomain_url 
-                            ? `<a href='${subdomain_url}' target="_blank" class="text-${badge_color}">${subdomain.name}</a>`
-                            : `<span class="text-${badge_color}">${subdomain.name}</span>`;
-
-                        let status_tags = '';
-                        if (subdomain.http_status) {
-                            status_tags += get_http_badge(subdomain.http_status);
-                        }
-                        if (subdomain.is_interesting) {
-                            status_tags += '<span class="badge badge-soft-danger ms-1">Interesting</span>';
-                        }
-
-                        return `
-                            <tr data-subdomain-id="${subdomain.id}" data-subdomain-name="${subdomain.name}">
-                                <td>${subdomain_link}</td>
-                                <td>${status_tags || '-'}</td>
-                                <td>${subdomain.page_title ? htmlEncode(subdomain.page_title) : '-'}</td>
-                                <td class="screenshot-cell" data-loading="true">
-                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                                    Loading...
-                                </td>
-                            </tr>
-                        `;
+                },
+                {
+                    targets: "alive:name",
+                    render: function (data) {
+                        if (data === true) return "<span class=\"badge badge-soft-success ms-1\">Alive</span>";
+                        if (data === false) return "<span class=\"badge badge-soft-secondary ms-1\">Not Alive</span>";
+                        return "-";
                     }
-                );
-            } else {
-                $('#modal_content_subdomain').append("<p>No subdomains found</p>");
+                },
+                {
+                    targets: "http_link:name",
+                    orderable: false,
+                    render: function (data, type, row) {
+                        const isWebPort = webPorts.includes(parseInt(port, 10));
+                        if (!isWebPort || !row.address) return "-";
+                        const rawHref = "http://" + row.address + ":" + port;
+                        return portDisplaySafeLink(rawHref, "HTTP", { target: "_blank", className: "badge badge-soft-primary" });
+                    }
+                },
+                {
+                    targets: "https_link:name",
+                    orderable: false,
+                    render: function (data, type, row) {
+                        const isWebPort = webPorts.includes(parseInt(port, 10));
+                        if (!isWebPort || !row.address) return "-";
+                        const rawHref = "https://" + row.address + ":" + port;
+                        return portDisplaySafeLink(rawHref, "HTTPS", { target: "_blank", className: "badge badge-soft-primary" });
+                    }
+                },
+                {
+                    targets: "is_cdn:name",
+                    render: function (data) {
+                        return data ? "<span class=\"badge badge-soft-warning\">CDN</span>" : "";
+                    }
+                }
+            ],
+            order: [[0, 'asc']],
+            drawCallback: function () {
+                const api = this.api();
+                const total = (api.page && typeof api.page.info === 'function') ? api.page.info().recordsTotal : 0;
+                $('#modal_content_ip_info').text(total + ' IP Addresses have Port ' + port + ' Open');
+                $('#modal-ip-count').html('<b>' + total + '</b>&nbsp;&nbsp;');
+                $('#ip-modal-loader').remove();
+                if (window.ScreenshotDisplay) window.ScreenshotDisplay.attachDelegation('#modal_content_ip');
             }
-            $("#subdomain-modal-loader").remove();
-        });
+        };
+        if ($.fn.DataTable.isDataTable('#modal_content_ip-datatable')) {
+            $('#modal_content_ip-datatable').DataTable().destroy();
+        }
+        if (typeof window.getRengineDatatableConfig === "function" && typeof window.initServerSideDataTable === "function") {
+            window.initServerSideDataTable("#modal_content_ip-datatable", window.getRengineDatatableConfig("#modal_content_ip-datatable", ipTableOpts));
+        } else {
+            if (typeof console !== "undefined" && console.warn) {
+                console.warn("port_display: getRengineDatatableConfig/initServerSideDataTable not found; ensure datatables/init.js loads before this script.");
+            }
+            $("#modal_content_ip-datatable").DataTable(Object.assign({ serverSide: true, processing: true }, ipTableOpts));
+        }
+
+        // Subdomain tab: server-side DataTable with lazy screenshots
+        $('#modal_content_subdomain').empty()
+            .append('<p id="modal_content_subdomain_info">Loading...</p>')
+            .append(
+                '<table id="modal_content_subdomain-datatable" class="table table-striped table-sm">' +
+                '<thead><tr><th>Subdomain</th><th>Status</th><th>Title</th><th>Screenshots</th></tr></thead><tbody></tbody></table>'
+            )
+            .data('port', port)
+            .data('scan_id', scan_id)
+            .data('domain_id', domain_id);
+        const subTableOpts = {
+            ajax: {
+                url: subdomain_url,
+                data: function (d) {
+                    d.port = port;
+                    if (scan_id) d.scan_id = scan_id;
+                    if (domain_id) d.target_id = domain_id;
+                }
+            },
+            columns: [
+                { data: "name", name: "name" },
+                { data: "http_status", name: "http_status" },
+                { data: "page_title", name: "page_title" },
+                { data: null, name: "screenshots" }
+            ],
+            columnDefs: [
+                {
+                    targets: "name:name",
+                    render: function (data, type, row) {
+                        let url = row.http_url;
+                        if (url && webPorts.includes(parseInt(port, 10))) {
+                            try {
+                                const u = new URL(url);
+                                u.port = port;
+                                url = u.toString();
+                            } catch (e) { /* keep original url */ }
+                        }
+                        return portDisplaySubdomainLinkCell(data, type, row, url);
+                    }
+                },
+                { targets: "http_status:name", render: function (data, type, row) { return portDisplayHttpStatusWithInteresting(data, row); } },
+                { targets: "page_title:name", render: function (data) { return (data && portDisplaySafeText(data)) || "-"; } },
+                {
+                    targets: "screenshots:name",
+                    orderable: false,
+                    render: function (data, type, row) {
+                        const idAttr = portDisplaySafeAttr(String(row.id));
+                        const nameAttr = portDisplaySafeAttr(row.name || "");
+                        return "<span class=\"screenshot-cell\" data-loading=\"true\" data-subdomain-id=\"" + idAttr + "\" data-subdomain-name=\"" + nameAttr + "\"><span class=\"spinner-border spinner-border-sm\"></span> Loading...</span>";
+                    }
+                }
+            ],
+            order: [[0, "asc"]],
+            initComplete: function () {
+                if (window.ScreenshotDisplay) window.ScreenshotDisplay.attachDelegation("#modal_content_subdomain");
+            },
+            drawCallback: function () {
+                const api = this.api();
+                const total = (api.page && typeof api.page.info === "function") ? api.page.info().recordsTotal : 0;
+                $("#modal_content_subdomain_info").text(total + " Subdomains have Port " + port + " Open");
+                $("#modal-subdomain-count").html("<b>" + total + "</b>&nbsp;&nbsp;");
+                $("#subdomain-modal-loader").remove();
+                if (window.ScreenshotDisplay) window.ScreenshotDisplay.attachDelegation("#modal_content_subdomain");
+                loadVisibleScreenshots("modal_content_subdomain", $("#modal_content_subdomain").data("port"), $("#modal_content_subdomain").data("scan_id"), $("#modal_content_subdomain").data("domain_id"));
+            }
+        };
+        if ($.fn.DataTable.isDataTable("#modal_content_subdomain-datatable")) {
+            $("#modal_content_subdomain-datatable").DataTable().destroy();
+        }
+        if (typeof window.getRengineDatatableConfig === "function" && typeof window.initServerSideDataTable === "function") {
+            window.initServerSideDataTable("#modal_content_subdomain-datatable", window.getRengineDatatableConfig("#modal_content_subdomain-datatable", subTableOpts));
+        } else {
+            if (typeof console !== "undefined" && console.warn) {
+                console.warn("port_display: getRengineDatatableConfig/initServerSideDataTable not found; ensure datatables/init.js loads before this script.");
+            }
+            $("#modal_content_subdomain-datatable").DataTable(Object.assign({ serverSide: true, processing: true }, subTableOpts));
+        }
 
     });
 }
@@ -707,105 +778,79 @@ function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, sca
             ]
         );
 
-        // Get associated subdomains
-    $.getJSON(subdomain_url, async function(data) {
-            $('#modal_content_subdomain').empty();
-            const subdomains = data.subdomains || [];
-            $('#modal-subdomain-count').html(`<b>${subdomains.length}</b>&nbsp;&nbsp;`);
-
-            if (subdomains.length > 0) {
-                $('#modal_content_subdomain').append(`<p>${subdomains.length} subdomains are associated with IP ${ip_address}</p>`);
-            
-                // Create DataTable immediately without waiting for screenshots (IP modal uses ports 80,443)
-                createDataTableWithLazyScreenshotsForIP('modal_content_subdomain',
-                    ['Subdomain', 'Status', 'Title', 'Screenshots'],
-                    subdomains,
-                    scan_id, domain_id,
-                    (subdomain) => {
-                        const badge_color = subdomain.http_status >= 400 ? 'danger' : '';
-                        const subdomain_link = subdomain.http_url 
-                            ? `<a href='${subdomain.http_url}' target="_blank" class="text-${badge_color}">${subdomain.name}</a>`
-                            : `<span class="text-${badge_color}">${subdomain.name}</span>`;
-
-                        let status_tags = '';
-                        if (subdomain.http_status) {
-                            status_tags += get_http_badge(subdomain.http_status);
-                        }
-                        if (subdomain.is_interesting) {
-                            status_tags += '<span class="badge badge-soft-danger ms-1">Interesting</span>';
-                        }
-
-                        return `
-                            <tr data-subdomain-id="${subdomain.id}" data-subdomain-name="${subdomain.name}">
-                                <td>${subdomain_link}</td>
-                                <td>${status_tags || '-'}</td>
-                                <td>${subdomain.page_title ? htmlEncode(subdomain.page_title) : '-'}</td>
-                                <td class="screenshot-cell" data-loading="true">
-                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                                    Loading...
-                                </td>
-                            </tr>
-                        `;
+        // Subdomain tab: server-side DataTable with lazy screenshots (ports 80, 443)
+        $('#modal_content_subdomain').empty()
+            .append('<p id="modal_content_subdomain_info">Loading...</p>')
+            .append(
+                '<table id="modal_content_subdomain-datatable" class="table table-striped table-sm">' +
+                '<thead><tr><th>Subdomain</th><th>Status</th><th>Title</th><th>Screenshots</th></tr></thead><tbody></tbody></table>'
+            )
+            .data('scan_id', scan_id)
+            .data('domain_id', domain_id);
+        const ipSubTableOpts = {
+            ajax: {
+                url: subdomain_url,
+                data: function (d) {
+                    d.ip_address = ip_address;
+                    if (scan_id) d.scan_id = scan_id;
+                    if (domain_id) d.target_id = domain_id;
+                }
+            },
+            columns: [
+                { data: "name", name: "name" },
+                { data: "http_status", name: "http_status" },
+                { data: "page_title", name: "page_title" },
+                { data: null, name: "screenshots" }
+            ],
+            columnDefs: [
+                { targets: "name:name", render: function (data, type, row) { return portDisplaySubdomainLinkCell(data, type, row); } },
+                { targets: "http_status:name", render: function (data, type, row) { return portDisplayHttpStatusWithInteresting(data, row); } },
+                { targets: "page_title:name", render: function (data) { return (data && portDisplaySafeText(data)) || "-"; } },
+                {
+                    targets: "screenshots:name",
+                    orderable: false,
+                    render: function (data, type, row) {
+                        const idAttr = portDisplaySafeAttr(String(row.id));
+                        const nameAttr = portDisplaySafeAttr(row.name || "");
+                        return "<span class=\"screenshot-cell\" data-loading=\"true\" data-subdomain-id=\"" + idAttr + "\" data-subdomain-name=\"" + nameAttr + "\"><span class=\"spinner-border spinner-border-sm\"></span> Loading...</span>";
                     }
-                );
-            } else {
-                $('#modal_content_subdomain').append("<p>No subdomains found</p>");
+                }
+            ],
+            order: [[0, "asc"]],
+            initComplete: function () {
+                if (window.ScreenshotDisplay) window.ScreenshotDisplay.attachDelegation("#modal_content_subdomain");
+            },
+            drawCallback: function () {
+                const api = this.api();
+                const total = (api.page && typeof api.page.info === "function") ? api.page.info().recordsTotal : 0;
+                $("#modal_content_subdomain_info").text(total + " subdomains are associated with IP " + ip_address);
+                $('#modal-subdomain-count').html('<b>' + total + '</b>&nbsp;&nbsp;');
+                $('#subdomain-modal-loader').remove();
+                if (window.ScreenshotDisplay) window.ScreenshotDisplay.attachDelegation('#modal_content_subdomain');
+                loadVisibleScreenshotsForIP('modal_content_subdomain', $('#modal_content_subdomain').data('scan_id'), $('#modal_content_subdomain').data('domain_id'));
             }
-            $("#subdomain-modal-loader").remove();
-        });
-}
-
-// Specialized DataTable function for IP details with lazy loading of screenshots for ports 80,443
-function createDataTableWithLazyScreenshotsForIP(containerId, columns, data, scan_id, domain_id, rowRenderer) {
-    const tableId = `${containerId}-datatable`;
-    const table = `
-        <table id="${tableId}" class="table table-striped table-sm">
-            <thead>
-                <tr>
-                    ${columns.map(col => `<th>${col}</th>`).join('')}
-                </tr>
-            </thead>
-            <tbody>
-                ${data.map(item => rowRenderer(item)).join('')}
-            </tbody>
-        </table>
-    `;
-    
-    $(`#${containerId}`).html(table);
-    
-    // Initialize DataTable with lazy loading configuration
-    const dataTableConfig = {
-        "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-        "pageLength": 25,
-        "lengthMenu": [10, 25, 50, 100],
-        "order": [[0, "asc"]],
-        "initComplete": function() {
-            window.ScreenshotDisplay.attachDelegation(`#${containerId}`);
-        },
-        "drawCallback": function() {
-            // Load screenshots for common web ports (80, 443) only for visible rows on page change/search/sort
-            loadVisibleScreenshotsForIP(containerId, scan_id, domain_id);
+        };
+        if ($.fn.DataTable.isDataTable('#modal_content_subdomain-datatable')) {
+            $('#modal_content_subdomain-datatable').DataTable().destroy();
         }
-    };
-    
-    // Destroy existing DataTable if it exists
-    if ($.fn.DataTable.isDataTable(`#${tableId}`)) {
-        $(`#${tableId}`).DataTable().destroy();
-    }
-    
-    // Initialize DataTable
-    $(`#${tableId}`).DataTable(dataTableConfig);
+        if (typeof window.getRengineDatatableConfig === "function" && typeof window.initServerSideDataTable === "function") {
+            window.initServerSideDataTable("#modal_content_subdomain-datatable", window.getRengineDatatableConfig("#modal_content_subdomain-datatable", ipSubTableOpts));
+        } else {
+            if (typeof console !== "undefined" && console.warn) {
+                console.warn("port_display: getRengineDatatableConfig/initServerSideDataTable not found; ensure datatables/init.js loads before this script.");
+            }
+            $("#modal_content_subdomain-datatable").DataTable(Object.assign({ serverSide: true, processing: true }, ipSubTableOpts));
+        }
 }
 
-// Function to load screenshots for common web ports (80, 443) only for visible rows
+// Load screenshots for common web ports (80, 443) only for visible rows (IP modal)
 async function loadVisibleScreenshotsForIP(containerId, scan_id, domain_id) {
     const $visibleCells = $(`#${containerId} .screenshot-cell[data-loading="true"]:visible`);
     
     $visibleCells.each(async function() {
         const $cell = $(this);
-        const $row = $cell.closest('tr');
-        const subdomainId = $row.data('subdomain-id');
-        const subdomainName = $row.data('subdomain-name');
+        const subdomainId = $cell.data('subdomain-id');
+        const subdomainName = $cell.data('subdomain-name');
         
         if (subdomainId && subdomainName) {
             try {
@@ -818,32 +863,28 @@ async function loadVisibleScreenshotsForIP(containerId, scan_id, domain_id) {
                 if (scan_id) {
                     const httpsScreenshots = await getScreenshotThumbnail(subdomainId, subdomainName, 443, scan_id, domain_id, true);
                     const httpScreenshots = await getScreenshotThumbnail(subdomainId, subdomainName, 80, scan_id, domain_id, true);
-                    
-                    if (httpsScreenshots !== '-') {
-                        combinedScreenshots += httpsScreenshots;
-                    }
-                    if (httpScreenshots !== '-') {
-                        combinedScreenshots += httpScreenshots;
-                    }
+                    if (typeof httpsScreenshots === "string" && httpsScreenshots !== "-") combinedScreenshots += httpsScreenshots;
+                    if (typeof httpScreenshots === "string" && httpScreenshots !== "-") combinedScreenshots += httpScreenshots;
                 } else if (domain_id) {
-                    // Try to get screenshots using domain_id when scan_id is null
                     const httpsScreenshots = await getScreenshotThumbnail(subdomainId, subdomainName, 443, null, domain_id, true);
                     const httpScreenshots = await getScreenshotThumbnail(subdomainId, subdomainName, 80, null, domain_id, true);
-                    
-                    if (httpsScreenshots !== '-') {
-                        combinedScreenshots += httpsScreenshots;
-                    }
-                    if (httpScreenshots !== '-') {
-                        combinedScreenshots += httpScreenshots;
-                    }
+                    if (typeof httpsScreenshots === "string" && httpsScreenshots !== "-") combinedScreenshots += httpsScreenshots;
+                    if (typeof httpScreenshots === "string" && httpScreenshots !== "-") combinedScreenshots += httpScreenshots;
                 }
-                
-                // Update cell content
-                $cell.html(combinedScreenshots || '-');
+                const html = typeof combinedScreenshots === "string" ? combinedScreenshots : "-";
+                $cell.html(html || "-");
             } catch (error) {
                 console.error('Error loading screenshots for subdomain:', subdomainName, error);
                 $cell.html('-');
             }
+        }
+    });
+}
+
+if (window.jQuery && typeof window.jQuery.fn.on === "function") {
+    window.jQuery(function () {
+        if (typeof attachPortBadgeTriggerListener === "function") {
+            attachPortBadgeTriggerListener();
         }
     });
 }

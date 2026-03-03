@@ -16,6 +16,30 @@ function escapeHtml(str) {
 		.replace(/\//g, '&#x2F;');
 }
 
+/**
+ * Returns a safe link renderer (href, displayText, opts). Prefer window.safeLink (escape.js).
+ * Fallback sanitizes href via window.sanitizeUrlForHref / window.normalizeSafeLinkUrl when available.
+ * Ensure escape.js loads before this script for full URL sanitization.
+ * @param {string} [defaultClass] - Default class for the anchor (e.g. "text-primary", "text-danger").
+ * @returns {function(string, string, object): string}
+ */
+function getRengineSafeLinkFn(defaultClass) {
+	defaultClass = defaultClass || "text-primary";
+	if (typeof window.safeLink === "function") return window.safeLink;
+	const sanitize = typeof window.sanitizeUrlForHref === "function" ? window.sanitizeUrlForHref : (typeof window.normalizeSafeLinkUrl === "function" ? window.normalizeSafeLinkUrl : null);
+	const safeA = typeof window.safeAttr === "function" ? window.safeAttr : function (s) { return s == null ? "" : String(s); };
+	const safeT = typeof window.safeText === "function" ? window.safeText : function (s) { return s == null ? "" : String(s); };
+	return function (h, t, o) {
+		const safeHref = sanitize ? (sanitize(h) || "#") : "#";
+		o = o || {};
+		const cls = o.className != null ? o.className : defaultClass;
+		const title = o.title != null ? " title=\"" + safeA(o.title) + "\"" : "";
+		const target = o.target != null ? o.target : "_blank";
+		const targetAttr = target ? " target=\"" + safeA(target) + "\"" : "";
+		return "<a href=\"" + safeA(safeHref) + "\"" + targetAttr + " class=\"" + safeA(cls) + "\"" + title + ">" + safeT(t != null ? t : "") + "</a>";
+	};
+}
+
 function checkall(clickchk, relChkbox) {
 	const checker = $('#' + clickchk);
 	const multichk = $('.' + relChkbox);
@@ -196,6 +220,17 @@ $(document).ready(function() {
 		const rowData = $('#vulnerability_results').DataTable().row(this).data();
 		if (rowData) {
 			render_vuln_offcanvas(rowData);
+		}
+	});
+
+	$(document).off("click.reportHackerone", ".js-report-hackerone").on("click.reportHackerone", ".js-report-hackerone", function(e) {
+		e.preventDefault();
+		const el = e.currentTarget;
+		const reportUrl = (el.getAttribute && el.getAttribute("data-report-url")) || "";
+		const vulnId = (el.getAttribute && el.getAttribute("data-vulnerability-id")) || "";
+		const severity = (el.getAttribute && el.getAttribute("data-severity")) || "";
+		if (typeof report_hackerone === "function") {
+			report_hackerone(reportUrl, vulnId, severity);
 		}
 	});
 });
@@ -399,24 +434,22 @@ function parse_comma_values_into_span(data, color, outline = null) {
 }
 
 function get_severity_badge(severity) {
+	if (typeof window.renderSeverityBadgeHtml === "function") {
+		return window.renderSeverityBadgeHtml(severity);
+	}
 	switch (severity) {
-		case 'Info':
-			return "<span class='badge badge-soft-primary'>&nbsp;&nbsp;INFO&nbsp;&nbsp;</span>";
-			break;
-		case 'Low':
-			return "<span class='badge badge-low'>&nbsp;&nbsp;LOW&nbsp;&nbsp;</span>";
-			break;
-		case 'Medium':
-			return "<span class='badge badge-soft-warning'>&nbsp;&nbsp;MEDIUM&nbsp;&nbsp;</span>";
-			break;
-		case 'High':
-			return "<span class='badge badge-soft-danger'>&nbsp;&nbsp;HIGH&nbsp;&nbsp;</span>";
-			break;
-		case 'Critical':
-			return "<span class='badge badge-critical'>&nbsp;&nbsp;CRITICAL&nbsp;&nbsp;</span>";
-			break;
-		case 'Unknown':
-		return "<span class='badge badge-soft-info'>&nbsp;&nbsp;UNKNOWN&nbsp;&nbsp;</span>";
+		case "Info":
+			return "<span class='badge badge-soft-primary'>&nbsp;&nbsp;Info&nbsp;&nbsp;</span>";
+		case "Low":
+			return "<span class='badge badge-low'>&nbsp;&nbsp;Low&nbsp;&nbsp;</span>";
+		case "Medium":
+			return "<span class='badge badge-soft-warning'>&nbsp;&nbsp;Medium&nbsp;&nbsp;</span>";
+		case "High":
+			return "<span class='badge badge-soft-danger'>&nbsp;&nbsp;High&nbsp;&nbsp;</span>";
+		case "Critical":
+			return "<span class='badge badge-critical'>&nbsp;&nbsp;Critical&nbsp;&nbsp;</span>";
+		case "Unknown":
+			return "<span class='badge badge-soft-info'>&nbsp;&nbsp;Unknown&nbsp;&nbsp;</span>";
 		default:
 			return "";
 	}
@@ -835,181 +868,147 @@ function report_hackerone(endpoint_url, vulnerability_id, severity) {
 
 function get_interesting_subdomains(endpoint_url, project, target_id, scan_history_id) {
 	let url;
+	let nonOrderableTargets;
 	if (target_id) {
 		url = `${endpoint_url}?project=${project}&target_id=${target_id}&format=datatables`;
-		non_orderable_targets = [0, 1, 2, 3];
+		nonOrderableTargets = ["name", "page_title", "http_status", "content_length"];
 	} else if (scan_history_id) {
 		url = `${endpoint_url}?project=${project}&scan_id=${scan_history_id}&format=datatables`;
-		non_orderable_targets = [];
+		nonOrderableTargets = [];
 	}
-	const interestingSubdomainsScrollerOpts = window.getRengineDatatableScrollerOptions
-		? window.getRengineDatatableScrollerOptions("60vh")
-		: {};
-	$('#interesting_subdomains').DataTable(Object.assign({
-		"drawCallback": function() {
+	const scrollOpts = typeof window.getRengineDatatableScrollerOptions === 'function'
+		? window.getRengineDatatableScrollerOptions('60vh') : {};
+	const opts = {
+		ajax: { url: url },
+		destroy: true,
+		info: false,
+		order: [[3, "desc"]],
+		columns: [
+			{ data: "name", name: "name" },
+			{ data: "page_title", name: "page_title" },
+			{ data: "http_status", name: "http_status" },
+			{ data: "content_length", name: "content_length" },
+			{ data: "http_url", name: "http_url" },
+			{ data: "technologies", name: "technologies" }
+		],
+		columnDefs: [
+			{ orderable: false, targets: nonOrderableTargets },
+			{ targets: "http_url", visible: false, searchable: false },
+			{ targets: "technologies", visible: false, searchable: true },
+			{ className: "text-center", targets: "http_status" },
+			{
+				targets: "name",
+				render: function (data, type, row) {
+					const href = row.http_url || ("https://" + (data || ""));
+					const text = (typeof window.safeText === "function" ? window.safeText(data) : data);
+					return getRengineSafeLinkFn("text-primary")(href, text || "", { target: "_blank", className: "text-primary" });
+				}
+			},
+			{
+				targets: "http_status",
+				render: function (data) {
+					if (data >= 200 && data < 300) return "<span class='badge badge-pills badge-soft-success'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
+					if (data >= 300 && data < 400) return "<span class='badge badge-pills badge-soft-warning'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
+					if (data === 0) return "";
+					return "<span class='badge badge-pills badge-soft-danger'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
+				}
+			}
+		],
+		drawCallback: function () {
 			const total = this.api().page.info().recordsTotal;
 			if (total === 0) {
 				$('#interesting_subdomain_div').empty();
 			} else {
 				$('.interesting-tab-show').removeAttr('style');
-				$('#interesting_subdomain_alert_count').html(`${total} Interesting Subdomains`);
-				$('#interesting_subdomain_count_badge').empty();
-				$('#interesting_subdomain_count_badge').html(`<span class="badge badge-soft-primary me-1">${total}</span>`);
+				$('#interesting_subdomain_alert_count').html(total + ' Interesting Subdomains');
+				$('#interesting_subdomain_count_badge').empty().html('<span class="badge badge-soft-primary me-1">' + total + '</span>');
 			}
-		},
-		"processing": true,
-		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-		"destroy": true,
-		"info": false,
-		"responsive": true,
-		'serverSide': true,
-		"ajax": url,
-		"order": [
-			[3, "desc"]
-		],
-		"lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, -1], ["30", "50", "100", "200", "500", "All"]],
-		"pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
-		"columns": [{
-			'data': 'name'
-		}, {
-			'data': 'page_title'
-		}, {
-			'data': 'http_status'
-		}, {
-			'data': 'content_length'
-		}, {
-			'data': 'http_url'
-		}, {
-			'data': 'technologies'
-		}, ],
-		"columnDefs": [{
-			"orderable": false,
-			"targets": non_orderable_targets
-		}, {
-			"targets": [4],
-			"visible": false,
-			"searchable": false,
-		}, {
-			"targets": [5],
-			"visible": false,
-			"searchable": true,
-		}, {
-			"className": "text-center",
-			"targets": [2]
-		}, {
-			"render": function(data, type, row) {
-				let tech_badge = '';
-				if (row['technologies']) {
-					// tech_badge = `</br>` + parse_technology( endpoint_url, row['technologies'], "primary", outline=true, scan_id=null);
-				}
-				if (row['http_url']) {
-					return `<a href="` + row['http_url'] + `" class="text-primary" target="_blank">` + data + `</a>` + tech_badge;
-				}
-				return `<a href="https://` + data + `" class="text-primary" target="_blank">` + data + `</a>` + tech_badge;
-			},
-			"targets": 0
-		}, {
-			"render": function(data, type, row) {
-				// display badge based on http status
-				// green for http status 2XX, orange for 3XX and warning for everything else
-				if (data >= 200 && data < 300) {
-					return "<span class='badge badge-pills badge-soft-success'>" + data + "</span>";
-				} else if (data >= 300 && data < 400) {
-					return "<span class='badge badge-pills badge-soft-warning'>" + data + "</span>";
-				} else if (data == 0) {
-					// datatable throws error when no data is returned
-					return "";
-				}
-				return `<span class='badge badge-pills badge-soft-danger'>` + data + `</span>`;
-			},
-			"targets": 2,
-		}, ],
-	}, interestingSubdomainsScrollerOpts));
+		}
+	};
+	const merged = Object.assign({}, scrollOpts, opts);
+	if ($.fn.DataTable.isDataTable('#interesting_subdomains')) {
+		$('#interesting_subdomains').DataTable().destroy();
+	}
+	if (typeof window.getRengineDatatableConfig === "function" && typeof window.initServerSideDataTable === "function") {
+		window.initServerSideDataTable("#interesting_subdomains", window.getRengineDatatableConfig("#interesting_subdomains", merged));
+	} else {
+		if (typeof console !== "undefined" && console.warn) {
+			console.warn("custom: getRengineDatatableConfig/initServerSideDataTable not found; ensure datatables/init.js loads before this script.");
+		}
+		$("#interesting_subdomains").DataTable(Object.assign({ serverSide: true, processing: true, responsive: true, layout: window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH }, merged));
+	}
 }
 
 function get_interesting_endpoints(endpoint_url, project, target_id, scan_history_id) {
-	const non_orderable_targets = [];
 	let url;
 	if (target_id) {
 		url = `${endpoint_url}/?project=${project}&target_id=${target_id}&format=datatables`;
-		// non_orderable_targets = [0, 1, 2, 3];
 	} else if (scan_history_id) {
 		url = `${endpoint_url}/?project=${project}&scan_id=${scan_history_id}&format=datatables`;
-		// non_orderable_targets = [0, 1, 2, 3];
 	}
-	const interestingEndpointsScrollerOpts = window.getRengineDatatableScrollerOptions
-		? window.getRengineDatatableScrollerOptions("60vh")
-		: {};
-	$('#interesting_endpoints').DataTable(Object.assign({
-		"drawCallback": function() {
+	const scrollOpts = typeof window.getRengineDatatableScrollerOptions === 'function'
+		? window.getRengineDatatableScrollerOptions('60vh') : {};
+	const opts = {
+		ajax: { url: url },
+		destroy: true,
+		info: false,
+		order: [[3, "desc"]],
+		columns: [
+			{ data: "http_url", name: "http_url" },
+			{ data: "page_title", name: "page_title" },
+			{ data: "http_status", name: "http_status" },
+			{ data: "content_length", name: "content_length" }
+		],
+		columnDefs: [
+			{ className: "text-center", targets: "http_status" },
+			{
+				targets: "http_url",
+				render: function (data) {
+					const raw = (data && typeof data === "string") ? data : (data ? String(data) : "");
+					const displayText = raw.length > 80 ? raw.slice(0, 77) + "..." : raw;
+					const linkOpts = { target: "_blank", className: "text-primary", title: raw };
+					return getRengineSafeLinkFn("text-primary")(raw, displayText, linkOpts);
+				}
+			},
+			{
+				targets: "page_title",
+				render: function (data) {
+					return (typeof window.safeText === "function" ? window.safeText(data) : (typeof htmlEncode === "function" ? htmlEncode(data) : data)) || "";
+				}
+			},
+			{
+				targets: "http_status",
+				render: function (data) {
+					if (data >= 200 && data < 300) return "<span class='badge badge-pills badge-soft-success'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
+					if (data >= 300 && data < 400) return "<span class='badge badge-pills badge-soft-warning'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
+					if (data === 0) return "";
+					return "<span class='badge badge-pills badge-soft-danger'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
+				}
+			}
+		],
+		drawCallback: function () {
 			const total = this.api().page.info().recordsTotal;
 			if (total === 0) {
 				$('#interesting_endpoint_div').remove();
 			} else {
 				$('.interesting-tab-show').removeAttr('style');
-				$('#interesting_endpoint_alert_count').html(`, ${total} Interesting Endpoints`);
-				$('#interesting_endpoint_count_badge').empty();
-				$('#interesting_endpoint_count_badge').html(`<span class="badge badge-soft-primary me-1">${total}</span>`);
+				$('#interesting_endpoint_alert_count').html(', ' + total + ' Interesting Endpoints');
+				$('#interesting_endpoint_count_badge').empty().html('<span class="badge badge-soft-primary me-1">' + total + '</span>');
 			}
-		},
-		"processing": true,
-		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-		'serverSide': true,
-		"destroy": true,
-		"info": false,
-		"responsive": true,
-		"ajax": url,
-		"order": [
-			[3, "desc"]
-		],
-		"lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, 1000, -1], ["30", "50", "100", "200", "500", "1000", "All"]],
-		"pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
-		"columns": [{
-			'data': 'http_url'
-		}, {
-			'data': 'page_title'
-		}, {
-			'data': 'http_status'
-		}, {
-			'data': 'content_length'
-		}, ],
-		"columnDefs": [{
-			"orderable": false,
-			"targets": non_orderable_targets
-		}, {
-			"className": "text-center",
-			"targets": [2]
-		}, {
-			"render": function(data, type, row) {
-				const url = split_into_lines(data, 70);
-				return "<a href='" + data + "' target='_blank' class='text-primary'>" + url + "</a>";
-			},
-			"targets": 0
-		}, 
-		{
-			"render": function(data, type, row) {
-				const out = htmlEncode(data);
-				return out;
-			},
-			"targets": 1
-		},
-		{
-			"render": function(data, type, row) {
-				// display badge based on http status
-				// green for http status 2XX, orange for 3XX and warning for everything else
-				if (data >= 200 && data < 300) {
-					return "<span class='badge badge-pills badge-soft-success'>" + data + "</span>";
-				} else if (data >= 300 && data < 400) {
-					return "<span class='badge badge-pills badge-soft-warning'>" + data + "</span>";
-				} else if (data == 0) {
-					// datatable throws error when no data is returned
-					return "";
-				}
-				return `<span class='badge badge-pills badge-soft-danger'>` + data + `</span>`;
-			},
-			"targets": 2,
-		}, ],
-	}, interestingEndpointsScrollerOpts));
+		}
+	};
+	const merged = Object.assign({}, scrollOpts, opts);
+	if ($.fn.DataTable.isDataTable('#interesting_endpoints')) {
+		$('#interesting_endpoints').DataTable().destroy();
+	}
+	if (typeof window.getRengineDatatableConfig === "function" && typeof window.initServerSideDataTable === "function") {
+		window.initServerSideDataTable("#interesting_endpoints", window.getRengineDatatableConfig("#interesting_endpoints", merged));
+	} else {
+		if (typeof console !== "undefined" && console.warn) {
+			console.warn("custom: getRengineDatatableConfig/initServerSideDataTable not found; ensure datatables/init.js loads before this script.");
+		}
+		$("#interesting_endpoints").DataTable(Object.assign({ serverSide: true, processing: true, responsive: true, layout: window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH }, merged));
+	}
 }
 
 function get_important_subdomains(endpoint_url, target_id, scan_history_id) {
@@ -1406,9 +1405,16 @@ function show_subscan_results(endpoint_url, subscan_id) {
 				}
 				$('#xl-modal-footer').append(`<span class="text-danger">* Uncommon Ports</span>`);
 			} else if (isVulnResult) {
-				render_vulnerability_in_xl_modal(vuln_count = response['result'].length, subdomain_name = response['subscan']['subdomain_name'], result = response['result']);
+				const vulnUrl = response['vulnerability_url'] || (typeof window.DETAIL_SCAN_API_VULNERABILITIES_LIST !== 'undefined' ? window.DETAIL_SCAN_API_VULNERABILITIES_LIST : '');
+				const subId = response['subscan'] && response['subscan']['subdomain'];
+				const scanId = response['subscan'] && response['subscan']['scan_history'];
+				render_vulnerability_in_xl_modal(vulnUrl, scanId, null, subId, response['subscan']['subdomain_name']);
 			} else if (isEndpointResult) {
-				render_endpoint_in_xl_modal(endpoint_count = response['result'].length, subdomain_name = response['subscan']['subdomain_name'], result = response['result']);
+				const epUrl = response['endpoint_url'] || (typeof window.DETAIL_SCAN_API_ENDPOINTS_LIST !== 'undefined' ? window.DETAIL_SCAN_API_ENDPOINTS_LIST : '');
+				const subId = response['subscan'] && response['subscan']['subdomain'];
+				const scanId = response['subscan'] && response['subscan']['scan_history'];
+				const proj = response['project'] || (typeof window.CURRENT_PROJECT_SLUG !== 'undefined' ? window.CURRENT_PROJECT_SLUG : '');
+				render_endpoint_in_xl_modal(subId, response['subscan']['subdomain_name'], epUrl, proj, scanId);
 			} else if (isDirFuzzResult) {
 				if (response['result'][0]['directory_files'].length == 0) {
 					$('#xl-modal-content').append(`
@@ -1417,7 +1423,10 @@ function show_subscan_results(endpoint_url, subscan_id) {
 						</div>
 					`);
 				} else {
-					render_directories_in_xl_modal(response['result'][0]['directory_files'].length, response['subscan']['subdomain_name'], response['result'][0]['directory_files']);
+					const dirUrl = response['directories_url'] || (typeof window.DETAIL_SCAN_API_DIRECTORIES_LIST !== 'undefined' ? window.DETAIL_SCAN_API_DIRECTORIES_LIST : '');
+					const subId = response['subscan'] && response['subscan']['subdomain'];
+					const scanId = response['subscan'] && response['subscan']['scan_history'];
+					render_directories_in_xl_modal(dirUrl, scanId, subId, response['subscan']['subdomain_name']);
 				}
 			}
 		} else {
@@ -1438,270 +1447,188 @@ function show_subscan_results(endpoint_url, subscan_id) {
 }
 
 function get_http_status_badge(data) {
-	if (data >= 200 && data < 300) {
-		return "<span class='badge  badge-soft-success'>" + data + "</span>";
-	} else if (data >= 300 && data < 400) {
-		return "<span class='badge  badge-soft-warning'>" + data + "</span>";
-	} else if (data == 0) {
-		// datatable throws error when no data is returned
-		return "";
-	}
-	return "<span class='badge  badge-soft-danger'>" + data + "</span>";
+	if (data == null || data === "") return "";
+	const n = Number(data);
+	if (n === 0) return "";
+	const safeTextFn = typeof window.safeText === "function" ? window.safeText : function (x) { return x == null ? "" : String(x); };
+	const display = safeTextFn(String(data));
+	const cls = (n >= 200 && n < 300) ? "badge badge-soft-success" : (n >= 300 && n < 400) ? "badge badge-soft-warning" : "badge badge-soft-danger";
+	const safeAttrFn = typeof window.safeAttr === "function" ? window.safeAttr : function (x) { return x; };
+	return "<span class=\"" + safeAttrFn(cls) + "\">" + display + "</span>";
 }
 
-function render_endpoint_in_xl_modal(endpoint_count, subdomain_name, result) {
-	// This function renders endpoints datatable in xl modal
-	// Used in Subscan results and subdomain to endpoints modal
-	// Clear loading state so "Loading..." is not shown with the content
-	$('#xl-modal-content').empty();
-	$('#xl-modal-content').append(`<h5> ${endpoint_count} Endpoints Discovered on subdomain ${subdomain_name}</h5>`);
-	$('#xl-modal-content').append(`
-		<div class="">
-		<table id="endpoint-modal-datatable" class="table dt-responsive w-100">
-		<thead>
-		<tr>
-		<th>HTTP URL</th>
-		<th>Status</th>
-		<th>Page Title</th>
-		<th>Tags</th>
-		<th>Content Type</th>
-		<th>Content Length</th>
-		<th>Response Time</th>
-		</tr>
-		</thead>
-		<tbody id="endpoint_tbody">
-		</tbody>
-		</table>
-		</div>
-	`);
-	$('#endpoint_tbody').empty();
-	for (let endpoint_obj in result) {
-		const endpoint = result[endpoint_obj];
-		let tech_badge = '';
-		let web_server = '';
-		if (endpoint['techs']) {
-			tech_badge = '<div>' + parse_technology('', endpoint['techs'], "primary", true, false, false);
-		}
-		if (endpoint['webserver']) {
-			web_server = `<span class='m-1 badge badge-soft-info' data-toggle="tooltip" data-placement="top" title="Web Server">${endpoint['webserver']}</span>`;
-		}
-		const url = split_into_lines(endpoint['http_url'], 70);
-		tech_badge += web_server + '</div>';
-		const http_url_td = "<a href='" + endpoint['http_url'] + `' target='_blank' class='text-primary'>` + url + "</a>" + tech_badge;
-		$('#endpoint_tbody').append(`
-			<tr>
-			<td>${http_url_td}</td>
-			<td>${get_http_status_badge(endpoint['http_status'])}</td>
-			<td>${return_str_if_not_null(htmlEncode(endpoint['page_title']))}</td>
-			<td>${parse_comma_values_into_span(endpoint['matched_gf_patterns'], "danger", outline=true)}</td>
-			<td>${return_str_if_not_null(endpoint['content_type'])}</td>
-			<td>${return_str_if_not_null(endpoint['content_length'])}</td>
-			<td>${get_response_time_text(endpoint['response_time'])}</td>
-			</tr>
-		`);
+function render_endpoint_in_xl_modal(subdomain_id, subdomain_name, endpoint_url, project, scan_id) {
+	if (!endpoint_url || typeof endpoint_url !== "string" || !endpoint_url.trim()) {
+		$("#xl-modal-content").empty().append("<p class=\"text-danger mb-0\">Missing or invalid endpoint URL. Cannot load endpoint data.</p>");
+		if (typeof console !== "undefined" && console.warn) console.warn("render_endpoint_in_xl_modal: missing or invalid endpoint_url");
+		return;
 	}
-	const endpointModalScrollerOpts = window.getRengineDatatableScrollerOptions
-		? window.getRengineDatatableScrollerOptions("60vh")
-		: {};
-	$("#endpoint-modal-datatable").DataTable(Object.assign({
-		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-		"order": [
-			[5, "desc"]
-		],
-		"responsive": true,
-		drawCallback: function() {
-			$(".dt-paging > .pagination").addClass("pagination-rounded")
-		}
-	}, endpointModalScrollerOpts));
-}
-
-function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_name, result) {
-	// This function will render the vulnerability datatable in xl modal
-	$('#xl-modal-content').empty();
-	$('#xl-modal-content').append(`<h5> ${vuln_count} Vulnerabilities Discovered on subdomain ${subdomain_name}</h5>`);
-	$('#xl-modal-content').append(`<ol id="vuln_results_ol" class="list-group list-group-numbered"></ol>`);
-	$('#xl-modal-content').append(`
-		<div class="">
-		<table id="vulnerability-modal-datatable" class="table dt-responsive w-100">
-		<thead>
-		<tr>
-		<th>Type</th>
-		<th>Title</th>
-		<th class="text-center">Severity</th>
-		<th>CVSS Score</th>
-		<th>CVE/CWE</th>
-		<th>Vulnerable URL</th>
-		<th class="text-center dt-no-sorting">Action</th>
-		</tr>
-		</thead>
-		<tbody id="vuln_tbody">
-		</tbody>
-		</table>
-		</div>
-		`);
-	$('#vuln_tbody').empty();
-	for (let vuln in result) {
-		const vuln_obj = result[vuln];
-		const vuln_type = vuln_obj['type'] ? `<span class="badge badge-soft-primary">&nbsp;&nbsp;${vuln_obj['type'].toUpperCase()}&nbsp;&nbsp;</span>` : '';
-		let tags = '';
-		let cvss_metrics_badge = '';
-		let color;
-		let badge_color;
-		switch (vuln_obj['severity']) {
-			case 'Info':
-				color = 'primary'
-				badge_color = 'soft-primary'
-				break;
-			case 'Low':
-				color = 'low'
-				badge_color = 'soft-warning'
-				break;
-			case 'Medium':
-				color = 'warning'
-				badge_color = 'soft-warning'
-				break;
-			case 'High':
-				color = 'danger'
-				badge_color = 'soft-danger'
-				break;
-			case 'Critical':
-				color = 'critical'
-				badge_color = 'critical'
-				break;
-			default:
-		}
-		if (vuln_obj['tags']) {
-			tags = '<div>';
-			vuln_obj['tags'].forEach(tag => {
-				tags += `<span class="badge badge-${badge_color} me-1 mb-1" data-toggle="tooltip" data-placement="top" title="Tags">${tag.name}</span>`;
-			});
-			tags += '</div>';
-		}
-		if (vuln_obj['cvss_metrics']) {
-			cvss_metrics_badge = `<div><span class="badge badge-outline-primary my-1" data-toggle="tooltip" data-placement="top" title="CVSS Metrics">${vuln_obj['cvss_metrics']}</span></div>`;
-		}
-		const vuln_title = `<b class="text-${color}">` + vuln_obj['name'] + `</b>` + cvss_metrics_badge + tags;
-		let badge = 'danger';
-		let cvss_score = '';
-		if (vuln_obj['cvss_score']) {
-			if (vuln_obj['cvss_score'] > 0.1 && vuln_obj['cvss_score'] <= 3.9) {
-				badge = 'info';
-			} else if (vuln_obj['cvss_score'] > 3.9 && vuln_obj['cvss_score'] <= 6.9) {
-				badge = 'warning';
-			} else if (vuln_obj['cvss_score'] > 6.9 && vuln_obj['cvss_score'] <= 8.9) {
-				badge = 'danger';
+	$("#xl-modal-content").empty();
+	$("#xl-modal-content").append(
+		"<div class=\"\"><table id=\"endpoint-modal-datatable\" class=\"table dt-responsive w-100\"><thead><tr>" +
+		"<th>HTTP URL</th><th>Status</th><th>Page Title</th><th>Tags</th><th>Content Type</th><th>Content Length</th><th>Response Time</th>" +
+		"</tr></thead><tbody></tbody></table></div>"
+	);
+	if ($.fn.DataTable.isDataTable("#endpoint-modal-datatable")) {
+		$("#endpoint-modal-datatable").DataTable().destroy();
+		$("#endpoint-modal-datatable").empty();
+	}
+	const safeLinkFn = getRengineSafeLinkFn("text-primary");
+	const safeTextFn = typeof window.safeText === "function" ? window.safeText : function (x) { return x == null ? "" : String(x); };
+	const columns = [
+		{ data: "http_url", name: "http_url" },
+		{ data: "http_status", name: "http_status" },
+		{ data: "page_title", name: "page_title" },
+		{ data: "matched_gf_patterns", name: "matched_gf_patterns" },
+		{ data: "content_type", name: "content_type" },
+		{ data: "content_length", name: "content_length" },
+		{ data: "response_time", name: "response_time" }
+	];
+	const httpStatusDef = (window.RengineDatatableColumnDefs && typeof window.RengineDatatableColumnDefs.getSubdomainHttpStatusBadgeColumnDef === "function")
+		? window.RengineDatatableColumnDefs.getSubdomainHttpStatusBadgeColumnDef("http_status:name")
+		: { targets: "http_status:name", className: "text-center", render: function (data) { return typeof get_http_status_badge === "function" ? get_http_status_badge(data) : (data != null ? data : ""); } };
+	const columnDefs = [
+		{ targets: "http_url:name", render: function (data, type) { if (type !== "display" || data == null) return data; const raw = String(data); const display = raw.length > 80 ? raw.slice(0, 77) + "..." : raw; return safeLinkFn(raw, display, { target: "_blank", className: "text-primary", title: raw }); } },
+		httpStatusDef,
+		{ targets: "page_title:name", render: function (data) { return data != null ? safeTextFn(data) : ""; } },
+		{ targets: "matched_gf_patterns:name", render: function (data) { return data != null && typeof parse_comma_values_into_span === "function" ? parse_comma_values_into_span(data, "danger", true) : safeTextFn(data); } },
+		{ targets: "content_type:name", render: function (data) { return data != null ? safeTextFn(data) : ""; } },
+		{ targets: "content_length:name", render: function (data) { return data != null ? safeTextFn(data) : ""; } },
+		{ targets: "response_time:name", render: function (data) { return typeof get_response_time_text === "function" ? get_response_time_text(data) : (data != null ? safeTextFn(data) : ""); } }
+	];
+	const opts = {
+		ajax: {
+			url: endpoint_url,
+			data: function (d) {
+				if (project) d.project = project;
+				if (scan_id) d.scan_history = scan_id;
+				if (subdomain_id) d.subdomain_id = subdomain_id;
 			}
-			cvss_score = `<span class="badge badge-outline-${badge}" data-toggle="tooltip" data-placement="top" title="CVSS Score">${vuln_obj['cvss_score']}</span>`;
-		}
-		let cve_cwe_badge = '<div>';
-		if (vuln_obj['cve_ids']) {
-			vuln_obj['cve_ids'].forEach(cve => {
-				cve_cwe_badge += `<a href="https://google.com/search?q=${cve.name.toUpperCase()}" target="_blank" class="badge badge-outline-primary me-1 mt-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${cve.name.toUpperCase()}</a>`;
-			});
-		}
-		if (vuln_obj['cwe_ids']) {
-			vuln_obj['cwe_ids'].forEach(cwe => {
-				cve_cwe_badge += `<a href="https://google.com/search?q=${cwe.name.toUpperCase()}" target="_blank" class="badge badge-outline-primary me-1 mt-1" data-toggle="tooltip" data-placement="top" title="CWE ID">${cwe.name.toUpperCase()}</a>`;
-			});
-		}
-		cve_cwe_badge += '</div>';
-		const http_url = vuln_obj['http_url'].includes('http') ? "<a href='" + htmlEncode(vuln_obj['http_url']) + "' target='_blank' class='text-danger'>" + htmlEncode(vuln_obj['http_url']) + "</a>" : vuln_obj['http_url'];
-		const action_icon = vuln_obj['hackerone_report_id'] ? '' : `
-		<div class="btn-group mb-2 dropstart">
-		<a href="#" class="text-dark dropdown-toggle float-end" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-horizontal"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-		</a>
-		<div class="dropdown-menu" style="">
-		<a class="dropdown-item" href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${vuln_obj['id']}, '${vuln_obj['severity']}');">Report to Hackerone</a>
-		</div>
-		</div>`;
-		$('#vuln_tbody').append(`
-			<tr>
-			<td>${vuln_type}</td>
-			<td>${vuln_title}</td>
-			<td class="text-center">${get_severity_badge(vuln_obj['severity'])}</td>
-			<td class="text-center">${cvss_score}</td>
-			<td>${cve_cwe_badge}</td>
-			<td>${http_url}</td>
-			<td>${action_icon}</td>
-			</tr>
-		`);
-	}
-	const vulnModalScrollerOpts = window.getRengineDatatableScrollerOptions
-		? window.getRengineDatatableScrollerOptions("60vh")
-		: {};
-	$("#vulnerability-modal-datatable").DataTable(Object.assign({
-		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-		"order": [
-			[5, "desc"]
-		],
-		"responsive": true,
-		drawCallback: function() {
-			$(".dt-paging > .pagination").addClass("pagination-rounded")
-		}
-	}, vulnModalScrollerOpts));
+		},
+		columns: columns,
+		columnDefs: columnDefs,
+		order: [[5, "desc"]],
+		drawCallback: function () { if ($(".dt-paging > .pagination").length) $(".dt-paging > .pagination").addClass("pagination-rounded"); }
+	};
+	const config = typeof window.getRengineDatatableConfig === "function" ? window.getRengineDatatableConfig("#endpoint-modal-datatable", opts) : opts;
+	typeof window.initServerSideDataTable === "function" ? window.initServerSideDataTable("#endpoint-modal-datatable", config) : $("#endpoint-modal-datatable").DataTable(config);
 }
 
-function render_directories_in_xl_modal(directory_count, subdomain_name, result) {
-	$('#xl-modal-content').empty();
-	$('#xl-modal-content').append(`<h5> ${directory_count} Directories Discovered on subdomain ${subdomain_name}</h5>`);
-	$('#xl-modal-content').append(`
-		<div class="">
-		<table id="directory-modal-datatable" class="table dt-responsive w-100">
-		<thead>
-		<tr>
-		<th>Base URL</th>
-		<th>Directory</th>
-		<th class="text-center">HTTP Status</th>
-		<th>Content Length</th>
-		<th>Lines</th>
-		<th>Words</th>
-		</tr>
-		</thead>
-		<tbody id="directory_tbody">
-		</tbody>
-		</table>
-		</div>
-	`);
-	$('#directory_tbody').empty();
-	for (let dir_obj in result) {
-		const dir = result[dir_obj];
-		const base_url = new URL(dir.url).origin;
-		$('#directory_tbody').append(`
-			<tr>
-			<td><a href="${base_url}" target="_blank">${base_url}</a></td>
-			<td><a href="${dir.url}" target="_blank">${atob(dir.name)}</a></td>
-			<td class="text-center">${get_http_status_badge(dir.http_status)}</td>
-			<td>${dir.length}</td>
-			<td>${dir.lines}</td>
-			<td>${dir.words}</td>
-			</tr>
-		`);
+function render_vulnerability_in_xl_modal(endpoint_url, scan_id, severity, subdomain_id, subdomain_name) {
+	if (!endpoint_url || typeof endpoint_url !== "string" || !endpoint_url.trim()) {
+		$("#xl-modal-content").empty().append("<p class=\"text-danger mb-0\">Missing or invalid endpoint URL. Cannot load vulnerability data.</p>");
+		if (typeof console !== "undefined" && console.warn) console.warn("render_vulnerability_in_xl_modal: missing or invalid endpoint_url");
+		return;
 	}
-	const dirModalScrollerOpts = window.getRengineDatatableScrollerOptions
-		? window.getRengineDatatableScrollerOptions("60vh")
-		: {};
-	$("#directory-modal-datatable").DataTable(Object.assign({
-		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-		"order": [
-			[1, "asc"]
-		],
-		"responsive": true,
-		drawCallback: function() {
-			$(".dt-paging > .pagination").addClass("pagination-rounded");
-		}
-	}, dirModalScrollerOpts));
-	// TODO: Find interesting dirs
-	// fetch("/api/listInterestingKeywords")
-	// .then(response => {
-	// 	return response.json();
-	// })
-	// .then(data => {
-	// 	interesting_keywords_array = data;
-	// 	dir_modal_table.rows().every(function(){
-	// 		console.log(this.data());
-	// 	});
-	// });
+	$("#xl-modal-content").empty();
+	$("#xl-modal-content").append(
+		"<div class=\"\"><table id=\"vulnerability-modal-datatable\" class=\"table dt-responsive w-100\"><thead><tr>" +
+		"<th>Type</th><th>Title</th><th class=\"text-center\">Severity</th><th>CVSS Score</th><th>CVE/CWE</th><th>Vulnerable URL</th><th class=\"text-center dt-no-sorting\">Action</th>" +
+		"</tr></thead><tbody></tbody></table></div>"
+	);
+	if ($.fn.DataTable.isDataTable("#vulnerability-modal-datatable")) {
+		$("#vulnerability-modal-datatable").DataTable().destroy();
+		$("#vulnerability-modal-datatable").empty();
+	}
+	const safeLinkFn = getRengineSafeLinkFn("text-danger");
+	const safeTextFn = typeof window.safeText === "function" ? window.safeText : function (x) { return x == null ? "" : String(x); };
+	const columns = [
+		{ data: "type", name: "type" },
+		{ data: "name", name: "name" },
+		{ data: "severity", name: "severity" },
+		{ data: "cvss_score", name: "cvss_score" },
+		{ data: "cve_ids", name: "cve_ids", orderable: false },
+		{ data: "http_url", name: "http_url" },
+		{ data: "id", name: "id", orderable: false }
+	];
+	const columnDefs = [
+		{ targets: 0, render: function (data) { return data != null && data !== "" ? "<span class=\"badge badge-soft-primary\">&nbsp;&nbsp;" + safeTextFn(data).toUpperCase() + "&nbsp;&nbsp;</span>" : ""; } },
+		{ targets: 1, render: function (data, type, row) { if (!data) return ""; const n = safeTextFn(data); const sev = row.severity || ""; const color = (sev === "Critical" || sev === "High") ? "danger" : (sev === "Medium" ? "warning" : "primary"); return "<b class=\"text-" + color + "\">" + n + "</b>"; } },
+		{ targets: 2, className: "text-center", render: function (data) { return typeof get_severity_badge === "function" ? get_severity_badge(data) : safeTextFn(data); } },
+		{ targets: 3, className: "text-center", render: function (data) { if (data == null || data === "") return ""; const b = data > 6.9 ? "danger" : (data > 3.9 ? "warning" : "info"); return "<span class=\"badge badge-outline-" + b + "\">" + safeTextFn(data) + "</span>"; } },
+		{ targets: 4, render: function (data, type, row) { const out = []; [].concat(row.cve_ids || [], row.cwe_ids || []).forEach(function (c) { const name = (c && c.name) ? String(c.name).toUpperCase() : ""; if (name) out.push("<a href=\"https://google.com/search?q=" + encodeURIComponent(name) + "\" target=\"_blank\" class=\"badge badge-outline-primary me-1 mt-1\">" + safeTextFn(name) + "</a>"); }); return out.join(" ") || ""; } },
+		{ targets: 5, render: function (data) { if (!data) return ""; const url = (typeof window.safeAttr === "function" ? window.safeAttr(data) : data); return url && url.indexOf("http") !== -1 ? safeLinkFn(data, data) : safeTextFn(data); } },
+		{ targets: 6, orderable: false, render: function (data, type, row) {
+			if (row.hackerone_report_id) return "";
+			const reportUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.vulnerabilityReport) || window.REPORT_HACKERONE_URL || "";
+			const idVal = (data != null && data !== "") ? String(data) : "";
+			const sev = (row && row.severity != null) ? String(row.severity) : "";
+			const safeUrl = typeof window.safeAttr === "function" ? window.safeAttr(reportUrl) : reportUrl;
+			const safeId = typeof window.safeAttr === "function" ? window.safeAttr(idVal) : idVal;
+			const safeSev = typeof window.safeAttr === "function" ? window.safeAttr(sev) : sev;
+			return "<div class=\"btn-group mb-2 dropstart\"><a href=\"#\" class=\"text-dark dropdown-toggle float-end\" data-bs-toggle=\"dropdown\"><span class=\"feather fe-more-horizontal\"></span></a><div class=\"dropdown-menu\"><a class=\"dropdown-item js-report-hackerone\" href=\"#\" data-report-url=\"" + safeUrl + "\" data-vulnerability-id=\"" + safeId + "\" data-severity=\"" + safeSev + "\">Report to Hackerone</a></div></div>";
+		} }
+	];
+	const opts = {
+		ajax: {
+			url: endpoint_url,
+			data: function (d) {
+				if (scan_id) d.scan_history = scan_id;
+				if (severity != null) d.severity = severity;
+				if (subdomain_id) d.subdomain_id = subdomain_id;
+			}
+		},
+		columns: columns,
+		columnDefs: columnDefs,
+		order: [[2, "desc"]],
+		drawCallback: function () { if ($(".dt-paging > .pagination").length) $(".dt-paging > .pagination").addClass("pagination-rounded"); }
+	};
+	const config = typeof window.getRengineDatatableConfig === "function" ? window.getRengineDatatableConfig("#vulnerability-modal-datatable", opts) : opts;
+	typeof window.initServerSideDataTable === "function" ? window.initServerSideDataTable("#vulnerability-modal-datatable", config) : $("#vulnerability-modal-datatable").DataTable(config);
+}
+
+function render_directories_in_xl_modal(endpoint_url, scan_id, subdomain_id, subdomain_name) {
+	if (!endpoint_url || typeof endpoint_url !== "string" || !endpoint_url.trim()) {
+		$("#xl-modal-content").empty().append("<p class=\"text-danger mb-0\">Missing or invalid endpoint URL. Cannot load directory data.</p>");
+		if (typeof console !== "undefined" && console.warn) console.warn("render_directories_in_xl_modal: missing or invalid endpoint_url");
+		return;
+	}
+	$("#xl-modal-content").empty();
+	$("#xl-modal-content").append(
+		"<div class=\"\"><table id=\"directory-modal-datatable\" class=\"table dt-responsive w-100\"><thead><tr>" +
+		"<th>Base URL</th><th>Directory</th><th class=\"text-center\">HTTP Status</th><th>Content Length</th><th>Lines</th><th>Words</th>" +
+		"</tr></thead><tbody></tbody></table></div>"
+	);
+	if ($.fn.DataTable.isDataTable("#directory-modal-datatable")) {
+		$("#directory-modal-datatable").DataTable().destroy();
+		$("#directory-modal-datatable").empty();
+	}
+	const safeLinkFn = getRengineSafeLinkFn("text-primary");
+	const safeTextFn = typeof window.safeText === "function" ? window.safeText : function (x) { return x == null ? "" : String(x); };
+	const columns = [
+		{ data: "url", name: "url" },
+		{ data: "name", name: "name" },
+		{ data: "http_status", name: "http_status" },
+		{ data: "length", name: "length" },
+		{ data: "lines", name: "lines" },
+		{ data: "words", name: "words" }
+	];
+	const dirHttpStatusDef = (window.RengineDatatableColumnDefs && typeof window.RengineDatatableColumnDefs.getSubdomainHttpStatusBadgeColumnDef === "function")
+		? window.RengineDatatableColumnDefs.getSubdomainHttpStatusBadgeColumnDef("http_status:name")
+		: { targets: "http_status:name", className: "text-center", render: function (data) { return typeof get_http_status_badge === "function" ? get_http_status_badge(data) : safeTextFn(data); } };
+	const columnDefs = [
+		{ targets: "url:name", render: function (data) { if (!data) return ""; try { const origin = new URL(data).origin; return safeLinkFn(origin, origin, { target: "_blank" }); } catch (e) { return safeLinkFn(data, safeTextFn(data), { target: "_blank" }); } } },
+		{ targets: "name:name", render: function (data, type, row) { return data != null && row.url ? safeLinkFn(row.url, safeTextFn(data), { target: "_blank" }) : safeTextFn(data); } },
+		dirHttpStatusDef,
+		{ targets: "length:name", render: function (data) { return safeTextFn(data); } },
+		{ targets: "lines:name", render: function (data) { return safeTextFn(data); } },
+		{ targets: "words:name", render: function (data) { return safeTextFn(data); } }
+	];
+	const opts = {
+		ajax: {
+			url: endpoint_url,
+			data: function (d) {
+				if (scan_id) d.scan_history = scan_id;
+				if (subdomain_id) d.subdomain_id = subdomain_id;
+			}
+		},
+		columns: columns,
+		columnDefs: columnDefs,
+		order: [[1, "asc"]],
+		drawCallback: function () { if ($(".dt-paging > .pagination").length) $(".dt-paging > .pagination").addClass("pagination-rounded"); }
+	};
+	const config = typeof window.getRengineDatatableConfig === "function" ? window.getRengineDatatableConfig("#directory-modal-datatable", opts) : opts;
+	typeof window.initServerSideDataTable === "function" ? window.initServerSideDataTable("#directory-modal-datatable", config) : $("#directory-modal-datatable").DataTable(config);
 }
 
 
@@ -2733,6 +2660,14 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 	});
 }
 
+$(document).on("click", "a[data-cve-details-url][data-cve-id]", function (e) {
+	e.preventDefault();
+	const url = $(this).attr("data-cve-details-url");
+	const id = $(this).attr("data-cve-id");
+	if (url && id && typeof get_and_render_cve_details === "function") {
+		get_and_render_cve_details(url, id);
+	}
+});
 
 function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, scan_id=null, target_id=null, ignore_info=false, limit=50){
 	$('#most_vulnerable_target_div').empty();
@@ -3555,28 +3490,28 @@ function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
 
 
 
-function get_datatable_col_index(lookup, cols){
-	// this function will be used to return index of lookup string and cols are datatables cols
-	return cols.findIndex(column => column.data === lookup);
-}
-
-
 function endpoint_datatable_col_visibility(endpoint_table, columns){
-    const getIndex = (name) => get_datatable_col_index(name, columns);
+    const getIndex = (name) => (typeof window.getColumnIndexByName === 'function' ? window.getColumnIndexByName(columns, name) : -1);
+    let idx;
     if(!$('#end_http_status_filter_checkbox').is(":checked")){
-        endpoint_table.column(getIndex('http_status')).visible(false);
+        idx = getIndex('http_status');
+        if (idx >= 0) endpoint_table.column(idx).visible(false);
     }
     if(!$('#end_page_title_filter_checkbox').is(":checked")){
-        endpoint_table.column(getIndex('page_title')).visible(false);
+        idx = getIndex('page_title');
+        if (idx >= 0) endpoint_table.column(idx).visible(false);
     }
     if(!$('#end_tags_filter_checkbox').is(":checked")){
-        endpoint_table.column(getIndex('matched_gf_patterns')).visible(false);
+        idx = getIndex('matched_gf_patterns');
+        if (idx >= 0) endpoint_table.column(idx).visible(false);
     }
     if(!$('#end_content_type_filter_checkbox').is(":checked")){
-        endpoint_table.column(getIndex('content_type')).visible(false);
+        idx = getIndex('content_type');
+        if (idx >= 0) endpoint_table.column(idx).visible(false);
     }
     if(!$('#end_content_length_filter_checkbox').is(":checked")){
-        endpoint_table.column(getIndex('content_length')).visible(false);
+        idx = getIndex('content_length');
+        if (idx >= 0) endpoint_table.column(idx).visible(false);
     }
     // Always keep techs and webserver hidden in columns; they are shown inline under HTTP URL
     const idxTechs = getIndex('techs');
@@ -3588,10 +3523,12 @@ function endpoint_datatable_col_visibility(endpoint_table, columns){
         endpoint_table.column(idxWebserver).visible(false);
     }
     if(!$('#end_response_time_filter_checkbox').is(":checked")){
-        endpoint_table.column(getIndex('response_time')).visible(false);
+        idx = getIndex('response_time');
+        if (idx >= 0) endpoint_table.column(idx).visible(false);
     }
     if(!$('#end_screenshot_filter_checkbox').is(":checked")){
-        endpoint_table.column(getIndex('screenshot_url')).visible(false);
+        idx = getIndex('screenshot_url');
+        if (idx >= 0) endpoint_table.column(idx).visible(false);
     }
 }
 
