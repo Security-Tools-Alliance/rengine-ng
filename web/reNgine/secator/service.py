@@ -40,6 +40,13 @@ class PerTaskRunResult(TypedDict):
     scan_id: int | None
 
 
+def _persist_scan_config_on_history(scan: ScanHistory, secator_config: dict | None) -> None:
+    """Persist the effective scan_config snapshot on a ScanHistory after creation."""
+    if secator_config:
+        scan.scan_config = secator_config
+        scan.save(update_fields=["scan_config"])
+
+
 def handle_scan_error(scan: ScanHistory, error: Exception) -> None:
     """
     Handle scan error by marking scan as failed if not already in terminal state.
@@ -180,6 +187,7 @@ def start_secator_scan(
             create_kw = {"engine_id": 1, "initiated_by_id": user_id, "target_id": target.id}
             scan_history_id = scan_repo.create_scan(**create_kw)
             scan = ScanHistory.objects.get(pk=scan_history_id)
+            _persist_scan_config_on_history(scan, secator_config)
 
             secator_scan_type = secator_scan.name
             initiated_by_id = user_id
@@ -275,6 +283,7 @@ def start_secator_scan(
             create_kw = {"engine_id": 1, "initiated_by_id": user_id, "target_id": target.id}
             new_scan_history_id = scan_repo.create_scan(**create_kw)
             scan = ScanHistory.objects.get(pk=new_scan_history_id)
+            _persist_scan_config_on_history(scan, secator_config)
             initiated_by_id = user_id
 
             def launch_scan():
@@ -510,6 +519,7 @@ def run_per_task_secator_scans(
         create_kw = {"engine_id": 1, "initiated_by_id": user_id, "target_id": target.id}
         shared_scan_id = scan_repo.create_scan(**create_kw)
         scan = ScanHistory.objects.get(pk=shared_scan_id)
+        _persist_scan_config_on_history(scan, secator_config)
     shared_scan_id = scan.id
     subdomains = list(Subdomain.objects.filter(id__in=subdomain_ids_for_subscan)) if subdomain_ids_for_subscan else []
     scan_for_subscans = scan if subdomains else None

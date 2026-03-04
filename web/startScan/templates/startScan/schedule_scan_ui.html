@@ -31,6 +31,7 @@ Scheduling scan for {{ target.value }}
           {% csrf_token %}
           <input type="hidden" name="target_id" value="{{ target.id }}">
           {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='schedule_scan_' %}
+          {% include 'startScan/_items/secator_profile_hidden_fields.html' with id_prefix='schedule_scan_' %}
 
           <div id="schedule-scan-content">
             <h4>Schedule type</h4>

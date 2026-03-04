@@ -356,12 +356,47 @@ class TestDataGenerator:
             self.organization.targets.add(self.domain.scan_history.target)
         return self.organization
 
+    _SCOPE_SCAN_CONFIG_KEYS = frozenset(
+        {
+            "threads",
+            "rate_limit",
+            "timeout",
+            "retries",
+            "delay",
+            "proxy",
+            "user_agent",
+            "request_headers",
+            "follow_redirect",
+            "depth",
+            "default_profiles",
+            "extra_config",
+            "profiles",
+        }
+    )
+
     def create_scope(self, scope_type="engagement_external", **kwargs):
-        """Create and return a test scope linked to an organization."""
+        """Create and return a test scope linked to an organization.
+
+        Accepts scan config params as top-level kwargs for convenience
+        (e.g. ``threads=5``). They are collected into ``scan_config``.
+        ``default_profiles`` is mapped to ``scan_config["profiles"]``.
+        An explicit ``scan_config`` kwarg is merged on top of extracted params.
+        """
         import uuid
 
         if not getattr(self, "organization", None):
             self.create_organization()
+
+        extracted_config: dict = {}
+        for key in self._SCOPE_SCAN_CONFIG_KEYS:
+            if key in kwargs:
+                value = kwargs.pop(key)
+                config_key = "profiles" if key == "default_profiles" else key
+                extracted_config[config_key] = value
+
+        explicit_config = kwargs.pop("scan_config", None)
+        if isinstance(explicit_config, dict):
+            extracted_config.update(explicit_config)
 
         unique_id = str(uuid.uuid4())[:8]
         defaults = {
@@ -370,6 +405,8 @@ class TestDataGenerator:
             "scope_type": scope_type,
             "description": "Test scope description",
         }
+        if extracted_config:
+            defaults["scan_config"] = extracted_config
         defaults.update(kwargs)
         self.scope = Scope.objects.create(**defaults)
         if getattr(self, "target", None):

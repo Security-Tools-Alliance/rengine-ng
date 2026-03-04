@@ -8,6 +8,7 @@ Update Organization
 
 {% block custom_js_css_link %}
 <link rel="stylesheet" type="text/css" href="{% static 'plugins/select2/select2.min.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
@@ -24,7 +25,7 @@ Update Organization
   <div class="col-12">
     <div class="card">
       <div class="card-body">
-        <form method="POST">
+        <form method="POST" id="scan-params-form" data-scan-params-level="organization" data-scan-params-organization-id="{{ organization.id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
           {% csrf_token %}
           <div class="row">
             <div class="col-6">
@@ -59,6 +60,8 @@ Update Organization
               {% endif %}
             </div>
           </div>
+          <hr>
+          {% include "shared/_scan_params_block.html" with scan_params_level="organization" scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_prefix="" id_prefix="org_" default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category %}
           <button class="btn btn-primary submit-fn mt-2 float-end" type="submit">Update Organization</button>
         </form>
       </div>
@@ -70,6 +73,7 @@ Update Organization
 
 {% block page_level_script %}
 <script src="{% static 'plugins/select2/select2.min.js' %}"></script>
+<script src="{% static 'custom/scan_params.js' %}"></script>
 <script type="text/javascript">
 $( document ).ready(function() {
   $(".tagging").select2({

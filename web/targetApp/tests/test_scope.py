@@ -60,18 +60,7 @@ class ScopeModelTest(BaseTestCase):
             name="Minimal Scope",
             scope_type=SCOPE_TYPE_ENGAGEMENT_EXTERNAL,
         )
-        self.assertIsNone(scope.threads)
-        self.assertIsNone(scope.rate_limit)
-        self.assertIsNone(scope.timeout)
-        self.assertIsNone(scope.retries)
-        self.assertIsNone(scope.delay)
-        self.assertIsNone(scope.proxy)
-        self.assertIsNone(scope.user_agent)
-        self.assertIsNone(scope.request_headers)
-        self.assertIsNone(scope.follow_redirect)
-        self.assertIsNone(scope.depth)
-        self.assertIsNone(scope.default_profiles)
-        self.assertIsNone(scope.extra_config)
+        self.assertIsNone(scope.scan_config)
         self.assertIsNone(scope.start_date)
         self.assertIsNone(scope.end_date)
 
@@ -81,13 +70,13 @@ class ScopeModelTest(BaseTestCase):
         self.data_generator.organization.delete()
         self.assertFalse(Scope.objects.filter(pk=scope_id).exists())
 
-    def test_target_scan_config_override_field(self):
+    def test_target_scan_config_field(self):
         target = self.data_generator.target
-        target.scan_config_override = {"threads": 10, "proxy": "socks5://10.0.0.1:1080"}
+        target.scan_config = {"threads": 10, "proxy": "socks5://10.0.0.1:1080"}
         target.save()
         target.refresh_from_db()
-        self.assertEqual(target.scan_config_override["threads"], 10)
-        self.assertEqual(target.scan_config_override["proxy"], "socks5://10.0.0.1:1080")
+        self.assertEqual(target.scan_config["threads"], 10)
+        self.assertEqual(target.scan_config["proxy"], "socks5://10.0.0.1:1080")
 
 
 class ScopeViewsTest(BaseTestCase):
@@ -279,10 +268,10 @@ class ScopeViewsTest(BaseTestCase):
         )
         self.assertEqual(response.status_code, 302)
         scope = Scope.objects.get(name="Parameterized Scope")
-        self.assertEqual(scope.threads, 10)
-        self.assertEqual(scope.rate_limit, 50)
-        self.assertEqual(scope.timeout, 30)
-        self.assertEqual(scope.proxy, "http://10.0.0.2:8080")
+        self.assertEqual(scope.scan_config["threads"], 10)
+        self.assertEqual(scope.scan_config["rate_limit"], 50)
+        self.assertEqual(scope.scan_config["timeout"], 30)
+        self.assertEqual(scope.scan_config["proxy"], "http://10.0.0.2:8080")
 
     def test_scope_filtered_by_project(self):
         """Scopes from other projects should not appear in the list."""

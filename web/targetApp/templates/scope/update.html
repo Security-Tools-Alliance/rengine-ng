@@ -8,6 +8,7 @@ Update Scope
 {% block custom_js_css_link %}
 {# Select2: same asset path and init pattern as organization add/update (data-toggle="select2"). #}
 <link rel="stylesheet" type="text/css" href="{% static 'plugins/select2/select2.min.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
@@ -24,7 +25,7 @@ Update Scope: {{ scope.name }}
   <div class="col-12">
     <div class="card">
       <div class="card-body">
-        <form method="POST">
+        <form method="POST" id="scan-params-form" data-scan-params-level="scope" data-scan-params-organization-id="{{ scope.organization.id|default:'' }}" data-scan-params-scope-id="{{ scope.id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
           {% csrf_token %}
           {% include "scope/_form.html" %}
           <button class="btn btn-primary mt-3 float-end" type="submit">Save Changes</button>
@@ -37,6 +38,7 @@ Update Scope: {{ scope.name }}
 
 {% block page_level_script %}
 <script src="{% static 'plugins/select2/select2.min.js' %}"></script>
+<script src="{% static 'custom/scan_params.js' %}"></script>
 <script>
 $(document).ready(function(){
   $('[data-toggle="select2"]').select2({closeOnSelect: false});

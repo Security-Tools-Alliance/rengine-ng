@@ -13,13 +13,10 @@ from typing import Any
 from django.http import QueryDict
 
 from startScan.secator.form import parse_secator_profiles_to_dict
-from startScan.secator.profiles import build_secator_profiles_context
 
 from .scan_param_definitions import ORDERED_PARAM_KEYS_FOR_FORM, TARGET_OVERRIDE_PREFIX
-from .scope_params import (
-    build_effective_params_display,
-    parse_target_scan_override_from_post,
-)
+from .scan_params_context import build_scan_params_form_context
+from .scope_params import parse_target_scan_override_from_post
 
 
 def process_target_scan_override_from_post(
@@ -55,27 +52,47 @@ def build_update_target_context(
     form: Any,
     override_form_fallback: dict[str, str] | None = None,
     override_request_headers_initial: str | None = None,
+    scan_override: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Build the template context for the target update page.
 
-    When override_request_headers_initial is None, it is derived from
-    target.scan_config_override["request_headers"].
+    When scan_override is provided (POST error case), it is used as scan_params_values
+    so the shared block re-displays the user's entered values with proper types.
+    Otherwise scan_params_values is derived from target.scan_config.
     """
     scopes = list(target.scopes.select_related("organization").all())
     first_scope = scopes[0] if scopes else None
-    effective = build_effective_params_display(scope=first_scope, target=target)
-    profiles_ctx = build_secator_profiles_context()
-    target_profiles_dict = None
-    if target.scan_config_override and isinstance(target.scan_config_override, dict):
-        target_profiles_dict = target.scan_config_override.get("profiles")
-    if target_profiles_dict and isinstance(target_profiles_dict, dict):
-        profiles_ctx["default_profiles"] = target_profiles_dict
 
-    if override_request_headers_initial is None:
-        headers_val = (target.scan_config_override or {}).get("request_headers")
-        override_request_headers_initial = json.dumps(headers_val) if isinstance(headers_val, dict) else ""
+    if scan_override is not None:
+        scan_params_values = dict(scan_override)
+    else:
+        scan_params_values = (
+            dict(target.scan_config) if target.scan_config and isinstance(target.scan_config, dict) else {}
+        )
 
+    request_headers_val = scan_params_values.get("request_headers") if isinstance(scan_params_values, dict) else None
+    if isinstance(request_headers_val, str):
+        try:
+            parsed = json.loads(request_headers_val)
+            request_headers_val = parsed if isinstance(parsed, dict) else {}
+        except (TypeError, ValueError):
+            request_headers_val = {}
+    if not isinstance(request_headers_val, dict):
+        request_headers_val = {}
+    scan_params_values["request_headers"] = request_headers_val
+    scan_params_values.setdefault("profiles", {})
+
+    try:
+        request_headers_initial = json.dumps(request_headers_val, indent=2, sort_keys=True)
+    except TypeError:
+        request_headers_initial = ""
+    if override_request_headers_initial is not None:
+        if isinstance(override_request_headers_initial, dict):
+            override_request_headers_initial = json.dumps(override_request_headers_initial)
+        request_headers_initial = override_request_headers_initial
+
+    form_ctx = build_scan_params_form_context(target=target, scan_params_values=scan_params_values)
     context = {
         "list_target_li": "active",
         "target_data_active": "active",
@@ -83,10 +100,10 @@ def build_update_target_context(
         "form": form,
         "target_scopes": scopes,
         "first_scope": first_scope,
-        "effective_params": effective,
+        "request_headers_initial": request_headers_initial,
         "override_request_headers_initial": override_request_headers_initial,
         "override_form_fallback": override_form_fallback,
         "override_prefix": TARGET_OVERRIDE_PREFIX,
     }
-    context.update(profiles_ctx)
+    context.update(form_ctx)
     return context

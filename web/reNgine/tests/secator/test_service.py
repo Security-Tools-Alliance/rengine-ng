@@ -6,10 +6,12 @@ from unittest.mock import MagicMock, Mock, patch
 
 from reNgine.definitions import ABORTED_TASK, FAILED_TASK, INITIATED_TASK, RUNNING_TASK, SUCCESS_TASK
 from reNgine.secator.service import (
+    _persist_scan_config_on_history,
     handle_scan_error,
     run_per_task_secator_scans,
     start_secator_scan,
 )
+from startScan.models import ScanHistory
 from utils.test_base import BaseTestCase
 
 
@@ -424,3 +426,86 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
         mock_scan_repo_cls.return_value.create_scan.assert_called_once()
         self.assertEqual(result["scan_id"], new_scan_id)
         self.assertEqual(result["success_count"], 1)
+
+
+class TestPersistScanConfigOnHistory(BaseTestCase):
+    """Test cases for _persist_scan_config_on_history helper."""
+
+    def setUp(self):
+        super().setUp()
+        self.scan_history = self.data_generator.create_scan_history()
+
+    def test_sets_scan_config_on_history(self):
+        """scan_config dict is saved on the ScanHistory row."""
+        config = {"threads": 10, "profiles": ["polite"]}
+        _persist_scan_config_on_history(self.scan_history, config)
+        self.scan_history.refresh_from_db()
+        self.assertEqual(self.scan_history.scan_config, config)
+
+    def test_noop_when_config_is_empty(self):
+        """Empty dict is falsy so no write should occur."""
+        _persist_scan_config_on_history(self.scan_history, {})
+        self.scan_history.refresh_from_db()
+        self.assertIsNone(self.scan_history.scan_config)
+
+    def test_noop_when_config_is_none(self):
+        """None config should not write."""
+        _persist_scan_config_on_history(self.scan_history, None)
+        self.scan_history.refresh_from_db()
+        self.assertIsNone(self.scan_history.scan_config)
+
+
+class TestStartSecatorScanPersistsScanConfig(BaseTestCase):
+    """Verify start_secator_scan persists secator_config on the ScanHistory."""
+
+    def setUp(self):
+        super().setUp()
+        self.scan_history = self.data_generator.create_scan_history()
+
+    @patch("reNgine.secator.service.threading.Thread")
+    def test_new_scan_persists_scan_config(self, mock_thread):
+        """When execution_mode creates a new scan, scan_config is persisted."""
+        config = {"threads": 20, "delay": 1}
+
+        def run_target_and_return_mock(*args, **kwargs):
+            kwargs.get("target", lambda: None)()
+            return Mock()
+
+        mock_thread.side_effect = run_target_and_return_mock
+
+        with patch("reNgine.secator.service.initiate_secator_scan"):
+            result = start_secator_scan(
+                target_id=self.scan_history.target_id,
+                user_id=self.user.id,
+                execution_mode="tasks",
+                task_ids=[1],
+                secator_config=config,
+            )
+        self.assertTrue(result.get("status"))
+        scan = ScanHistory.objects.get(pk=result["scan_id"])
+        self.assertEqual(scan.scan_config, config)
+
+    @patch("reNgine.secator.service.threading.Thread")
+    def test_reused_scan_does_not_overwrite_scan_config(self, mock_thread):
+        """When scan_history_id is provided, scan_config is NOT overwritten."""
+        self.scan_history.scan_config = {"threads": 5}
+        self.scan_history.save(update_fields=["scan_config"])
+
+        def run_target_and_return_mock(*args, **kwargs):
+            kwargs.get("target", lambda: None)()
+            return Mock()
+
+        mock_thread.side_effect = run_target_and_return_mock
+
+        with patch("reNgine.secator.service.initiate_secator_scan"):
+            result = start_secator_scan(
+                target_id=self.scan_history.target_id,
+                user_id=self.user.id,
+                execution_mode="tasks",
+                task_ids=[1],
+                secator_config={"threads": 99},
+                scan_history_id=self.scan_history.id,
+            )
+        self.assertTrue(result.get("status"))
+        self.scan_history.refresh_from_db()
+        self.assertEqual(self.scan_history.scan_config, {"threads": 5})

@@ -84,7 +84,8 @@ from startScan.secator.ajax import render_secator_selection_json
 from startScan.secator.form import build_start_secator_scan_kwargs
 from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.constants import RENGINE_TARGET_TYPES_FOR_JS
-from targetApp.models import Organization, Target
+from targetApp.models import Organization, Scope, Target
+from targetApp.services.scan_params_context import build_scan_params_form_context
 
 
 PREFIX_SCAN = "[STARTSCAN]"
@@ -916,6 +917,10 @@ def start_scan_ui(request, slug, target_id):
         )
         return JsonResponse({"engine_html": engine_html})
 
+    scope = Scope.objects.filter(targets=target).select_related("organization").first()
+    organization = scope.organization if scope else target.organizations.first()
+
+    form_ctx = build_scan_params_form_context(target=target, scope=scope, organization=organization)
     context = {
         "scan_history_active": "active",
         "target": target,
@@ -925,7 +930,7 @@ def start_scan_ui(request, slug, target_id):
         "has_ip_content": has_ip_content,
         "rengine_target_types": RENGINE_TARGET_TYPES_FOR_JS,
     }
-    context.update(build_secator_profiles_context())
+    context.update(form_ctx)
     context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
     return render(request, "startScan/start_scan_ui.html", context)
 
@@ -974,6 +979,20 @@ def start_multiple_scan(request, slug):
     engines = EngineType.objects.filter(scan_type=scan_type)
 
     custom_engine_count = engines.filter(default_engine=False).count()
+    first_target_id = None
+    first_target = None
+    scope = None
+    organization = None
+    if target_ids_str:
+        first_id = target_ids_str.split(",")[0].strip()
+        if first_id.isdigit():
+            first_target_id = first_id
+            first_target = Target.objects.filter(id=int(first_id)).select_related("project").first()
+            if first_target and first_target.project.slug == slug:
+                scope = Scope.objects.filter(targets=first_target).select_related("organization").first()
+                organization = scope.organization if scope else first_target.organizations.first()
+
+    form_ctx = build_scan_params_form_context(target=first_target, scope=scope, organization=organization)
     context = {
         "scan_history_active": "active",
         "engines": engines,
@@ -981,8 +1000,9 @@ def start_multiple_scan(request, slug):
         "domain_ids": target_ids_str,
         "custom_engine_count": custom_engine_count,
         "scan_type": scan_type,
+        "first_target_id": first_target_id,
     }
-    context.update(build_secator_profiles_context())
+    context.update(form_ctx)
     context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
     return render(request, "startScan/start_multiple_scan_ui.html", context)
 
@@ -1339,6 +1359,7 @@ def start_organization_scan(request, id, slug):
     # Optimize domain list query
     domain_list = organization.get_domains().select_related()
 
+    form_ctx = build_scan_params_form_context(organization=organization)
     context = {
         "organization_data_active": "true",
         "list_organization_li": "active",
@@ -1348,7 +1369,7 @@ def start_organization_scan(request, id, slug):
         "scan_type": scan_type,
         "secator_scans": secator_scans,
     }
-    context.update(build_secator_profiles_context())
+    context.update(form_ctx)
     context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
     return render(request, "organization/start_scan.html", context)
 

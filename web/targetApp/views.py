@@ -80,7 +80,13 @@ from targetApp.forms import (
     UpdateTargetModelForm,
 )
 from targetApp.models import TARGET_TYPE_CHOICES, Organization, Scope, Target
-from targetApp.services.scope_params import build_effective_params_display
+from targetApp.services.scan_param_definitions import TARGET_OVERRIDE_PREFIX
+from targetApp.services.scan_params_context import build_scan_params_form_context
+from targetApp.services.scope_params import (
+    _normalize_scan_config,
+    build_effective_params_display,
+    parse_scan_config_from_post,
+)
 from targetApp.services.target_update import (
     build_update_target_context,
     process_target_scan_override_from_post,
@@ -750,7 +756,9 @@ def add_target(request, slug):
         "rengine_target_types": RENGINE_TARGET_TYPES_FOR_JS,
         "secator_configs": _get_secator_configs_for_add_target(),
         "target_type_choices": dict(TARGET_TYPE_CHOICES),
+        "override_prefix": TARGET_OVERRIDE_PREFIX,
     }
+    context.update(build_scan_params_form_context())
     return render(request, "target/add.html", context)
 
 
@@ -874,6 +882,7 @@ def update_target(request, slug, id):
     form = UpdateTargetModelForm(instance=target)
     override_form_fallback = None
     override_request_headers_initial = None
+    scan_override = None
 
     if request.method == "POST":
         form = UpdateTargetModelForm(request.POST, instance=target)
@@ -889,7 +898,7 @@ def update_target(request, slug, id):
                     messages.error(request, msg)
             else:
                 updated_target = form.save(commit=False)
-                updated_target.scan_config_override = scan_override or None
+                updated_target.scan_config = scan_override or None
                 updated_target.save()
                 messages.add_message(request, messages.INFO, "Target %s modified!" % (target.value,))
                 return http.HttpResponseRedirect(reverse("list_target", kwargs={"slug": slug}))
@@ -899,6 +908,7 @@ def update_target(request, slug, id):
         form,
         override_form_fallback=override_form_fallback,
         override_request_headers_initial=override_request_headers_initial,
+        scan_override=scan_override if override_form_fallback else None,
     )
     return render(request, "target/update.html", context)
 
@@ -1119,14 +1129,30 @@ def add_organization(request, slug):
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
         project = Project.objects.get(slug=slug)
-        organization = Organization.objects.create(
-            name=data["name"], description=data["description"], project=project, insert_date=timezone.now()
-        )
-        for target in data.get("targets") or []:
-            organization.targets.add(target)
-        messages.add_message(request, messages.INFO, f"Organization {data['name']} added successfully")
-        return http.HttpResponseRedirect(reverse("list_organization", kwargs={"slug": slug}))
-    context = {"organization_active": "active", "form": form}
+        profiles_dict = parse_secator_profiles_to_dict(request.POST)
+        scan_config, config_errors = parse_scan_config_from_post(request.POST, profiles_dict=profiles_dict, prefix="")
+        if config_errors:
+            for msg in config_errors:
+                messages.error(request, msg)
+        else:
+            organization = Organization.objects.create(
+                name=data["name"],
+                description=data["description"],
+                project=project,
+                insert_date=timezone.now(),
+                scan_config=scan_config or None,
+            )
+            for target in data.get("targets") or []:
+                organization.targets.add(target)
+            messages.add_message(request, messages.INFO, f"Organization {data['name']} added successfully")
+            return http.HttpResponseRedirect(reverse("list_organization", kwargs={"slug": slug}))
+    context = {
+        "organization_active": "active",
+        "form": form,
+        "scan_params_values": {},
+        "scan_params_effective": None,
+    }
+    context.update(build_secator_profiles_context())
     return render(request, "organization/add.html", context)
 
 
@@ -1170,24 +1196,33 @@ def update_organization(request, slug, id):
         form = UpdateOrganizationForm(request.POST, instance=organization)
         if form.is_valid():
             data = form.cleaned_data
-            organization.targets.clear()
-
-            organization_obj = Organization.objects.filter(id=id)
-            organization_obj.update(
-                name=data["name"],
-                description=data["description"],
+            profiles_dict = parse_secator_profiles_to_dict(request.POST)
+            scan_config, config_errors = parse_scan_config_from_post(
+                request.POST,
+                profiles_dict=profiles_dict,
+                existing_config=organization.scan_config,
+                prefix="",
             )
-            for target in data.get("targets") or []:
-                organization.targets.add(target)
-            msg = "Organization %s modified!" % (organization.name,)
-            logger.log_line(
-                PREFIX_TARGET,
-                "ORGANIZATION",
-                msg,
-                level="info",
-            )
-            messages.add_message(request, messages.INFO, msg)
-            return http.HttpResponseRedirect(reverse("list_organization", kwargs={"slug": slug}))
+            if config_errors:
+                for msg in config_errors:
+                    messages.error(request, msg)
+            else:
+                organization.targets.clear()
+                organization.name = data["name"]
+                organization.description = data["description"]
+                organization.scan_config = scan_config or None
+                organization.save()
+                for target in data.get("targets") or []:
+                    organization.targets.add(target)
+                msg = "Organization %s modified!" % (organization.name,)
+                logger.log_line(
+                    PREFIX_TARGET,
+                    "ORGANIZATION",
+                    msg,
+                    level="info",
+                )
+                messages.add_message(request, messages.INFO, msg)
+                return http.HttpResponseRedirect(reverse("list_organization", kwargs={"slug": slug}))
         domain_list = request.POST.getlist("domains")
         target_list = request.POST.getlist("targets")
     else:
@@ -1204,6 +1239,7 @@ def update_organization(request, slug, id):
         "target_list": mark_safe(target_list),
         "form": form,
     }
+    context.update(build_scan_params_form_context(organization=organization))
     return render(request, "organization/update.html", context)
 
 
@@ -1240,17 +1276,23 @@ def add_scope(request, slug):
     form = ScopeForm(request.POST or None, project_slug=slug)
     if request.method == "POST" and form.is_valid():
         scope = form.save(commit=False)
-        scope.default_profiles = parse_secator_profiles_to_dict(request.POST) or None
-        scope.save()
-        form.save_m2m()
-        messages.add_message(request, messages.INFO, "Scope %s added successfully" % (scope.name,))
-        return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
+        profiles_dict = parse_secator_profiles_to_dict(request.POST) or None
+        config, errors = parse_scan_config_from_post(request.POST, prefix="", profiles_dict=profiles_dict)
+        if errors:
+            for msg in errors:
+                messages.error(request, msg)
+        else:
+            scope.scan_config = config or None
+            scope.save()
+            form.save_m2m()
+            messages.add_message(request, messages.INFO, "Scope %s added successfully" % (scope.name,))
+            return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
     context = {
         "scope_active": "active",
         "form": form,
         "slug": slug,
     }
-    context.update(build_secator_profiles_context())
+    context.update(build_scan_params_form_context())
     return render(request, "scope/add.html", context)
 
 
@@ -1260,21 +1302,26 @@ def update_scope(request, slug, id):
     form = ScopeForm(request.POST or None, instance=scope, project_slug=slug)
     if request.method == "POST" and form.is_valid():
         updated_scope = form.save(commit=False)
-        updated_scope.default_profiles = parse_secator_profiles_to_dict(request.POST) or None
-        updated_scope.save()
-        form.save_m2m()
-        messages.add_message(request, messages.INFO, "Scope %s updated successfully" % (scope.name,))
-        return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
-    profiles_context = build_secator_profiles_context()
-    if scope.default_profiles and isinstance(scope.default_profiles, dict):
-        profiles_context["default_profiles"] = scope.default_profiles
+        profiles_dict = parse_secator_profiles_to_dict(request.POST) or None
+        config, errors = parse_scan_config_from_post(
+            request.POST, prefix="", profiles_dict=profiles_dict, existing_config=scope.scan_config
+        )
+        if errors:
+            for msg in errors:
+                messages.error(request, msg)
+        else:
+            updated_scope.scan_config = config or None
+            updated_scope.save()
+            form.save_m2m()
+            messages.add_message(request, messages.INFO, "Scope %s updated successfully" % (scope.name,))
+            return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
     context = {
         "scope_active": "active",
         "form": form,
         "scope": scope,
         "slug": slug,
     }
-    context.update(profiles_context)
+    context.update(build_scan_params_form_context(scope=scope, organization=scope.organization))
     return render(request, "scope/update.html", context)
 
 
@@ -1302,10 +1349,12 @@ def scope_detail(request, slug, id):
         id=id,
         organization__project__slug=slug,
     )
+    scope_scan_config = _normalize_scan_config(getattr(scope, "scan_config", None))
     context = {
         "scope_active": "active",
         "scope": scope,
+        "scope_scan_config": scope_scan_config,
         "slug": slug,
-        "effective_params": build_effective_params_display(scope=scope),
+        "scan_params_effective": build_effective_params_display(scope=scope, organization=scope.organization),
     }
     return render(request, "scope/detail.html", context)

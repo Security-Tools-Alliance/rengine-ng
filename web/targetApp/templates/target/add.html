@@ -7,6 +7,7 @@ Add targets
 
 
 {% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
@@ -420,7 +421,7 @@ Add or Import Targets
       </div>
       <div class="card border mt-3 mb-0">
         <div class="card-header py-2">
-          <h6 class="mb-0">Target options (apply to all tabs)</h6>
+          <h6 class="mb-0">Target options</h6>
         </div>
         <div class="card-body">
           <div class="row">
@@ -440,6 +441,10 @@ Add or Import Targets
           </div>
         </div>
       </div>
+      <hr>
+      <div id="scan-params-form-context" data-scan-params-level="target" data-scan-params-target-id="" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
+      {% include "shared/_scan_params_block.html" with scan_params_level="target" scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_prefix=override_prefix id_prefix="target_" default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category %}
+      </div>
     </div>
   </div>
 </div>
@@ -447,6 +452,7 @@ Add or Import Targets
 
 
 {% block page_level_script %}
+<script src="{% static 'custom/scan_params.js' %}"></script>
 <script type="text/javascript">
   function syncGlobalToForm(form) {
     form.find('input.global-field-desc').val($('#global_target_description').val());

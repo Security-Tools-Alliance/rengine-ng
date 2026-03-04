@@ -6,6 +6,7 @@ Update Target
 {% endblock title %}
 
 {% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
 {% endblock custom_js_css_link %}
 
 {% block page_title %}
@@ -18,7 +19,7 @@ Update Target {{ form.value.value }}
     <div class="card">
       <div class="card-body">
         <h4 class="header-title">Update Target</h4>
-        <form method="POST">
+        <form method="POST" id="scan-params-form" data-scan-params-level="target" data-scan-params-target-id="{{ target.id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
           {% csrf_token %}
           <div class="row mb-3">
             <div class="col-6">
@@ -61,183 +62,15 @@ Update Target {{ form.value.value }}
           <hr>
           <div class="d-flex align-items-center mb-2">
             <h5 class="mb-0 me-2">Scan Parameter Overrides</h5>
-            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#scanOverridesSection" aria-expanded="{% if target.scan_config_override or override_form_fallback %}true{% else %}false{% endif %}">
-              <i class="fe-sliders me-1"></i>{% if target.scan_config_override %}Configured{% else %}Configure{% endif %}
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#scanOverridesSection" aria-expanded="{% if scan_params_values %}true{% else %}false{% endif %}">
+              <i class="fe-sliders me-1"></i>{% if target.scan_config %}Configured{% else %}Configure{% endif %}
             </button>
           </div>
           <p class="text-muted small mb-2">Leave fields empty to inherit from the scope (if any) or system defaults. Filled values override the scope for this target only.</p>
 
-          <div class="collapse {% if target.scan_config_override or override_form_fallback %}show{% endif %}" id="scanOverridesSection">
-
-            {# Effective values reference table #}
-            {% if effective_params %}
-            <div class="alert alert-light border mb-3">
-              <p class="fw-semibold mb-2 small">Current effective values (without your override):</p>
-              <div class="row row-cols-2 row-cols-md-4 g-2">
-                {% for param, info in effective_params.items %}
-                {% if param != "profiles" %}
-                <div class="col">
-                  <div class="d-flex align-items-center gap-1 flex-wrap">
-                    <span class="text-muted small" style="min-width:80px">{{ param }}</span>
-                    <span class="small fw-semibold">
-                      {% if info.value is not None %}
-                        {% if param == "follow_redirect" %}{{ info.value|yesno:"Yes,No" }}
-                        {% else %}{{ info.value }}{% endif %}
-                      {% else %}—{% endif %}
-                    </span>
-                    {% if info.source == "target" %}
-                    <span class="badge bg-warning text-dark">target</span>
-                    {% elif info.source == "scope" %}
-                    <span class="badge bg-primary">scope</span>
-                    {% else %}
-                    <span class="badge bg-secondary">default</span>
-                    {% endif %}
-                  </div>
-                </div>
-                {% endif %}
-                {% endfor %}
-              </div>
-              {% with profiles_info=effective_params.profiles %}
-              {% if profiles_info.value %}
-              <div class="mt-2">
-                <span class="text-muted small me-1">Profiles:</span>
-                {% for cat, name in profiles_info.value.items %}
-                <span class="badge {% if profiles_info.source == 'scope' %}bg-primary{% elif profiles_info.source == 'target' %}bg-warning text-dark{% else %}bg-secondary{% endif %} me-1">{{ cat }}: {{ name }}</span>
-                {% endfor %}
-                <span class="badge bg-light text-dark border ms-1">{{ profiles_info.source }}</span>
-              </div>
-              {% endif %}
-              {% endwith %}
-            </div>
-            {% endif %}
-
-            <div class="row">
-              <div class="col-md-3">
-                <div class="mb-3">
-                  <label class="form-label">Threads
-                    {% if first_scope and first_scope.threads %}<small class="text-muted">(scope: {{ first_scope.threads }})</small>{% endif %}
-                  </label>
-                  <input type="number" name="{{ override_prefix }}threads" class="form-control" placeholder="Inherit from scope / default" min="1"
-                    value="{% if override_form_fallback %}{{ override_form_fallback.threads|default:'' }}{% else %}{{ target.scan_config_override.threads|default:'' }}{% endif %}">
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="mb-3">
-                  <label class="form-label">Rate Limit (req/s)
-                    {% if first_scope and first_scope.rate_limit %}<small class="text-muted">(scope: {{ first_scope.rate_limit }})</small>{% endif %}
-                  </label>
-                  <input type="number" name="{{ override_prefix }}rate_limit" class="form-control" placeholder="Inherit from scope / default" min="1"
-                    value="{% if override_form_fallback %}{{ override_form_fallback.rate_limit|default:'' }}{% else %}{{ target.scan_config_override.rate_limit|default:'' }}{% endif %}">
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="mb-3">
-                  <label class="form-label">Timeout (s)
-                    {% if first_scope and first_scope.timeout %}<small class="text-muted">(scope: {{ first_scope.timeout }})</small>{% endif %}
-                  </label>
-                  <input type="number" name="{{ override_prefix }}timeout" class="form-control" placeholder="Inherit from scope / default" min="1"
-                    value="{% if override_form_fallback %}{{ override_form_fallback.timeout|default:'' }}{% else %}{{ target.scan_config_override.timeout|default:'' }}{% endif %}">
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="mb-3">
-                  <label class="form-label">Retries
-                    {% if first_scope and first_scope.retries is not None %}<small class="text-muted">(scope: {{ first_scope.retries }})</small>{% endif %}
-                  </label>
-                  <input type="number" name="{{ override_prefix }}retries" class="form-control" placeholder="Inherit from scope / default" min="0"
-                    value="{% if override_form_fallback %}{{ override_form_fallback.retries|default:'' }}{% else %}{{ target.scan_config_override.retries|default:'' }}{% endif %}">
-                </div>
-              </div>
-            </div>
-
-            <div class="row">
-              <div class="col-md-3">
-                <div class="mb-3">
-                  <label class="form-label">Delay (s)
-                    {% if first_scope and first_scope.delay is not None %}<small class="text-muted">(scope: {{ first_scope.delay }})</small>{% endif %}
-                  </label>
-                  <input type="number" step="0.1" name="{{ override_prefix }}delay" class="form-control" placeholder="Inherit from scope / default" min="0"
-                    value="{% if override_form_fallback %}{{ override_form_fallback.delay|default:'' }}{% else %}{{ target.scan_config_override.delay|default:'' }}{% endif %}">
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="mb-3">
-                  <label class="form-label">Depth
-                    {% if first_scope and first_scope.depth is not None %}<small class="text-muted">(scope: {{ first_scope.depth }})</small>{% endif %}
-                  </label>
-                  <input type="number" name="{{ override_prefix }}depth" class="form-control" placeholder="No limit" min="0"
-                    value="{% if override_form_fallback %}{{ override_form_fallback.depth|default:'' }}{% else %}{{ target.scan_config_override.depth|default:'' }}{% endif %}">
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="mb-3">
-                  <label class="form-label">Follow Redirects
-                    {% if first_scope and first_scope.follow_redirect is not None %}<small class="text-muted">(scope: {{ first_scope.follow_redirect|yesno:"Yes,No" }})</small>{% endif %}
-                  </label>
-                  <select name="{{ override_prefix }}follow_redirect" class="form-control">
-                    <option value="">Inherit from scope / default</option>
-                    <option value="True" {% if override_form_fallback %}{% if override_form_fallback.follow_redirect == 'True' %}selected{% endif %}{% else %}{% if target.scan_config_override.follow_redirect == True %}selected{% endif %}{% endif %}>Yes</option>
-                    <option value="False" {% if override_form_fallback %}{% if override_form_fallback.follow_redirect == 'False' %}selected{% endif %}{% else %}{% if target.scan_config_override.follow_redirect == False %}selected{% endif %}{% endif %}>No</option>
-                  </select>
-                </div>
-              </div>
-              <div class="col-md-3">
-                <div class="mb-3">
-                  <label class="form-label">Proxy
-                    {% if first_scope and first_scope.proxy %}<small class="text-muted">(scope: {{ first_scope.proxy }})</small>{% endif %}
-                  </label>
-                  <input type="text" name="{{ override_prefix }}proxy" class="form-control" placeholder="Inherit from scope / default"
-                    value="{% if override_form_fallback %}{{ override_form_fallback.proxy|default:'' }}{% else %}{{ target.scan_config_override.proxy|default:'' }}{% endif %}">
-                </div>
-              </div>
-            </div>
-
-            <div class="row">
-              <div class="col-md-6">
-                <div class="mb-3">
-                  <label class="form-label">User Agent
-                    {% if first_scope and first_scope.user_agent %}<small class="text-muted">(scope: {{ first_scope.user_agent }})</small>{% endif %}
-                  </label>
-                  <input type="text" name="{{ override_prefix }}user_agent" class="form-control" placeholder="Inherit from scope / default"
-                    value="{% if override_form_fallback %}{{ override_form_fallback.user_agent|default:'' }}{% else %}{{ target.scan_config_override.user_agent|default:'' }}{% endif %}">
-                </div>
-              </div>
-              <div class="col-md-6">
-                <div class="mb-3">
-                  <label class="form-label">
-                    HTTP Headers
-                    <small class="text-muted">(JSON object)</small>
-                    {% if first_scope and first_scope.request_headers %}
-                      <small class="text-muted">
-                        (scope defined — overrides here fully replace scope headers for this target;
-                        leave empty to inherit from scope; use <code>{}</code> to send no headers)
-                      </small>
-                    {% else %}
-                      <small class="text-muted">
-                        (leave empty to send no headers; provide a JSON object to set headers)
-                      </small>
-                    {% endif %}
-                  </label>
-                  <textarea name="{{ override_prefix }}request_headers" class="form-control" rows="2"
-                    placeholder='e.g. {"X-Api-Key": "secret", "Cookie": "session=abc"}'>{{ override_request_headers_initial|escape }}</textarea>
-                </div>
-              </div>
-            </div>
-
-            <hr>
-            <h6 class="mb-1">Profile Overrides <small class="text-muted fw-normal">(leave unchecked to inherit from scope or system defaults)</small></h6>
-            <p class="text-muted small mb-3">
-              Selecting a profile here overrides the scope default for this target.
-              {% if first_scope and first_scope.default_profiles %}
-              Scope defaults:
-              {% for cat, name in first_scope.default_profiles.items %}
-              <span class="badge bg-primary me-1">{{ cat }}: {{ name }}</span>
-              {% endfor %}
-              {% endif %}
-            </p>
-            {% include "startScan/_items/secator_profiles.html" %}
-
-          </div>{# end collapse #}
+          <div class="collapse {% if scan_params_values %}show{% endif %}" id="scanOverridesSection">
+            {% include "shared/_scan_params_block.html" with scan_params_level="target" scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_prefix=override_prefix id_prefix="target_" default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category %}
+          </div>
 
           <button class="btn btn-primary submit-fn mt-3 float-end" type="submit">Update Target</button>
         </form>
@@ -248,4 +81,5 @@ Update Target {{ form.value.value }}
 {% endblock main_content %}
 
 {% block page_level_script %}
+<script src="{% static 'custom/scan_params.js' %}"></script>
 {% endblock page_level_script %}

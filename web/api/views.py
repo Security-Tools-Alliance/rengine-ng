@@ -11,8 +11,10 @@ from django.conf import settings as django_settings
 from django.core.cache import cache
 from django.db.models import Case, CharField, Count, F, IntegerField, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.template.defaultfilters import slugify
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from packaging import version
@@ -2439,6 +2441,170 @@ class GetSecatorSelection(APIView):
             )
 
         return render_secator_selection_json(request)
+
+
+class GetScanParamsEffectiveHtml(APIView):
+    """
+    Returns the effective scan parameters display HTML for a given target.
+
+    Used by the subscan modal to inject the shared effective-params block
+    (single source of truth: shared/_scan_params_effective_display.html).
+    GET with target_id (required). Returns 404 if target not found.
+    """
+
+    http_method_names = ["get"]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        target_id = request.GET.get("target_id")
+        if not target_id or not str(target_id).strip().isdigit():
+            return HttpResponse(
+                '<p class="text-muted small">Effective parameters depend on the scan target.</p>',
+                content_type="text/html",
+            )
+        target = Target.objects.filter(id=int(target_id)).select_related("project").first()
+        if not target:
+            return HttpResponse(
+                '<p class="text-muted small">Target not found.</p>',
+                content_type="text/html",
+            )
+        scope = Scope.objects.filter(targets=target).select_related("organization").first()
+        organization = scope.organization if scope else target.organizations.first()
+        from targetApp.services.scope_params import build_effective_params_display
+
+        scan_params_effective = build_effective_params_display(target=target, scope=scope, organization=organization)
+        html = render_to_string(
+            "shared/_scan_params_effective_display.html",
+            {
+                "scan_params_effective": scan_params_effective,
+                "scan_params_level": "target",
+            },
+            request=request,
+        )
+        return HttpResponse(html, content_type="text/html")
+
+
+class PostScanParamsEffectivePreview(APIView):
+    """
+    Returns the effective scan parameters display HTML for a draft form state.
+
+    POST body (JSON): level, project_slug, organization_id?, scope_id?, target_id?, draft.
+    Used for real-time effective block updates when the user edits scan params on
+    Organization, Scope, Target, or Scan forms.
+    """
+
+    http_method_names = ["post"]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from api.scan_params_preview import (
+            ScanParamsPreviewError,
+            _preview_config_organization,
+            _preview_config_scan,
+            _preview_config_scope,
+            _preview_config_target,
+        )
+        from targetApp.services.scan_param_definitions import PARAM_KEYS
+        from targetApp.services.scope_params import (
+            _normalize_scan_config,
+            build_effective_params_display_from_configs,
+        )
+
+        try:
+            data = request.data if getattr(request, "data", None) else {}
+            if not isinstance(data, dict):
+                return HttpResponse(
+                    '<p class="text-muted small">Invalid request.</p>',
+                    content_type="text/html",
+                    status=400,
+                )
+        except Exception:
+            return HttpResponse(
+                '<p class="text-muted small">Invalid request.</p>',
+                content_type="text/html",
+                status=400,
+            )
+
+        level = (data.get("level") or "").strip().lower()
+        if level not in ("organization", "scope", "target", "scan"):
+            return HttpResponse(
+                '<p class="text-muted small">Invalid level.</p>',
+                content_type="text/html",
+                status=400,
+            )
+
+        draft_raw = data.get("draft")
+        draft = _normalize_scan_config(draft_raw) if draft_raw is not None else {}
+        allowed_keys = set(PARAM_KEYS) | {"profiles", "extra_config"}
+        draft = {k: v for k, v in draft.items() if k in allowed_keys}
+        scan_params_level = level
+
+        try:
+            if level == "organization":
+                org_config, scope_config, target_config, user_override = _preview_config_organization(draft)
+            elif level == "scope":
+                org_config, scope_config, target_config, user_override = _preview_config_scope(
+                    data, draft, _normalize_scan_config
+                )
+            elif level == "target":
+                org_config, scope_config, target_config, user_override = _preview_config_target(
+                    data, draft, _normalize_scan_config
+                )
+            else:
+                org_config, scope_config, target_config, user_override = _preview_config_scan(
+                    data, draft, _normalize_scan_config
+                )
+        except ScanParamsPreviewError as e:
+            msg = str(e).strip() or "Invalid request."
+            html = render_to_string(
+                "shared/_scan_params_effective_display_error.html",
+                {"error_message": msg},
+                request=request,
+            )
+            return HttpResponse(html, content_type="text/html", status=400)
+        except ValueError as e:
+            logger.log_line(
+                PREFIX_API,
+                "SCAN_PARAMS_PREVIEW",
+                "Unexpected ValueError in PostScanParamsEffectivePreview: %s" % (e,),
+                level="exception",
+            )
+            html = render_to_string(
+                "shared/_scan_params_effective_display_error.html",
+                {"error_message": "Unable to preview scan parameters due to an internal error."},
+                request=request,
+            )
+            return HttpResponse(html, content_type="text/html", status=500)
+        except Exception as e:
+            logger.log_line(
+                PREFIX_API,
+                "SCAN_PARAMS_PREVIEW",
+                "PostScanParamsEffectivePreview failed: %s" % (e,),
+                level="exception",
+            )
+            html = render_to_string(
+                "shared/_scan_params_effective_display_error.html",
+                {"error_message": "Unable to preview scan parameters due to an internal error."},
+                request=request,
+            )
+            return HttpResponse(html, content_type="text/html", status=500)
+
+        scan_params_effective = build_effective_params_display_from_configs(
+            org_config=org_config,
+            scope_config=scope_config,
+            target_config=target_config,
+            user_override=user_override,
+        )
+
+        html = render_to_string(
+            "shared/_scan_params_effective_display.html",
+            {
+                "scan_params_effective": scan_params_effective,
+                "scan_params_level": scan_params_level,
+            },
+            request=request,
+        )
+        return HttpResponse(html, content_type="text/html")
 
 
 class DeleteSubdomain(APIView):

@@ -223,6 +223,27 @@ class TestSecatorProfilesContext(BaseTestCase):
         self.assertIn("custom_profiles_by_category", response.context)
         self.assertIn(b'id="start_scan_execution_mode"', response.content)
 
+    def test_start_scan_ui_has_effective_params_context(self):
+        """start_scan_ui should provide scan_params_effective in context."""
+        response = self.client.get(
+            reverse(
+                "start_scan",
+                kwargs={
+                    "slug": self.data_generator.project.slug,
+                    "target_id": self.data_generator.target.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("scan_params_effective", response.context)
+        effective = response.context["scan_params_effective"]
+        self.assertIsInstance(effective, dict)
+        self.assertIn("threads", effective)
+        self.assertIn("profiles", effective)
+        for info in effective.values():
+            self.assertIn("value", info)
+            self.assertIn("source", info)
+
     def test_start_organization_scan_has_profiles_context(self):
         """start_organization_scan should always provide profile context keys."""
         response = self.client.get(

@@ -2,7 +2,7 @@
 {# Params: id_prefix (string, optional) #}
 <div class="profile-selector">
   <!-- Speed Profile -->
-  <div class="profile-category-container mb-3">
+  <div class="profile-category-container mb-1">
     <div class="form-check form-switch">
       <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useSpeedProfile" name="use_speed_profile">
       <label class="form-check-label" for="{{ id_prefix|default:'' }}useSpeedProfile">Use Speed Profile</label>
@@ -34,9 +34,10 @@
       <div id="{{ id_prefix|default:'' }}speed_custom_description" class="small text-muted mt-1" style="display: none;"></div>
     </div>
   </div>
-  
+  </div>
+
   <!-- Evasion Profile -->
-  <div class="profile-category-container mb-3">
+  <div class="profile-category-container mb-1">
     <div class="form-check form-switch">
       <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useEvasionProfile" name="use_evasion_profile">
       <label class="form-check-label" for="{{ id_prefix|default:'' }}useEvasionProfile">Use Evasion Profile</label>
@@ -65,9 +66,10 @@
       <div id="{{ id_prefix|default:'' }}evasion_custom_description" class="small text-muted mt-1" style="display: none;"></div>
     </div>
   </div>
-  
+  </div>
+
   <!-- General Profile -->
-  <div class="profile-category-container mb-3">
+  <div class="profile-category-container mb-1">
     <div class="form-check form-switch">
       <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useGeneralProfile" name="use_general_profile">
       <label class="form-check-label" for="{{ id_prefix|default:'' }}useGeneralProfile">Use General Profile</label>
@@ -96,9 +98,10 @@
       <div id="{{ id_prefix|default:'' }}general_custom_description" class="small text-muted mt-1" style="display: none;"></div>
     </div>
   </div>
-  
+  </div>
+
   <!-- Network Profile -->
-  <div class="profile-category-container mb-3">
+  <div class="profile-category-container mb-1">
     <div class="form-check form-switch">
       <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useNetworkProfile" name="use_network_profile">
       <label class="form-check-label" for="{{ id_prefix|default:'' }}useNetworkProfile">Use Network Profile</label>
@@ -127,186 +130,5 @@
       <div id="{{ id_prefix|default:'' }}network_custom_description" class="small text-muted mt-1" style="display: none;"></div>
     </div>
   </div>
+  </div>
 </div>
-
-<script>
-// Profile selection exclusive logic
-document.addEventListener('DOMContentLoaded', function() {
-  const categories = ['speed', 'evasion', 'general', 'network'];
-  const idPrefix = '{{ id_prefix|default:"" }}';
-  
-  // Map category to appropriate Bootstrap button class
-  const categoryToButtonClass = {
-    'speed': 'btn-primary',
-    'evasion': 'btn-secondary',
-    'general': 'btn-info',
-    'network': 'btn-success'
-  };
-  
-  // Map solid classes to outline classes
-  const solidToOutlineMap = {
-    'btn-primary': 'btn-outline-primary',
-    'btn-secondary': 'btn-outline-secondary',
-    'btn-info': 'btn-outline-info',
-    'btn-success': 'btn-outline-success'
-  };
-  
-  // Helper function to reset button classes based on category
-  function resetButtonClasses(button, category) {
-    // Remove active state and all solid/outline contextual classes
-    button.classList.remove('active');
-    
-    // Remove all known solid/outline contextual classes
-    Object.keys(solidToOutlineMap).forEach(solidClass => {
-      button.classList.remove(solidClass);
-      button.classList.remove(solidToOutlineMap[solidClass]);
-    });
-    
-    // Apply the appropriate outline class based on category
-    const outlineClass = solidToOutlineMap[categoryToButtonClass[category]];
-    if (outlineClass) {
-      button.classList.add(outlineClass);
-    }
-  }
-  
-  // Get default profiles from template context (passed from backend)
-  const defaultProfiles = {
-    'speed': '{{ default_profiles.speed|default:"polite" }}',
-    'evasion': '{{ default_profiles.evasion|default:"stealth" }}',
-    'general': '{{ default_profiles.general|default:"full" }}',
-    'network': '{{ default_profiles.network|default:"all_ports" }}'
-  };
-  
-  document.querySelectorAll('.profile-selector').forEach(profileRoot => {
-    const form = profileRoot.closest('form') || document;
-
-    categories.forEach(category => {
-      const builtinButtonsId = idPrefix + category + '-builtin-buttons';
-      const customSelectId = idPrefix + category + '_custom_profile';
-      const descriptionDivId = idPrefix + category + '_custom_description';
-      const builtinButtons = profileRoot.querySelector('#' + builtinButtonsId);
-      const customSelect = profileRoot.querySelector('#' + customSelectId);
-      const descriptionDiv = profileRoot.querySelector('#' + descriptionDivId);
-      const hiddenInputName = category === 'evasion' ? 'stealth_profile' : category + '_profile';
-      const hiddenInput = form.querySelector(`input[name="${hiddenInputName}"]`);
-    
-      // Handle builtin button clicks
-      if (builtinButtons) {
-        builtinButtons.querySelectorAll('button').forEach(button => {
-          button.addEventListener('click', function() {
-            // Deselect all buttons in this category
-            builtinButtons.querySelectorAll('button').forEach(btn => {
-              resetButtonClasses(btn, category);
-            });
-            
-            // Select clicked button
-            resetButtonClasses(this, category);
-            const solidClass = categoryToButtonClass[category];
-            if (solidClass) {
-              this.classList.add(solidClass, 'active');
-            }
-            
-            // Reset custom select value but keep it visible if there are custom profiles
-            if (customSelect) {
-              customSelect.value = '';
-              // Keep select visible if there are custom profiles available
-              if (customSelect.options.length > 1) {
-                customSelect.style.display = 'block';
-              }
-            }
-            if (descriptionDiv) {
-              descriptionDiv.style.display = 'none';
-              descriptionDiv.textContent = '';
-            }
-            
-            // Update hidden input
-            if (hiddenInput) {
-              hiddenInput.value = this.dataset.profileValue;
-            }
-          });
-        });
-      }
-      
-      // Handle custom select changes
-      if (customSelect) {
-        customSelect.addEventListener('change', function() {
-          const selectedOption = this.options[this.selectedIndex];
-          
-          if (this.value) {
-            // Deselect all builtin buttons
-            if (builtinButtons) {
-              builtinButtons.querySelectorAll('button').forEach(btn => {
-                resetButtonClasses(btn, category);
-              });
-            }
-            
-            // Show description
-            if (descriptionDiv && selectedOption.dataset.description) {
-              descriptionDiv.textContent = selectedOption.dataset.description;
-              descriptionDiv.style.display = 'block';
-            }
-            
-            // Update hidden input with custom profile name
-            if (hiddenInput) {
-              hiddenInput.value = this.value;
-            }
-          } else {
-            // Reset to default
-            if (descriptionDiv) {
-              descriptionDiv.style.display = 'none';
-              descriptionDiv.textContent = '';
-            }
-            if (hiddenInput) {
-              hiddenInput.value = '';
-            }
-          }
-        });
-      }
-      
-      // Show custom select if there are custom profiles
-      // Always show the select if there are custom profiles available (options.length > 1 means there's at least one custom profile)
-      if (customSelect && customSelect.options.length > 1) {
-        customSelect.style.display = 'block';
-      }
-      
-      // Initialize default profile value
-      const defaultProfile = defaultProfiles[category];
-      if (defaultProfile && hiddenInput) {
-        // Check if default profile is a custom profile
-        const isCustomDefault = customSelect && Array.from(customSelect.options).some(opt => opt.value === defaultProfile);
-        
-        if (isCustomDefault) {
-          // Default is a custom profile - select it in dropdown
-          customSelect.value = defaultProfile;
-          // Update hidden input
-          hiddenInput.value = defaultProfile;
-          // Show description
-          const selectedOption = customSelect.options[customSelect.selectedIndex];
-          if (descriptionDiv && selectedOption && selectedOption.dataset.description) {
-            descriptionDiv.textContent = selectedOption.dataset.description;
-            descriptionDiv.style.display = 'block';
-          }
-          // Deselect all builtin buttons
-          if (builtinButtons) {
-            builtinButtons.querySelectorAll('button').forEach(btn => {
-              resetButtonClasses(btn, category);
-            });
-          }
-        } else {
-          // Default is a builtin profile
-          if (builtinButtons) {
-            const defaultButton = builtinButtons.querySelector(`[data-profile-value="${defaultProfile}"]`);
-            if (defaultButton) {
-              // Button is already marked as active in template, just set hidden input
-              hiddenInput.value = defaultProfile;
-            }
-          } else {
-            // If no builtin buttons, set default value anyway
-            hiddenInput.value = defaultProfile;
-          }
-        }
-      }
-    });
-  });
-});
-</script>

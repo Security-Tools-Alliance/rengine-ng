@@ -819,8 +819,10 @@
       const $hiddenInput = $form.find(`input[name="${hiddenInputName}"]`);
 
       if (isEnabled) {
-        // Show section and enable controls
-        $section.slideDown();
+        // Show section and enable controls; clear inline height/padding/margin left by slideDown so section can grow with content
+        $section.slideDown(200, function() {
+          $section.css({ height: '', paddingTop: '', marginTop: '', paddingBottom: '', marginBottom: '' });
+        });
         $section.find('button, select').prop('disabled', false);
         // Show custom profile select when it has options (modal may not have run inline script in section context)
         $section.find('select[id$="_custom_profile"]').each(function() {
@@ -831,15 +833,18 @@
         // Activate default profile
         this.activateDefaultProfile(category, $form);
       } else {
-        // Hide section and disable controls
-        $section.slideUp();
+        // Hide section and disable controls; clear inline styles and force hide so section and buttons are fully hidden
+        $section.slideUp(200, function() {
+          $section.css({ height: '', paddingTop: '', marginTop: '', paddingBottom: '', marginBottom: '', overflow: '' });
+          $section.hide();
+        });
         $section.find('button, select').prop('disabled', true);
-        
+
         // Clear hidden input
         if ($hiddenInput.length) {
           $hiddenInput.val('');
         }
-        
+
         // Deselect all buttons in this category
         $section.find('.btn').removeClass('active');
         $section.find('select').val('');

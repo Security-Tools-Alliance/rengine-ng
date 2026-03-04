@@ -33,11 +33,13 @@ Initiating scan for {{ target.value }}
   <div class="col-12">
     <div class="card">
       <div class="card-body start-scan-card-body">
-        <form method="POST" id="start-scan-form" data-secator-id-prefix="start_scan">
+        <form method="POST" id="start-scan-form" data-secator-id-prefix="start_scan" data-scan-params-level="scan" data-scan-params-target-id="{{ target.id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:target.project.slug }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
           {% csrf_token %}
           <input type="hidden" id="target_id" name="target_id" value="{{ target.id }}">
           <input type="hidden" id="target_id_context" value="{{ target.id }}">
           {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='start_scan_' %}
+          {% include 'startScan/_items/secator_profile_hidden_fields.html' with id_prefix='start_scan_' %}
+
           <div id="select_engine">
             <h4>Choose Execution Mode</h4>
             {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_title='Scan' embed_selection_container=False %}
@@ -48,6 +50,8 @@ Initiating scan for {{ target.value }}
             <!-- Advanced Configuration Accordion -->
             {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_scan_' show_random_proxy=True %}
           </div>
+          {# Live preview: scan_params.js (loaded in base) binds via #scan-params-effective-container and data-scan-params-* on this form; the block updates on field change. #}
+          {% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_effective_title="Effective scan parameters for "|add:target.value|add:":" %}
           {% include 'startScan/_items/secator_start_scan_button.html' %}
         </form>
       </div>
@@ -64,6 +68,7 @@ Initiating scan for {{ target.value }}
   window.SCAN_HISTORY_URL = "{% url "scan_history" current_project.slug %}";
   window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
   window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
+  window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL = "{% url 'api:get_scan_params_effective_preview' %}";
 </script>
 <script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
 <script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>

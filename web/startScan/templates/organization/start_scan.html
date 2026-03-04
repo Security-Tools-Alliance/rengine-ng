@@ -190,9 +190,10 @@ Initiating scan for {{organization.name}}
         {% for domain in domain_list %}
         <span class="badge bg-dark m-1">{{domain.name}}</span>
         {% endfor %}
-        <form method="POST" id="start-org-scan-form" data-secator-id-prefix="start_org_scan">
+        <form method="POST" id="start-org-scan-form" data-secator-id-prefix="start_org_scan" data-scan-params-level="scan" data-scan-params-organization-id="{{ organization.id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
           {% csrf_token %}
           {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='start_org_scan_' %}
+          {% include 'startScan/_items/secator_profile_hidden_fields.html' with id_prefix='start_org_scan_' %}
           <div class="form-row">
             <div class="col-md-12 mb-4">
               <h4>Choose Execution Mode</h4>
@@ -201,6 +202,7 @@ Initiating scan for {{organization.name}}
               {% include 'startScan/_items/secator_selection_layout.html' with id_prefix='start_org_scan' %}
               {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=organization.name id_prefix='start_org_scan_' id_suffix='_start_org_scan' %}
               {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_org_scan_' show_random_proxy=False %}
+              {% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_level="organization" %}
               {% include 'startScan/_items/secator_start_scan_button.html' %}
             </div>
             <input type="hidden" name="list_of_domain_id" value="{{domain_ids}}">
@@ -216,6 +218,7 @@ Initiating scan for {{organization.name}}
 <script>
   window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
   window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
+  window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL = "{% url 'api:get_scan_params_effective_preview' %}";
 </script>
 <script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
 <script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>

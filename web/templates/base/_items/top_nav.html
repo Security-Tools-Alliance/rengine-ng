@@ -15,6 +15,11 @@
               <i class="fe-folder me-1"></i> Projects
             </a>
           </li>
+          <li class="nav-item dropdown {{organization_active}}">
+            <a class="nav-link arrow-none" href="{% url 'list_organization' current_project.slug %}">
+              <i class="fe-briefcase me-1"></i> Organization
+            </a>
+          </li>
           <li class="nav-item dropdown {{target_data_active}} {{scope_active}}">
             <a class="nav-link dropdown-toggle arrow-none" href="#" id="topnav-targets" role="button"
               data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -49,11 +54,6 @@
           <li class="nav-item dropdown {{recon_note_active}}">
             <a class="nav-link arrow-none" href="{% url 'list_note' current_project.slug %}">
               <i class="fe-check-square me-1"></i> To-do
-            </a>
-          </li>
-          <li class="nav-item dropdown {{organization_active}}">
-            <a class="nav-link arrow-none" href="{% url 'list_organization' current_project.slug %}">
-              <i class="fe-briefcase me-1"></i> Organization
             </a>
           </li>
           <li class="nav-item dropdown {{scan_engine_nav_active}}">

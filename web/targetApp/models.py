@@ -2,7 +2,6 @@ from django.db import models
 
 from dashboard.models import Project
 from targetApp.constants import SCOPE_TYPE_CHOICES, TARGET_TYPE_CHOICES
-from targetApp.services.scan_param_definitions import REQUEST_HEADERS_HELP_TEXT
 
 
 class TargetQuerySet(models.QuerySet):
@@ -40,11 +39,10 @@ class Target(models.Model):
     h1_team_handle = models.CharField(max_length=100, blank=True, null=True)
     insert_date = models.DateTimeField(null=True)
     start_scan_date = models.DateTimeField(null=True, blank=True)
-    request_headers = models.JSONField(null=True, blank=True, help_text=REQUEST_HEADERS_HELP_TEXT)
-    scan_config_override = models.JSONField(
+    scan_config = models.JSONField(
         null=True,
         blank=True,
-        help_text="Per-target scan parameter overrides (threads, rate_limit, timeout, etc.)",
+        help_text="Per-target scan parameter overrides and profiles",
     )
     project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True, blank=False)
 
@@ -91,6 +89,11 @@ class Organization(models.Model):
     name = models.CharField(max_length=300, unique=True)
     description = models.TextField(blank=True, null=True)
     insert_date = models.DateTimeField()
+    scan_config = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Organization-level scan parameter defaults and profiles",
+    )
     targets = models.ManyToManyField("Target", related_name="organizations", blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True, blank=False)
 
@@ -113,8 +116,9 @@ class Scope(models.Model):
     Groups targets under an organization with shared scan parameters.
     Represents a bug bounty program, an engagement (internal/external/OSINT/red team), etc.
 
-    default_profiles is stored as a JSON object mapping category (speed, evasion,
-    general, network) to profile name; see scope_params._profiles_to_list.
+    scan_config is a JSON object with the same structure as Organization.scan_config
+    and Target.scan_config: keys from PARAM_KEYS + "profiles" + "extra_config".
+    Only present keys act as overrides for this scope.
     """
 
     id = models.AutoField(primary_key=True)
@@ -124,27 +128,10 @@ class Scope(models.Model):
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     description = models.TextField(blank=True, null=True)
-
-    # Secator meta-option fields (all nullable: only set values act as defaults)
-    threads = models.PositiveIntegerField(null=True, blank=True)
-    rate_limit = models.PositiveIntegerField(null=True, blank=True, help_text="Requests per second")
-    timeout = models.PositiveIntegerField(null=True, blank=True, help_text="HTTP timeout in seconds")
-    retries = models.PositiveIntegerField(null=True, blank=True)
-    delay = models.FloatField(null=True, blank=True, help_text="Delay between requests in seconds")
-    proxy = models.CharField(max_length=500, blank=True, null=True)
-    user_agent = models.CharField(max_length=500, blank=True, null=True)
-    request_headers = models.JSONField(null=True, blank=True, help_text=REQUEST_HEADERS_HELP_TEXT)
-    follow_redirect = models.BooleanField(null=True, blank=True)
-    depth = models.PositiveIntegerField(null=True, blank=True)
-    default_profiles = models.JSONField(
+    scan_config = models.JSONField(
         null=True,
         blank=True,
-        help_text="JSON object mapping category (speed, evasion, general, network) to profile name",
-    )
-    extra_config = models.JSONField(
-        null=True,
-        blank=True,
-        help_text="Advanced options (method, data, wordlist, ports, match/filter regex, etc.)",
+        help_text="Scope-level scan parameter defaults and profiles",
     )
 
     targets = models.ManyToManyField("Target", related_name="scopes", blank=True)

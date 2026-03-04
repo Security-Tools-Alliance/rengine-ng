@@ -1,12 +1,15 @@
+import uuid
+
 from django.http import QueryDict
 from django.test import override_settings
 
-from scanEngine.models import SecatorWorker
+from scanEngine.models import SecatorProfile, SecatorWorker
 from targetApp.services.scope_params import (
     PARAM_KEYS,
     TARGET_OVERRIDE_PREFIX,
     _profiles_to_list,
     build_effective_params_display,
+    build_effective_params_display_from_configs,
     parse_target_scan_override_from_post,
     resolve_scan_params,
 )
@@ -41,11 +44,11 @@ class ResolveScanParamsTest(BaseTestCase):
         self.assertEqual(result["extra_config"], {})
 
     # ------------------------------------------------------------------
-    # Target with scan_config_override, without scope
+    # Target with scan_config, without scope
     # ------------------------------------------------------------------
-    def test_target_scan_config_override_applied(self):
+    def test_target_scan_config_applied(self):
         target = self.data_generator.target
-        target.scan_config_override = {
+        target.scan_config = {
             "threads": 10,
             "proxy": "socks5://10.0.0.1:1080",
             "user_agent": "TestAgent/1.0",
@@ -59,10 +62,10 @@ class ResolveScanParamsTest(BaseTestCase):
         self.assertEqual(result["user_agent"], "TestAgent/1.0")
         self.assertEqual(result["rate_limit"], 150)
 
-    def test_scan_config_override_non_dict_normalized(self):
-        """Legacy or malformed scan_config_override (list, string) is treated as empty dict."""
+    def test_scan_config_non_dict_normalized(self):
+        """Legacy or malformed scan_config (list, string) is treated as empty dict."""
         target = self.data_generator.target
-        target.scan_config_override = [1, 2, 3]
+        target.scan_config = [1, 2, 3]
         target.save()
 
         result = resolve_scan_params(target)
@@ -72,39 +75,27 @@ class ResolveScanParamsTest(BaseTestCase):
         self.assertEqual(result["extra_config"], {})
 
     # ------------------------------------------------------------------
-    # Target.request_headers historical compat
+    # Target scan_config request_headers
     # ------------------------------------------------------------------
-    def test_target_request_headers_historical_compat(self):
+    def test_target_scan_config_request_headers(self):
         target = self.data_generator.target
-        target.request_headers = {"Authorization": "Bearer test-token-0000"}
+        target.scan_config = {"request_headers": {"Authorization": "Bearer test-token-0000"}}
         target.save()
 
         result = resolve_scan_params(target)
 
         self.assertEqual(result["request_headers"], {"Authorization": "Bearer test-token-0000"})
 
-    def test_scan_config_override_request_headers_takes_priority(self):
-        target = self.data_generator.target
-        target.request_headers = {"Authorization": "Bearer old-token"}
-        target.scan_config_override = {
-            "request_headers": {"X-Custom": "override-value"},
-        }
-        target.save()
-
-        result = resolve_scan_params(target)
-
-        self.assertEqual(result["request_headers"], {"X-Custom": "override-value"})
-
     def test_target_request_headers_beat_scope_request_headers(self):
         """
-        When both target.request_headers and scope.request_headers are set,
-        target.request_headers must take precedence (historical behavior).
+        When both target.scan_config and scope.scan_config have request_headers,
+        target takes precedence.
         """
         target_headers = {"X-From": "target", "X-Common": "target-value"}
         scope_headers = {"X-From": "scope", "X-Common": "scope-value"}
 
         target = self.data_generator.target
-        target.request_headers = target_headers
+        target.scan_config = {"request_headers": target_headers}
         target.save()
         scope = self.data_generator.create_scope(request_headers=scope_headers)
 
@@ -113,7 +104,7 @@ class ResolveScanParamsTest(BaseTestCase):
         self.assertEqual(
             params["request_headers"],
             target_headers,
-            msg="target.request_headers should override scope.request_headers",
+            msg="target scan_config request_headers should override scope",
         )
         self.assertNotEqual(target_headers, scope_headers)
 
@@ -142,7 +133,7 @@ class ResolveScanParamsTest(BaseTestCase):
     # ------------------------------------------------------------------
     def test_target_override_beats_scope(self):
         target = self.data_generator.target
-        target.scan_config_override = {"threads": 99}
+        target.scan_config = {"threads": 99}
         target.save()
 
         scope = self.data_generator.create_scope(threads=5, rate_limit=50)
@@ -157,7 +148,7 @@ class ResolveScanParamsTest(BaseTestCase):
     # ------------------------------------------------------------------
     def test_user_override_beats_all(self):
         target = self.data_generator.target
-        target.scan_config_override = {"threads": 99}
+        target.scan_config = {"threads": 99}
         target.save()
 
         scope = self.data_generator.create_scope(threads=5)
@@ -222,10 +213,10 @@ class ResolveScanParamsTest(BaseTestCase):
         self.assertIn("polite", result["profiles"])
         self.assertIn("stealth", result["profiles"])
 
-    def test_target_scan_config_override_profiles_beats_scope(self):
-        """Target.scan_config_override["profiles"] (level 2) overrides scope defaults."""
+    def test_target_scan_config_profiles_beats_scope(self):
+        """Target.scan_config["profiles"] (level 2) overrides scope defaults."""
         target = self.data_generator.target
-        target.scan_config_override = {"profiles": {"speed": "aggressive"}}
+        target.scan_config = {"profiles": {"speed": "aggressive"}}
         target.save()
 
         scope = self.data_generator.create_scope(
@@ -238,7 +229,7 @@ class ResolveScanParamsTest(BaseTestCase):
 
     def test_user_override_profiles_beat_target_and_scope(self):
         target = self.data_generator.target
-        target.scan_config_override = {"profiles": {"speed": "aggressive"}}
+        target.scan_config = {"profiles": {"speed": "aggressive"}}
         target.save()
 
         scope = self.data_generator.create_scope(
@@ -265,7 +256,7 @@ class ResolveScanParamsTest(BaseTestCase):
             extra_config={"wordlist": "/path/to/list.txt", "method": "GET"},
         )
         target = self.data_generator.target
-        target.scan_config_override = {
+        target.scan_config = {
             "extra_config": {"method": "POST"},
         }
         target.save()
@@ -304,7 +295,7 @@ class ResolveScanParamsTest(BaseTestCase):
         self.assertEqual(result["extra_config"], {})
 
         target = self.data_generator.target
-        target.scan_config_override = {"extra_config": ["not-a-dict"]}
+        target.scan_config = {"extra_config": ["not-a-dict"]}
         target.save()
         scope = self.data_generator.create_scope(
             name="ScopeDict",
@@ -313,7 +304,7 @@ class ResolveScanParamsTest(BaseTestCase):
         result = resolve_scan_params(target, scope=scope)
         self.assertEqual(result["extra_config"]["wordlist"], "/scope/list.txt")
 
-        target.scan_config_override = {"extra_config": {"method": "POST"}}
+        target.scan_config = {"extra_config": {"method": "POST"}}
         target.save()
         result = resolve_scan_params(
             target,
@@ -461,7 +452,7 @@ class BuildEffectiveParamsDisplayTest(BaseTestCase):
     def test_target_override_takes_precedence_over_scope(self):
         scope = self.data_generator.create_scope(threads=5)
         target = self.data_generator.target
-        target.scan_config_override = {"threads": 99}
+        target.scan_config = {"threads": 99}
         target.save()
 
         result = build_effective_params_display(scope=scope, target=target)
@@ -482,7 +473,7 @@ class BuildEffectiveParamsDisplayTest(BaseTestCase):
             default_profiles={"speed": "polite"},
         )
         target = self.data_generator.target
-        target.scan_config_override = {"profiles": {"speed": "aggressive"}}
+        target.scan_config = {"profiles": {"speed": "aggressive"}}
         target.save()
 
         result = build_effective_params_display(scope=scope, target=target)
@@ -502,6 +493,145 @@ class BuildEffectiveParamsDisplayTest(BaseTestCase):
         self.assertEqual(result["delay"]["source"], "default")
         self.assertIs(result["follow_redirect"]["value"], True)
         self.assertEqual(result["follow_redirect"]["source"], "default")
+
+
+class BuildEffectiveParamsDisplayFromConfigsTest(BaseTestCase):
+    """Tests for build_effective_params_display_from_configs (draft + parent configs)."""
+
+    def test_organization_only_draft(self):
+        result = build_effective_params_display_from_configs(
+            org_config={"threads": 8, "rate_limit": 100},
+        )
+        self.assertEqual(result["threads"]["value"], 8)
+        self.assertEqual(result["threads"]["source"], "organization")
+        self.assertEqual(result["rate_limit"]["value"], 100)
+        self.assertEqual(result["rate_limit"]["source"], "organization")
+        self.assertEqual(result["timeout"]["source"], "default")
+
+    def test_user_override_source_scan(self):
+        result = build_effective_params_display_from_configs(
+            org_config={"threads": 5},
+            user_override={"threads": 20},
+        )
+        self.assertEqual(result["threads"]["value"], 20)
+        self.assertEqual(result["threads"]["source"], "scan")
+
+    def test_priority_override_over_target_over_scope_over_org(self):
+        result = build_effective_params_display_from_configs(
+            org_config={"threads": 1},
+            scope_config={"threads": 2},
+            target_config={"threads": 3},
+            user_override={"threads": 4},
+        )
+        self.assertEqual(result["threads"]["value"], 4)
+        self.assertEqual(result["threads"]["source"], "scan")
+
+        result = build_effective_params_display_from_configs(
+            org_config={"threads": 1},
+            scope_config={"threads": 2},
+            target_config={"threads": 3},
+        )
+        self.assertEqual(result["threads"]["value"], 3)
+        self.assertEqual(result["threads"]["source"], "target")
+
+    def test_profiles_user_override_source_scan(self):
+        result = build_effective_params_display_from_configs(
+            org_config={"profiles": {"speed": "polite"}},
+            user_override={"profiles": {"speed": "aggressive", "evasion": "stealth"}},
+        )
+        self.assertEqual(result["profiles"]["source"], "scan")
+        self.assertEqual(result["profiles"]["value"], {"speed": "aggressive", "evasion": "stealth"})
+
+    def test_profile_opts_merged_into_effective_display(self):
+        """Effective display overlays profile opts for params that would be default."""
+        profile_name = "test-profile-opts-%s" % (str(uuid.uuid4())[:8],)
+        SecatorProfile.objects.create(
+            name=profile_name,
+            category="speed",
+            description="Profile with opts for effective display",
+            opts="delay: 0.5\nthreads: 6\n",
+            profile_type="custom",
+            is_active=True,
+        )
+        result = build_effective_params_display_from_configs(
+            user_override={"profiles": {"speed": profile_name}},
+        )
+        self.assertEqual(result["delay"]["value"], 0.5)
+        self.assertEqual(result["delay"]["source"], "profile")
+        self.assertEqual(result["delay"].get("profile_name"), profile_name)
+        self.assertEqual(result["threads"]["value"], 6)
+        self.assertEqual(result["threads"]["source"], "profile")
+        self.assertEqual(result["threads"].get("profile_name"), profile_name)
+        self.assertIn("profile_display_list", result)
+        self.assertEqual(len(result["profile_display_list"]), 1)
+        self.assertEqual(result["profile_display_list"][0]["category"], "speed")
+        self.assertEqual(result["profile_display_list"][0]["name"], profile_name)
+        self.assertIn("delay", result["profile_display_list"][0]["tooltip"])
+        self.assertIn("threads", result["profile_display_list"][0]["tooltip"])
+
+    def test_profile_opts_do_not_override_explicit_config(self):
+        """Profile opts only fill params with source 'default', not org/scope/target/scan."""
+        profile_name = "test-profile-no-override-%s" % (str(uuid.uuid4())[:8],)
+        SecatorProfile.objects.create(
+            name=profile_name,
+            category="speed",
+            description="Profile with opts",
+            opts="threads: 99\ndelay: 2.0\n",
+            profile_type="custom",
+            is_active=True,
+        )
+        result = build_effective_params_display_from_configs(
+            org_config={"threads": 10},
+            user_override={"profiles": {"speed": profile_name}},
+        )
+        self.assertEqual(result["threads"]["value"], 10)
+        self.assertEqual(result["threads"]["source"], "organization")
+        self.assertEqual(result["delay"]["value"], 2.0)
+        self.assertEqual(result["delay"]["source"], "profile")
+
+    def test_profile_display_list_empty_when_no_profiles(self):
+        result = build_effective_params_display_from_configs(user_override={})
+        self.assertEqual(result["profile_display_list"], [])
+
+    def test_profile_opts_full_yaml_with_nested_opts_key(self):
+        """When SecatorProfile.opts stores full YAML with top-level 'opts:', inner opts are applied."""
+        profile_name = "test-full-yaml-%s" % (str(uuid.uuid4())[:8],)
+        full_yaml = (
+            "type: profile\n"
+            "name: %s\n"
+            "category: speed\n"
+            "description: Full file format\n"
+            "opts:\n"
+            "  rate_limit: 100\n"
+            "  delay: 0\n"
+            "  timeout: 10\n"
+            "  retries: 5\n"
+        ) % (profile_name,)
+        SecatorProfile.objects.create(
+            name=profile_name,
+            category="speed",
+            description="Full file format",
+            opts=full_yaml,
+            profile_type="custom",
+            is_active=True,
+        )
+        result = build_effective_params_display_from_configs(
+            user_override={"profiles": {"speed": profile_name}},
+        )
+        self.assertEqual(result["rate_limit"]["value"], 100)
+        self.assertEqual(result["rate_limit"]["source"], "profile")
+        self.assertEqual(result["rate_limit"].get("profile_name"), profile_name)
+        self.assertEqual(result["delay"]["value"], 0)
+        self.assertEqual(result["delay"]["source"], "profile")
+        self.assertEqual(result["delay"].get("profile_name"), profile_name)
+        self.assertEqual(result["timeout"]["value"], 10)
+        self.assertEqual(result["timeout"]["source"], "profile")
+        self.assertEqual(result["retries"]["value"], 5)
+        self.assertEqual(result["retries"]["source"], "profile")
+        self.assertEqual(result["retries"].get("profile_name"), profile_name)
+        self.assertEqual(len(result["profile_display_list"]), 1)
+        self.assertIn("rate_limit", result["profile_display_list"][0]["tooltip"])
+        self.assertIn("retries", result["profile_display_list"][0]["tooltip"])
 
 
 class ParseTargetScanOverrideFromPostTest(BaseTestCase):

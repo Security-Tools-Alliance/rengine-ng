@@ -69,6 +69,11 @@ class ScanHistory(models.Model):
     is_legacy_scan = models.BooleanField(
         default=False, help_text="Whether this scan uses legacy EngineType (True) or new SecatorScan (False)"
     )
+    scan_config = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Effective scan parameters and profiles used for this scan",
+    )
 
     def __str__(self):
         # Avoid hidden DB access (Domain/target) to prevent N+1 in admin, logs, serializers.

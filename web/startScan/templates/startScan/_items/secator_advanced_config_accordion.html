@@ -10,8 +10,8 @@
       </div>
       <div id="{{ id_prefix|default:'' }}advancedConfig" class="accordion-collapse collapse">
         <div class="accordion-body">
-          <!-- Secator Profiles -->
-          {% include 'startScan/_items/secator_profiles.html' with id_prefix=id_prefix|default:'' %}
+          <!-- Secator Profiles (default_profiles and custom_profiles_by_category from view context or empty for modal) -->
+          {% include 'startScan/_items/secator_profiles.html' with id_prefix=id_prefix|default:'' default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category %}
 
           <!-- Optional worker (run on remote Secator host) -->
           {% include 'startScan/_items/secator_worker_select.html' with id_prefix=id_prefix|default:'' secator_workers=secator_workers|default:None %}

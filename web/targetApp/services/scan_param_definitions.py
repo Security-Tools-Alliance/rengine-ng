@@ -1,27 +1,32 @@
 """
 Central definitions for scan parameter keys and type-casting rules.
 
-SCOPE/TARGET PARAMETER RESOLUTION — MODULE RESPONSIBILITIES AND DATA FLOW
-==========================================================================
+SCAN CONFIG RESOLUTION — MODULE RESPONSIBILITIES AND DATA FLOW
+==============================================================
+
+  Precedence chain (highest to lowest): user override at scan launch → target.scan_config
+  → scope.scan_config → organization.scan_config → settings defaults. Organization,
+  Scope, and Target each have a single scan_config JSONField (same schema: PARAM_KEYS,
+  profiles, extra_config). Only keys present at a lower level override the level above.
 
   scan_param_definitions (this module)
     - Defines PARAM_KEYS, type keys (INT_PARAM_KEYS, etc.), cast_param_value().
-    - Defines request_headers user copy and parse_request_headers_value() for
-      consistent validation of JSON-object headers everywhere.
+    - Defines parse_request_headers_value() for consistent validation of
+      request_headers as a JSON object wherever scan_config is built from POST.
     - Single source of truth for param names and value types.
 
   targetApp.services.scope_params
-    - resolve_scan_params(target, scope, user_override): priority chain
-      (user override → target.scan_config_override → target.request_headers →
-      scope fields → settings defaults). Returns dict with PARAM_KEYS + profiles,
-      worker_ids, extra_config.
+    - resolve_scan_params(target, scope, organization, user_override): applies the
+      precedence chain and returns effective dict (PARAM_KEYS + profiles, worker_ids,
+      extra_config).
     - apply_resolved_to_secator_config(secator_config, resolved): merges resolved
       values into a Secator config (scalar params, profiles); worker_ids go to kwargs root.
       Single place for merge strategy when new params are added.
-    - parse_target_scan_override_from_post(post): builds target scan_config_override
-      from target update form POST; uses parse_request_headers_value for headers.
-    - _normalize_scan_config_override(raw): ensures scan_config_override is a dict.
-    - build_effective_params_display(scope, target): for scope detail template.
+    - parse_scan_config_from_post(post, prefix, profiles_dict, existing_config):
+      builds scan_config from POST for any form (org, scope, target); uses
+      parse_request_headers_value for the request_headers key.
+    - _normalize_scan_config(raw): ensures scan_config is a dict.
+    - build_effective_params_display(scope, target, organization): for templates.
 
   startScan.secator.form
     - _parse_secator_user_override_from_post(post): builds user_override from
@@ -34,20 +39,14 @@ SCOPE/TARGET PARAMETER RESOLUTION — MODULE RESPONSIBILITIES AND DATA FLOW
       scan launch; calls _merge_scope_params_into_config.
 
   targetApp.services.target_update
-    - process_target_scan_override_from_post(post): view helper; calls
-      parse_target_scan_override_from_post and builds fallback/context for
-      target update template.
-
-  targetApp.forms (ScopeForm)
-    - clean_request_headers(): uses parse_request_headers_value() so Scope
-      request_headers matches the same JSON-object contract and error messages.
+    - process_target_scan_override_from_post(post): view helper for target update;
+      calls parse_scan_config_from_post (via alias parse_target_scan_override_from_post)
+      and builds fallback/context for the target update template.
 
 Flow (scan launch):  POST → form.build_start_secator_scan_kwargs
   → _merge_scope_params_into_config → resolve_scan_params → apply_resolved_to_secator_config.
-Flow (target update): POST → target_update.process_target_scan_override_from_post
-  → parse_target_scan_override_from_post (uses parse_request_headers_value).
-Flow (scope form):    POST → ScopeForm.clean_request_headers
-  → parse_request_headers_value.
+Flow (org/scope/target forms): POST → parse_scan_config_from_post (views call it with
+  appropriate prefix and profiles_dict); request_headers validated via parse_request_headers_value.
 """
 
 from __future__ import annotations
@@ -106,8 +105,8 @@ def parse_request_headers_value(value: Any) -> tuple[dict[str, Any] | None, str 
     """
     Parse and validate request_headers from form/POST: must be a JSON object or empty.
 
-    Used by ScopeForm.clean_request_headers and parse_target_scan_override_from_post
-    so behavior and error messages stay consistent.
+    Used by parse_scan_config_from_post when building scan_config from POST so
+    behavior and error messages stay consistent across org, scope, and target forms.
 
     Returns:
         (parsed_dict, None) on success (parsed_dict may be None for "clear").

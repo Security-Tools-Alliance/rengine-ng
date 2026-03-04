@@ -28,9 +28,10 @@ Initiate Scan for Multiple Targets
         {% for domain in domain_list %}
         <span class="badge badge-soft-primary m-1">{{domain}}</span>
         {% endfor %}
-        <form method="POST" id="start-multi-scan-form" data-secator-id-prefix="start_multi_scan">
+        <form method="POST" id="start-multi-scan-form" data-secator-id-prefix="start_multi_scan" data-scan-params-level="scan" data-scan-params-target-id="{{ first_target_id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
           {% csrf_token %}
           {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='start_multi_scan_' %}
+          {% include 'startScan/_items/secator_profile_hidden_fields.html' with id_prefix='start_multi_scan_' %}
           <h4 class="header-title mt-4">Choose Execution Mode</h4>
           {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_title='Scan Type' embed_selection_container=False %}
           {% include 'startScan/_items/secator_view_toggle.html' with id_prefix='start_multi_scan' %}
@@ -40,7 +41,9 @@ Initiate Scan for Multiple Targets
           
           <!-- Advanced Configuration Accordion -->
           {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_multi_scan_' show_random_proxy=False %}
-          
+
+          {% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_level="target" %}
+
           <input type="hidden" name="list_of_domain_id" value="{{domain_ids}}">
           {% include 'startScan/_items/secator_start_scan_button.html' %}
         </form>
@@ -55,6 +58,7 @@ Initiate Scan for Multiple Targets
 <script>
   window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
   window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
+  window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL = "{% url 'api:get_scan_params_effective_preview' %}";
 </script>
 <script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
 <script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>

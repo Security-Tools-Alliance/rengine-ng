@@ -114,19 +114,12 @@
 
     init: function() {
       this.bindEvents();
-      this.initializeDefaultProfiles();
-      this.initializeProfileCategories();
       this.initializeSubmitButtons();
     },
 
     bindEvents: function() {
       $(document).on('click', '.execution-mode-card', this.handleModeSelection.bind(this));
-      $(document).on('click', '[data-profile-type]', this.handleProfileSelection.bind(this));
       $(document).on('change', '[id$="useRandomProxy"], #useRandomProxy', this.toggleRandomProxy);
-      $(document).on('change', '[id$="useSpeedProfile"], #useSpeedProfile', this.handleProfileCategoryToggle.bind(this));
-      $(document).on('change', '[id$="useEvasionProfile"], #useEvasionProfile', this.handleProfileCategoryToggle.bind(this));
-      $(document).on('change', '[id$="useGeneralProfile"], #useGeneralProfile', this.handleProfileCategoryToggle.bind(this));
-      $(document).on('change', '[id$="useNetworkProfile"], #useNetworkProfile', this.handleProfileCategoryToggle.bind(this));
       $(document).on('click', '.category-filter-btn', this.handleCategoryFilter.bind(this));
       $(document).on('click', '#clear-all-tasks', this.clearAllTasks.bind(this));
       $(document).on('click', '.remove-task', this.removeTask.bind(this));
@@ -158,4 +151,5 @@
   };
 
   window.SecatorScan = SecatorScan;
+  window.ScanParamsProfilesInitialized = true;
 })(jQuery);

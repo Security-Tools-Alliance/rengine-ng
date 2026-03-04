@@ -39,7 +39,7 @@ class TargetAdmin(admin.ModelAdmin):
         ),
         (
             "Advanced",
-            {"fields": ("request_headers", "scan_config_override"), "classes": ("collapse",)},
+            {"fields": ("request_headers", "scan_config"), "classes": ("collapse",)},
         ),
     )
 

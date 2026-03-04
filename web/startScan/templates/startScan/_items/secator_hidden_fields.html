@@ -1,7 +1,5 @@
-{# Optional: pass `id_prefix` to make IDs unique per form instance. #}
+{# Optional: pass id_prefix to make IDs unique per form instance. #}
+{# Profile hidden inputs (speed_profile, stealth_profile, general_profile, network_profile) #}
+{# are in shared/_scan_params_block.html for org/scope/target forms, or in #}
+{# secator_profile_hidden_fields.html for scan launch forms (start/schedule). #}
 <input type="hidden" id="{{ id_prefix|default:'' }}execution_mode" name="execution_mode" value="">
-<input type="hidden" name="speed_profile" id="{{ id_prefix|default:'' }}speed_profile" value="">
-<input type="hidden" name="stealth_profile" id="{{ id_prefix|default:'' }}stealth_profile" value="">
-<input type="hidden" name="general_profile" id="{{ id_prefix|default:'' }}general_profile" value="">
-<input type="hidden" name="network_profile" id="{{ id_prefix|default:'' }}network_profile" value="">
-

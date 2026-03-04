@@ -63,7 +63,7 @@ class BuildUpdateTargetContextTest(BaseTestCase):
     def test_override_request_headers_initial_from_target_when_none_passed(self):
         self.data_generator.create_organization()
         target = self.data_generator.target
-        target.scan_config_override = {"request_headers": {"X-Custom": "value"}}
+        target.scan_config = {"request_headers": {"X-Custom": "value"}}
         target.save()
         form = UpdateTargetModelForm(instance=target)
         context = build_update_target_context(target, form)

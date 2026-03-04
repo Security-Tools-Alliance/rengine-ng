@@ -93,7 +93,6 @@
       <div class="rightbar-overlay" aria-hidden="true"></div>
       {% include 'base/_items/right_bar.html' %}
       {% include 'base/_items/footer.html' %}
-    </div>
     <script>
       (function(){ try { window.sessionStorage.setItem('_UBOLD_VISITED_', '1'); } catch (e) {} })();
     </script>
@@ -104,6 +103,7 @@
     <script src="{% static 'assets/js/app.min.js' %}"></script>
     <script src="{% static 'custom/modal_manager.js' %}"></script>
     <script src="{% static 'custom/custom.js' %}"></script>
+    <script src="{% static 'custom/scan_params.js' %}"></script>
     <script src="{% static 'custom/toolbox.js' %}"></script>
     {{ RENGINE_SCAN_STATUS|json_script:"rengine-scan-status" }}
     <script src="{% static 'custom/command_log_helpers.js' %}"></script>

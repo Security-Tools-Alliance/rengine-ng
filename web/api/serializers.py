@@ -999,7 +999,7 @@ class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
         return obj.target.value if obj.target else ""
 
     def get_target_id(self, obj):
-        return obj.target_id if obj.target_id else None
+        return obj.target_id or None
 
     def get_organizations(self, obj):
         target = obj.target
@@ -1029,9 +1029,7 @@ class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
         return getattr(obj, "secator_worker_name", None) or "Local"
 
     def get_last_scan(self, obj):
-        if not obj.start_scan_date:
-            return None
-        return naturalday(obj.start_scan_date).title()
+        return naturalday(obj.start_scan_date).title() if obj.start_scan_date else None
 
     def get_initiated_by(self, obj):
         return obj.initiated_by.username if obj.initiated_by else ""
@@ -1262,8 +1260,7 @@ def _engine_type_tasks_html(engine):
     }
     tasks = getattr(engine, "tasks", None) or []
     parts = [task_badges.get(t, (f'<span class="badge badge-soft-secondary task-badge">{t}</span>',))[0] for t in tasks]
-    config_params = getattr(engine, "get_config_parameters", lambda: {})()
-    if config_params:
+    if config_params := getattr(engine, "get_config_parameters", lambda: {})():
         config_display = getattr(engine, "get_config_parameters_display", lambda: "")()
         config_title = html.escape(config_display) if config_display else ""
         parts.append(

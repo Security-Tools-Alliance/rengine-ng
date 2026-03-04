@@ -299,11 +299,19 @@ def _merge_scope_params_into_config(
     a dict (caller must parse JSON elsewhere).
     """
     target, scope = _get_target_and_scope_for_scope_merge(post, target_id, target, scope)
-    if target is None or scope is None:
+    if target is None:
         return secator_config, []
 
+    organization = None
+    if scope is not None:
+        organization = getattr(scope, "organization", None)
+    elif target is not None:
+        orgs = getattr(target, "organizations", None)
+        if orgs is not None:
+            organization = orgs.first()
+
     user_override = _parse_secator_user_override_from_post(post)
-    resolved = resolve_scan_params(target, scope=scope, user_override=user_override)
+    resolved = resolve_scan_params(target, scope=scope, organization=organization, user_override=user_override)
     apply_resolved_to_secator_config(secator_config, resolved)
     return secator_config, list(resolved.get("worker_ids", []))
 

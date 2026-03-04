@@ -427,3 +427,82 @@ class TestGetSecatorInputTypesAndTargets(BaseTestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("input_types", response.data)
+
+
+class PostScanParamsEffectivePreviewTest(BaseTestCase):
+    """Tests for PostScanParamsEffectivePreview (real-time effective params HTML)."""
+
+    def setUp(self):
+        super().setUp()
+        self.url = reverse("api:get_scan_params_effective_preview")
+        self.project_slug = self.data_generator.project.slug
+
+    def test_organization_level_returns_html(self):
+        """POST with level=organization and draft returns effective block HTML."""
+        payload = {
+            "level": "organization",
+            "project_slug": self.project_slug,
+            "draft": {"threads": 12, "rate_limit": 80},
+        }
+        response = self.client.post(self.url, payload, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get("Content-Type", "").split(";")[0].strip(), "text/html")
+        self.assertIn(b"scan-params-effective-container", response.content)
+        self.assertIn(b"12", response.content)
+        self.assertIn(b"80", response.content)
+
+    def test_invalid_level_returns_400(self):
+        """POST with invalid level returns 400."""
+        response = self.client.post(
+            self.url,
+            {"level": "invalid", "draft": {}},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_scan_level_with_target_id_returns_html(self):
+        """POST with level=scan, target_id and project_slug returns merged effective HTML."""
+        payload = {
+            "level": "scan",
+            "project_slug": self.project_slug,
+            "target_id": self.data_generator.target.id,
+            "draft": {"threads": 5},
+        }
+        response = self.client.post(self.url, payload, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"scan-params-effective-container", response.content)
+
+    def test_scope_level_without_project_returns_400_with_user_message(self):
+        """ScanParamsPreviewError returns 400 and user-safe message in error template."""
+        payload = {
+            "level": "scope",
+            "project_slug": "",
+            "scope_id": self.data_generator.scope.id,
+            "draft": {},
+        }
+        response = self.client.post(self.url, payload, content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"scan-params-effective-container", response.content)
+        self.assertIn(b"Project required", response.content)
+
+    def test_draft_empty_string_clears_override_in_preview(self):
+        """Empty string in draft removes key from merged config (aligned with parse_scan_config_from_post)."""
+        scope = self.data_generator.scope
+        org = scope.organization
+        if getattr(org, "scan_config", None) is None:
+            org.scan_config = {}
+            org.save(update_fields=["scan_config"])
+        scope.scan_config = {"threads": 10, "rate_limit": 50}
+        scope.save(update_fields=["scan_config"])
+        payload = {
+            "level": "scope",
+            "project_slug": self.project_slug,
+            "organization_id": scope.organization_id,
+            "scope_id": scope.id,
+            "draft": {"threads": "", "rate_limit": 50},
+        }
+        response = self.client.post(self.url, payload, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"scan-params-effective-container", response.content)
+        self.assertIn(b"50", response.content)
+        self.assertNotIn(b"10", response.content)

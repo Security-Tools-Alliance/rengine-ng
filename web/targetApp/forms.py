@@ -7,7 +7,6 @@ from scanEngine.models import SecatorWorker
 from startScan.models import Domain
 
 from .models import Organization, Scope, Target
-from .services.scan_param_definitions import parse_request_headers_value
 
 
 class AddTargetForm(forms.Form):
@@ -243,17 +242,6 @@ class ScopeForm(forms.ModelForm):
             "start_date",
             "end_date",
             "description",
-            "threads",
-            "rate_limit",
-            "timeout",
-            "retries",
-            "delay",
-            "proxy",
-            "user_agent",
-            "request_headers",
-            "follow_redirect",
-            "depth",
-            "extra_config",
             "targets",
             "workers",
         ]
@@ -268,28 +256,6 @@ class ScopeForm(forms.ModelForm):
             "start_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "end_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
-            "threads": forms.NumberInput(attrs={"class": "form-control", "placeholder": "Default: 30", "min": 1}),
-            "rate_limit": forms.NumberInput(
-                attrs={"class": "form-control", "placeholder": "Default: 150 req/s", "min": 1}
-            ),
-            "timeout": forms.NumberInput(attrs={"class": "form-control", "placeholder": "Default: 5s", "min": 1}),
-            "retries": forms.NumberInput(attrs={"class": "form-control", "placeholder": "Default: 1", "min": 0}),
-            "delay": forms.NumberInput(
-                attrs={"class": "form-control", "placeholder": "Default: 0s", "min": 0, "step": "0.1"}
-            ),
-            "proxy": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "socks5://host:port or http://host:port"}
-            ),
-            "user_agent": forms.TextInput(attrs={"class": "form-control", "placeholder": "Custom User-Agent"}),
-            "request_headers": forms.Textarea(
-                attrs={
-                    "class": "form-control",
-                    "rows": 3,
-                    "placeholder": '{"X-Api-Key": "secret", "Cookie": "session=abc"}',
-                }
-            ),
-            "follow_redirect": forms.NullBooleanSelect(attrs={"class": "form-control"}),
-            "depth": forms.NumberInput(attrs={"class": "form-control", "placeholder": "No limit", "min": 0}),
             "targets": forms.SelectMultiple(
                 attrs={
                     "class": "form-control select2-multiple",
@@ -307,13 +273,6 @@ class ScopeForm(forms.ModelForm):
                 }
             ),
         }
-
-    def clean_request_headers(self):
-        value = self.cleaned_data.get("request_headers")
-        parsed, err = parse_request_headers_value(value)
-        if err:
-            raise forms.ValidationError(err)
-        return parsed
 
     def clean(self):
         cleaned = super().clean()
