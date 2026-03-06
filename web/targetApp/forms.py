@@ -232,7 +232,9 @@ class ScopeForm(forms.ModelForm):
             self.fields["targets"].queryset = Target.objects.for_project(project)
 
         self.fields["workers"].queryset = SecatorWorker.objects.active()
-        self.fields["workers"].help_text = (
+        self.fields[
+            "workers"
+        ].help_text = (
             'Remote workers allowed for scans in this scope. Use "Allow Local worker" to include the reNgine server.'
         )
         if self.instance and self.instance.pk:
