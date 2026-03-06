@@ -5,7 +5,7 @@ Tests for Subdomain repository functionality.
 from django.utils import timezone
 
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
-from startScan.models import Subdomain, SubScan
+from startScan.models import Certificate, Subdomain, SubScan
 from utils.test_base import BaseTestCase
 
 
@@ -57,6 +57,63 @@ class TestSubdomainRepository(BaseTestCase):
         result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
+
+    def test_get_or_create_from_host_with_fqdn(self):
+        """Test get_or_create_from_host creates subdomain for FQDN."""
+        sub = self.subdomain_repo.get_or_create_from_host(
+            self.scan_history.id, self.data_generator.target.id, "api.example.com"
+        )
+        self.assertIsNotNone(sub)
+        self.assertEqual(sub.name, "api.example.com")
+        self.assertEqual(sub.scan_history_id, self.scan_history.id)
+
+    def test_get_or_create_from_host_with_ip(self):
+        """Test get_or_create_from_host creates subdomain for IP (CIDR-style scans)."""
+        sub = self.subdomain_repo.get_or_create_from_host(
+            self.scan_history.id, self.data_generator.target.id, "192.168.1.100"
+        )
+        self.assertIsNotNone(sub)
+        self.assertEqual(sub.name, "192.168.1.100")
+
+    def test_get_or_create_from_host_with_local_hostname(self):
+        """Test get_or_create_from_host accepts .lan hostname."""
+        sub = self.subdomain_repo.get_or_create_from_host(
+            self.scan_history.id, self.data_generator.target.id, "rengine.lan"
+        )
+        self.assertIsNotNone(sub)
+        self.assertEqual(sub.name, "rengine.lan")
+
+    def test_get_or_create_from_host_idempotent(self):
+        """Test get_or_create_from_host returns same subdomain on second call."""
+        sub1 = self.subdomain_repo.get_or_create_from_host(
+            self.scan_history.id, self.data_generator.target.id, "idempotent.example.com"
+        )
+        sub2 = self.subdomain_repo.get_or_create_from_host(
+            self.scan_history.id, self.data_generator.target.id, "idempotent.example.com"
+        )
+        self.assertIsNotNone(sub1)
+        self.assertIsNotNone(sub2)
+        self.assertEqual(sub1.id, sub2.id)
+
+    def test_get_or_create_from_host_rejects_empty(self):
+        """Test get_or_create_from_host returns None for empty/invalid host."""
+        self.assertIsNone(
+            self.subdomain_repo.get_or_create_from_host(self.scan_history.id, self.data_generator.target.id, "")
+        )
+        self.assertIsNone(
+            self.subdomain_repo.get_or_create_from_host(self.scan_history.id, self.data_generator.target.id, "  ")
+        )
+
+    def test_save_from_secator_accepts_lan_hostname(self):
+        """Test saving subdomain with .lan hostname (is_acceptable_subdomain_name)."""
+        item = {
+            "_type": "subdomain",
+            "host": "rengine.lan",
+            "verified": False,
+        }
+        result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "rengine.lan")
 
     def test_save_from_secator_with_extra_data(self):
         """Test saving subdomain with extra_data mapping."""
@@ -274,6 +331,20 @@ class TestSubdomainRepository(BaseTestCase):
 
         self.assertEqual(result, [])
 
+    def test_save_from_secator_stores_normalized_name_via_get_or_create_from_host(self):
+        """Subdomain item host is normalized (lowercase) via get_or_create_from_host."""
+        item = {
+            "_type": "subdomain",
+            "host": "MyHost.Example.com",
+            "verified": True,
+            "sources": ["amass"],
+        }
+        result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "myhost.example.com")
+        self.assertTrue(result.verified)
+        self.assertEqual(result.sources, ["amass"])
+
     def test_get_or_create_existing_subdomain(self):
         """Test get_or_create with existing subdomain."""
         subdomain1, created1 = self.subdomain_repo.get_or_create(
@@ -296,3 +367,22 @@ class TestSubdomainRepository(BaseTestCase):
         self.assertIsNotNone(subdomain)
         self.assertTrue(created)
         self.assertEqual(subdomain.name, "new.example.com")
+
+    def test_get_certificate_count(self):
+        """Subdomain.get_certificate_count returns count of linked certificates."""
+        subdomain = self.data_generator.create_subdomain(scan_history=self.scan_history)
+        self.assertEqual(subdomain.get_certificate_count(), 0)
+        Certificate.objects.create(
+            host="test.example.com",
+            subdomain=subdomain,
+            scan_history=self.scan_history,
+            fingerprint_sha256="a" * 64,
+        )
+        self.assertEqual(subdomain.get_certificate_count(), 1)
+        Certificate.objects.create(
+            host="test.example.com",
+            subdomain=subdomain,
+            scan_history=self.scan_history,
+            fingerprint_sha256="b" * 64,
+        )
+        self.assertEqual(subdomain.get_certificate_count(), 2)

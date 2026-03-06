@@ -42,27 +42,11 @@ Add or Import Targets
               IP Address
             </a>
           </li>
+          {% for tab in add_target_simple_tabs %}
           <li class="nav-item">
-            <a href="#cidr-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link">CIDR</a>
+            <a href="#{{ tab.tab_id }}" data-bs-toggle="tab" aria-expanded="false" class="nav-link">{{ tab.label }}</a>
           </li>
-          <li class="nav-item">
-            <a href="#url-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link">URL</a>
-          </li>
-          <li class="nav-item">
-            <a href="#organization-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link">Organization</a>
-          </li>
-          <li class="nav-item">
-            <a href="#username-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link">Username</a>
-          </li>
-          <li class="nav-item">
-            <a href="#filename-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link">Filename</a>
-          </li>
-          <li class="nav-item">
-            <a href="#slug-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link">Slug</a>
-          </li>
-          <li class="nav-item">
-            <a href="#string-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link">String</a>
-          </li>
+          {% endfor %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle arrow-none" href="#" id="import-dropdown" role="button"
             data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -76,51 +60,6 @@ Add or Import Targets
         </li>
       </ul>
       <div class="tab-content" id="pills-tabContent">
-        <!-- <div class="tab-pane fade show active" id="pills-add" role="tabpanel" aria-labelledby="pills-add-tab">
-          <div class="mb-4">
-            <div class="row">
-              <form class="simple-example" method="POST">
-                {% csrf_token %}
-                <div class="row mb-3">
-                  <div class="col-6">
-                    <div>
-                      <label for="simpleinput" class="form-label">Domain name</label>
-                      {{ form.name }}
-                      <span class="float-end"><a href="#" onclick="show_whois()" class="btn disabled" id="btn_view_whois">(View WHOIS)</a></span>
-                      {% if form.errors %}
-                      <div class="invalid-feedback" style="display: block;">
-                        {{ form.errors.name|striptags }}
-                      </div>
-                      {% endif %}
-                    </div>
-                  </div>
-                  <div class="col-6">
-                    <label for="domainDescription" class="form-label">Description (Optional)</label>
-                    {{ form.description }}
-                  </div>
-                </div>
-                <div class="col-12">
-                  <label for="domainDescription" class="form-label">Hackerone Target Team Handle (Optional)
-                    <br>
-                    This is used for sending vulnerability reports to Hackerone Program automatically. Team handle can be found from program url, hackerone.com/team_handle
-                  </label>
-                  {{ form.h1_team_handle }}
-                </div>
-                <div class="col-6">
-                  <div class="mt-3">
-                    <div class="form-check">
-                      <input type="checkbox" class="form-check-input" id="fetch_whois_checkbox" name="fetch_whois_checkbox" checked>
-                      <label class="form-check-label" for="fetch_whois_checkbox">Fetch WHOIS and domain related information</label>
-                      <br>
-                      <span class="text-muted">(reNgine-ng will automatically fetch whois and domain related information if selected.)</span>
-                    </div>
-                  </div>
-                </div>
-                <button class="btn btn-primary submit-fn mt-2 float-end" disabled type="submit" name="add-single-target" id="add-single-target" value="submit"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-plus"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add Target</button>
-              </form>
-            </div>
-          </div>
-        </div> -->
         <div class="tab-pane fade" id="ip-address-tab" role="tabpanel" aria-labelledby="ip-address-tab">
           <form method="post" class="add-target-form" id="ip-address-form">
             {% csrf_token %}
@@ -261,163 +200,16 @@ Add or Import Targets
                 </div>
                 <label for="addTargets">Hostnames</label>
                 <textarea class="form-control" id="addTargets" rows="8" spellcheck="false" name="addTargets" placeholder="example.com"></textarea>
+                <button class="btn btn-primary submit-fn mt-2 float-end" type="submit" id="add-multiple-targets" name="add-multiple-targets" value="submit">Add 0 Target</button>
               </div>
             </div>
-            <button class="btn btn-primary submit-fn mt-2 float-end" type="submit" id="add-multiple-targets" name="add-multiple-targets" value="submit">Add 0 Target</button>
           </form>
         </div>
-        <div class="tab-pane fade" id="cidr-tab" role="tabpanel" aria-labelledby="cidr-tab">
-          <form method="post" class="add-target-form">
-            {% csrf_token %}
-            <input type="hidden" name="target_type" value="{{ target_type_choices.cidr_range }}">
-            <input type="hidden" name="targetDescription" class="global-field-desc">
-            <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
-            <input type="hidden" name="targetOrganization" class="global-field-org">
-            <div class="alert alert-primary border-0 mb-4" role="alert">Add an IP range in CIDR notation (e.g. 192.168.1.0/24). Only a Target is created; use scans to discover hosts.</div>
-            <div class="mb-3">
-              <label for="cidr_value" class="form-label">CIDR range</label>
-              <input type="text" class="form-control form-control-lg" id="cidr_value" name="target_value" placeholder="192.168.1.0/24" required>
-            </div>
-            {% if secator_configs and secator_configs.scan_names %}<p class="text-muted small">Usable with Secator scans: {{ secator_configs.scan_names|join:", " }}</p>{% endif %}
-            <button class="btn btn-primary" type="submit" name="add-single-target" value="submit">Add Target</button>
-          </form>
-        </div>
-        <div class="tab-pane fade" id="url-tab" role="tabpanel" aria-labelledby="url-tab">
-          <form method="post" class="add-target-form">
-            {% csrf_token %}
-            <input type="hidden" name="target_type" value="{{ target_type_choices.url }}">
-            <input type="hidden" name="targetDescription" class="global-field-desc">
-            <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
-            <input type="hidden" name="targetOrganization" class="global-field-org">
-            <div class="alert alert-primary border-0 mb-4" role="alert">Add a single URL (e.g. https://example.com/path). Only a Target is created.</div>
-            <div class="mb-3">
-              <label for="url_value" class="form-label">URL</label>
-              <input type="url" class="form-control form-control-lg" id="url_value" name="target_value" placeholder="https://example.com" required>
-            </div>
-            {% if secator_configs and secator_configs.scan_names %}<p class="text-muted small">Usable with Secator scans: {{ secator_configs.scan_names|join:", " }}</p>{% endif %}
-            <button class="btn btn-primary" type="submit" name="add-single-target" value="submit">Add Target</button>
-          </form>
-        </div>
-        <div class="tab-pane fade" id="organization-tab" role="tabpanel" aria-labelledby="organization-tab">
-          <form method="post" class="add-target-form">
-            {% csrf_token %}
-            <input type="hidden" name="target_type" value="{{ target_type_choices.org_name }}">
-            <input type="hidden" name="targetDescription" class="global-field-desc">
-            <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
-            <input type="hidden" name="targetOrganization" class="global-field-org">
-            <div class="alert alert-primary border-0 mb-4" role="alert">Add an organization name as target (e.g. for OSINT or scope). Only a Target is created.</div>
-            <div class="mb-3">
-              <label for="org_value" class="form-label">Organization name</label>
-              <input type="text" class="form-control form-control-lg" id="org_value" name="target_value" placeholder="Acme Corp" required>
-            </div>
-            {% if secator_configs and secator_configs.workflow_names %}<p class="text-muted small">Usable with Secator workflows: {{ secator_configs.workflow_names|join:", " }}</p>{% endif %}
-            <button class="btn btn-primary" type="submit" name="add-single-target" value="submit">Add Target</button>
-          </form>
-        </div>
-        <div class="tab-pane fade" id="username-tab" role="tabpanel" aria-labelledby="username-tab">
-          <form method="post" class="add-target-form">
-            {% csrf_token %}
-            <input type="hidden" name="target_type" value="{{ target_type_choices.username }}">
-            <input type="hidden" name="targetDescription" class="global-field-desc">
-            <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
-            <input type="hidden" name="targetOrganization" class="global-field-org">
-            <div class="alert alert-primary border-0 mb-4" role="alert">Add a username as target (e.g. for credential or social checks). Only a Target is created.</div>
-            <div class="mb-3">
-              <label for="username_value" class="form-label">Username</label>
-              <input type="text" class="form-control form-control-lg" id="username_value" name="target_value" placeholder="j.doe" required>
-            </div>
-            {% if secator_configs and secator_configs.task_names %}<p class="text-muted small">Usable with Secator tasks: {{ secator_configs.task_names|join:", " }}</p>{% endif %}
-            <button class="btn btn-primary" type="submit" name="add-single-target" value="submit">Add Target</button>
-          </form>
-        </div>
-        <div class="tab-pane fade" id="filename-tab" role="tabpanel" aria-labelledby="filename-tab">
-          <form method="post" class="add-target-form">
-            {% csrf_token %}
-            <input type="hidden" name="target_type" value="{{ target_type_choices.filename }}">
-            <input type="hidden" name="targetDescription" class="global-field-desc">
-            <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
-            <input type="hidden" name="targetOrganization" class="global-field-org">
-            <div class="alert alert-primary border-0 mb-4" role="alert">Add a filename as target (e.g. for fuzzing or discovery). Only a Target is created.</div>
-            <div class="mb-3">
-              <label for="filename_value" class="form-label">Filename</label>
-              <input type="text" class="form-control form-control-lg" id="filename_value" name="target_value" placeholder="config.json" required>
-            </div>
-            <button class="btn btn-primary" type="submit" name="add-single-target" value="submit">Add Target</button>
-          </form>
-        </div>
-        <div class="tab-pane fade" id="slug-tab" role="tabpanel" aria-labelledby="slug-tab">
-          <form method="post" class="add-target-form">
-            {% csrf_token %}
-            <input type="hidden" name="target_type" value="{{ target_type_choices.slug }}">
-            <input type="hidden" name="targetDescription" class="global-field-desc">
-            <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
-            <input type="hidden" name="targetOrganization" class="global-field-org">
-            <div class="alert alert-primary border-0 mb-4" role="alert">Add a slug (URL-safe identifier). Only a Target is created.</div>
-            <div class="mb-3">
-              <label for="slug_value" class="form-label">Slug</label>
-              <input type="text" class="form-control form-control-lg" id="slug_value" name="target_value" placeholder="my-target-slug" required>
-            </div>
-            <button class="btn btn-primary" type="submit" name="add-single-target" value="submit">Add Target</button>
-          </form>
-        </div>
-        <div class="tab-pane fade" id="string-tab" role="tabpanel" aria-labelledby="string-tab">
-          <form method="post" class="add-target-form">
-            {% csrf_token %}
-            <input type="hidden" name="target_type" value="{{ target_type_choices.str }}">
-            <input type="hidden" name="targetDescription" class="global-field-desc">
-            <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
-            <input type="hidden" name="targetOrganization" class="global-field-org">
-            <div class="alert alert-primary border-0 mb-4" role="alert">Add a generic string target (e.g. for custom workflows or tasks). Only a Target is created.</div>
-            <div class="mb-3">
-              <label for="string_value" class="form-label">Value</label>
-              <input type="text" class="form-control form-control-lg" id="string_value" name="target_value" placeholder="Any string" required>
-            </div>
-            {% if secator_configs and secator_configs.workflow_names %}<p class="text-muted small">Usable with Secator workflows: {{ secator_configs.workflow_names|join:", " }}</p>{% endif %}
-            <button class="btn btn-primary" type="submit" name="add-single-target" value="submit">Add Target</button>
-          </form>
-        </div>
-        <div class="tab-pane fade" id="import-text-tab" role="tabpanel" aria-labelledby="import-text-tab">
-          <div class="row">
-            <div class="col-12">
-              <div class="alert alert-primary border-0 mb-4" role="alert">
-                Your txt file must have list of domains separated by a new line.
-                <br><br>
-                By default all domains imported from txt will have no description and no organization. If you choose to import multiple domains with description and/or organization, csv import is recommended.
-              </div>
-              <form method="post" class="add-target-form" enctype="multipart/form-data">
-                {% csrf_token %}
-                <input type="hidden" name="targetDescription" class="global-field-desc">
-                <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
-                <input type="hidden" name="targetOrganization" class="global-field-org">
-                <div class="mb-3">
-                  <input type="file" class="form-control" id="txtFile" required accept=".txt" name="txtFile" onchange="showname(this, '#selectedTextFileName')">
-                  <h6 id="selectedTextFileName" class="text-primary"></h6>
-                </div>
-                <input type="submit" class="btn btn-primary float-right mt-5 mb-2" value="Upload" name="import-txt-target">
-              </form>
-            </div>
-          </div>
-        </div>
-        <div class="tab-pane fade" id="import-csv-tab" role="tabpanel" aria-labelledby="import-csv-tab">
-          <div class="row">
-            <div class="col-12">
-              <div class="alert alert-warning border-0 mb-4" role="alert">
-                Your csv file must be in the format of <strong>domain, description, organization</strong> separated by a new line.
-              </div>
-              <form method="post" class="add-target-form" enctype="multipart/form-data">
-                {% csrf_token %}
-                <input type="hidden" name="targetDescription" class="global-field-desc">
-                <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
-                <input type="hidden" name="targetOrganization" class="global-field-org">
-                <div class="mb-3">
-                  <input type="file" class="form-control" id="csvFile" required accept=".csv" name="csvFile" onchange="showname(this, '#selectedCsvFileName')">
-                  <h6 id="selectedCsvFileName" class="text-primary"></h6>
-                </div>
-                <input type="submit" class="btn btn-primary float-right mt-5 mb-2" value="Upload" name="import-csv-target">
-              </form>
-            </div>
-          </div>
-        </div>
+        {% for tab in add_target_simple_tabs %}
+        {% include "target/add/_single_value_tab.html" with tab=tab %}
+        {% endfor %}
+        {% include "target/add/_import_tab.html" with tab_id="import-text-tab" alert_class="alert-primary" alert_content=import_txt_alert file_accept=".txt" file_input_name="txtFile" file_input_id="txtFile" selected_file_el_selector="#selectedTextFileName" selected_file_el_id="selectedTextFileName" submit_value="Upload" submit_name="import-txt-target" %}
+        {% include "target/add/_import_tab.html" with tab_id="import-csv-tab" alert_class="alert-warning" alert_content=import_csv_alert file_accept=".csv" file_input_name="csvFile" file_input_id="csvFile" selected_file_el_selector="#selectedCsvFileName" selected_file_el_id="selectedCsvFileName" submit_value="Upload" submit_name="import-csv-target" %}
       </div>
       <div class="card border mt-3 mb-0">
         <div class="card-header py-2">

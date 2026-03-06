@@ -10,8 +10,10 @@ from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.validators import is_valid_ip, is_valid_port
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
+from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import IpAddress, Port, ScanHistory
 from targetApp.models import Target
 
@@ -197,6 +199,9 @@ class PortRepository:
                 "Port already exists: %s on %s" % (port_number, ip_address),
                 level="debug",
             )
+
+        if raw_host and raw_host.strip().lower() != ip_address and is_acceptable_subdomain_name(raw_host):
+            SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, raw_host)
 
         return port_obj
 

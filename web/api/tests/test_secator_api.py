@@ -7,10 +7,11 @@ from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 
 from reNgine.definitions import RUNNING_TASK, SUCCESS_TASK
-from startScan.models import SecatorRunner, SubScan
+from startScan.models import Domain, ScanHistory, SecatorRunner, Subdomain, SubScan
 from utils.test_base import BaseTestCase
 
 
@@ -427,6 +428,56 @@ class TestGetSecatorInputTypesAndTargets(BaseTestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("input_types", response.data)
+
+    @patch("reNgine.secator.services.input_type_service.InputTypeService.get_input_types")
+    def test_resolves_target_id_from_subdomain_ids_same_target_different_domains(self, mock_get_input_types):
+        """API returns 200 when subdomain_ids span multiple domains but same target."""
+        mock_get_input_types.return_value = ["host"]
+        scan2 = ScanHistory.objects.create(
+            target=self.target,
+            start_scan_date=timezone.now(),
+            scan_status=2,
+            is_legacy_scan=False,
+            tasks=["subdomain_discovery"],
+        )
+        domain2 = Domain.objects.create(
+            name="other-example.com",
+            insert_date=timezone.now(),
+            scan_history=scan2,
+        )
+        subdomain2 = Subdomain.objects.create(
+            name="other.admin.example.com",
+            domain=domain2,
+            scan_history=scan2,
+        )
+        response = self.client.get(
+            self.url,
+            {
+                "subdomain_ids": f"{self.subdomain.id},{subdomain2.id}",
+                "workflow_id": self.secator_workflow.id,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("input_types", response.data)
+        self.assertIn("proposed_targets", response.data)
+
+    def test_subdomain_ids_from_different_targets_returns_400(self):
+        """API returns 400 when subdomain_ids belong to more than one target."""
+        target2 = self.data_generator.create_target()
+        self.data_generator.create_domain()
+        self.data_generator.create_scan_history()
+        subdomain2 = self.data_generator.create_subdomain(name="sub.target2.com")
+        self.assertEqual(subdomain2.scan_history.target_id, target2.id)
+        response = self.client.get(
+            self.url,
+            {
+                "subdomain_ids": f"{self.subdomain.id},{subdomain2.id}",
+                "workflow_id": self.secator_workflow.id,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("error", response.data)
+        self.assertIn("same target", response.data["error"].lower())
 
 
 class PostScanParamsEffectivePreviewTest(BaseTestCase):

@@ -254,6 +254,26 @@ const updateCommandOutputs = function(data) {
         return;
     }
 
+    const SCROLL_AT_BOTTOM_THRESHOLD = 10;
+
+    /**
+     * Ensure a single scroll listener is attached to a command output container
+     * so that user scroll position updates dataset.autoScroll (for stick-to-bottom behavior).
+     *
+     * @param {HTMLElement} container - The .command-output element
+     */
+    const ensureCommandOutputScrollListener = function(container) {
+        if (!container || container.dataset.scrollListenerAttached === 'true') {
+            return;
+        }
+        container.addEventListener('scroll', function() {
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            const nearBottom = (scrollHeight - scrollTop - clientHeight) < SCROLL_AT_BOTTOM_THRESHOLD;
+            container.dataset.autoScroll = nearBottom ? 'true' : 'false';
+        });
+        container.dataset.scrollListenerAttached = 'true';
+    };
+
     /**
      * Decide whether we should auto-scroll a specific output container
      * based on the user's current scroll position in that container.
@@ -271,8 +291,7 @@ const updateCommandOutputs = function(data) {
 
         const { scrollTop, scrollHeight, clientHeight } = container;
 
-        // Consider "near bottom" if within 100px of bottom
-        const nearBottom = (scrollHeight - scrollTop - clientHeight) < 100;
+        const nearBottom = (scrollHeight - scrollTop - clientHeight) < SCROLL_AT_BOTTOM_THRESHOLD;
 
         // Persist per-container preference: if user is near bottom, keep auto-scroll on;
         // if they scroll up, we stop auto-scrolling for this container.
@@ -298,7 +317,9 @@ const updateCommandOutputs = function(data) {
         }
 
         if (shouldAutoScrollContainer(container)) {
-            container.scrollTop = container.scrollHeight;
+            requestAnimationFrame(function() {
+                container.scrollTop = container.scrollHeight;
+            });
         }
     };
     
@@ -513,6 +534,7 @@ const updateCommandOutputs = function(data) {
         }
 
         if (outputElement) {
+            ensureCommandOutputScrollListener(outputElement);
             const statusStr = (command.status_string != null && command.status_string !== '') ? command.status_string : command.status;
             const skipOutputUpdate = command.end_time && statusStr !== 'RUNNING';
             if (!skipOutputUpdate) {

@@ -3,6 +3,7 @@ Unit tests for TargetBuilderService.
 """
 
 from reNgine.secator.services.target_builder_service import TargetBuilderService
+from startScan.models import Port
 from utils.test_base import BaseTestCase
 
 
@@ -60,6 +61,34 @@ class TestTargetBuilderService(BaseTestCase):
         self.assertIsInstance(result, list)
         for item in result:
             self.assertIn(":", item)
+
+    def test_build_targets_for_type_host_port_includes_ip_port_from_port_model(self):
+        """build_targets_for_type('host:port') includes IP:port from Ports on IPs linked to subdomains."""
+        ip_obj = self.data_generator.create_ip_address(address="10.0.0.1")
+        self.subdomain.ip_addresses.add(ip_obj)
+        Port.objects.create(number=8080, ip_address=ip_obj)
+        Port.objects.create(number=8443, ip_address=ip_obj)
+        service = TargetBuilderService(target_id=self.target.id)
+        result = service.build_targets_for_type("host:port")
+        self.assertIn("10.0.0.1:8080", result)
+        self.assertIn("10.0.0.1:8443", result)
+
+    def test_build_targets_for_type_host_port_with_subdomain_ids_returns_only_selected_ports(self):
+        """build_targets_for_type('host:port') with subdomain_ids returns IP:port only for selected subdomains."""
+        ip1 = self.data_generator.create_ip_address(address="10.0.0.1")
+        self.subdomain.ip_addresses.add(ip1)
+        Port.objects.create(number=8080, ip_address=ip1)
+        subdomain2 = self.data_generator.create_subdomain(name="other." + self.domain.name, domain=self.domain)
+        ip2 = self.data_generator.create_ip_address(address="10.0.0.2")
+        subdomain2.ip_addresses.add(ip2)
+        Port.objects.create(number=9090, ip_address=ip2)
+        service = TargetBuilderService(
+            target_id=self.target.id,
+            subdomain_ids=[self.subdomain.id],
+        )
+        result = service.build_targets_for_type("host:port")
+        self.assertIn("10.0.0.1:8080", result)
+        self.assertNotIn("10.0.0.2:9090", result)
 
     def test_build_targets_for_type_ip_returns_ip_addresses(self):
         """build_targets_for_type('ip') returns IPs linked to domain subdomains."""

@@ -133,6 +133,26 @@ def is_valid_domain_or_subdomain(domain):
         return False
 
 
+def is_acceptable_subdomain_name(name: str) -> bool:
+    """
+    Return True if the string can serve as a subdomain name (hostname or IP).
+
+    Use this predicate for creating or associating Subdomains from Secator findings
+    (Endpoint, Ip, Port, Record, Certificate, etc.). Accepts:
+    - Standard FQDNs (is_valid_domain)
+    - Local/private hostnames (.lan, .local, etc. via is_valid_domain_or_subdomain)
+    - IP addresses (IPv4/IPv6)
+    """
+    if not name or not isinstance(name, str):
+        return False
+    from reNgine.core.validators import is_valid_domain, is_valid_ip
+
+    name = name.strip()
+    if not name:
+        return False
+    return bool(is_valid_domain(name) or is_valid_domain_or_subdomain(name) or is_valid_ip(name))
+
+
 def get_domain_from_subdomain(subdomain):
     """Get domain from subdomain with improved handling of edge cases.
 

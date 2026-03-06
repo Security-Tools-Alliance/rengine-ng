@@ -27,6 +27,7 @@ from scanEngine.models import (
     Wordlist,
 )
 from startScan.models import (
+    Certificate,
     Command,
     DirectoryFile,
     DirectoryScan,
@@ -1928,6 +1929,50 @@ class WafSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "manufacturer"]
 
 
+class CertificateSerializer(serializers.ModelSerializer):
+    """Serializer for certificate detail in modal (no raw_value by default)."""
+
+    not_before_display = serializers.SerializerMethodField("get_not_before_display")
+    not_after_display = serializers.SerializerMethodField("get_not_after_display")
+    is_expired = serializers.SerializerMethodField("get_is_expired")
+
+    class Meta:
+        model = Certificate
+        fields = [
+            "id",
+            "host",
+            "subject_cn",
+            "subject_an",
+            "issuer_cn",
+            "issuer_dn",
+            "issuer",
+            "not_before",
+            "not_after",
+            "not_before_display",
+            "not_after_display",
+            "is_expired",
+            "self_signed",
+            "trusted",
+            "status",
+            "fingerprint_sha256",
+            "keysize",
+            "ip",
+        ]
+
+    def get_not_before_display(self, obj):
+        if obj.not_before is None:
+            return None
+        return obj.not_before.isoformat()
+
+    def get_not_after_display(self, obj):
+        if obj.not_after is None:
+            return None
+        return obj.not_after.isoformat()
+
+    def get_is_expired(self, obj):
+        return obj.is_expired() if obj.not_after else None
+
+
 class SubdomainSerializer(serializers.ModelSerializer):
     vuln_count = serializers.SerializerMethodField("get_vuln_count")
 
@@ -1942,6 +1987,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
     todos_count = serializers.SerializerMethodField("get_todos_count")
     directories_count = serializers.SerializerMethodField("get_directories_count")
     subscan_count = serializers.SerializerMethodField("get_subscan_count")
+    certificate_count = serializers.SerializerMethodField("get_certificate_count")
     ip_addresses = IpSerializer(many=True)
     ports = serializers.SerializerMethodField("get_ports")
     waf = WafSerializer(many=True)
@@ -1994,7 +2040,9 @@ class SubdomainSerializer(serializers.ModelSerializer):
             "todos_count",
             "directories_count",
             "subscan_count",
+            "certificate_count",
         ]
+        datatables_always_serialize = ("certificate_count",)
 
     def get_is_interesting(self, subdomain):
         interesting_names = self.context.get("datatable_interesting_names")
@@ -2041,6 +2089,10 @@ class SubdomainSerializer(serializers.ModelSerializer):
     def get_subscan_count(self, subdomain):
         val = getattr(subdomain, "subscan_count", None)
         return val if val is not None else subdomain.get_subscan_count
+
+    def get_certificate_count(self, subdomain):
+        val = getattr(subdomain, "certificate_count", None)
+        return val if val is not None else subdomain.get_certificate_count()
 
     def get_todos_count(self, subdomain):
         val = getattr(subdomain, "todos_count", None)

@@ -10,9 +10,11 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.utils import timezone
 
-from reNgine.core.validators import is_valid_domain, is_valid_email, is_valid_url
+from reNgine.core.validators import is_valid_email, is_valid_url
+from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, get_or_create_domain_for_target
 from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import Email, Employee, EndPoint, ScanHistory, Subdomain
 from targetApp.models import Target
 
@@ -444,8 +446,20 @@ class EmployeeRepository:
 
             # If no endpoint found, try subdomain association
             hostname = urlparse(url).hostname
-            if hostname and is_valid_domain(hostname):
-                if subdomain := Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first():
+            if hostname and is_acceptable_subdomain_name(hostname):
+                subdomain = None
+                try:
+                    scan_history = ScanHistory.objects.get(id=scan_history_id)
+                    target_id = getattr(scan_history, "target_id", None)
+                    if target_id:
+                        subdomain = SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, hostname)
+                except ObjectDoesNotExist:
+                    pass
+                if not subdomain:
+                    subdomain = Subdomain.objects.filter(
+                        name=hostname.strip().lower(), scan_history_id=scan_history_id
+                    ).first()
+                if subdomain:
                     employee.subdomain = subdomain
                     employee.save(update_fields=["subdomain"])
                     logger.log_line(

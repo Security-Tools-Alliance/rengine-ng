@@ -112,6 +112,26 @@
       return checked + ' of ' + total + ' selected';
     },
 
+    /**
+     * Format count text when a filter may be active. When filtered, shows both
+     * how many are selected for scan (global) and how many selected in the current view.
+     * @param {number} globalChecked - Total checked (will be sent to scan)
+     * @param {number} totalCount - Total items
+     * @param {boolean} filterActive - Whether a filter is applied
+     * @param {number} [visibleChecked] - Checked among visible (when filter active)
+     * @param {number} [visibleCount] - Visible items count (when filter active)
+     */
+    formatSelectedCountWithFilter: function(globalChecked, totalCount, filterActive, visibleChecked, visibleCount) {
+      if (!filterActive) {
+        return this.formatSelectedCount(globalChecked, totalCount);
+      }
+      const viewPart = visibleCount != null && visibleChecked != null
+        ? visibleChecked + ' of ' + visibleCount + ' in view'
+        : '';
+      const scanPart = globalChecked + ' selected for scan';
+      return viewPart ? scanPart + ' · ' + viewPart : scanPart;
+    },
+
     init: function() {
       this.bindEvents();
       this.initializeSubmitButtons();

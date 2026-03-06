@@ -1,0 +1,18 @@
+<div class="tab-pane fade" id="{{ tab.tab_id }}" role="tabpanel" aria-labelledby="{{ tab.tab_id }}">
+  <form method="post" class="add-target-form">
+    {% csrf_token %}
+    <input type="hidden" name="target_type" value="{{ tab.target_type_value }}">
+    <input type="hidden" name="targetDescription" class="global-field-desc">
+    <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
+    <input type="hidden" name="targetOrganization" class="global-field-org">
+    <div class="alert alert-primary border-0 mb-4" role="alert">{{ tab.alert }}</div>
+    <div class="mb-3">
+      <label for="{{ tab.input_id }}" class="form-label">{{ tab.input_label }}</label>
+      <input type="{{ tab.input_type }}" class="form-control form-control-lg" id="{{ tab.input_id }}" name="target_value" placeholder="{{ tab.placeholder }}" required>
+    </div>
+    {% if tab.secator_names %}
+    <p class="text-muted small">Usable with Secator {{ tab.secator_hint_label }}: {{ tab.secator_names|join:", " }}</p>
+    {% endif %}
+    <button class="btn btn-primary" type="submit" name="add-single-target" value="submit">Add Target</button>
+  </form>
+</div>

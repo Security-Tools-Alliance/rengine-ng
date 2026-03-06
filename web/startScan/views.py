@@ -28,7 +28,6 @@ from api.helpers.datatables import (
 )
 from api.serializers import IpSerializer
 from reNgine.core.data import safe_int_cast
-from targetApp.services.scan_param_definitions import PARAM_KEYS as SCAN_PARAM_KEYS
 from reNgine.core.path import resolve_results_dir_under_base, safe_rmtree
 from reNgine.definitions import (
     ABORTED_TASK,
@@ -86,6 +85,7 @@ from startScan.secator.form import build_start_secator_scan_kwargs
 from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.constants import RENGINE_TARGET_TYPES_FOR_JS
 from targetApp.models import Organization, Target
+from targetApp.services.scan_param_definitions import PARAM_KEYS as SCAN_PARAM_KEYS
 from targetApp.services.scan_params_context import build_scan_params_form_context
 from targetApp.services.scope_params import get_scope_for_target
 

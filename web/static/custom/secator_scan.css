@@ -188,6 +188,10 @@
 }
 
 /* Left column list: max height with scroll (unified for pages and modal) */
+.secator-list-toolbar {
+  flex-shrink: 0;
+}
+
 .secator-list-container {
   max-height: 645px;
   min-height: 120px;

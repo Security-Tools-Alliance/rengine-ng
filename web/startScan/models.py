@@ -979,6 +979,11 @@ class Subdomain(models.Model):
     def get_subscan_count(self):
         return SubScan.objects.filter(subdomain__id=self.id).distinct().count()
 
+    def get_certificate_count(self):
+        if hasattr(self, "certificate_count"):
+            return self.certificate_count
+        return Certificate.objects.filter(subdomain=self).count()
+
     @property
     def formatted_attack_surface(self):
         """Format description as HTML with proper styling"""

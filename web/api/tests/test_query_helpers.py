@@ -135,7 +135,7 @@ class BuildSubdomainDatatableQuerysetTestCase(BaseTestCase):
         self.assertIsInstance(interesting_names, set)
 
     def test_subdomain_queryset_has_count_annotations(self):
-        """Queryset rows have endpoint_count, vuln_count, subscan_count, todos_count, etc."""
+        """Queryset rows have endpoint_count, vuln_count, subscan_count, certificate_count, todos_count, etc."""
         slug = self.data_generator.project.slug
         queryset, _ = build_subdomain_datatable_queryset(slug)
         first = next(iter(queryset), None)
@@ -144,4 +144,5 @@ class BuildSubdomainDatatableQuerysetTestCase(BaseTestCase):
         self.assertIsInstance(getattr(first, "endpoint_count", None), int)
         self.assertIsInstance(getattr(first, "vuln_count", None), int)
         self.assertIsInstance(getattr(first, "subscan_count", None), int)
+        self.assertIsInstance(getattr(first, "certificate_count", None), int)
         self.assertIsInstance(getattr(first, "todos_count", None), int)

@@ -3,6 +3,7 @@ Tests for DNS repository functionality.
 """
 
 from reNgine.services.repositories.dns_repository import DnsRepository
+from startScan.models import Subdomain
 from utils.test_base import BaseTestCase
 
 
@@ -40,6 +41,27 @@ class TestDnsRepository(BaseTestCase):
         # name field stores the domain name (record_name), not the value
         self.assertEqual(result.name, "www.example.com")
         self.assertEqual(result.type, "A")
+
+    def test_save_from_secator_record_creates_subdomain_via_get_or_create_from_host(self):
+        """Record item with name/host creates Subdomains via same process (get_or_create_from_host)."""
+        item = {
+            "_type": "record",
+            "name": "api.example.com",
+            "type": "A",
+            "host": "192.168.1.2",
+        }
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        subdomain_for_name = Subdomain.objects.filter(scan_history=self.scan_history, name="api.example.com").first()
+        self.assertIsNotNone(
+            subdomain_for_name,
+            "Subdomain for record name should be created via get_or_create_from_host",
+        )
+        subdomain_for_host = Subdomain.objects.filter(scan_history=self.scan_history, name="192.168.1.2").first()
+        self.assertIsNotNone(
+            subdomain_for_host,
+            "Subdomain for record host (IP) should be created via get_or_create_from_host",
+        )
 
     def test_save_from_secator_valid_aaaa_record(self):
         """Test saving valid AAAA record from Secator."""

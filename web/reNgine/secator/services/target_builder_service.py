@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from django.db.models import QuerySet
 
-from startScan.models import Domain, EndPoint, IpAddress, Subdomain
+from startScan.models import Domain, EndPoint, IpAddress, Port, Subdomain
 from targetApp.constants import (
     TARGET_TYPE_CIDR_RANGE,
     TARGET_TYPE_EMAIL,
@@ -205,12 +205,14 @@ class TargetBuilderService:
         return hosts
 
     def _targets_host_port(self) -> List[str]:
-        """Target value (if host:port/port) or default alive endpoints as host:port from linked Domain(s)."""
+        """Target value (if host:port/port), default alive endpoints as host:port, and IP:port from Ports on IPs linked to subdomains."""
         if self.target.target_type in (TARGET_TYPE_HOST_PORT, TARGET_TYPE_PORT) and self.target.value:
             return [self.target.value]
         domain_ids = self.domain_ids
         if not domain_ids:
             return []
+        host_ports: set = set()
+
         qs = (
             EndPoint.objects.filter(
                 domain_id__in=domain_ids,
@@ -222,7 +224,6 @@ class TargetBuilderService:
         )
         if self.subdomain_ids:
             qs = qs.filter(subdomain_id__in=self.subdomain_ids)
-        host_ports: set = set()
         for url in qs:
             if not url:
                 continue
@@ -235,6 +236,18 @@ class TargetBuilderService:
             if port is None:
                 port = 443 if scheme == "https" else 80
             host_ports.add(f"{host}:{port}")
+
+        port_qs = (
+            Port.objects.filter(ip_address__ip_addresses__domain_id__in=domain_ids)
+            .values_list("ip_address__address", "number")
+            .distinct()
+        )
+        if self.subdomain_ids:
+            port_qs = port_qs.filter(ip_address__ip_addresses__id__in=self.subdomain_ids)
+        for address, number in port_qs:
+            if address and number is not None and 1 <= number <= 65535:
+                host_ports.add(f"{address}:{number}")
+
         return sorted(host_ports)
 
     def _targets_ip(self) -> List[str]:

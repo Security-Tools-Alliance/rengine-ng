@@ -44,12 +44,22 @@
         const targets = (data && data.proposed_targets) ? data.proposed_targets : [];
         const totalCount = (data && data.total_count != null) ? data.total_count : targets.length;
         const truncated = data && data.truncated;
+        const commonWebPorts = (data && data.common_web_ports) ? data.common_web_ports : [];
+        const uncommonWebPorts = (data && data.uncommon_web_ports) ? data.uncommon_web_ports : [];
         let previewHtml = '';
         targets.forEach((t, idx) => {
           const safeVal = String(t).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
           const id = prefix + '-task-' + taskId + '-tgt-' + idx;
           const name = inputNamePrefix + taskId;
-          previewHtml += '<div class="' + itemWrapperClass + ' form-check form-check-sm"><input class="form-check-input ' + checkboxClass + '" type="checkbox" data-task-id="' + taskId + '" data-task-type="' + taskType + '" name="' + name + '" id="' + id + '" value="' + safeVal + '" checked><label class="form-check-label text-break" for="' + id + '">' + t + '</label></div>';
+          const { scheme, targetKind } = window.SecatorScan.inferTargetSchemeAndKind(t);
+          const dataScheme = scheme ? ' data-scheme="' + scheme + '"' : '';
+          const dataKind = ' data-target-kind="' + (targetKind || '') + '"';
+          let dataWebPortType = '';
+          if (targetKind === 'host:port' && typeof window.SecatorScan.getWebPortType === 'function') {
+            const webPortType = window.SecatorScan.getWebPortType(t, commonWebPorts, uncommonWebPorts);
+            if (webPortType) dataWebPortType = ' data-web-port-type="' + webPortType + '"';
+          }
+          previewHtml += '<div class="' + itemWrapperClass + ' form-check form-check-sm"' + dataScheme + dataKind + dataWebPortType + '><input class="form-check-input ' + checkboxClass + '" type="checkbox" data-task-id="' + taskId + '" data-task-type="' + taskType + '" name="' + name + '" id="' + id + '" value="' + safeVal + '" checked><label class="form-check-label text-break" for="' + id + '">' + t + '</label></div>';
         });
         if (truncated && totalCount > targets.length) {
           const truncatedText = window.SecatorScan.formatTruncatedCount(targets.length, totalCount);
@@ -57,10 +67,13 @@
         }
         counts[taskId] = targets.length;
         const typesSpan = includeTypesSpan ? ' <span class="secator-task-types"></span>' : '';
+        const quickFiltersButtonsHtml = window.SecatorScan.getQuickFilterButtonsHtml ? window.SecatorScan.getQuickFilterButtonsHtml(types) : '';
+        const quickFiltersHtml = '<div class="secator-task-quick-filters d-flex flex-wrap align-items-center gap-1" title="Filter by type (toggle to filter)">' + quickFiltersButtonsHtml + '</div>';
         const blockHtml = '<div class="secator-task-targets-block border rounded p-2 mb-2 bg-light" data-task-id="' + taskId + '" data-task-type="' + taskType + '">' +
           '<div class="d-flex justify-content-between align-items-center mb-1 small"><strong>' + taskName + '</strong>' + typesSpan + '</div>' +
           '<div class="d-flex flex-wrap align-items-center gap-2 mb-1 small">' +
           '<input type="text" class="form-control form-control-sm secator-task-filter" placeholder="Filter..." style="max-width:160px" data-task-id="' + taskId + '" autocomplete="off">' +
+          quickFiltersHtml +
           '<button type="button" class="btn btn-outline-secondary btn-sm secator-task-select-all" data-task-id="' + taskId + '">Select all</button>' +
           '<button type="button" class="btn btn-outline-secondary btn-sm secator-task-deselect-all" data-task-id="' + taskId + '">Deselect all</button>' +
           '<span class="secator-task-count-text text-muted"></span></div>' +

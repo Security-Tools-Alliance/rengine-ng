@@ -15,11 +15,13 @@ from django.db.models import Count
 from django.utils import timezone
 import validators
 
-from reNgine.core.validators import is_valid_domain, is_valid_url
+from reNgine.core.validators import is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
+from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.distributed_lock import DistributedLock
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import DirectoryFile, Domain, EndPoint, ScanHistory, Subdomain, Technology
 from targetApp.models import Target
 
@@ -139,7 +141,8 @@ class EndpointRepository:
             defaults=defaults,
         )
 
-        self._associate_with_subdomain(endpoint, http_url, scan_history_id)
+        hostname_override = (item.get("host") or "").strip() or None
+        self._associate_with_subdomain(endpoint, http_url, scan_history_id, hostname_override=hostname_override)
         self._mark_as_default_if_first(endpoint)
         self._associate_technologies(endpoint, item)
 
@@ -454,68 +457,54 @@ class EndpointRepository:
             return False
 
     def _associate_with_subdomain(
-        self, endpoint: EndPoint, http_url: str, scan_history_id: int, auto_create_subdomain: bool = True
+        self,
+        endpoint: EndPoint,
+        http_url: str,
+        scan_history_id: int,
+        auto_create_subdomain: bool = True,
+        hostname_override: Optional[str] = None,
     ) -> None:
         """
-        Associate endpoint with subdomain based on URL hostname.
+        Associate endpoint with subdomain based on URL hostname (or IP).
 
-        Args:
-            endpoint: Endpoint object
-            http_url: Endpoint URL
-            scan_history_id: Scan history ID
-            auto_create_subdomain: If True, create subdomain if it doesn't exist. If False, only associate if subdomain exists.
+        Uses is_acceptable_subdomain_name and SubdomainRepository.get_or_create_from_host
+        so that IPs and .lan/.local hostnames get a Subdomain and the endpoint is linked.
+        When URL parsing yields no hostname, hostname_override (e.g. item["host"]) is used.
         """
         try:
             if endpoint.subdomain_id:
                 return
 
             parsed_url = urlparse(http_url)
-            hostname = parsed_url.hostname
-            if not hostname or not is_valid_domain(hostname):
+            hostname = (parsed_url.hostname or "").strip() or (hostname_override or "").strip() or None
+            if not hostname:
                 return
-
-            try:
-                with transaction.atomic():
-                    scan_history = ScanHistory.objects.select_for_update().get(id=scan_history_id)
-                    target_value = (
-                        Target.objects.filter(id=scan_history.target_id).values_list("value", flat=True).first()
-                        if scan_history.target_id
-                        else None
+            if not is_acceptable_subdomain_name(hostname):
+                return
+            if not auto_create_subdomain:
+                subdomain = Subdomain.objects.filter(
+                    name=hostname.strip().lower(), scan_history_id=scan_history_id
+                ).first()
+                if not subdomain:
+                    logger.log_line(
+                        PREFIX_ENDPOINT_REPO,
+                        "ASSOCIATE",
+                        "Subdomain %s not found in scan %s and auto_create_subdomain=False, "
+                        "skipping association" % (hostname, scan_history_id),
+                        level="debug",
                     )
-                    domain = resolve_domain_for_scan(scan_history_id, hostname, (target_value or ""), create=True)
-                    domain_id = endpoint.domain_id or (domain.id if domain else None)
-                    subdomain = Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first()
-                    if not subdomain:
-                        if not auto_create_subdomain:
-                            logger.log_line(
-                                PREFIX_ENDPOINT_REPO,
-                                "ASSOCIATE",
-                                "Subdomain %s not found in scan %s and auto_create_subdomain=False, "
-                                "skipping association" % (hostname, scan_history_id),
-                                level="debug",
-                            )
-                            return
-
-                        scheme = parsed_url.scheme
-                        subdomain_http_url = None
-                        if scheme in ("http", "https"):
-                            subdomain_http_url = f"{scheme}://{hostname}"
-
-                        subdomain = Subdomain.objects.create(
-                            name=hostname,
-                            scan_history_id=scan_history_id,
-                            domain_id=domain_id,
-                            discovered_date=timezone.now(),
-                            http_url=subdomain_http_url,
-                        )
-                        logger.log_line(
-                            PREFIX_ENDPOINT_REPO,
-                            "ASSOCIATE",
-                            "Created subdomain %s for scan %s" % (hostname, scan_history_id),
-                            level="info",
-                        )
-            except ObjectDoesNotExist:
-                return
+                    return
+            else:
+                try:
+                    scan_history = ScanHistory.objects.get(id=scan_history_id)
+                    target_id = scan_history.target_id
+                except ObjectDoesNotExist:
+                    return
+                if not target_id:
+                    return
+                subdomain = SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, hostname)
+                if not subdomain:
+                    return
 
             endpoint.subdomain = subdomain
             endpoint.save(update_fields=["subdomain"])
@@ -680,6 +669,12 @@ class EndpointRepository:
                 "Created endpoint for IP %s" % (ip_address,),
                 level="info",
             )
+        target_id = getattr(scan_history, "target_id", None)
+        if target_id and not endpoint.subdomain_id:
+            subdomain = SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, ip_address)
+            if subdomain:
+                endpoint.subdomain = subdomain
+                endpoint.save(update_fields=["subdomain"])
         return endpoint
 
     def _associate_technologies(self, endpoint: EndPoint, item: Dict[str, Any]) -> None:

@@ -8,9 +8,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 
-from reNgine.core.validators import is_valid_domain
+from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, get_or_create_domain_for_target
 from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import DNSRecord, Domain, DomainInfo
 from targetApp.models import Target
 
@@ -133,7 +134,7 @@ class DnsRepository:
 
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
         domain = get_or_create_domain_for_target(scan_history_id, target_value) if target_value else None
-        if not domain and is_valid_domain(record_name):
+        if not domain and is_acceptable_subdomain_name(record_name):
             domain = get_or_create_domain_for_target(scan_history_id, record_name)
         if not domain:
             logger.log_line(
@@ -143,6 +144,11 @@ class DnsRepository:
                 level="warning",
             )
             return None
+
+        if is_acceptable_subdomain_name(record_name):
+            SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, record_name)
+        if host and host != record_name and is_acceptable_subdomain_name(host):
+            SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, host)
 
         # Extract data from item
         name_value = record_name

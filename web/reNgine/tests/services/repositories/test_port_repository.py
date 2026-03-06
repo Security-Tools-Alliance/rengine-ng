@@ -3,6 +3,7 @@ Tests for Port repository functionality.
 """
 
 from reNgine.services.repositories.port_repository import PortRepository
+from startScan.models import Subdomain
 from utils.test_base import BaseTestCase
 
 
@@ -368,3 +369,20 @@ class TestPortRepository(BaseTestCase):
         result = self.port_repo._process_secator_port_item(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNone(result)
+
+    def test_save_from_secator_with_host_creates_subdomain_via_get_or_create_from_host(self):
+        """Port item with host (hostname different from ip) creates/links Subdomain; name is normalized."""
+        item = {
+            "_type": "port",
+            "port": 443,
+            "ip": "192.168.1.1",
+            "host": "Server.Example.lan",
+            "service_name": "https",
+        }
+        result = self.port_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.number, 443)
+        self.assertEqual(result.ip_address.address, "192.168.1.1")
+        subdomain = Subdomain.objects.filter(scan_history=self.scan_history, name="server.example.lan").first()
+        self.assertIsNotNone(subdomain, "Subdomain should be created via get_or_create_from_host")
+        self.assertEqual(subdomain.name, "server.example.lan")

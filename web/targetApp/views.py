@@ -107,6 +107,107 @@ ADD_SINGLE_TARGET_TYPES = {
     TARGET_TYPE_USERNAME,
 }
 
+# Specs for the 7 "simple" add-target tabs (single value input). Used to render tab panes via a shared partial.
+ADD_TARGET_SIMPLE_TAB_SPECS = [
+    {
+        "tab_id": "cidr-tab",
+        "label": "CIDR",
+        "target_type_key": TARGET_TYPE_CIDR_RANGE,
+        "alert": "Add an IP range in CIDR notation (e.g. 192.168.1.0/24). Only a Target is created; use scans to discover hosts.",
+        "input_label": "CIDR range",
+        "input_id": "cidr_value",
+        "input_type": "text",
+        "placeholder": "192.168.1.0/24",
+        "secator_hint": "scan_names",
+        "secator_hint_label": "scans",
+    },
+    {
+        "tab_id": "url-tab",
+        "label": "URL",
+        "target_type_key": TARGET_TYPE_URL,
+        "alert": "Add a single URL (e.g. https://example.com/path). Only a Target is created.",
+        "input_label": "URL",
+        "input_id": "url_value",
+        "input_type": "url",
+        "placeholder": "https://example.com",
+        "secator_hint": "scan_names",
+        "secator_hint_label": "scans",
+    },
+    {
+        "tab_id": "organization-tab",
+        "label": "Organization",
+        "target_type_key": TARGET_TYPE_ORG_NAME,
+        "alert": "Add an organization name as target (e.g. for OSINT or scope). Only a Target is created.",
+        "input_label": "Organization name",
+        "input_id": "org_value",
+        "input_type": "text",
+        "placeholder": "Acme Corp",
+        "secator_hint": "workflow_names",
+        "secator_hint_label": "workflows",
+    },
+    {
+        "tab_id": "username-tab",
+        "label": "Username",
+        "target_type_key": TARGET_TYPE_USERNAME,
+        "alert": "Add a username as target (e.g. for credential or social checks). Only a Target is created.",
+        "input_label": "Username",
+        "input_id": "username_value",
+        "input_type": "text",
+        "placeholder": "j.doe",
+        "secator_hint": "task_names",
+        "secator_hint_label": "tasks",
+    },
+    {
+        "tab_id": "filename-tab",
+        "label": "Filename",
+        "target_type_key": TARGET_TYPE_FILENAME,
+        "alert": "Add a filename as target (e.g. for fuzzing or discovery). Only a Target is created.",
+        "input_label": "Filename",
+        "input_id": "filename_value",
+        "input_type": "text",
+        "placeholder": "config.json",
+        "secator_hint": None,
+        "secator_hint_label": None,
+    },
+    {
+        "tab_id": "slug-tab",
+        "label": "Slug",
+        "target_type_key": TARGET_TYPE_SLUG,
+        "alert": "Add a slug (URL-safe identifier). Only a Target is created.",
+        "input_label": "Slug",
+        "input_id": "slug_value",
+        "input_type": "text",
+        "placeholder": "my-target-slug",
+        "secator_hint": None,
+        "secator_hint_label": None,
+    },
+    {
+        "tab_id": "string-tab",
+        "label": "String",
+        "target_type_key": TARGET_TYPE_STR,
+        "alert": "Add a generic string target (e.g. for custom workflows or tasks). Only a Target is created.",
+        "input_label": "Value",
+        "input_id": "string_value",
+        "input_type": "text",
+        "placeholder": "Any string",
+        "secator_hint": "workflow_names",
+        "secator_hint_label": "workflows",
+    },
+]
+
+
+def _build_add_target_simple_tabs(target_type_choices, secator_configs):
+    """Build context list for simple add-target tab panes (single value per type)."""
+    tabs = []
+    for spec in ADD_TARGET_SIMPLE_TAB_SPECS:
+        tab = {
+            **spec,
+            "target_type_value": target_type_choices.get(spec["target_type_key"], spec["target_type_key"]),
+            "secator_names": (secator_configs.get(spec["secator_hint"], []) if spec.get("secator_hint") else []),
+        }
+        tabs.append(tab)
+    return tabs
+
 
 def _get_secator_configs_for_add_target():
     """Return Secator workflow, scan and task names for display on add target form. Safe if Secator unavailable."""
@@ -751,14 +852,27 @@ def add_target(request, slug):
         return http.HttpResponseRedirect(reverse("list_target", kwargs={"slug": slug}))
 
     # GET request
+    secator_configs = _get_secator_configs_for_add_target()
+    target_type_choices = dict(TARGET_TYPE_CHOICES)
     context = {
         "add_target_li": "active",
         "target_data_active": "active",
         "form": form,
         "rengine_target_types": RENGINE_TARGET_TYPES_FOR_JS,
-        "secator_configs": _get_secator_configs_for_add_target(),
-        "target_type_choices": dict(TARGET_TYPE_CHOICES),
+        "secator_configs": secator_configs,
+        "target_type_choices": target_type_choices,
         "override_prefix": TARGET_OVERRIDE_PREFIX,
+        "add_target_simple_tabs": _build_add_target_simple_tabs(target_type_choices, secator_configs),
+        "import_txt_alert": mark_safe(
+            "Your txt file must have list of domains separated by a new line."
+            "<br><br>By default all domains imported from txt will have no description "
+            "and no organization. If you choose to import multiple domains with "
+            "description and/or organization, csv import is recommended."
+        ),
+        "import_csv_alert": mark_safe(
+            "Your csv file must be in the format of "
+            "<strong>domain, description, organization</strong> separated by a new line."
+        ),
     }
     context.update(build_scan_params_form_context(level="target"))
     return render(request, "target/add.html", context)

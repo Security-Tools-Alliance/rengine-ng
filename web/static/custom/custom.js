@@ -643,8 +643,8 @@ function updateVulnStatus(endpoint_url, element, id, status) {
 
     $row.toggleClass("table-success text-strike", status);
     $element.text(status ? 'RESOLVED' : 'OPEN')
-        .toggleClass('badge-soft-primary', !status)
-        .toggleClass('badge-soft-success', status)
+        .toggleClass('badge badge-soft-danger', !status)
+        .toggleClass('badge badge-soft-success', status)
         .attr('onclick', `vuln_status_change('${endpoint_url}', this, ${id}, ${!status})`);
 }
 
@@ -1631,6 +1631,78 @@ function render_directories_in_xl_modal(endpoint_url, scan_id, subdomain_id, sub
 	typeof window.initServerSideDataTable === "function" ? window.initServerSideDataTable("#directory-modal-datatable", config) : $("#directory-modal-datatable").DataTable(config);
 }
 
+function render_certificate_in_xl_modal(subdomain_id, subdomain_name, scan_id) {
+	const enc = typeof htmlEncode === "function" ? htmlEncode : function (x) { return x == null ? "" : String(x); };
+	const title = "Certificate(s) for " + (subdomain_name ? enc(subdomain_name) : "");
+	$("#xl-modal-title").empty().html(title);
+	$("#xl-modal-content").empty();
+	$("#xl-modal-footer").empty();
+	if (window.ModalManager) {
+		ModalManager.setXlTitle(title);
+		ModalManager.setXlContent({ bodyHtml: "", footerHtml: "" });
+		ModalManager.showXlOnly();
+	} else {
+		var modalEl = document.getElementById("modal-xl-scroll-dialog");
+		if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
+			var modalInst = bootstrap.Modal.getOrCreateInstance(modalEl);
+			modalInst.show();
+		}
+	}
+	$("#xl-modal-content").append("<p class=\"text-muted\"><i class=\"fas fa-spinner fa-spin\"></i> Loading certificate(s)...</p>");
+	var apiUrl = (typeof window.DETAIL_SCAN_API_CERTIFICATES_LIST !== "undefined" ? window.DETAIL_SCAN_API_CERTIFICATES_LIST : "") || "";
+	if (!apiUrl) {
+		$("#xl-modal-content").empty().append("<p class=\"text-danger mb-0\">Certificate API URL not configured.</p>");
+		return;
+	}
+	var params = "subdomain_id=" + encodeURIComponent(String(subdomain_id));
+	if (scan_id != null && scan_id !== "") params += "&scan_id=" + encodeURIComponent(String(scan_id));
+	var url = apiUrl + (apiUrl.indexOf("?") !== -1 ? "&" : "?") + params;
+	fetch(url, {
+		method: "GET",
+		credentials: "same-origin",
+		headers: { "X-CSRFToken": typeof getCookie === "function" ? getCookie("csrftoken") : "", "X-Requested-With": "XMLHttpRequest" }
+	}).then(function (resp) { return resp.ok ? resp.json() : Promise.reject(new Error("Request failed")); }).then(function (data) {
+		var certs = data && data.certificates ? data.certificates : [];
+		$("#xl-modal-content").empty();
+		if (certs.length === 0) {
+			$("#xl-modal-content").append("<p class=\"text-muted mb-0\">No certificate(s) found for this subdomain.</p>");
+			return;
+		}
+		function formatCert(cert, index) {
+			var subjCn = cert.subject_cn != null ? enc(cert.subject_cn) : "—";
+			var issuerCn = cert.issuer_cn != null ? enc(cert.issuer_cn) : (cert.issuer != null ? enc(cert.issuer) : "—");
+			var notBefore = cert.not_before_display != null ? enc(cert.not_before_display) : (cert.not_before != null ? enc(cert.not_before) : "—");
+			var notAfter = cert.not_after_display != null ? enc(cert.not_after_display) : (cert.not_after != null ? enc(cert.not_after) : "—");
+			var host = cert.host != null ? enc(cert.host) : "—";
+			var fp = cert.fingerprint_sha256 ? enc(cert.fingerprint_sha256) : "";
+			var fpShort = fp.length > 24 ? fp.slice(0, 24) + "…" : fp;
+			var status = cert.status != null ? enc(cert.status) : "";
+			var keysize = cert.keysize != null ? String(cert.keysize) : "—";
+			var selfSigned = cert.self_signed === true ? "<span class=\"badge badge-soft-warning\">Self-signed</span>" : "";
+			var trusted = cert.trusted === true ? "<span class=\"badge badge-soft-success\">Trusted</span>" : "";
+			var expired = cert.is_expired === true ? "<span class=\"badge badge-soft-danger\">Expired</span>" : "";
+			var sans = "";
+			if (cert.subject_an && Array.isArray(cert.subject_an) && cert.subject_an.length > 0) {
+				sans = "<div class=\"mt-1\"><strong>Subject Alternative Names:</strong> <span class=\"text-break\">" + cert.subject_an.map(function (s) { return enc(s); }).join(", ") + "</span></div>";
+			}
+			var cardTitle = certs.length > 1 ? "Certificate #" + (index + 1) + " – " + host : "Certificate details";
+			var html = "<div class=\"card mb-3\"><div class=\"card-header\">" + cardTitle + "</div><div class=\"card-body\">" +
+				"<div><strong>Subject CN:</strong> " + subjCn + "</div>" +
+				(sans ? sans : "") +
+				"<div class=\"mt-1\"><strong>Issuer:</strong> " + issuerCn + "</div>" +
+				"<div class=\"mt-1\"><strong>Valid from:</strong> " + notBefore + " <strong>to</strong> " + notAfter + " " + expired + "</div>" +
+				"<div class=\"mt-1\">" + selfSigned + " " + trusted + (status ? " <span class=\"badge badge-soft-info\">" + status + "</span>" : "") + " <span class=\"badge badge-outline-secondary\">" + keysize + " bits</span></div>" +
+				(fp ? "<div class=\"mt-1 small text-muted\"><strong>Fingerprint (SHA256):</strong> <code title=\"" + fp + "\">" + fpShort + "</code></div>" : "") +
+				"</div></div>";
+			return html;
+		}
+		for (var i = 0; i < certs.length; i++) {
+			$("#xl-modal-content").append(formatCert(certs[i], i));
+		}
+	}).catch(function () {
+		$("#xl-modal-content").empty().append("<p class=\"text-danger mb-0\">Failed to load certificate(s).</p>");
+	});
+}
 
 function get_and_render_subscan_history(endpoint, subdomain_id, subdomain_name) {
 	const payload = { subdomain_id: subdomain_id };

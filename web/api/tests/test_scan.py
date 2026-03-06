@@ -6,8 +6,10 @@ import json
 from unittest.mock import patch
 
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 
+from startScan.models import Domain, ScanHistory, Subdomain
 from utils.test_base import BaseTestCase
 
 
@@ -429,6 +431,66 @@ class TestInitiateSubTask(BaseTestCase):
         self.assertGreaterEqual(len(subscans), 1)
         created_ids = [s.id for s in subscans]
         self.assertIn(call_kwargs["subscan_id"], created_ids)
+
+    @patch("api.views.start_secator_scan")
+    def test_initiate_subtask_accepts_subdomains_same_target_different_domains(self, mock_start_scan):
+        """When subdomain_ids span multiple domains but same target, POST returns 200."""
+        self.data_generator.create_secator_workflow()
+        target = self.data_generator.target
+        subdomain1 = self.data_generator.subdomain
+        scan2 = ScanHistory.objects.create(
+            target=target,
+            start_scan_date=timezone.now(),
+            scan_status=2,
+            is_legacy_scan=False,
+            tasks=["subdomain_discovery"],
+        )
+        domain2 = Domain.objects.create(
+            name="other-example.com",
+            insert_date=timezone.now(),
+            scan_history=scan2,
+        )
+        subdomain2 = Subdomain.objects.create(
+            name="other.admin.example.com",
+            domain=domain2,
+            scan_history=scan2,
+        )
+        mock_start_scan.return_value = {"status": True, "scan_id": scan2.id}
+
+        url = reverse("api:initiate_subscan")
+        data = {
+            "subdomain_ids": [subdomain1.id, subdomain2.id],
+            "workflow_id": self.data_generator.secator_workflow.id,
+            "scan_history_id": self.data_generator.scan_history.id,
+        }
+
+        response = self.client.post(url, data=json.dumps(data), content_type="application/json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(len(response.data["results"]), 2)
+
+    def test_initiate_subtask_subdomains_different_targets_returns_400(self):
+        """When subdomain_ids belong to more than one target, POST returns 400 with same target message."""
+        self.data_generator.create_secator_workflow()
+        first_subdomain_id = self.data_generator.subdomain.id
+        self.data_generator.create_target()
+        self.data_generator.create_domain()
+        self.data_generator.create_scan_history()
+        subdomain2 = self.data_generator.create_subdomain(name="sub.target2.com")
+
+        url = reverse("api:initiate_subscan")
+        data = {
+            "subdomain_ids": [first_subdomain_id, subdomain2.id],
+            "workflow_id": self.data_generator.secator_workflow.id,
+        }
+
+        response = self.client.post(url, data=json.dumps(data), content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.data["status"])
+        self.assertIn("error", response.data)
+        self.assertIn("same target", response.data["error"].lower())
 
 
 class TestListEngines(BaseTestCase):

@@ -107,7 +107,7 @@ def build_subdomain_datatable_queryset(
     """
 
     from recon_note.models import TodoNote
-    from startScan.models import EndPoint, Subdomain, SubScan, Vulnerability
+    from startScan.models import Certificate, EndPoint, Subdomain, SubScan, Vulnerability
 
     subdomains = Subdomain.objects.filter(domain__scan_history__target__project__slug=project_slug)
     if is_important:
@@ -152,6 +152,7 @@ def build_subdomain_datatable_queryset(
             critical_count=count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 4}),
             vuln_count=count_subquery(Vulnerability, "subdomain_id"),
             subscan_count=count_subquery(SubScan, "subdomain_id"),
+            certificate_count=count_subquery(Certificate, "subdomain_id"),
             todos_count=count_subquery(TodoNote, "subdomain_id", filter_kwargs={"is_done": False}),
         )
         .prefetch_related(

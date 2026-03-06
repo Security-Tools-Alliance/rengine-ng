@@ -149,6 +149,33 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         item = {"url": url, "status_code": 200} | overrides
         return self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
+    def test_endpoint_with_ip_url_gets_subdomain(self):
+        """Endpoint with IP URL (CIDR-style scan) is associated with a subdomain named after the IP."""
+        endpoint = self._save_secator_endpoint("http://192.168.1.1/", status_code=200)
+        self.assertIsNotNone(endpoint, "Endpoint should be created")
+        endpoint.refresh_from_db()
+        self.assertIsNotNone(
+            endpoint.subdomain_id,
+            "Endpoint with IP host should be linked to a subdomain (get_or_create_from_host)",
+        )
+        self.assertEqual(endpoint.subdomain.name, "192.168.1.1")
+
+    def test_associate_with_subdomain_uses_hostname_override_when_url_has_no_host(self):
+        """When URL has no hostname, item['host'] (hostname_override) is used for subdomain association."""
+        endpoint = self._save_secator_endpoint("https://test.example.com/")
+        self.assertIsNotNone(endpoint)
+        endpoint.subdomain = None
+        endpoint.save(update_fields=["subdomain"])
+        self.repository._associate_with_subdomain(
+            endpoint,
+            "http:///",
+            self.scan_history.id,
+            hostname_override="override.example.com",
+        )
+        endpoint.refresh_from_db()
+        self.assertIsNotNone(endpoint.subdomain_id)
+        self.assertEqual(endpoint.subdomain.name, "override.example.com")
+
     def test_first_endpoint_becomes_default(self):
         """Test that the first endpoint for a subdomain becomes is_default=True."""
         # Create first endpoint via Secator

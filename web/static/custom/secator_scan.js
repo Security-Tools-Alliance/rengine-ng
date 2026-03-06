@@ -231,6 +231,22 @@
           showDetail($tile, taskId, 'task');
         }
       });
+      if (typeof this.bindListToolbar === 'function') {
+        this.bindListToolbar({
+          prefix: containers.prefix,
+          mode: mode,
+          listContainer: $listContainer,
+          listItemClass: listItemClass,
+          onSelectionChange: function() {
+            if (mode === 'tasks') {
+              self.updateTaskSelection($form);
+              showDetail(null, null, 'task');
+              self.initializeSelectionListeners($form);
+              $(document).trigger('secator:contentLoaded');
+            }
+          }
+        });
+      }
     },
 
     handleViewToggle: function(view, e) {
@@ -316,10 +332,19 @@
         if ($warning && $warning.length) $warning.hide();
         if ($toolbar && $toolbar.length) $toolbar.show();
         $preview.empty();
+        const commonWebPorts = data.common_web_ports || [];
+        const uncommonWebPorts = data.uncommon_web_ports || [];
         targets.forEach((t, idx) => {
           const safeVal = String(t).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
           const id = (idPrefix || prefix) + '-tgt-' + idx;
+          const { scheme, targetKind } = window.SecatorScan.inferTargetSchemeAndKind(t);
           const $wrap = $('<div>').addClass(itemWrapperClass + ' form-check-sm');
+          if (scheme) $wrap.attr('data-scheme', scheme);
+          $wrap.attr('data-target-kind', targetKind || '');
+          if (targetKind === 'host:port' && typeof window.SecatorScan.getWebPortType === 'function') {
+            const webPortType = window.SecatorScan.getWebPortType(t, commonWebPorts, uncommonWebPorts);
+            if (webPortType) $wrap.attr('data-web-port-type', webPortType);
+          }
           $wrap.append($('<input>').attr({ type: 'checkbox', id: id, value: safeVal }).addClass('form-check-input ' + checkboxClass).prop('checked', true));
           $wrap.append($('<label>').attr('for', id).addClass('form-check-label text-break').text(t));
           $preview.append($wrap);
@@ -328,6 +353,9 @@
         if (truncated && totalCount > targets.length) {
           const truncatedText = window.SecatorScan.formatTruncatedCount(targets.length, totalCount, { showing: true });
           $preview.append($('<div class="small text-muted mt-1 w-100">').text(truncatedText));
+        }
+        if ($toolbar && $toolbar.length && prefix && window.SecatorScan.updateQuickFiltersVisibility) {
+          window.SecatorScan.updateQuickFiltersVisibility($toolbar, prefix, types);
         }
       }
       if (typeof onRendered === 'function') onRendered(data, options);

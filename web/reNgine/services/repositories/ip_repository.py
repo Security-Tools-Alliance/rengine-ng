@@ -9,8 +9,10 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
 from reNgine.core.validators import is_valid_ip
+from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import IpAddress, ScanHistory, Subdomain
 from targetApp.models import Target
 
@@ -129,10 +131,14 @@ class IpRepository:
                 level="debug",
             )
 
-        # Associate with subdomain if hostname provided (use value not used as IP when applicable)
+        # Get or create subdomain for hostname (or IP) and associate IP to it
         hostname = self._resolve_hostname_for_association(item, ip_address)
-        if hostname:
-            self._associate_with_subdomain(ip_obj, hostname, scan_history_id)
+        if not hostname:
+            hostname = ip_address
+        if hostname and is_acceptable_subdomain_name(hostname):
+            subdomain = SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, hostname)
+            if subdomain:
+                self._associate_with_subdomain(ip_obj, hostname, scan_history_id)
 
         # Ensure an endpoint exists for this IP so it can be used as a Secator target (e.g. subscans)
         from reNgine.services.repositories.endpoint_repository import EndpointRepository

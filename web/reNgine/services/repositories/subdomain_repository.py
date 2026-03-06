@@ -11,9 +11,9 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from reNgine.core.validators import is_valid_domain, is_valid_ip
-from reNgine.services.repositories.endpoint_repository import EndpointRepository
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import Domain, IpAddress, ScanHistory, Subdomain, Technology
 from targetApp.models import Target
 
@@ -85,7 +85,7 @@ class SubdomainRepository:
             )
             return None
 
-        if not is_valid_domain(subdomain_name):
+        if not is_acceptable_subdomain_name(subdomain_name):
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
                 "SAVE",
@@ -94,69 +94,51 @@ class SubdomainRepository:
             )
             return None
 
-        domain = self._resolve_domain_for_subdomain(scan_history_id, target_id, subdomain_name)
-        if not domain:
+        subdomain = self.get_or_create_from_host(scan_history_id, target_id, subdomain_name)
+        if not subdomain:
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
                 "SAVE",
-                "Could not resolve domain for target_id=%s, subdomain=%s" % (target_id, subdomain_name),
+                "Could not get or create subdomain for target_id=%s, subdomain=%s" % (target_id, subdomain_name),
                 level="warning",
             )
             return None
 
-        scan_history = ScanHistory.objects.get(id=scan_history_id)
-
-        # Check if this subdomain is in the imported list
         is_imported = self._is_imported_subdomain(subdomain_name, rengine_context or {})
 
-        # Prepare enriched defaults
-        defaults = {
-            "domain": domain,
-            "is_imported_subdomain": is_imported,
-            "discovered_date": timezone.now(),
-            "verified": item.get("verified", False),
-            "sources": item.get("sources", []),
-        }
-
-        if extra_data := item.get("extra_data", {}):
-            self._map_extra_data_to_subdomain_fields(extra_data, defaults)
-        subdomain, created = Subdomain.objects.get_or_create(
-            name=subdomain_name,
-            scan_history=scan_history,
-            defaults=defaults,
-        )
-
-        # If subdomain already exists but we need to update the imported flag
-        if not created and is_imported and not subdomain.is_imported_subdomain:
+        update_fields = []
+        if item.get("verified", False) != subdomain.verified:
+            subdomain.verified = item.get("verified", False)
+            update_fields.append("verified")
+        sources = item.get("sources", [])
+        if sources != (subdomain.sources or []):
+            subdomain.sources = sources
+            update_fields.append("sources")
+        if is_imported and not subdomain.is_imported_subdomain:
             subdomain.is_imported_subdomain = True
-            subdomain.save(update_fields=["is_imported_subdomain"])
-            logger.log_line(
-                PREFIX_SUBDOMAIN_REPO,
-                "SAVE",
-                "Updated subdomain %s as imported" % (subdomain_name,),
-                level="info",
-            )
+            update_fields.append("is_imported_subdomain")
 
-        # Associate with IP addresses if available
+        extra_data = item.get("extra_data", {}) or {}
+        if extra_data:
+            defaults: Dict[str, Any] = {}
+            self._map_extra_data_to_subdomain_fields(extra_data, defaults)
+            for key, value in defaults.items():
+                if getattr(subdomain, key, None) != value:
+                    setattr(subdomain, key, value)
+                    update_fields.append(key)
+
+        if update_fields:
+            subdomain.save(update_fields=list(dict.fromkeys(update_fields)))
+
         self._associate_ip_addresses(subdomain, item, scan_history_id)
-
-        # Associate with technologies if available
         self._associate_technologies(subdomain, item)
 
-        if created:
-            logger.log_line(
-                PREFIX_SUBDOMAIN_REPO,
-                "SAVE",
-                "Created subdomain: %s (imported: %s)" % (subdomain_name, is_imported),
-                level="info",
-            )
-        else:
-            logger.log_line(
-                PREFIX_SUBDOMAIN_REPO,
-                "SAVE",
-                "Subdomain already exists: %s" % (subdomain_name,),
-                level="debug",
-            )
+        logger.log_line(
+            PREFIX_SUBDOMAIN_REPO,
+            "SAVE",
+            "Saved subdomain: %s (imported: %s)" % (subdomain.name, is_imported),
+            level="info",
+        )
 
         rengine_context = rengine_context or {}
         if subscan_id := rengine_context.get("subscan_id"):
@@ -173,6 +155,44 @@ class SubdomainRepository:
         """Resolve Domain for this scan and subdomain using TLD extraction."""
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
         return resolve_domain_for_scan(scan_history_id, subdomain_name, target_value, create=True)
+
+    def get_or_create_from_host(self, scan_history_id: int, target_id: int, hostname: str) -> Optional[Subdomain]:
+        """
+        Get or create a Subdomain for the given scan and host (hostname or IP).
+
+        Single entry point for "obtain subdomain for this host" used by Endpoint, Ip, Port,
+        Record, Certificate, and Vulnerability repositories. Uses is_acceptable_subdomain_name
+        (accepts FQDNs, .lan/.local, and IPs).
+
+        Returns:
+            Subdomain or None if hostname is empty, invalid, or domain resolution fails.
+        """
+        if not hostname or not isinstance(hostname, str):
+            return None
+        normalized = hostname.strip().lower()
+        if not normalized:
+            return None
+        if not is_acceptable_subdomain_name(normalized):
+            return None
+        target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
+        domain = resolve_domain_for_scan(scan_history_id, normalized, target_value, create=True)
+        if not domain:
+            return None
+        try:
+            scan_history = ScanHistory.objects.get(id=scan_history_id)
+        except ObjectDoesNotExist:
+            return None
+        defaults = {
+            "domain": domain,
+            "is_imported_subdomain": False,
+            "discovered_date": timezone.now(),
+        }
+        subdomain, _ = Subdomain.objects.get_or_create(
+            name=normalized,
+            scan_history=scan_history,
+            defaults=defaults,
+        )
+        return subdomain
 
     def _map_extra_data_to_subdomain_fields(self, extra_data: Dict[str, Any], defaults: Dict[str, Any]) -> None:
         # Map common extra data fields to subdomain fields
@@ -367,6 +387,8 @@ class SubdomainRepository:
 
             if not ip_addresses and isinstance(ip_addresses, list):
                 return
+
+            from reNgine.services.repositories.endpoint_repository import EndpointRepository
 
             endpoint_repo = EndpointRepository()
             created_endpoints_cache: set[tuple[str, int, int]] = set()

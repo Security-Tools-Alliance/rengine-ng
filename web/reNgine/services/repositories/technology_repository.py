@@ -9,10 +9,12 @@ from urllib.parse import urlparse
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import DatabaseError, IntegrityError
 
-from reNgine.core.validators import is_valid_domain, is_valid_url
+from reNgine.core.validators import is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
+from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.logger import get_module_logger
-from startScan.models import EndPoint, Subdomain, Technology
+from reNgine.utilities.url import is_acceptable_subdomain_name
+from startScan.models import EndPoint, ScanHistory, Subdomain, Technology
 
 
 PREFIX_TECH_REPO = "[TECH_REPO]"
@@ -427,7 +429,7 @@ class TechnologyRepository:
 
                     if hostname := urlparse(match_target).hostname:
                         self._associate_with_subdomain_by_hostname(tech_obj, hostname, scan_history_id)
-            elif is_valid_domain(match_target):
+            elif is_acceptable_subdomain_name(match_target):
                 self._associate_with_subdomain_by_hostname(tech_obj, match_target, scan_history_id)
             else:
                 logger.log_line(
@@ -446,16 +448,21 @@ class TechnologyRepository:
             )
 
     def _associate_with_subdomain_by_hostname(self, tech_obj: Technology, hostname: str, scan_history_id: int) -> None:
-        """
-        Associate technology with subdomain by hostname.
-
-        Args:
-            tech_obj: Technology object
-            hostname: Hostname
-            scan_history_id: Scan history ID
-        """
+        """Associate technology with subdomain by hostname (or IP). Uses get_or_create_from_host when needed."""
         try:
-            if subdomain := Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first():
+            subdomain = None
+            try:
+                scan_history = ScanHistory.objects.get(id=scan_history_id)
+                target_id = getattr(scan_history, "target_id", None)
+                if target_id and is_acceptable_subdomain_name(hostname):
+                    subdomain = SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, hostname)
+            except ObjectDoesNotExist:
+                pass
+            if not subdomain:
+                subdomain = Subdomain.objects.filter(
+                    name=hostname.strip().lower(), scan_history_id=scan_history_id
+                ).first()
+            if subdomain:
                 subdomain.technologies.add(tech_obj)
                 logger.log_line(
                     PREFIX_TECH_REPO,

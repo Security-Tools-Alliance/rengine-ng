@@ -151,6 +151,7 @@ from scanEngine.services.worker_ssh import (
     validate_deploy_path,
 )
 from startScan.models import (
+    Certificate,
     Command,
     DirectoryFile,
     DirectoryScan,
@@ -178,6 +179,7 @@ from targetApp.constants import TARGET_TYPE_HOST
 from targetApp.models import Organization, Scope, Target
 
 from .serializers import (
+    CertificateSerializer,
     CommandSerializer,
     DirectoryFileSerializer,
     DirectoryScanSerializer,
@@ -2089,14 +2091,20 @@ class InitiateSubTask(APIView):
             if not subdomains.exists():
                 return Response({"status": False, "error": "No valid subdomains found"}, status=404)
 
-            # Get unique domains from subdomains
-            domains = subdomains.values_list("domain", flat=True).distinct()
-            if len(domains) > 1:
-                return Response({"status": False, "error": "All subdomains must belong to the same domain"}, status=400)
-
-            domain_id = domains[0]
-            domain = get_domain_by_id(domain_id)
-            target_id_from_domain = domain.scan_history.target_id if (domain and domain.scan_history_id) else None
+            # Require all subdomains to belong to the same target (they may span multiple Domain/scan)
+            target_ids = list(subdomains.values_list("scan_history__target_id", flat=True).distinct())
+            target_ids = [tid for tid in target_ids if tid is not None]
+            if not target_ids:
+                return Response(
+                    {"status": False, "error": "Could not resolve target from subdomains"},
+                    status=400,
+                )
+            if len(target_ids) > 1:
+                return Response(
+                    {"status": False, "error": "All subdomains must belong to the same target"},
+                    status=400,
+                )
+            target_id_from_domain = target_ids[0]
 
         except Exception as e:
             return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=400)
@@ -2117,7 +2125,7 @@ class InitiateSubTask(APIView):
         if execution_mode == "tasks" and selected_targets_per_task:
             if target_id_from_domain is None:
                 return Response(
-                    {"status": False, "error": "Domain has no linked scan/target; cannot run per-task scans"},
+                    {"status": False, "error": "Subdomains have no linked scan/target; cannot run per-task scans"},
                     status=400,
                 )
             run_result = run_per_task_secator_scans(
@@ -2343,26 +2351,23 @@ class GetSecatorInputTypesAndTargets(APIView):
                 )
             target_id = domain.scan_history.target_id
         elif subdomain_ids:
-            domain_ids = list(
-                Subdomain.objects.filter(id__in=subdomain_ids).values_list("domain_id", flat=True).distinct()
+            target_ids = list(
+                Subdomain.objects.filter(id__in=subdomain_ids)
+                .values_list("scan_history__target_id", flat=True)
+                .distinct()
             )
-            if not domain_ids or None in domain_ids:
+            target_ids = [tid for tid in target_ids if tid is not None]
+            if not target_ids:
                 return Response(
-                    {"error": "Could not resolve domain from subdomain_ids"},
+                    {"error": "Could not resolve target from subdomain_ids"},
                     status=HTTP_400_BAD_REQUEST,
                 )
-            if len(domain_ids) > 1:
+            if len(target_ids) > 1:
                 return Response(
-                    {"error": "All subdomain_ids must belong to the same domain"},
+                    {"error": "All subdomain_ids must belong to the same target"},
                     status=HTTP_400_BAD_REQUEST,
                 )
-            domain = get_domain_by_id(domain_ids[0])
-            if not domain or domain.scan_history_id is None:
-                return Response(
-                    {"error": "Domain has no linked scan"},
-                    status=HTTP_400_BAD_REQUEST,
-                )
-            target_id = domain.scan_history.target_id
+            target_id = target_ids[0]
         else:
             return Response(
                 {"error": "target_id, domain_id, or subdomain_ids is required"},
@@ -2385,6 +2390,7 @@ class GetSecatorInputTypesAndTargets(APIView):
             )
 
         try:
+            from reNgine.definitions import COMMON_WEB_PORTS, UNCOMMON_WEB_PORTS
             from reNgine.secator.services.input_type_service import InputTypeService
             from reNgine.secator.services.target_builder_service import TargetBuilderService
 
@@ -2418,6 +2424,8 @@ class GetSecatorInputTypesAndTargets(APIView):
                     "proposed_targets": proposed_targets,
                     "total_count": total_count,
                     "truncated": truncated,
+                    "common_web_ports": list(COMMON_WEB_PORTS),
+                    "uncommon_web_ports": list(UNCOMMON_WEB_PORTS),
                 }
             )
         except (SecatorWorkflow.DoesNotExist, SecatorScan.DoesNotExist, SecatorTask.DoesNotExist):
@@ -4101,6 +4109,29 @@ class ListEndpoints(APIView):
             endpoints_serializer = EndpointSerializer(endpoints, many=True)
 
         return Response({"endpoints": endpoints_serializer.data})
+
+
+class ListCertificates(APIView):
+    """List certificates for a subdomain (for certificate modal)."""
+
+    def get(self, request, format=None):
+        req = self.request
+        subdomain_id = safe_int_cast(req.query_params.get("subdomain_id"))
+        scan_id = safe_int_cast(req.query_params.get("scan_id"))
+
+        if not subdomain_id:
+            return Response(
+                {"detail": "subdomain_id is required"},
+                status=HTTP_400_BAD_REQUEST,
+            )
+
+        certificates = Certificate.objects.filter(subdomain_id=subdomain_id)
+        if scan_id is not None:
+            certificates = certificates.filter(scan_history_id=scan_id)
+        certificates = certificates.order_by("-discovered_date")
+
+        serializer = CertificateSerializer(certificates, many=True)
+        return Response({"certificates": serializer.data})
 
 
 class EndPointViewSet(DatatableListMixin, DatatablePaginationMixin, AdvancedSearchMixin, viewsets.ModelViewSet):

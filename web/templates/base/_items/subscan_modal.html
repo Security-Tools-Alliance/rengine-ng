@@ -271,11 +271,26 @@
 						window.SecatorScan.buildCompactList($html, mode, {
 							listContainer: $listContainer,
 							listItemClass: 'subscan-list-item',
-							showTaskCategories: true,
+							showTaskCategories: false,
 							onWorkflowClick: function($tile, workflowId) { showItemDetail($tile, 'workflow', workflowId); },
 							onScanClick: function($tile, scanType) { showItemDetail($tile, 'scan', scanType); },
 							onTaskClick: function($tile, taskId) { refreshTasksDetail(); fetchInputTypesAndTargets(); checkSubscanSelection(); }
 						});
+						if (typeof window.SecatorScan.bindListToolbar === 'function') {
+							window.SecatorScan.bindListToolbar({
+								prefix: 'subscan',
+								mode: mode,
+								listContainer: $listContainer,
+								listItemClass: 'subscan-list-item',
+								onSelectionChange: function() {
+									if (mode === 'tasks') {
+										refreshTasksDetail();
+										fetchInputTypesAndTargets();
+										checkSubscanSelection();
+									}
+								}
+							});
+						}
 					}
 					// Store full HTML on content row for list/grid toggle (unified with pages)
 					$contentRow.data('full-html', data.html).data('list-view-html', placeholderHtml);
@@ -338,6 +353,10 @@
 				$root: $modal,
 				prefix: 'subscan',
 				getExecutionMode: function() { return $modal.find('.execution-mode-card.selected').data('mode'); },
+				getTargetId: function() {
+					const val = $('#context_target_id').val();
+					return (val !== undefined && val !== null && String(val).trim() !== '') ? String(val).trim() : '';
+				},
 				getDomainId: function() { return getSubscanContext().domainId; },
 				getSubdomainIds: function() { return getSubscanContext().subdomainIds; },
 				getWorkflowId: function() { return $container.find('input[name="workflow_id"]:checked').val(); },
