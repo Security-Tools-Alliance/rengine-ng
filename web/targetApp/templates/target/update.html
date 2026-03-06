@@ -19,7 +19,7 @@ Update Target {{ form.value.value }}
     <div class="card">
       <div class="card-body">
         <h4 class="header-title">Update Target</h4>
-        <form method="POST" id="scan-params-form" data-scan-params-level="target" data-scan-params-target-id="{{ target.id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
+        <form method="POST" id="scan-params-form">
           {% csrf_token %}
           <div class="row mb-3">
             <div class="col-6">
@@ -60,17 +60,7 @@ Update Target {{ form.value.value }}
           {% endif %}
 
           <hr>
-          <div class="d-flex align-items-center mb-2">
-            <h5 class="mb-0 me-2">Scan Parameter Overrides</h5>
-            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#scanOverridesSection" aria-expanded="{% if scan_params_values %}true{% else %}false{% endif %}">
-              <i class="fe-sliders me-1"></i>{% if target.scan_config %}Configured{% else %}Configure{% endif %}
-            </button>
-          </div>
-          <p class="text-muted small mb-2">Leave fields empty to inherit from the scope (if any) or system defaults. Filled values override the scope for this target only.</p>
-
-          <div class="collapse {% if scan_params_values %}show{% endif %}" id="scanOverridesSection">
-            {% include "shared/_scan_params_block.html" with scan_params_level="target" scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_prefix=override_prefix id_prefix="target_" default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category %}
-          </div>
+          {% include "shared/_scan_params_section.html" with section_collapse_id="scanOverridesSection" section_form_id="scan-params-form" scan_params_prefix=override_prefix id_prefix="target_" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values %}
 
           <button class="btn btn-primary submit-fn mt-3 float-end" type="submit">Update Target</button>
         </form>
@@ -81,5 +71,4 @@ Update Target {{ form.value.value }}
 {% endblock main_content %}
 
 {% block page_level_script %}
-<script src="{% static 'custom/scan_params.js' %}"></script>
 {% endblock page_level_script %}

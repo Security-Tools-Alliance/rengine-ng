@@ -6,10 +6,9 @@
  *    inputs and custom selects, initProfileCategories, onSwitchChange, profile button/select handlers.
  *    On scan launch pages, secator_scan_core.js + secator_scan.js handle profile toggling;
  *    this script handles it on org/scope/target forms that include _scan_params_block.html.
- * 2. Draft collection: getFieldPrefix, collectDraft, buildScanParamsPreviewPayload (centralized
- *    payload for level, ids, draft from form/data-* attributes).
- * 3. AJAX preview: getPreviewUrl, getCsrfToken, triggerEffectivePreview (request-id guard),
- *    scheduleEffectivePreview (debounce), bindEffectiveLiveUpdate.
+ * 2. Draft collection: getFieldPrefix, collectDraft, buildScanParamsPreviewPayloadFromRoot.
+ * 3. AJAX preview: block-root driven (no parent traversal). getFormForRoot, getScopeForRoot,
+ *    triggerEffectivePreview(root), scheduleEffectivePreview(root) per-root debounce, bindEffectiveLiveUpdate.
  *
  * Each .profile-selector is guarded by data-scan-params-initialized to avoid double-binding.
  */
@@ -86,8 +85,35 @@
             $customSelect.val(initialVal);
           }
         }
+        if (initialVal) {
+          const $builtinBtn = $section.find('button[data-profile-type][data-profile-value]').filter(function () {
+            return $(this).attr('data-profile-type') === category && $(this).attr('data-profile-value') === initialVal;
+          }).first();
+          if ($builtinBtn.length) {
+            const $group = $builtinBtn.closest('.btn-group');
+            if ($group.length) {
+              $group.find('button').each(function () {
+                resetBuiltinButtonClasses($(this), category);
+              });
+            }
+            $builtinBtn.addClass(CATEGORY_BUTTON_CLASS[category] || '').addClass('active');
+            const $sel = $section.find('select[name="' + CATEGORY_CUSTOM_SELECT[category] + '"], select[id$="' + category + '_custom_profile"]').first();
+            if ($sel.length) { $sel.val(''); }
+            const $descDiv = $section.find('div[id$="' + category + '_custom_description"]');
+            if ($descDiv.length) { $descDiv.hide().text(''); }
+          } else {
+            const $sel = $section.find('select[name="' + CATEGORY_CUSTOM_SELECT[category] + '"], select[id$="' + category + '_custom_profile"]').first();
+            const $descDiv = $section.find('div[id$="' + category + '_custom_description"]');
+            if ($sel.length && $descDiv.length && $sel.val()) {
+              const opt = $sel.find('option:selected');
+              const desc = opt.length && opt.attr('data-description') ? opt.attr('data-description') : '';
+              $descDiv.text(desc).show();
+            }
+          }
+        }
         syncProfileHiddensFromVisibleUI($scope);
-        triggerEffectivePreview();
+        const $blockRoot = $container.closest('[data-scan-params-block-root="true"]');
+        if ($blockRoot.length) scheduleEffectivePreview($blockRoot[0]);
       });
       $section.find('button, select').prop('disabled', false);
       $section.find('select[id$="_custom_profile"]').each(function () {
@@ -117,6 +143,11 @@
       $selector.attr('data-scan-params-initialized', '1');
 
       const $scope = getFormScope($selector);
+      const $wrapper = $selector.closest('[data-scan-params-level]');
+      const entityCategoriesStr = ($wrapper.length && $wrapper.attr('data-scan-params-entity-profile-categories')) || '';
+      const entityProfileCategories = entityCategoriesStr
+        ? entityCategoriesStr.split(',').map(function (s) { return s.trim(); }).filter(Boolean)
+        : [];
 
       Object.keys(CATEGORY_SWITCH_MAP).forEach(function (category) {
         const switchId = CATEGORY_SWITCH_MAP[category];
@@ -125,13 +156,19 @@
         const $hidden = $scope.find('input[name="' + hiddenName + '"]').first();
 
         const serverValue = $hidden.length ? ($hidden.attr('value') || '').toString().trim() : '';
-        const hasExplicitValue = serverValue !== '';
+        const isEntityOverride = entityProfileCategories.indexOf(category) !== -1;
+        const hasExplicitValue = serverValue !== '' && isEntityOverride;
         if (hasExplicitValue && $hidden.length) {
           $hidden.attr('data-initial-profile-value', serverValue);
         }
 
         if ($switch.length) {
-          toggleCategory(category, $switch.is(':checked'), $scope, $selector);
+          if (hasExplicitValue) {
+            $switch.prop('checked', true);
+            toggleCategory(category, true, $scope, $selector);
+          } else {
+            toggleCategory(category, $switch.is(':checked'), $scope, $selector);
+          }
         }
       });
     });
@@ -153,7 +190,8 @@
     const $selector = $switch.closest('.profile-selector');
     toggleCategory(category, $switch.is(':checked'), $scope, $selector);
     if (!$switch.is(':checked')) {
-      scheduleEffectivePreview();
+      const $blockRoot = $switch.closest('[data-scan-params-block-root="true"]');
+      if ($blockRoot.length) scheduleEffectivePreview($blockRoot[0]);
     }
   };
 
@@ -209,7 +247,8 @@
       $descDiv.hide().text('');
     }
     if ($hidden.length) $hidden.val(value);
-    scheduleEffectivePreview();
+    const $blockRoot = $selector.closest('[data-scan-params-block-root="true"]');
+    if ($blockRoot.length) scheduleEffectivePreview($blockRoot[0]);
   };
 
   const CUSTOM_SELECT_SUFFIX_MAP = {
@@ -254,13 +293,14 @@
       $descDiv.text('').hide();
     }
     if ($hidden.length) $hidden.val(value);
-    scheduleEffectivePreview();
+    const $blockRoot = $selector.closest('[data-scan-params-block-root="true"]');
+    if ($blockRoot.length) scheduleEffectivePreview($blockRoot[0]);
   };
 
-  // ========== Draft collection: field prefix, collectDraft, buildScanParamsPreviewPayload ==========
+  // ========== Draft collection: field prefix, collectDraft, buildScanParamsPreviewPayloadFromRoot ==========
   const SCALAR_PARAMS = [
     'threads', 'rate_limit', 'timeout', 'retries', 'delay', 'depth',
-    'follow_redirect', 'proxy', 'user_agent', 'request_headers'
+    'follow_redirect', 'proxy', 'user_agent', 'header'
   ];
 
   const PROFILE_HIDDEN_NAMES = ['speed_profile', 'stealth_profile', 'general_profile', 'network_profile'];
@@ -278,22 +318,26 @@
       const name = prefix + param;
       const $input = $scope.find('input[name="' + name + '"], select[name="' + name + '"], textarea[name="' + name + '"]');
       if ($input.length) {
-        const val = $input.val();
-        if (val !== undefined && val !== null && String(val).trim() !== '') {
-          let v = val.trim();
+        const raw = $input.val();
+        const v = raw !== undefined && raw !== null ? String(raw).trim() : '';
+        if (v === '') {
+          draft[param] = null;
+        } else {
           if (param === 'threads' || param === 'rate_limit' || param === 'timeout' || param === 'retries' || param === 'depth') {
             const n = parseInt(v, 10);
-            if (!isNaN(n)) draft[param] = n;
+            draft[param] = !isNaN(n) ? n : v;
           } else if (param === 'delay') {
             const f = parseFloat(v);
-            if (!isNaN(f)) draft[param] = f;
+            draft[param] = !isNaN(f) ? f : v;
           } else if (param === 'follow_redirect') {
             draft[param] = v === 'True' || v === 'true' || v === '1';
-          } else if (param === 'request_headers') {
+          } else if (param === 'header') {
             try {
               const o = JSON.parse(v);
-              if (typeof o === 'object' && o !== null) draft[param] = o;
-            } catch (e) { /* ignore */ }
+              draft[param] = typeof o === 'object' && o !== null ? o : null;
+            } catch (e) {
+              draft[param] = null;
+            }
           } else {
             draft[param] = v;
           }
@@ -316,77 +360,126 @@
     return draft;
   }
 
+  // ========== AJAX preview: block-root driven (no parent traversal) ==========
   /**
-   * Build the payload object for the scan params effective preview API from the form or wrapper.
-   * Centralizes level, project_slug, organization_id, scope_id, target_id, draft so forms and
-   * JS stay in sync without duplicating data-* attribute names.
-   * @param {jQuery} $formOrWrapper - Element with data-scan-params-level (and optional ids).
-   * @returns {{ level: string, project_slug: string, organization_id: string|null, scope_id: string|null, target_id: string|null, draft: object }|null}
-   *   Payload or null if level missing.
+   * Resolve the form element for the block root: by data-scan-params-form-id or closest form.
+   * @param {Element} root - Block root element (data-scan-params-block-root).
+   * @returns {Element|null} Form element or null.
    */
-  function buildScanParamsPreviewPayload($formOrWrapper) {
-    const level = ($formOrWrapper.attr('data-scan-params-level') || '').trim();
+  function getFormForRoot(root) {
+    const formId = root.getAttribute && root.getAttribute('data-scan-params-form-id');
+    if (formId) {
+      const form = document.getElementById(formId);
+      if (form) return form;
+    }
+    return root.closest ? root.closest('form') : null;
+  }
+
+  /**
+   * Scope for draft collection and CSRF: the form if found, otherwise the block root.
+   * @param {Element} root - Block root element.
+   * @returns {jQuery} jQuery wrapper of form or root.
+   */
+  function getScopeForRoot(root) {
+    const form = getFormForRoot(root);
+    return form ? $(form) : $(root);
+  }
+
+  /**
+   * Build preview payload from block root data attributes and draft collected from scope.
+   * @param {Element} root - Block root element.
+   * @returns {{ level: string, project_slug: string, organization_id: string|null, scope_id: string|null, target_id: string|null, draft: object }|null}
+   */
+  function buildScanParamsPreviewPayloadFromRoot(root) {
+    const level = (root.getAttribute('data-scan-params-level') || '').trim();
     if (!level) return null;
-    const $scope = $formOrWrapper.is('form') ? $formOrWrapper : $formOrWrapper.find('form').first().addBack().first();
+    const $scope = getScopeForRoot(root);
     const draft = collectDraft($scope, level);
-    let organizationId = $formOrWrapper.attr('data-scan-params-organization-id') || '';
+    let organizationId = root.getAttribute('data-scan-params-organization-id') || '';
     if (level === 'scope' && !organizationId) {
       const $orgSelect = $scope.find('select[name="organization"], select[id="id_organization"]');
       if ($orgSelect.length) organizationId = $orgSelect.val() || '';
     }
     return {
       level: level,
-      project_slug: $formOrWrapper.attr('data-scan-params-project-slug') || (typeof window.PROJECT_SLUG !== 'undefined' ? window.PROJECT_SLUG : ''),
+      project_slug: root.getAttribute('data-scan-params-project-slug') || (typeof window.PROJECT_SLUG !== 'undefined' ? window.PROJECT_SLUG : ''),
       organization_id: organizationId || null,
-      scope_id: $formOrWrapper.attr('data-scan-params-scope-id') || null,
-      target_id: $formOrWrapper.attr('data-scan-params-target-id') || $scope.find('input[name="target_id"]').val() || null,
+      scope_id: root.getAttribute('data-scan-params-scope-id') || null,
+      target_id: root.getAttribute('data-scan-params-target-id') || $scope.find('input[name="target_id"]').val() || null,
       draft: draft
     };
   }
 
-  // ========== AJAX preview: URL, CSRF, request-id guard, debounce, bind ==========
-  function getPreviewUrl($formOrWrapper) {
-    const url = $formOrWrapper.attr('data-scan-params-preview-url') ||
-      (typeof window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL !== 'undefined' ? window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL : null);
-    return url;
-  }
-
   function getCsrfToken($scope) {
     const $tok = $scope.find('input[name="csrfmiddlewaretoken"]');
-    return $tok.length ? $tok.val() : (typeof window.CSRF_TOKEN !== 'undefined' ? window.CSRF_TOKEN : '');
+    if ($tok.length) return $tok.val();
+    const $docTok = $(document).find('input[name="csrfmiddlewaretoken"]').first();
+    if ($docTok.length) return $docTok.val();
+    return typeof window.CSRF_TOKEN !== 'undefined' ? window.CSRF_TOKEN : '';
   }
 
-  let latestEffectivePreviewRequestId = 0;
+  const effectivePreviewRequestIdMap = new Map();
+  const effectivePreviewDebounceMap = new Map();
 
-  function triggerEffectivePreview() {
-    const $container = $('#scan-params-effective-container');
-    if (!$container.length) return;
+  let _rootKeyCounter = 0;
 
-    const $formOrWrapper = $container.closest('form[id], form[data-scan-params-level], [data-scan-params-level]').first();
-    if (!$formOrWrapper.length) return;
+  /**
+   * Return a stable string key for the block root, assigning one if absent.
+   * Using a string key rather than the DOM node avoids orphaned Map entries
+   * if the root element is ever recreated.
+   * @param {Element} root
+   * @returns {string}
+   */
+  function getRootKey(root) {
+    let key = root.getAttribute('data-scan-params-root-key');
+    if (!key) {
+      key = 'sp-root-' + (++_rootKeyCounter);
+      root.setAttribute('data-scan-params-root-key', key);
+    }
+    return key;
+  }
 
-    const level = $formOrWrapper.attr('data-scan-params-level');
-    if (!level) return;
+  /**
+   * Remove Map entries for a completed or removed root.
+   * Call after a request resolves (success or error) so that entries do not
+   * accumulate on pages where roots are rendered dynamically.
+   * @param {string} rootKey
+   */
+  function cleanupRootState(rootKey) {
+    effectivePreviewRequestIdMap.delete(rootKey);
+    effectivePreviewDebounceMap.delete(rootKey);
+  }
 
-    const previewUrl = getPreviewUrl($formOrWrapper);
+  function triggerEffectivePreview(root) {
+    if (!root || !root.querySelector) return;
+    const container = root.querySelector('#scan-params-effective-container');
+    if (!container) return;
+
+    const previewUrl = root.getAttribute('data-scan-params-preview-url') ||
+      (typeof window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL !== 'undefined' ? window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL : null);
     if (!previewUrl) return;
 
-    const requestId = ++latestEffectivePreviewRequestId;
-    const payload = buildScanParamsPreviewPayload($formOrWrapper);
+    const payload = buildScanParamsPreviewPayloadFromRoot(root);
     if (!payload) return;
 
-    const $scope = $formOrWrapper.is('form') ? $formOrWrapper : $formOrWrapper.find('form').first().addBack().first();
+    const $scope = getScopeForRoot(root);
+    const rootKey = getRootKey(root);
+    const requestId = (effectivePreviewRequestIdMap.get(rootKey) || 0) + 1;
+    effectivePreviewRequestIdMap.set(rootKey, requestId);
+
     const csrfToken = getCsrfToken($scope);
     const headers = { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
     if (csrfToken) headers['X-CSRFToken'] = csrfToken;
 
+    const $container = $(container);
     $.ajax({
       url: previewUrl,
       type: 'POST',
       data: JSON.stringify(payload),
       headers: headers,
       success: function (html) {
-        if (requestId !== latestEffectivePreviewRequestId) return;
+        if (requestId !== effectivePreviewRequestIdMap.get(rootKey)) return;
+        cleanupRootState(rootKey);
         if (html && typeof html === 'string') {
           $container.replaceWith(html);
           const newContainer = document.getElementById('scan-params-effective-container');
@@ -401,36 +494,43 @@
         }
       },
       error: function () {
-        if (requestId !== latestEffectivePreviewRequestId) return;
+        if (requestId !== effectivePreviewRequestIdMap.get(rootKey)) return;
+        cleanupRootState(rootKey);
       }
     });
   }
 
-  let effectivePreviewDebounceTimer = null;
-  function scheduleEffectivePreview() {
-    if (effectivePreviewDebounceTimer) clearTimeout(effectivePreviewDebounceTimer);
-    effectivePreviewDebounceTimer = setTimeout(function () {
-      effectivePreviewDebounceTimer = null;
-      triggerEffectivePreview();
+  function scheduleEffectivePreview(root) {
+    if (!root) return;
+    const rootKey = getRootKey(root);
+    const entry = effectivePreviewDebounceMap.get(rootKey);
+    if (entry && entry.timer) clearTimeout(entry.timer);
+    const timer = setTimeout(function () {
+      effectivePreviewDebounceMap.delete(rootKey);
+      triggerEffectivePreview(root);
     }, 350);
+    effectivePreviewDebounceMap.set(rootKey, { timer: timer });
   }
 
   function bindEffectiveLiveUpdate() {
-    const $container = $('#scan-params-effective-container');
-    if (!$container.length) return;
-    const $formOrWrapper = $container.closest('form[data-scan-params-level], [data-scan-params-level]').first();
-    if (!$formOrWrapper.length) return;
-    if (!getPreviewUrl($formOrWrapper)) return;
+    const roots = document.querySelectorAll('[data-scan-params-block-root="true"]');
+    roots.forEach(function (root) {
+      const container = root.querySelector('#scan-params-effective-container');
+      const previewUrl = root.getAttribute('data-scan-params-preview-url') ||
+        (typeof window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL !== 'undefined' ? window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL : null);
+      if (!container || !previewUrl) return;
 
-    const $scope = $formOrWrapper.is('form') ? $formOrWrapper : $formOrWrapper.find('form').first().addBack().first();
-    const prefix = getFieldPrefix($formOrWrapper.attr('data-scan-params-level'));
-    const selInputs = SCALAR_PARAMS.map(function (p) {
-      return 'input[name="' + prefix + p + '"], select[name="' + prefix + p + '"], textarea[name="' + prefix + p + '"]';
-    }).join(', ');
-    const profileSel = PROFILE_HIDDEN_NAMES.map(function (n) { return 'input[name="' + n + '"]'; }).join(', ');
+      const $scope = getScopeForRoot(root);
+      const level = (root.getAttribute('data-scan-params-level') || '').trim();
+      const prefix = getFieldPrefix(level);
+      const selInputs = SCALAR_PARAMS.map(function (p) {
+        return 'input[name="' + prefix + p + '"], select[name="' + prefix + p + '"], textarea[name="' + prefix + p + '"]';
+      }).join(', ');
+      const profileSel = PROFILE_HIDDEN_NAMES.map(function (n) { return 'input[name="' + n + '"]'; }).join(', ');
 
-    $scope.on('input change', selInputs + ', ' + profileSel, function () {
-      scheduleEffectivePreview();
+      $scope.on('input change', selInputs + ', ' + profileSel, function () {
+        scheduleEffectivePreview(root);
+      });
     });
   }
 

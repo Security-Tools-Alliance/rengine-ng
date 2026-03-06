@@ -561,7 +561,9 @@ def add_target(request, slug):
                             "rengine_target_types": RENGINE_TARGET_TYPES_FOR_JS,
                             "secator_configs": _get_secator_configs_for_add_target(),
                             "target_type_choices": dict(TARGET_TYPE_CHOICES),
+                            "override_prefix": TARGET_OVERRIDE_PREFIX,
                         }
+                        context.update(build_scan_params_form_context(level="target"))
                         return render(request, "target/add.html", context)
                     used_dns_servers = cleaned_dns
 
@@ -758,7 +760,7 @@ def add_target(request, slug):
         "target_type_choices": dict(TARGET_TYPE_CHOICES),
         "override_prefix": TARGET_OVERRIDE_PREFIX,
     }
-    context.update(build_scan_params_form_context())
+    context.update(build_scan_params_form_context(level="target"))
     return render(request, "target/add.html", context)
 
 
@@ -881,7 +883,7 @@ def update_target(request, slug, id):
     target = get_object_or_404(Target, id=id)
     form = UpdateTargetModelForm(instance=target)
     override_form_fallback = None
-    override_request_headers_initial = None
+    override_header_initial = None
     scan_override = None
 
     if request.method == "POST":
@@ -891,7 +893,7 @@ def update_target(request, slug, id):
                 scan_override,
                 override_errors,
                 override_form_fallback,
-                override_request_headers_initial,
+                override_header_initial,
             ) = process_target_scan_override_from_post(request.POST)
             if override_errors:
                 for msg in override_errors:
@@ -907,7 +909,7 @@ def update_target(request, slug, id):
         target,
         form,
         override_form_fallback=override_form_fallback,
-        override_request_headers_initial=override_request_headers_initial,
+        override_header_initial=override_header_initial,
         scan_override=scan_override if override_form_fallback else None,
     )
     return render(request, "target/update.html", context)
@@ -1149,10 +1151,9 @@ def add_organization(request, slug):
     context = {
         "organization_active": "active",
         "form": form,
-        "scan_params_values": {},
-        "scan_params_effective": None,
+        "section_collapse_id": "scanOverridesSectionOrgAdd",
     }
-    context.update(build_secator_profiles_context())
+    context.update(build_scan_params_form_context())
     return render(request, "organization/add.html", context)
 
 
@@ -1238,6 +1239,7 @@ def update_organization(request, slug, id):
         "domain_list": mark_safe(domain_list),
         "target_list": mark_safe(target_list),
         "form": form,
+        "section_collapse_id": "scanOverridesSectionOrg",
     }
     context.update(build_scan_params_form_context(organization=organization))
     return render(request, "organization/update.html", context)
@@ -1291,8 +1293,9 @@ def add_scope(request, slug):
         "scope_active": "active",
         "form": form,
         "slug": slug,
+        "section_collapse_id": "scanOverridesSectionScopeAdd",
     }
-    context.update(build_scan_params_form_context())
+    context.update(build_scan_params_form_context(level="scope"))
     return render(request, "scope/add.html", context)
 
 
@@ -1320,6 +1323,7 @@ def update_scope(request, slug, id):
         "form": form,
         "scope": scope,
         "slug": slug,
+        "section_collapse_id": "scanOverridesSectionScope",
     }
     context.update(build_scan_params_form_context(scope=scope, organization=scope.organization))
     return render(request, "scope/update.html", context)

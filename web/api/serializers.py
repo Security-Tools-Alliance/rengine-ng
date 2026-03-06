@@ -50,6 +50,7 @@ from startScan.models import (
     Waf,
 )
 from targetApp.models import Organization, Scope, Target
+from targetApp.services.scope_params import get_scope_for_target
 
 
 # Sentinel to distinguish "annotated count missing" from "count present but None" in get_*_count.
@@ -169,6 +170,12 @@ class TargetSerializer(serializers.ModelSerializer):
             "endpoint_count",
             "vulnerability_count",
         ]
+        datatables_always_serialize = (
+            "domain_count",
+            "subdomain_count",
+            "endpoint_count",
+            "vulnerability_count",
+        )
 
     def get_name(self, obj):
         return obj.value
@@ -179,7 +186,7 @@ class TargetSerializer(serializers.ModelSerializer):
     def get_scope_group(self, obj):
         if hasattr(obj, "scope_group_name"):
             return obj.scope_group_name
-        first = obj.scopes.first()
+        first = get_scope_for_target(obj)
         return first.name if first else "No scope"
 
     def get_most_recent_scan(self, obj):
@@ -1048,7 +1055,7 @@ class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
     def get_scope_name(self, obj):
         if not obj.target:
             return ""
-        first = obj.target.scopes.first()
+        first = get_scope_for_target(obj.target)
         return first.name if first else ""
 
 

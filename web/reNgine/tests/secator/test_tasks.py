@@ -171,6 +171,50 @@ class TestSecatorTasks(BaseTestCase):
     @patch("reNgine.secator.orchestrator.ScanOrchestrator")
     @patch("reNgine.secator.tasks.build_enriched_targets")
     @patch("reNgine.secator.services.input_type_service.InputTypeService.get_input_types", return_value=["host"])
+    def test_initiate_secator_scan_passes_full_scan_config_to_orchestrator(
+        self, mock_get_input_types, mock_build_targets, mock_orchestrator
+    ):
+        """Config passed to orchestrator includes all PARAM_KEYS, profiles, and extra_config."""
+        from scanEngine.models import SecatorWorkflow
+
+        mock_build_targets.return_value = [self.domain_name]
+        mock_workflow = Mock(spec=SecatorWorkflow)
+        mock_workflow.name = "test_workflow"
+        mock_orchestrator.return_value.execute_scan.return_value = {"status": "success"}
+
+        secator_config = {
+            "threads": 5,
+            "rate_limit": 10,
+            "delay": 0.5,
+            "proxy": "",
+            "profiles": ["insane"],
+            "extra_config": {"custom_key": "custom_value"},
+        }
+
+        with patch("scanEngine.models.SecatorWorkflow.objects.get", return_value=mock_workflow):
+            with patch("startScan.models.ScanHistory.objects.get", return_value=self.scan_history):
+                initiate_secator_scan(
+                    scan_history_id=self.scan_history.id,
+                    target_id=self.target.id,
+                    execution_mode="workflow",
+                    workflow_id=1,
+                    secator_config=secator_config,
+                )
+
+                call_args = mock_orchestrator.return_value.execute_scan.call_args
+                config = call_args[1]["config"]
+                self.assertEqual(config["workflow_name"], "test_workflow")
+                self.assertEqual(config.get("threads"), 5)
+                self.assertEqual(config.get("rate_limit"), 10)
+                self.assertEqual(config.get("delay"), 0.5)
+                self.assertEqual(config.get("extra_config"), {"custom_key": "custom_value"})
+                profiles = call_args[1]["profiles"]
+                self.assertEqual(profiles, ["insane"])
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    @patch("reNgine.secator.orchestrator.ScanOrchestrator")
+    @patch("reNgine.secator.tasks.build_enriched_targets")
+    @patch("reNgine.secator.services.input_type_service.InputTypeService.get_input_types", return_value=["host"])
     def test_initiate_secator_scan_with_rengine_context(
         self, mock_get_input_types, mock_build_targets, mock_orchestrator
     ):

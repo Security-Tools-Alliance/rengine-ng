@@ -442,9 +442,7 @@ Add or Import Targets
         </div>
       </div>
       <hr>
-      <div id="scan-params-form-context" data-scan-params-level="target" data-scan-params-target-id="" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
-      {% include "shared/_scan_params_block.html" with scan_params_level="target" scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_prefix=override_prefix id_prefix="target_" default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category %}
-      </div>
+      {% include "shared/_scan_params_section.html" with section_collapse_id="scanOverridesSectionAdd" scan_params_prefix=override_prefix id_prefix="target_" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values %}
     </div>
   </div>
 </div>
@@ -452,7 +450,6 @@ Add or Import Targets
 
 
 {% block page_level_script %}
-<script src="{% static 'custom/scan_params.js' %}"></script>
 <script type="text/javascript">
   function syncGlobalToForm(form) {
     form.find('input.global-field-desc').val($('#global_target_description').val());

@@ -63,7 +63,7 @@ class TestSecatorFormHelpers(BaseTestCase):
         post["secator_config"] = {"profiles": []}
         cfg = parse_secator_config(post)
         self.assertEqual(cfg["delay"], 60)
-        self.assertIn("proxy", cfg)
+        self.assertNotIn("proxy", cfg)
         self.assertIn("profiles", cfg)
 
     def test_parse_secator_profiles_custom_overrides_builtin(self):
@@ -302,3 +302,66 @@ class TestSecatorFormHelpers(BaseTestCase):
         post["secator_config"] = "{}"
         kwargs = build_start_secator_scan_kwargs(post)
         self.assertNotIn("scan_history_id", kwargs)
+
+    # --- Fix 2: delay default behaviour ---
+
+    def test_parse_secator_config_no_delay_when_not_provided(self):
+        """delay is absent from result when neither JSON blob nor top-level field contains it."""
+        post = QueryDict("", mutable=True)
+        post["secator_config"] = json.dumps({"profiles": []})
+        cfg = parse_secator_config(post)
+        self.assertNotIn("delay", cfg)
+
+    def test_parse_secator_config_delay_present_when_provided_in_top_level(self):
+        """delay is included when explicitly given in top-level POST field."""
+        post = QueryDict("", mutable=True)
+        post["delay"] = "3"
+        post["secator_config"] = json.dumps({"profiles": []})
+        cfg = parse_secator_config(post)
+        self.assertIn("delay", cfg)
+        self.assertEqual(cfg["delay"], 3)
+
+    def test_parse_secator_config_delay_present_when_provided_in_json_blob(self):
+        """delay is included when explicitly given inside the secator_config JSON blob."""
+        post = QueryDict("", mutable=True)
+        post["secator_config"] = json.dumps({"delay": 2, "profiles": []})
+        cfg = parse_secator_config(post)
+        self.assertIn("delay", cfg)
+        self.assertEqual(cfg["delay"], 2)
+
+    def test_parse_secator_config_empty_string_delay_not_included(self):
+        """An empty-string delay top-level field is treated as not provided."""
+        post = QueryDict("", mutable=True)
+        post["delay"] = ""
+        post["secator_config"] = json.dumps({"profiles": []})
+        cfg = parse_secator_config(post)
+        self.assertNotIn("delay", cfg)
+
+    def test_parse_secator_config_proxy_absent_when_not_provided(self):
+        """proxy is absent from result when not set in POST."""
+        post = QueryDict("", mutable=True)
+        post["secator_config"] = json.dumps({"profiles": []})
+        cfg = parse_secator_config(post)
+        self.assertNotIn("proxy", cfg)
+
+    def test_parse_secator_config_proxy_present_when_provided(self):
+        """proxy is included when explicitly given."""
+        post = QueryDict("", mutable=True)
+        post["secator_config"] = json.dumps({"proxy": "http://p:8080", "profiles": []})
+        cfg = parse_secator_config(post)
+        self.assertEqual(cfg.get("proxy"), "http://p:8080")
+
+    # --- Fix 4: profiles fallback condition ---
+
+    def test_build_start_secator_scan_kwargs_uses_parse_secator_profiles_when_json_blob_has_empty_profiles(self):
+        """When secator_config JSON has profiles=[], the parsed checkbox profiles are applied."""
+        post = QueryDict("", mutable=True)
+        post["execution_mode"] = "tasks"
+        post.setlist("task_ids", ["1"])
+        post["secator_config"] = json.dumps({"profiles": []})
+        post["use_speed_profile"] = "true"
+        post["speed_profile"] = "aggressive"
+        kwargs = build_start_secator_scan_kwargs(post)
+        profiles = kwargs["secator_config"].get("profiles")
+        self.assertIsNotNone(profiles)
+        self.assertIn("aggressive", profiles)

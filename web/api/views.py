@@ -862,7 +862,7 @@ class QueryInterestingSubdomains(APIView):
         return Response(InterestingSubdomainSerializer(queryset, many=True).data)
 
 
-class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
+class ListTargetsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.ModelViewSet):
     """DataTables list API for targets. Filter params: filter_organization, filter_scope. See wiki datatables-api-filters.md."""
 
     queryset = Target.objects.all()
@@ -873,11 +873,35 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
         slug = self.request.GET.get("slug", None)
         qs = Target.objects.for_project(slug) if slug else self.queryset
         first_scope_name = Scope.objects.filter(targets=OuterRef("pk")).order_by("name").values("name")[:1]
+        domain_count_subq = (
+            Domain.objects.filter(scan_history__target_id=OuterRef("pk"))
+            .values("scan_history__target_id")
+            .annotate(c=Count("name", distinct=True))
+            .values("c")[:1]
+        )
+        subdomain_count_subq = (
+            Subdomain.objects.filter(scan_history__target_id=OuterRef("pk"))
+            .values("scan_history__target_id")
+            .annotate(c=Count("name", distinct=True))
+            .values("c")[:1]
+        )
+        endpoint_count_subq = (
+            EndPoint.objects.filter(scan_history__target_id=OuterRef("pk"))
+            .values("scan_history__target_id")
+            .annotate(c=Count("http_url", distinct=True))
+            .values("c")[:1]
+        )
+        vulnerability_count_subq = (
+            Vulnerability.objects.filter(scan_history__target_id=OuterRef("pk"))
+            .values("scan_history__target_id")
+            .annotate(c=Count("id"))
+            .values("c")[:1]
+        )
         qs = qs.prefetch_related("scopes").annotate(
-            domain_count=Count("scan_histories__discovered_domains", distinct=True),
-            subdomain_count=Count("scan_histories__subdomain", distinct=True),
-            endpoint_count=Count("scan_histories__endpoint", distinct=True),
-            vulnerability_count=Count("scan_histories__vulnerability", distinct=True),
+            domain_count=Coalesce(Subquery(domain_count_subq), Value(0)),
+            subdomain_count=Coalesce(Subquery(subdomain_count_subq), Value(0)),
+            endpoint_count=Coalesce(Subquery(endpoint_count_subq), Value(0)),
+            vulnerability_count=Coalesce(Subquery(vulnerability_count_subq), Value(0)),
             scope_group_name=Coalesce(Subquery(first_scope_name), Value("No scope")),
         )
         return qs
@@ -2468,9 +2492,10 @@ class GetScanParamsEffectiveHtml(APIView):
                 '<p class="text-muted small">Target not found.</p>',
                 content_type="text/html",
             )
-        scope = Scope.objects.filter(targets=target).select_related("organization").first()
+        from targetApp.services.scope_params import build_effective_params_display, get_scope_for_target
+
+        scope = get_scope_for_target(target)
         organization = scope.organization if scope else target.organizations.first()
-        from targetApp.services.scope_params import build_effective_params_display
 
         scan_params_effective = build_effective_params_display(target=target, scope=scope, organization=organization)
         html = render_to_string(

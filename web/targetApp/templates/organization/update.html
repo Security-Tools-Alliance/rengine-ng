@@ -25,7 +25,7 @@ Update Organization
   <div class="col-12">
     <div class="card">
       <div class="card-body">
-        <form method="POST" id="scan-params-form" data-scan-params-level="organization" data-scan-params-organization-id="{{ organization.id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
+        <form method="POST" id="scan-params-form">
           {% csrf_token %}
           <div class="row">
             <div class="col-6">
@@ -61,7 +61,7 @@ Update Organization
             </div>
           </div>
           <hr>
-          {% include "shared/_scan_params_block.html" with scan_params_level="organization" scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_prefix="" id_prefix="org_" default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category %}
+          {% include "shared/_scan_params_section.html" with section_collapse_id=section_collapse_id section_form_id="scan-params-form" scan_params_prefix="" id_prefix="org_" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values %}
           <button class="btn btn-primary submit-fn mt-2 float-end" type="submit">Update Organization</button>
         </form>
       </div>
@@ -73,7 +73,6 @@ Update Organization
 
 {% block page_level_script %}
 <script src="{% static 'plugins/select2/select2.min.js' %}"></script>
-<script src="{% static 'custom/scan_params.js' %}"></script>
 <script type="text/javascript">
 $( document ).ready(function() {
   $(".tagging").select2({

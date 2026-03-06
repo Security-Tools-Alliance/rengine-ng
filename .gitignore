@@ -44,7 +44,10 @@ MANIFEST
 .vscode/tasks-and-contexts.json
 .idea/
 .cursor/
+.claude/
 .zed/
+.VSCodeCounter/
+.sourcery.yaml
 
 *.manifest
 *.spec

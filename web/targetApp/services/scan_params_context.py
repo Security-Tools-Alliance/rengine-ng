@@ -7,11 +7,12 @@ scan_params_effective, scan_params_values, and default_profiles are built.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from startScan.secator.profiles import build_secator_profiles_context
 
-from .scope_params import build_effective_params_display
+from .scope_params import PROFILE_CATEGORIES, build_effective_params_display, get_scope_for_target
 
 
 def build_scan_params_form_context(
@@ -19,24 +20,24 @@ def build_scan_params_form_context(
     scope: Any = None,
     target: Any = None,
     scan_params_values: dict[str, Any] | None = None,
+    level: str | None = None,
 ) -> dict[str, Any]:
     """
     Build the common scan-params block context for organization/scope/target forms.
 
-    Returns a dict with scan_params_effective, scan_params_values, and profile
-    context (default_profiles, custom_profiles_by_category). When an entity is
+    Returns a dict with scan_params_level, scan_params_effective, scan_params_values, and
+    profile context (default_profiles, custom_profiles_by_category). When an entity is
     provided, default_profiles is taken from its scan_config.profiles.
+
+    The level parameter overrides the deduced level ("organization"|"scope"|"target"). Use it
+    on add-forms where no entity exists yet (e.g. target/add should pass level="target").
     """
     if organization is None and scope is None and target is None:
-        effective = None
+        effective = build_effective_params_display()
     else:
         if target is not None and scope is None and organization is None:
-            first_scope = next(
-                iter(target.scopes.select_related("organization").all()),
-                None,
-            )
-            scope = first_scope
-            organization = first_scope.organization if first_scope else None
+            scope = get_scope_for_target(target)
+            organization = scope.organization if scope else None
         effective = build_effective_params_display(
             scope=scope,
             target=target,
@@ -64,11 +65,44 @@ def build_scan_params_form_context(
     if entity_config:
         profiles = entity_config.get("profiles")
         if profiles and isinstance(profiles, dict):
-            profiles_ctx["default_profiles"] = profiles
+            profiles_ctx["default_profiles"] = {cat: (profiles.get(cat) or "") for cat in PROFILE_CATEGORIES}
 
     values.setdefault("profiles", {})
+    raw_profiles = values.get("profiles")
+    values["profiles"] = {
+        cat: ((raw_profiles.get(cat) if isinstance(raw_profiles, dict) else "") or "") for cat in PROFILE_CATEGORIES
+    }
+    entity_profile_categories = [cat for cat in PROFILE_CATEGORIES if values["profiles"].get(cat, "").strip()]
+    header_val = values.get("header")
+    if isinstance(header_val, dict):
+        header_initial = json.dumps(header_val, indent=2, sort_keys=True)
+    else:
+        header_initial = ""
+
+    if level is None:
+        level = "target" if target else ("scope" if scope else "organization")
+    has_overrides = any(
+        v is not None and v != "" for k, v in values.items() if k != "profiles" and not (isinstance(v, dict) and not v)
+    ) or any(((values.get("profiles") or {}).get(c) or "").strip() for c in PROFILE_CATEGORIES)
+    if level == "target":
+        section_title = "Scan Parameter Overrides"
+        section_help_text = "Leave fields empty to inherit from the scope (if any) or system defaults. Filled values override the scope for this target only."
+    else:
+        section_title = "Scan Parameters"
+        section_help_text = (
+            "Leave fields empty to inherit from the level above or system defaults. Filled values apply at this level."
+        )
+
     return {
+        "scan_params_level": level,
         "scan_params_effective": effective,
         "scan_params_values": values,
+        "header_initial": header_initial,
+        "entity_profile_categories": entity_profile_categories,
+        "scan_params_section_title": section_title,
+        "scan_params_section_help_text": section_help_text,
+        "scan_params_section_use_collapse": True,
+        "scan_params_section_collapse_expanded": has_overrides,
+        "scan_params_section_configure_button_label": "Configured" if has_overrides else "Configure",
         **profiles_ctx,
     }

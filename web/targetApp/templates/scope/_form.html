@@ -72,7 +72,7 @@
 </div>
 
 <hr>
-{% include "shared/_scan_params_block.html" with scan_params_level="scope" scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_prefix="" id_prefix="scope_" default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category %}
+{% include "shared/_scan_params_section.html" with section_collapse_id=section_collapse_id section_form_id="scan-params-form" scan_params_prefix="" id_prefix="scope_" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values %}
 
 {% if form.non_field_errors %}
 <div class="alert alert-danger mt-2">

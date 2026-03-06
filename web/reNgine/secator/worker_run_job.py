@@ -46,8 +46,6 @@ if __name__ == "__main__":
     targets = job.get("targets") or []
     context = job.get("context") or {}
     run_opts_data = job.get("run_opts") or {}
-    proxy = run_opts_data.get("proxy")
-    delay = run_opts_data.get("delay", 0)
     profile_names = run_opts_data.get("profiles") or []
 
     try:
@@ -65,12 +63,7 @@ if __name__ == "__main__":
         hooks = {}
 
     profile_loaders = [TemplateLoader(name=f"profiles/{p}") for p in profile_names if p]
-    run_opts = {
-        "sync": False,
-        "proxy": proxy,
-        "delay": delay,
-        "profiles": profile_loaders,
-    }
+    run_opts = {"sync": False, **run_opts_data, "profiles": profile_loaders}
 
     def _run_success(result) -> bool:
         """

@@ -17,6 +17,7 @@ from secator.runners import Scan, Task, Workflow
 from secator.template import TemplateLoader
 
 from reNgine.core.path import is_safe_path
+from reNgine.secator.run_opts import build_run_opts
 from reNgine.settings import SECATOR_RESULTS
 from reNgine.utilities.logger import get_runner_logger
 from startScan.models import ScanHistory
@@ -545,35 +546,11 @@ class SecatorRunner:
         """
         Prepare Secator run_opts configuration dictionary.
 
-        This method converts configuration parameters into the flat run_opts format
-        expected by Secator runners. It processes proxy settings, delay values, and
-        profile names into a standardized configuration dictionary.
-
-        Args:
-            config: Configuration dictionary with optional keys:
-                - proxy (str, optional): Proxy URL (e.g., "socks5://127.0.0.1:9050")
-                - delay (int, optional): Delay in seconds between requests (default: 0)
-            profiles: List of profile names as strings or TemplateLoader instances.
-                Each string represents a profile name (e.g., "polite", "full", "stealth").
-                Profiles are processed and converted to TemplateLoader instances if needed.
-
-        Returns:
-            Dictionary with flat run_opts structure:
-                - sync (bool): Always False (async execution)
-                - proxy (str|None): Proxy URL if provided, None otherwise
-                - delay (int): Delay in seconds (default: 0)
-                - profiles (List): List of profile TemplateLoader instances or strings
+        Uses build_run_opts for base options; then resolves profile names
+        into the expanded list expected by Secator runners.
+        Custom profile opts are merged into run_opts so they are forwarded to Secator.
         """
-        run_opts: Dict[str, Any] = {
-            "sync": False,
-            "proxy": None,
-            "delay": 0,
-            "profiles": [],
-        }
-
-        if config:
-            run_opts["proxy"] = config.get("proxy")
-            run_opts["delay"] = config.get("delay", 0)
+        run_opts = build_run_opts(secator_config=config or {}, profile_names=[])
 
         if profiles:
             profile_list: List[Any] = []
@@ -583,7 +560,7 @@ class SecatorRunner:
                 if profile_item is None:
                     continue
                 if isinstance(profile_item, str):
-                    self._process_profile(profile_item, profile_list, seen_profile_names, {})
+                    self._process_profile(profile_item, profile_list, seen_profile_names, run_opts)
                 else:
                     profile_list.append(str(profile_item))
 

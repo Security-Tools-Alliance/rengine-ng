@@ -7,6 +7,7 @@ from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import get_subdomain_from_url
 from startScan.models import ScanHistory
 from targetApp.models import Target
+from targetApp.services.scan_param_definitions import PARAM_KEYS as SCAN_PARAM_KEYS
 
 
 PREFIX_SECATOR_TASKS = "[SECATOR_TASKS]"
@@ -173,20 +174,12 @@ def initiate_secator_scan(
 
         config = {}
         if secator_config:
-            for _key in (
-                "proxy",
-                "delay",
-                "threads",
-                "rate_limit",
-                "timeout",
-                "retries",
-                "user_agent",
-                "follow_redirect",
-                "depth",
-                "request_headers",
-            ):
+            for _key in SCAN_PARAM_KEYS:
                 if _key in secator_config and secator_config[_key] is not None and secator_config[_key] != "":
                     config[_key] = secator_config[_key]
+            extra = secator_config.get("extra_config")
+            if isinstance(extra, dict) and extra:
+                config["extra_config"] = extra
 
         profiles = []
         if secator_config and "profiles" in secator_config:
@@ -232,7 +225,20 @@ def initiate_secator_scan(
             if not worker.is_active:
                 raise ValueError("Worker is not active")
             workspace = _workspace_for_target(target)
-            remote_config = {"proxy": config.get("proxy"), "delay": config.get("delay"), "profiles": profiles}
+            run_opts_keys = SCAN_PARAM_KEYS | {"extra_config"}
+            remote_config = {}
+            for k in run_opts_keys:
+                if k not in config:
+                    continue
+                v = config[k]
+                if k == "extra_config":
+                    if isinstance(v, dict):
+                        remote_config[k] = v
+                    continue
+                if v is None or (isinstance(v, str) and v == ""):
+                    continue
+                remote_config[k] = v
+            remote_config["profiles"] = profiles
             try:
                 run_scan_on_worker(
                     worker,

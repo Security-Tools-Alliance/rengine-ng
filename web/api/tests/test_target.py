@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 
+from startScan.models import Domain, EndPoint, ScanHistory, Subdomain, Vulnerability
 from targetApp.models import Target
 from utils.test_base import BaseTestCase
 
@@ -213,3 +214,80 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         scope_groups = [r["scope_group"] for r in response.data["results"]]
         self.assertEqual(scope_groups, ["A-scope", "B-scope", "No scope"])
+
+    def test_list_targets_aggregated_counts(self):
+        """List targets returns aggregated domain/subdomain/endpoint/vulnerability counts across all scan history."""
+        self.data_generator.create_project()
+        self.data_generator.create_target()
+        self.data_generator.create_scan_history()
+        self.data_generator.create_domain(scan_history=self.data_generator.scan_history)
+        self.data_generator.domain.name = "agg-target.local"
+        self.data_generator.domain.save(update_fields=["name"])
+        self.data_generator.create_subdomain(
+            name="sub1.agg-target.local",
+            scan_history=self.data_generator.scan_history,
+            domain=self.data_generator.domain,
+        )
+        self.data_generator.create_endpoint(
+            http_url="https://sub1.agg-target.local/path1",
+            scan_history=self.data_generator.scan_history,
+            domain=self.data_generator.domain,
+            subdomain=self.data_generator.subdomain,
+        )
+        self.data_generator.create_vulnerability()
+
+        scan2 = ScanHistory.objects.create(
+            target=self.data_generator.target,
+            start_scan_date=timezone.now(),
+            scan_status=2,
+            tasks=["subdomain_discovery"],
+        )
+        Domain.objects.create(
+            name="agg-target.local",
+            insert_date=timezone.now(),
+            scan_history=scan2,
+        )
+        domain_other = Domain.objects.create(
+            name="other.agg-target.local",
+            insert_date=timezone.now(),
+            scan_history=scan2,
+        )
+        sub2 = Subdomain.objects.create(
+            name="sub2.agg-target.local",
+            scan_history=scan2,
+            domain=domain_other,
+        )
+        EndPoint.objects.create(
+            http_url="https://sub2.agg-target.local/path2",
+            scan_history=scan2,
+            domain=domain_other,
+            subdomain=sub2,
+            discovered_date=timezone.now(),
+        )
+        Vulnerability.objects.create(
+            name="Vuln 2",
+            severity=1,
+            discovered_date=timezone.now(),
+            scan_history=scan2,
+            domain=domain_other,
+            subdomain=sub2,
+        )
+
+        api_url = reverse("api:targets-list")
+        response = self.client.get(api_url, {"slug": self.data_generator.project.slug})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        by_name = {r["name"]: r for r in response.data["results"]}
+        self.assertIn(
+            self.data_generator.target.value,
+            by_name,
+            "Target must appear in list",
+        )
+        row = by_name[self.data_generator.target.value]
+        self.assertIn("domain_count", row)
+        self.assertIn("subdomain_count", row)
+        self.assertIn("endpoint_count", row)
+        self.assertIn("vulnerability_count", row)
+        self.assertEqual(row["domain_count"], 2, "Distinct domain names: agg-target.local, other.agg-target.local")
+        self.assertEqual(row["subdomain_count"], 2, "Distinct subdomain names across scans")
+        self.assertEqual(row["endpoint_count"], 2, "Distinct endpoint URLs across scans")
+        self.assertEqual(row["vulnerability_count"], 2, "Total vulnerabilities across scans")

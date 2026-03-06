@@ -240,7 +240,10 @@ class TestSecatorProfilesContext(BaseTestCase):
         self.assertIsInstance(effective, dict)
         self.assertIn("threads", effective)
         self.assertIn("profiles", effective)
-        for info in effective.values():
+        for key, info in effective.items():
+            if key == "profile_display_list":
+                continue
+            self.assertIsInstance(info, dict, msg="Expected dict for %s" % key)
             self.assertIn("value", info)
             self.assertIn("source", info)
 

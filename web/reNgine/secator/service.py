@@ -24,6 +24,11 @@ from reNgine.utilities.websocket import send_scan_status_update
 from scanEngine.models import SecatorScan, SecatorTask
 from startScan.models import ScanHistory, Subdomain, SubScan
 from targetApp.models import Target
+from targetApp.services.scope_params import (
+    apply_resolved_to_secator_config,
+    get_scope_for_target,
+    resolve_scan_params,
+)
 
 
 PREFIX_SECATOR_SERVICE = "[SECATOR_SERVICE]"
@@ -45,6 +50,26 @@ def _persist_scan_config_on_history(scan: ScanHistory, secator_config: dict | No
     if secator_config:
         scan.scan_config = secator_config
         scan.save(update_fields=["scan_config"])
+
+
+def _apply_effective_scan_params(target: Target, secator_config: dict) -> None:
+    """
+    Resolve and merge effective scan params from the target/scope/org chain into secator_config.
+
+    Treats the current values in secator_config as the user override (highest priority).
+    Missing values are filled from scope, organization, then settings defaults.
+    Mutates secator_config in place.
+    """
+    scope = get_scope_for_target(target)
+    organization = None
+    if scope is not None:
+        organization = getattr(scope, "organization", None)
+    elif target is not None:
+        orgs = getattr(target, "organizations", None)
+        if orgs is not None:
+            organization = orgs.first()
+    resolved = resolve_scan_params(target, scope=scope, organization=organization, user_override=secator_config)
+    apply_resolved_to_secator_config(secator_config, resolved)
 
 
 def handle_scan_error(scan: ScanHistory, error: Exception) -> None:
@@ -143,20 +168,25 @@ def start_secator_scan(
     if targets_override is None:
         targets_override = []
 
-    # Handle random proxy if proxy is None
-    if secator_config.get("proxy") is None:
-        from reNgine.utilities.proxy import get_random_proxy
-
-        random_proxy = get_random_proxy()
-        if random_proxy:
-            secator_config["proxy"] = random_proxy
-
     if target_id is None:
         return {"status": False, "error": "target_id is required", "http_status": 400}
     try:
         target = Target.objects.get(id=target_id)
     except Target.DoesNotExist:
         return {"status": False, "error": "Target with ID %s not found" % (target_id,), "http_status": 404}
+
+    # Merge effective params from target/scope/org chain; secator_config values act as user overrides.
+    # Resolution happens here so both UI and API paths benefit consistently.
+    _apply_effective_scan_params(target, secator_config)
+
+    # Apply random proxy only after scope/org resolution: proxy from scope takes precedence
+    # and random proxy is the last fallback when still unset.
+    if secator_config.get("proxy") is None:
+        from reNgine.utilities.proxy import get_random_proxy
+
+        random_proxy = get_random_proxy()
+        if random_proxy:
+            secator_config["proxy"] = random_proxy
 
     if worker_id is not None:
         from scanEngine.models import SecatorWorker
@@ -519,6 +549,9 @@ def run_per_task_secator_scans(
         create_kw = {"engine_id": 1, "initiated_by_id": user_id, "target_id": target.id}
         shared_scan_id = scan_repo.create_scan(**create_kw)
         scan = ScanHistory.objects.get(pk=shared_scan_id)
+        # Resolve effective params before persisting so the DB snapshot reflects the
+        # full resolved config, not just the raw user override that was passed in.
+        _apply_effective_scan_params(target, secator_config)
         _persist_scan_config_on_history(scan, secator_config)
     shared_scan_id = scan.id
     subdomains = list(Subdomain.objects.filter(id__in=subdomain_ids_for_subscan)) if subdomain_ids_for_subscan else []

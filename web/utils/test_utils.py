@@ -365,7 +365,7 @@ class TestDataGenerator:
             "delay",
             "proxy",
             "user_agent",
-            "request_headers",
+            "header",
             "follow_redirect",
             "depth",
             "default_profiles",

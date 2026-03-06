@@ -11,8 +11,8 @@ SCAN CONFIG RESOLUTION — MODULE RESPONSIBILITIES AND DATA FLOW
 
   scan_param_definitions (this module)
     - Defines PARAM_KEYS, type keys (INT_PARAM_KEYS, etc.), cast_param_value().
-    - Defines parse_request_headers_value() for consistent validation of
-      request_headers as a JSON object wherever scan_config is built from POST.
+    - Defines parse_header_value() for consistent validation of
+      header as a JSON object wherever scan_config is built from POST.
     - Single source of truth for param names and value types.
 
   targetApp.services.scope_params
@@ -24,7 +24,7 @@ SCAN CONFIG RESOLUTION — MODULE RESPONSIBILITIES AND DATA FLOW
       Single place for merge strategy when new params are added.
     - parse_scan_config_from_post(post, prefix, profiles_dict, existing_config):
       builds scan_config from POST for any form (org, scope, target); uses
-      parse_request_headers_value for the request_headers key.
+      parse_header_value for the header key.
     - _normalize_scan_config(raw): ensures scan_config is a dict.
     - build_effective_params_display(scope, target, organization): for templates.
 
@@ -46,7 +46,7 @@ SCAN CONFIG RESOLUTION — MODULE RESPONSIBILITIES AND DATA FLOW
 Flow (scan launch):  POST → form.build_start_secator_scan_kwargs
   → _merge_scope_params_into_config → resolve_scan_params → apply_resolved_to_secator_config.
 Flow (org/scope/target forms): POST → parse_scan_config_from_post (views call it with
-  appropriate prefix and profiles_dict); request_headers validated via parse_request_headers_value.
+  appropriate prefix and profiles_dict); header validated via parse_header_value.
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ PARAM_KEYS = frozenset(
         "delay",
         "proxy",
         "user_agent",
-        "request_headers",
+        "header",
         "follow_redirect",
         "depth",
     }
@@ -88,22 +88,20 @@ ORDERED_PARAM_KEYS_FOR_FORM = (
     "follow_redirect",
     "proxy",
     "user_agent",
-    "request_headers",
+    "header",
 )
 
 TARGET_OVERRIDE_PREFIX = "override_"
 
-# User-facing copy for request_headers (Scope, Target, target update form, scope form).
-REQUEST_HEADERS_HELP_TEXT = (
-    'Optional HTTP headers as a JSON object, e.g. {"X-Api-Key": "secret"}. Must be a valid JSON object.'
-)
-REQUEST_HEADERS_ERROR_MUST_BE_OBJECT = 'Request headers must be a JSON object (e.g. {"X-Header": "value"}).'
-REQUEST_HEADERS_ERROR_INVALID_JSON = "Invalid JSON. Changes were not applied."
+# User-facing copy for header (Scope, Target, target update form, scope form).
+HEADER_HELP_TEXT = 'Optional HTTP headers as a JSON object, e.g. {"X-Api-Key": "secret"}. Must be a valid JSON object.'
+HEADER_ERROR_MUST_BE_OBJECT = 'Request headers must be a JSON object (e.g. {"X-Header": "value"}).'
+HEADER_ERROR_INVALID_JSON = "Invalid JSON. Changes were not applied."
 
 
-def parse_request_headers_value(value: Any) -> tuple[dict[str, Any] | None, str | None]:
+def parse_header_value(value: Any) -> tuple[dict[str, Any] | None, str | None]:
     """
-    Parse and validate request_headers from form/POST: must be a JSON object or empty.
+    Parse and validate header from form/POST: must be a JSON object or empty.
 
     Used by parse_scan_config_from_post when building scan_config from POST so
     behavior and error messages stay consistent across org, scope, and target forms.
@@ -123,18 +121,18 @@ def parse_request_headers_value(value: Any) -> tuple[dict[str, Any] | None, str 
         try:
             parsed = json.loads(value)
         except (json.JSONDecodeError, TypeError):
-            return (None, REQUEST_HEADERS_ERROR_INVALID_JSON)
+            return (None, HEADER_ERROR_INVALID_JSON)
         if not isinstance(parsed, dict):
-            return (None, REQUEST_HEADERS_ERROR_MUST_BE_OBJECT)
+            return (None, HEADER_ERROR_MUST_BE_OBJECT)
         return (parsed, None)
-    return (None, REQUEST_HEADERS_ERROR_MUST_BE_OBJECT)
+    return (None, HEADER_ERROR_MUST_BE_OBJECT)
 
 
 def cast_param_value(key: str, raw: str | None) -> Any | None:
     """
     Cast a raw string from POST to the correct type for the given param key.
 
-    Returns None for empty/invalid values. request_headers is returned as-is
+    Returns None for empty/invalid values. header is returned as-is
     (caller must parse JSON separately).
     """
     if raw is None or (isinstance(raw, str) and not raw.strip()):
@@ -150,4 +148,4 @@ def cast_param_value(key: str, raw: str | None) -> Any | None:
             return None
     if key in BOOL_PARAM_KEYS:
         return safe_bool_cast(raw)
-    return raw if key in STR_PARAM_KEYS or key == "request_headers" else None
+    return raw if key in STR_PARAM_KEYS or key == "header" else None

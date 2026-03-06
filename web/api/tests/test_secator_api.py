@@ -434,6 +434,7 @@ class PostScanParamsEffectivePreviewTest(BaseTestCase):
 
     def setUp(self):
         super().setUp()
+        self.data_generator.create_scope()
         self.url = reverse("api:get_scan_params_effective_preview")
         self.project_slug = self.data_generator.project.slug
 
@@ -506,3 +507,25 @@ class PostScanParamsEffectivePreviewTest(BaseTestCase):
         self.assertIn(b"scan-params-effective-container", response.content)
         self.assertIn(b"50", response.content)
         self.assertNotIn(b"10", response.content)
+
+    def test_draft_null_leaves_override_unchanged_in_preview(self):
+        """None in draft leaves the key unchanged (no-op); only empty string clears."""
+        scope = self.data_generator.scope
+        org = scope.organization
+        if getattr(org, "scan_config", None) is None:
+            org.scan_config = {}
+            org.save(update_fields=["scan_config"])
+        scope.scan_config = {"threads": 10, "rate_limit": 50}
+        scope.save(update_fields=["scan_config"])
+        payload = {
+            "level": "scope",
+            "project_slug": self.project_slug,
+            "organization_id": scope.organization_id,
+            "scope_id": scope.id,
+            "draft": {"threads": None, "rate_limit": 50},
+        }
+        response = self.client.post(self.url, payload, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"scan-params-effective-container", response.content)
+        self.assertIn(b"50", response.content)
+        self.assertIn(b"10", response.content)

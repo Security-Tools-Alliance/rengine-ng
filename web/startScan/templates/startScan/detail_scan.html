@@ -180,6 +180,35 @@ Scan Findings
 						<h6 class="font-13 text-muted text-uppercase mt-3">Worker</h6>
 						<span class="badge badge-soft-secondary">{{ history.secator_worker_name|default:"Local" }}</span>
 
+						{% if scan_config_display %}
+						<h6 class="font-13 text-muted text-uppercase mt-3 mb-1">Scan config</h6>
+						<p class="mb-0">
+							<a class="text-primary text-decoration-none small" data-bs-toggle="collapse" href="#scan-config-collapse" aria-expanded="false" aria-controls="scan-config-collapse">
+								<i class="fe-chevron-down me-1"></i>Show scan parameters
+							</a>
+						</p>
+						<div class="collapse mt-1" id="scan-config-collapse">
+							<div class="small border rounded p-2 bg-light">
+								{% for key, value in scan_config_display.items %}
+								<div class="d-flex flex-wrap gap-1 mb-1">
+									<span class="text-muted fw-medium">{{ key }}:</span>
+									{% if value is None or value == "" %}
+									<span class="text-muted">—</span>
+									{% elif key == "profiles" and value %}
+									{% for p in value %}{% if not forloop.first %}, {% endif %}<span class="badge badge-soft-info">{{ p|escape }}</span>{% endfor %}
+									{% elif key == "header" or key == "extra_config" %}
+									<pre class="mb-0 small text-break">{{ value|escape }}</pre>
+									{% elif key == "follow_redirect" %}
+									<span>{{ value|yesno:"Yes,No" }}</span>
+									{% else %}
+									<span>{{ value|escape }}</span>
+									{% endif %}
+								</div>
+								{% endfor %}
+							</div>
+						</div>
+						{% endif %}
+
 						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Duration</h6>
 						{% if history.scan_status == -1 %}
 						<p class="mt-1 mb-0 text-warning font-14"><small class="text-center text-muted">Scan not yet started.</small></p>

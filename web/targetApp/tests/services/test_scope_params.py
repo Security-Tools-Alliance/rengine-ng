@@ -1,3 +1,4 @@
+from unittest.mock import patch
 import uuid
 
 from django.http import QueryDict
@@ -8,8 +9,10 @@ from targetApp.services.scope_params import (
     PARAM_KEYS,
     TARGET_OVERRIDE_PREFIX,
     _profiles_to_list,
+    apply_resolved_to_secator_config,
     build_effective_params_display,
     build_effective_params_display_from_configs,
+    get_scope_for_target,
     parse_target_scan_override_from_post,
     resolve_scan_params,
 )
@@ -38,7 +41,7 @@ class ResolveScanParamsTest(BaseTestCase):
         self.assertIsNone(result["depth"])
         self.assertIsNone(result["proxy"])
         self.assertIsNone(result["user_agent"])
-        self.assertIsNone(result["request_headers"])
+        self.assertIsNone(result["header"])
         self.assertEqual(result["profiles"], [])
         self.assertEqual(result["worker_ids"], [])
         self.assertEqual(result["extra_config"], {})
@@ -75,36 +78,55 @@ class ResolveScanParamsTest(BaseTestCase):
         self.assertEqual(result["extra_config"], {})
 
     # ------------------------------------------------------------------
-    # Target scan_config request_headers
+    # Target scan_config header
     # ------------------------------------------------------------------
-    def test_target_scan_config_request_headers(self):
+    def test_target_scan_config_header(self):
         target = self.data_generator.target
-        target.scan_config = {"request_headers": {"Authorization": "Bearer test-token-0000"}}
+        target.scan_config = {"header": {"Authorization": "Bearer test-token-0000"}}
         target.save()
 
         result = resolve_scan_params(target)
 
-        self.assertEqual(result["request_headers"], {"Authorization": "Bearer test-token-0000"})
+        self.assertEqual(result["header"], {"Authorization": "Bearer test-token-0000"})
 
-    def test_target_request_headers_beat_scope_request_headers(self):
+    def test_scope_empty_header_does_not_override_organization(self):
         """
-        When both target.scan_config and scope.scan_config have request_headers,
+        When scope has header set to empty dict, resolved value is org's
+        header, not {} (empty dict must not override parent config).
+        """
+        org_headers = {"User-Agent": "Mozilla/5.0"}
+        self.data_generator.organization.scan_config = {"header": org_headers}
+        self.data_generator.organization.save()
+
+        scope = self.data_generator.create_scope(header={})
+
+        result = resolve_scan_params(
+            self.data_generator.target,
+            scope=scope,
+            organization=scope.organization,
+        )
+
+        self.assertEqual(result["header"], org_headers)
+
+    def test_target_header_beat_scope_header(self):
+        """
+        When both target.scan_config and scope.scan_config have header,
         target takes precedence.
         """
         target_headers = {"X-From": "target", "X-Common": "target-value"}
         scope_headers = {"X-From": "scope", "X-Common": "scope-value"}
 
         target = self.data_generator.target
-        target.scan_config = {"request_headers": target_headers}
+        target.scan_config = {"header": target_headers}
         target.save()
-        scope = self.data_generator.create_scope(request_headers=scope_headers)
+        scope = self.data_generator.create_scope(header=scope_headers)
 
         params = resolve_scan_params(target=target, scope=scope)
 
         self.assertEqual(
-            params["request_headers"],
+            params["header"],
             target_headers,
-            msg="target scan_config request_headers should override scope",
+            msg="target scan_config header should override scope",
         )
         self.assertNotEqual(target_headers, scope_headers)
 
@@ -393,6 +415,28 @@ class ResolveScanParamsTest(BaseTestCase):
         result = resolve_scan_params(self.data_generator.target)
         self.assertEqual(result["threads"], 42)
         self.assertEqual(result["rate_limit"], 999)
+
+
+class ApplyResolvedToSecatorConfigTest(BaseTestCase):
+    """Tests for apply_resolved_to_secator_config."""
+
+    def test_empty_header_in_resolved_does_not_overwrite_existing(self):
+        """When resolved has header {}, existing secator_config is not overwritten."""
+        secator_config = {"header": {"User-Agent": "Mozilla/5.0"}}
+        resolved = {"header": {}}
+
+        apply_resolved_to_secator_config(secator_config, resolved)
+
+        self.assertEqual(secator_config["header"], {"User-Agent": "Mozilla/5.0"})
+
+    def test_empty_extra_config_in_resolved_does_not_overwrite_existing(self):
+        """When resolved has extra_config {}, existing secator_config is not overwritten."""
+        secator_config = {"extra_config": {"custom": "value"}}
+        resolved = {"extra_config": {}}
+
+        apply_resolved_to_secator_config(secator_config, resolved)
+
+        self.assertEqual(secator_config["extra_config"], {"custom": "value"})
 
 
 class ProfilesToListTest(BaseTestCase):
@@ -697,58 +741,58 @@ class ParseTargetScanOverrideFromPostTest(BaseTestCase):
         result, errors = parse_target_scan_override_from_post(post)
         self.assertIs(result["follow_redirect"], False)
 
-    def test_request_headers_valid_json(self):
+    def test_header_valid_json(self):
         post = QueryDict("", mutable=True)
-        post[f"{TARGET_OVERRIDE_PREFIX}request_headers"] = '{"X-Api-Key": "secret"}'
+        post[f"{TARGET_OVERRIDE_PREFIX}header"] = '{"X-Api-Key": "secret"}'
         result, errors = parse_target_scan_override_from_post(post)
-        self.assertEqual(result["request_headers"], {"X-Api-Key": "secret"})
+        self.assertEqual(result["header"], {"X-Api-Key": "secret"})
         self.assertEqual(errors, [])
 
-    def test_request_headers_invalid_json_omitted_and_error_added(self):
+    def test_header_invalid_json_omitted_and_error_added(self):
         post = QueryDict("", mutable=True)
-        post[f"{TARGET_OVERRIDE_PREFIX}request_headers"] = "not json"
+        post[f"{TARGET_OVERRIDE_PREFIX}header"] = "not json"
         result, errors = parse_target_scan_override_from_post(post)
-        self.assertNotIn("request_headers", result)
+        self.assertNotIn("header", result)
         self.assertEqual(len(errors), 1)
         self.assertIn("Invalid JSON", errors[0])
 
-    def test_request_headers_non_dict_json_adds_error(self):
+    def test_header_non_dict_json_adds_error(self):
         post = QueryDict("", mutable=True)
-        post[f"{TARGET_OVERRIDE_PREFIX}request_headers"] = "[1, 2, 3]"
+        post[f"{TARGET_OVERRIDE_PREFIX}header"] = "[1, 2, 3]"
         result, errors = parse_target_scan_override_from_post(post)
-        self.assertNotIn("request_headers", result)
+        self.assertNotIn("header", result)
         self.assertEqual(len(errors), 1)
         self.assertIn("JSON object", errors[0])
 
-    def test_request_headers_invalid_json_preserves_existing_override(self):
-        """On invalid JSON, existing request_headers are kept and an error is returned."""
+    def test_header_invalid_json_preserves_existing_override(self):
+        """On invalid JSON, existing header are kept and an error is returned."""
         post = QueryDict("", mutable=True)
-        post[f"{TARGET_OVERRIDE_PREFIX}request_headers"] = "not json"
-        pre_existing_override = {"request_headers": {"X-Api-Key": "secret"}}
+        post[f"{TARGET_OVERRIDE_PREFIX}header"] = "not json"
+        pre_existing_override = {"header": {"X-Api-Key": "secret"}}
         result, errors = parse_target_scan_override_from_post(post, existing_override=pre_existing_override)
-        self.assertEqual(result.get("request_headers"), {"X-Api-Key": "secret"})
+        self.assertEqual(result.get("header"), {"X-Api-Key": "secret"})
         self.assertEqual(len(errors), 1)
         self.assertIn("Invalid JSON", errors[0])
 
-    def test_request_headers_non_dict_json_preserves_existing_override(self):
-        """On valid JSON that is not an object, existing request_headers are kept and an error is returned."""
+    def test_header_non_dict_json_preserves_existing_override(self):
+        """On valid JSON that is not an object, existing header are kept and an error is returned."""
         post = QueryDict("", mutable=True)
-        post[f"{TARGET_OVERRIDE_PREFIX}request_headers"] = "[1, 2, 3]"
-        pre_existing_override = {"request_headers": {"X-Api-Key": "secret"}}
+        post[f"{TARGET_OVERRIDE_PREFIX}header"] = "[1, 2, 3]"
+        pre_existing_override = {"header": {"X-Api-Key": "secret"}}
         result, errors = parse_target_scan_override_from_post(post, existing_override=pre_existing_override)
-        self.assertEqual(result.get("request_headers"), {"X-Api-Key": "secret"})
+        self.assertEqual(result.get("header"), {"X-Api-Key": "secret"})
         self.assertEqual(len(errors), 1)
         self.assertIn("JSON object", errors[0])
 
-    def test_request_headers_non_dict_json_no_existing_override(self):
+    def test_header_non_dict_json_no_existing_override(self):
         """
-        When request_headers JSON is valid but not an object (e.g. array) and there is
-        no existing override, request_headers must not be set and an error must be returned.
+        When header JSON is valid but not an object (e.g. array) and there is
+        no existing override, header must not be set and an error must be returned.
         """
         post = QueryDict("", mutable=True)
-        post[f"{TARGET_OVERRIDE_PREFIX}request_headers"] = "[1, 2, 3]"
+        post[f"{TARGET_OVERRIDE_PREFIX}header"] = "[1, 2, 3]"
         result, errors = parse_target_scan_override_from_post(post, existing_override=None)
-        self.assertNotIn("request_headers", result)
+        self.assertNotIn("header", result)
         self.assertEqual(len(errors), 1)
         self.assertIn("JSON object", errors[0])
 
@@ -778,3 +822,40 @@ class ParseTargetScanOverrideFromPostTest(BaseTestCase):
         self.assertNotIn("threads", result)
         self.assertNotIn("proxy", result)
         self.assertEqual(errors, [])
+
+
+class GetScopeForTargetTest(BaseTestCase):
+    """Tests for get_scope_for_target helper."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_organization()
+
+    def test_none_target_returns_none(self):
+        self.assertIsNone(get_scope_for_target(None))
+
+    def test_target_with_no_scopes_returns_none(self):
+        target = self.data_generator.target
+        target.scopes.clear()
+        self.assertIsNone(get_scope_for_target(target))
+
+    def test_target_with_one_scope_returns_that_scope(self):
+        target = self.data_generator.target
+        scope = self.data_generator.create_scope(name="Single scope")
+        result = get_scope_for_target(target)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.id, scope.id)
+
+    def test_target_with_multiple_scopes_returns_first_by_id_and_logs_warning(self):
+        scope_a = self.data_generator.create_scope(name="Scope A")
+        scope_b = self.data_generator.create_scope(name="Scope B")
+        target = self.data_generator.target
+        scope_a.targets.add(target)
+        scope_b.targets.add(target)
+        with patch("targetApp.services.scope_params.logger") as mock_logger:
+            result = get_scope_for_target(target)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.id, min(scope_a.id, scope_b.id))
+        mock_logger.log_line.assert_called()
+        call_args = mock_logger.log_line.call_args
+        self.assertIn("multiple scopes", call_args[0][2])

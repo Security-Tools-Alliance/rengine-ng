@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from targetApp.models import Organization, Scope, Target
+from targetApp.services.scope_params import get_scope_for_target
 
 
 class ScanParamsPreviewError(ValueError):
@@ -18,13 +19,18 @@ class ScanParamsPreviewError(ValueError):
 
 def _merge_draft_into_config(config: dict[str, Any], draft: dict[str, Any]) -> None:
     """
-    Merge draft key/values into config. Empty string in draft clears the key
-    (aligned with parse_scan_config_from_post). None means leave key unchanged.
+    Merge draft key/values into config.
+
+    Keys in draft with value None leave config unchanged (no-op).
+    Empty string clears the key. Other values set the key.
+    Keys absent from draft leave config unchanged.
     """
     for k, v in draft.items():
+        if v is None:
+            continue
         if v == "":
             config.pop(k, None)
-        elif v is not None and v != "":
+        else:
             config[k] = v
 
 
@@ -81,7 +87,7 @@ def _preview_config_target(
     scope = None
     organization = None
     if target:
-        scope = Scope.objects.filter(targets=target).select_related("organization").first()
+        scope = get_scope_for_target(target)
         organization = scope.organization if scope else None
     org_config = normalize_scan_config(getattr(organization, "scan_config", None) if organization else None)
     scope_config = normalize_scan_config(getattr(scope, "scan_config", None) if scope else None)
@@ -110,7 +116,7 @@ def _preview_config_scan(
         except (Target.DoesNotExist, TypeError, ValueError):
             pass
         if target:
-            scope = Scope.objects.filter(targets=target).select_related("organization").first()
+            scope = get_scope_for_target(target)
             organization = scope.organization if scope else None
     if organization is None and organization_id:
         try:

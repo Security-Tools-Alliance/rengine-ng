@@ -28,6 +28,7 @@ from api.helpers.datatables import (
 )
 from api.serializers import IpSerializer
 from reNgine.core.data import safe_int_cast
+from targetApp.services.scan_param_definitions import PARAM_KEYS as SCAN_PARAM_KEYS
 from reNgine.core.path import resolve_results_dir_under_base, safe_rmtree
 from reNgine.definitions import (
     ABORTED_TASK,
@@ -84,12 +85,19 @@ from startScan.secator.ajax import render_secator_selection_json
 from startScan.secator.form import build_start_secator_scan_kwargs
 from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.constants import RENGINE_TARGET_TYPES_FOR_JS
-from targetApp.models import Organization, Scope, Target
+from targetApp.models import Organization, Target
 from targetApp.services.scan_params_context import build_scan_params_form_context
+from targetApp.services.scope_params import get_scope_for_target
 
 
 PREFIX_SCAN = "[STARTSCAN]"
 logger = get_module_logger(__name__)
+
+# Keys from scan_config that are safe to expose in the detail-scan UI.
+# Built from the public SCAN_PARAM_KEYS plus the two composite fields.
+# Any internal/engine-only keys added to scan_config in the future will NOT
+# be shown unless explicitly added here.
+_SCAN_CONFIG_DISPLAY_KEYS: frozenset[str] = SCAN_PARAM_KEYS | frozenset({"profiles", "extra_config"})
 
 
 def _parse_domain_id_list(raw_domain_ids: str) -> tuple[list[int], list[str]]:
@@ -820,6 +828,27 @@ def detail_scan(request, id, slug):
     ctx["secator_workers"] = SecatorWorker.objects.active().order_by("name")
     ctx["rengine_target_types"] = RENGINE_TARGET_TYPES_FOR_JS
 
+    scan_config = getattr(scan, "scan_config", None)
+    if isinstance(scan_config, dict) and scan_config:
+        display = {}
+        for k, v in scan_config.items():
+            if k not in _SCAN_CONFIG_DISPLAY_KEYS:
+                continue
+            if k == "profiles":
+                if isinstance(v, dict):
+                    display[k] = [f"{cat}: {name}" for cat, name in v.items() if name]
+                elif isinstance(v, list):
+                    display[k] = [str(p) for p in v if p]
+                else:
+                    display[k] = []
+            elif k in ("header", "extra_config") and isinstance(v, dict):
+                display[k] = json.dumps(v, indent=2)
+            else:
+                display[k] = v
+        ctx["scan_config_display"] = display
+    else:
+        ctx["scan_config_display"] = None
+
     return render(request, "startScan/detail_scan.html", ctx)
 
 
@@ -869,8 +898,9 @@ def start_scan_ui(request, slug, target_id):
         paths = request.POST.get("filterPath", "").split()
         filter_path = paths[0].rstrip() if paths else ""
 
+        scope = get_scope_for_target(target)
         try:
-            secator_kwargs = build_start_secator_scan_kwargs(request.POST)
+            secator_kwargs = build_start_secator_scan_kwargs(request.POST, target=target, scope=scope)
         except ValueError as exc:
             messages.error(request, str(exc))
             return redirect("start_scan", slug=slug, target_id=target_id)
@@ -917,7 +947,7 @@ def start_scan_ui(request, slug, target_id):
         )
         return JsonResponse({"engine_html": engine_html})
 
-    scope = Scope.objects.filter(targets=target).select_related("organization").first()
+    scope = get_scope_for_target(target)
     organization = scope.organization if scope else target.organizations.first()
 
     form_ctx = build_scan_params_form_context(target=target, scope=scope, organization=organization)
@@ -989,7 +1019,7 @@ def start_multiple_scan(request, slug):
             first_target_id = first_id
             first_target = Target.objects.filter(id=int(first_id)).select_related("project").first()
             if first_target and first_target.project.slug == slug:
-                scope = Scope.objects.filter(targets=first_target).select_related("organization").first()
+                scope = get_scope_for_target(first_target)
                 organization = scope.organization if scope else first_target.organizations.first()
 
     form_ctx = build_scan_params_form_context(target=first_target, scope=scope, organization=organization)

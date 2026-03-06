@@ -36,7 +36,7 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         result = self.runner._prepare_secator_config(config, profiles)
 
         self.assertEqual(result["sync"], False)
-        self.assertIsNone(result["proxy"])
+        self.assertIsNone(result.get("proxy"))
         self.assertEqual(result["delay"], 0)
         self.assertIn("profiles", result)
         self.assertIsInstance(result["profiles"], list)
@@ -47,13 +47,13 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         self.assertEqual(len(result["profiles"]), 4)
 
     def test_prepare_secator_config_default_delay(self):
-        """Test default delay when not specified."""
+        """When delay is absent from config, it is not forwarded to run_opts."""
         config = {"proxy": None}
         profiles = []
 
         result = self.runner._prepare_secator_config(config, profiles)
 
-        self.assertEqual(result["delay"], 0)
+        self.assertNotIn("delay", result)
 
     def test_prepare_secator_config_empty_profiles(self):
         """Test configuration with empty profiles list."""
@@ -82,22 +82,22 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         self.assertEqual(len(result["profiles"]), 2)
 
     def test_prepare_secator_config_none_inputs(self):
-        """Test configuration with None inputs."""
+        """When config and profiles are None, only sync and profiles keys are present."""
         result = self.runner._prepare_secator_config(None, None)
 
         self.assertEqual(result["sync"], False)
-        self.assertIsNone(result["proxy"])
-        self.assertEqual(result["delay"], 0)
+        self.assertNotIn("proxy", result)
+        self.assertNotIn("delay", result)
         self.assertIn("profiles", result)
         self.assertEqual(len(result["profiles"]), 0)
 
     def test_prepare_secator_config_empty_inputs(self):
-        """Test configuration with empty inputs."""
+        """When config and profiles are empty, only sync and profiles keys are present."""
         result = self.runner._prepare_secator_config({}, [])
 
         self.assertEqual(result["sync"], False)
-        self.assertIsNone(result["proxy"])
-        self.assertEqual(result["delay"], 0)
+        self.assertNotIn("proxy", result)
+        self.assertNotIn("delay", result)
         self.assertIn("profiles", result)
         self.assertEqual(len(result["profiles"]), 0)
 
@@ -111,13 +111,13 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         self.assertEqual(result["sync"], False)
 
     def test_prepare_secator_config_proxy_none(self):
-        """Test configuration with proxy set to None."""
+        """When proxy is None in config, it is not forwarded to run_opts."""
         config = {"proxy": None, "delay": 5}
         profiles = []
 
         result = self.runner._prepare_secator_config(config, profiles)
 
-        self.assertIsNone(result["proxy"])
+        self.assertNotIn("proxy", result)
 
     def test_prepare_secator_config_proxy_string(self):
         """Test configuration with proxy as string."""
@@ -129,7 +129,7 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         self.assertEqual(result["proxy"], "socks5://127.0.0.1:9050")
 
     def test_prepare_secator_config_delay_zero(self):
-        """Test configuration with delay set to 0."""
+        """Explicit delay=0 in config is forwarded to run_opts (0 is a valid value)."""
         config = {"proxy": None, "delay": 0}
         profiles = []
 
@@ -138,7 +138,7 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         self.assertEqual(result["delay"], 0)
 
     def test_prepare_secator_config_delay_positive(self):
-        """Test configuration with positive delay."""
+        """Positive delay in config is forwarded to run_opts."""
         config = {"proxy": None, "delay": 10}
         profiles = []
 
@@ -146,14 +146,14 @@ class TestSecatorRunnerConfig(unittest.TestCase):
 
         self.assertEqual(result["delay"], 10)
 
-    def test_prepare_secator_config_delay_default_when_omitted(self):
-        """Test that delay defaults to 0 when config is non-empty but delay is omitted."""
+    def test_prepare_secator_config_delay_absent_when_omitted(self):
+        """When delay is absent from config, it is not added to run_opts."""
         config = {"proxy": "http://proxy:8080"}
         profiles = []
 
         result = self.runner._prepare_secator_config(config, profiles)
 
-        self.assertEqual(result["delay"], 0)
+        self.assertNotIn("delay", result)
         self.assertEqual(result["proxy"], "http://proxy:8080")
 
     def test_prepare_secator_config_profiles_non_string_items(self):

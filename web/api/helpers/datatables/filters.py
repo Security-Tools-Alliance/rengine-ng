@@ -187,19 +187,12 @@ def get_request_filter_list(request: HttpRequest, param_key: str) -> list:
     Return list of filter values for a DataTables multi-value filter param.
 
     Accepts both param_key and param_key + "[]" (frontend multi-select convention).
-    Merges both lists when both are present so neither is ignored.
+    When both are present, param_key takes precedence (getlist(param_key) is used first).
     """
     from_param = list(request.GET.getlist(param_key))
-    from_brackets = list(request.GET.getlist(f"{param_key}[]"))
-    if from_param or from_brackets:
-        seen = set()
-        out = []
-        for v in from_param + from_brackets:
-            if v not in seen:
-                seen.add(v)
-                out.append(v)
-        return out
-    return []
+    if from_param:
+        return from_param
+    return list(request.GET.getlist(f"{param_key}[]"))
 
 
 def apply_filter_list_in(

@@ -10,7 +10,11 @@ from reNgine.core.data import safe_bool_cast, safe_int_cast
 from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.utilities.logger import get_module_logger
 from targetApp.services.scan_param_definitions import PARAM_KEYS, cast_param_value
-from targetApp.services.scope_params import apply_resolved_to_secator_config, resolve_scan_params
+from targetApp.services.scope_params import (
+    apply_resolved_to_secator_config,
+    get_scope_for_target,
+    resolve_scan_params,
+)
 
 
 PREFIX_SECATOR_FORM = "[SECATOR_FORM]"
@@ -36,7 +40,7 @@ class SecatorConfig(TypedDict, total=False):
     user_agent: str | None
     follow_redirect: bool | None
     depth: int | None
-    request_headers: dict[str, str] | None
+    header: dict[str, str] | None
 
 
 class ExecutionModeParams(TypedDict):
@@ -98,13 +102,16 @@ def parse_secator_config(post: QueryDict) -> SecatorConfig:
     if proxy is None:
         proxy = post.get("proxy") or None
     if delay is None:
-        delay = max(0, min(60, safe_int_cast(post.get("delay", 0), 0)))
+        raw_delay = post.get("delay")
+        if raw_delay is not None and raw_delay != "":
+            delay = max(0, min(60, safe_int_cast(raw_delay, 0)))
 
-    return {
-        "proxy": proxy,
-        "delay": delay,
-        "profiles": profiles if isinstance(profiles, list) else [],
-    }
+    result: dict[str, Any] = {"profiles": profiles if isinstance(profiles, list) else []}
+    if proxy is not None:
+        result["proxy"] = proxy
+    if delay is not None:
+        result["delay"] = delay
+    return result
 
 
 _PROFILE_CATEGORY_POST_KEYS: list[tuple[str, str, str, str]] = [
@@ -220,7 +227,7 @@ def _get_target_and_scope_for_scope_merge(
     """
     have_prefetched = target is not None and scope is not None
     if have_prefetched:
-        if target.project_id != scope.organization.project_id:
+        if scope is not None and target.project_id != scope.organization.project_id:
             logger.log_line(
                 PREFIX_SECATOR_FORM,
                 "SECURITY",
@@ -230,27 +237,34 @@ def _get_target_and_scope_for_scope_merge(
             return (None, None)
         return (target, scope)
 
-    scope_id = safe_int_cast(post.get("scope_id"))
-    if scope_id is None or target_id is None:
-        return (None, None)
-
     from targetApp.models import Scope, Target
+
+    scope_id = safe_int_cast(post.get("scope_id"))
+    if target_id is None:
+        return (None, None)
 
     try:
         target = Target.objects.select_related("project").get(id=target_id)
-        scope = Scope.objects.select_related("organization__project").get(id=scope_id)
-    except (Target.DoesNotExist, Scope.DoesNotExist):
+    except Target.DoesNotExist:
         return (None, None)
 
-    if target.project_id != scope.organization.project_id:
-        logger.log_line(
-            PREFIX_SECATOR_FORM,
-            "SECURITY",
-            "Rejected scope/target mismatch: target %s belongs to project %s, scope %s belongs to project %s"
-            % (target_id, target.project_id, scope_id, scope.organization.project_id),
-            level="warning",
-        )
-        return (None, None)
+    if scope_id is not None:
+        try:
+            scope = Scope.objects.select_related("organization__project").get(id=scope_id)
+        except Scope.DoesNotExist:
+            return (None, None)
+        if target.project_id != scope.organization.project_id:
+            logger.log_line(
+                PREFIX_SECATOR_FORM,
+                "SECURITY",
+                "Rejected scope/target mismatch: target %s belongs to project %s, scope %s belongs to project %s"
+                % (target_id, target.project_id, scope_id, scope.organization.project_id),
+                level="warning",
+            )
+            return (None, None)
+        return (target, scope)
+
+    scope = get_scope_for_target(target)
     return (target, scope)
 
 
@@ -259,7 +273,7 @@ def _parse_secator_user_override_from_post(post: QueryDict) -> dict[str, Any]:
     Build user_override dict from POST for scope param merge.
 
     Reads PARAM_KEYS from post; values are cast with cast_param_value.
-    Used by _merge_scope_params_into_config. request_headers, if present,
+    Used by _merge_scope_params_into_config. header, if present,
     remains as raw string (caller/resolution may parse JSON elsewhere).
     """
     user_override: dict[str, Any] = {}
@@ -295,7 +309,7 @@ def _merge_scope_params_into_config(
 
     Expected shape of user_override (built from POST in this function): a dict
     whose keys are a subset of PARAM_KEYS, with values already cast by
-    cast_param_value (int/float/bool/str). request_headers, if present, must be
+    cast_param_value (int/float/bool/str). header, if present, must be
     a dict (caller must parse JSON elsewhere).
     """
     target, scope = _get_target_and_scope_for_scope_merge(post, target_id, target, scope)
@@ -333,7 +347,7 @@ def build_start_secator_scan_kwargs(
     mode_params = parse_execution_mode_params(post)
     secator_config = parse_secator_config(post)
     profiles = parse_secator_profiles(post)
-    if profiles and "profiles" not in secator_config:
+    if profiles and not secator_config.get("profiles"):
         secator_config["profiles"] = profiles
 
     execution_mode = mode_params.get("execution_mode")

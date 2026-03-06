@@ -18,16 +18,16 @@ class ProcessTargetScanOverrideFromPostTest(BaseTestCase):
     def test_valid_post_returns_override_and_no_fallback(self):
         post = QueryDict("", mutable=True)
         post["override_threads"] = "10"
-        post["override_request_headers"] = "{}"
+        post["override_header"] = "{}"
         scan_override, errors, fallback, headers_initial = process_target_scan_override_from_post(post)
         self.assertIn("threads", scan_override)
         self.assertEqual(errors, [])
         self.assertIsNone(fallback)
         self.assertIsNone(headers_initial)
 
-    def test_invalid_request_headers_returns_errors_and_fallback(self):
+    def test_invalid_header_returns_errors_and_fallback(self):
         post = QueryDict("", mutable=True)
-        post["override_request_headers"] = "not json"
+        post["override_header"] = "not json"
         post["override_threads"] = "5"
         scan_override, errors, fallback, headers_initial = process_target_scan_override_from_post(post)
         self.assertEqual(len(errors), 1)
@@ -50,8 +50,8 @@ class BuildUpdateTargetContextTest(BaseTestCase):
         self.assertIn("form", context)
         self.assertIn("target_scopes", context)
         self.assertIn("first_scope", context)
-        self.assertIn("effective_params", context)
-        self.assertIn("override_request_headers_initial", context)
+        self.assertIn("scan_params_effective", context)
+        self.assertIn("override_header_initial", context)
         self.assertIn("override_form_fallback", context)
         self.assertIn("override_prefix", context)
         self.assertEqual(context["override_prefix"], "override_")
@@ -60,19 +60,19 @@ class BuildUpdateTargetContextTest(BaseTestCase):
         self.assertEqual(context["target"], target)
         self.assertEqual(context["form"], form)
 
-    def test_override_request_headers_initial_from_target_when_none_passed(self):
+    def test_override_header_initial_from_target_when_none_passed(self):
         self.data_generator.create_organization()
         target = self.data_generator.target
-        target.scan_config = {"request_headers": {"X-Custom": "value"}}
+        target.scan_config = {"header": {"X-Custom": "value"}}
         target.save()
         form = UpdateTargetModelForm(instance=target)
         context = build_update_target_context(target, form)
-        self.assertIn('"X-Custom"', context["override_request_headers_initial"])
-        self.assertIn("value", context["override_request_headers_initial"])
+        self.assertIn('"X-Custom"', context["override_header_initial"])
+        self.assertIn("value", context["override_header_initial"])
 
-    def test_override_request_headers_initial_passed_overrides_target(self):
+    def test_override_header_initial_passed_overrides_target(self):
         self.data_generator.create_organization()
         target = self.data_generator.target
         form = UpdateTargetModelForm(instance=target)
-        context = build_update_target_context(target, form, override_request_headers_initial='{"X-Passed": "ok"}')
-        self.assertEqual(context["override_request_headers_initial"], '{"X-Passed": "ok"}')
+        context = build_update_target_context(target, form, override_header_initial='{"X-Passed": "ok"}')
+        self.assertEqual(context["override_header_initial"], '{"X-Passed": "ok"}')

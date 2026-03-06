@@ -28,7 +28,7 @@ from .scan_param_definitions import (
     STR_PARAM_KEYS,
     TARGET_OVERRIDE_PREFIX,
     cast_param_value,
-    parse_request_headers_value,
+    parse_header_value,
 )
 
 
@@ -46,6 +46,34 @@ _SETTINGS_DEFAULTS: dict[str, str] = {
 }
 
 _PROFILE_CATEGORIES = ("speed", "evasion", "general", "network")
+PROFILE_CATEGORIES = _PROFILE_CATEGORIES
+
+
+def get_scope_for_target(target: Any) -> Any:
+    """
+    Return the scope to use for a target when scope_id is not specified.
+
+    Selection contract: when a target belongs to more than one scope, this
+    function always returns the scope with the lowest database ID (``order_by("id")``).
+    This is intentionally deterministic so that all call sites — forms, API
+    preview, and views — agree on the same scope without any additional
+    tie-breaking logic.  A warning is logged whenever multiple scopes are
+    found so that operators can diagnose unexpected associations.
+
+    Returns ``None`` if ``target`` is ``None`` or has no associated scopes.
+    """
+    if target is None:
+        return None
+    qs = target.scopes.select_related("organization", "organization__project").order_by("id")
+    scopes = list(qs[:2])
+    if len(scopes) > 1:
+        logger.log_line(
+            PREFIX_SCOPE_PARAMS,
+            "SCOPE",
+            "Target %s has multiple scopes; using first by id" % (target.id,),
+            level="warning",
+        )
+    return scopes[0] if scopes else None
 
 
 def _get_profile_opts(profile_name: str) -> dict[str, Any]:
@@ -357,6 +385,11 @@ def build_effective_params_display_from_configs(
     return _build_effective_display_from_config_dicts(override, target_c, scope_c, org_c)
 
 
+def _is_empty_dict_no_override(param: str, value: Any) -> bool:
+    """Treat empty dict for header as 'no override' so parent config is not overwritten."""
+    return param == "header" and isinstance(value, dict) and len(value) == 0
+
+
 def _resolve_single_param(
     param: str,
     override: dict[str, Any],
@@ -364,20 +397,26 @@ def _resolve_single_param(
     scope_config: dict[str, Any],
     org_config: dict[str, Any],
 ) -> Any:
-    # 1. User override
-    if param in override and override[param] is not None:
+    # 1. User override (empty dict for header does not override)
+    if param in override and override[param] is not None and not _is_empty_dict_no_override(param, override[param]):
         return override[param]
 
     # 2. Target.scan_config
-    if param in target_config and target_config[param] is not None:
+    if (
+        param in target_config
+        and target_config[param] is not None
+        and not _is_empty_dict_no_override(param, target_config[param])
+    ):
         return target_config[param]
 
     # 3. Scope.scan_config
-    if (scope_val := scope_config.get(param)) is not None:
+    scope_val = scope_config.get(param)
+    if scope_val is not None and not _is_empty_dict_no_override(param, scope_val):
         return scope_val
 
     # 4. Organization.scan_config
-    if (org_val := org_config.get(param)) is not None:
+    org_val = org_config.get(param)
+    if org_val is not None and not _is_empty_dict_no_override(param, org_val):
         return org_val
 
     # 5. Default
@@ -460,17 +499,29 @@ def apply_resolved_to_secator_config(
     Strategy:
     - Scalar params (PARAM_KEYS): set only when current value is None or "".
     - profiles: set only when resolved has profiles and config has none.
+    - extra_config: merged (resolved keys take precedence over existing keys).
     - worker_ids are not written here; caller should put them on the kwargs root.
     """
     for key in PARAM_KEYS:
         value = resolved.get(key)
-        if value is not None:
-            existing = secator_config.get(key)
-            if existing is None or existing == "":
-                secator_config[key] = value
+        if value is None:
+            continue
+        if key == "header" and isinstance(value, dict) and len(value) == 0:
+            continue
+        existing = secator_config.get(key)
+        if existing is None or existing == "":
+            secator_config[key] = value
 
     if resolved.get("profiles") and not secator_config.get("profiles"):
         secator_config["profiles"] = resolved["profiles"]
+
+    extra = resolved.get("extra_config")
+    if isinstance(extra, dict) and extra:
+        existing_extra = secator_config.get("extra_config")
+        if isinstance(existing_extra, dict):
+            secator_config["extra_config"] = {**existing_extra, **extra}
+        else:
+            secator_config["extra_config"] = extra
 
 
 def _prefixed(key: str, prefix: str) -> str:
@@ -490,14 +541,14 @@ def parse_scan_config_from_post(
     - Scalar fields (threads, rate_limit, etc.): missing POST key -> leave as-is
       (when existing_config is provided); present but value == '' -> clear override
       (key removed from result).
-    - request_headers: missing POST key -> leave as-is; present but value == ''
-      -> explicitly clear (set to {}). parse_request_headers_value returning
+    - header: missing POST key -> leave as-is; present but value == ''
+      -> explicitly clear (set to {}). parse_header_value returning
       (None, None) is treated as "no override" (key removed, not set to {}).
     - profiles: when profiles_dict is provided, result["profiles"] = profiles_dict
       (empty dict means clear). Caller builds profiles_dict from form (e.g.
       parse_secator_profiles_to_dict(post)).
 
-    On request_headers parse error, existing value is left unchanged and an error
+    On header parse error, existing value is left unchanged and an error
     is appended. Returns the full config (result), not a delta.
 
     Returns:
@@ -519,19 +570,19 @@ def parse_scan_config_from_post(
         if val is not None:
             result[param] = val
 
-    headers_key = _prefixed("request_headers", prefix)
+    headers_key = _prefixed("header", prefix)
     if headers_key in post:
         raw_headers = (post.get(headers_key) or "").strip()
         if raw_headers == "":
-            result["request_headers"] = {}
+            result["header"] = {}
         else:
-            parsed, err = parse_request_headers_value(raw_headers)
+            parsed, err = parse_header_value(raw_headers)
             if err:
                 errors.append(err)
             elif parsed is not None:
-                result["request_headers"] = parsed
+                result["header"] = parsed
             else:
-                result.pop("request_headers", None)
+                result.pop("header", None)
 
     if profiles_dict is not None:
         result["profiles"] = profiles_dict

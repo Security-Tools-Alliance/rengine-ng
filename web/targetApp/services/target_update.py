@@ -26,16 +26,16 @@ def process_target_scan_override_from_post(
     Parse target scan override from POST and build fallback values when parsing fails.
 
     Returns:
-        (scan_override, errors, override_form_fallback, override_request_headers_initial).
-        override_form_fallback and override_request_headers_initial are non-None only when
+        (scan_override, errors, override_form_fallback, override_header_initial).
+        override_form_fallback and override_header_initial are non-None only when
         errors is non-empty (so the template can re-display POSTed values).
     """
     profiles_dict = parse_secator_profiles_to_dict(post)
     scan_override, errors = parse_target_scan_override_from_post(post, profiles_dict=profiles_dict)
     override_form_fallback = None
-    override_request_headers_initial = None
+    override_header_initial = None
     if errors:
-        override_request_headers_initial = post.get(TARGET_OVERRIDE_PREFIX + "request_headers", "")
+        override_header_initial = post.get(TARGET_OVERRIDE_PREFIX + "header", "")
         override_form_fallback = {
             param: post.get(TARGET_OVERRIDE_PREFIX + param, "") for param in ORDERED_PARAM_KEYS_FOR_FORM
         }
@@ -43,7 +43,7 @@ def process_target_scan_override_from_post(
         scan_override,
         errors,
         override_form_fallback,
-        override_request_headers_initial,
+        override_header_initial,
     )
 
 
@@ -51,7 +51,7 @@ def build_update_target_context(
     target: Any,
     form: Any,
     override_form_fallback: dict[str, str] | None = None,
-    override_request_headers_initial: str | None = None,
+    override_header_initial: str | None = None,
     scan_override: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
@@ -71,26 +71,26 @@ def build_update_target_context(
             dict(target.scan_config) if target.scan_config and isinstance(target.scan_config, dict) else {}
         )
 
-    request_headers_val = scan_params_values.get("request_headers") if isinstance(scan_params_values, dict) else None
-    if isinstance(request_headers_val, str):
+    header_val = scan_params_values.get("header") if isinstance(scan_params_values, dict) else None
+    if isinstance(header_val, str):
         try:
-            parsed = json.loads(request_headers_val)
-            request_headers_val = parsed if isinstance(parsed, dict) else {}
+            parsed = json.loads(header_val)
+            header_val = parsed if isinstance(parsed, dict) else {}
         except (TypeError, ValueError):
-            request_headers_val = {}
-    if not isinstance(request_headers_val, dict):
-        request_headers_val = {}
-    scan_params_values["request_headers"] = request_headers_val
+            header_val = {}
+    if not isinstance(header_val, dict):
+        header_val = {}
+    scan_params_values["header"] = header_val
     scan_params_values.setdefault("profiles", {})
 
     try:
-        request_headers_initial = json.dumps(request_headers_val, indent=2, sort_keys=True)
+        header_initial = json.dumps(header_val, indent=2, sort_keys=True)
     except TypeError:
-        request_headers_initial = ""
-    if override_request_headers_initial is not None:
-        if isinstance(override_request_headers_initial, dict):
-            override_request_headers_initial = json.dumps(override_request_headers_initial)
-        request_headers_initial = override_request_headers_initial
+        header_initial = ""
+    if override_header_initial is not None:
+        if isinstance(override_header_initial, dict):
+            override_header_initial = json.dumps(override_header_initial)
+        header_initial = override_header_initial
 
     form_ctx = build_scan_params_form_context(target=target, scan_params_values=scan_params_values)
     context = {
@@ -100,10 +100,12 @@ def build_update_target_context(
         "form": form,
         "target_scopes": scopes,
         "first_scope": first_scope,
-        "request_headers_initial": request_headers_initial,
-        "override_request_headers_initial": override_request_headers_initial,
+        "override_header_initial": override_header_initial,
         "override_form_fallback": override_form_fallback,
         "override_prefix": TARGET_OVERRIDE_PREFIX,
     }
     context.update(form_ctx)
+    context["header_initial"] = header_initial
+    if context.get("override_header_initial") is None:
+        context["override_header_initial"] = header_initial
     return context

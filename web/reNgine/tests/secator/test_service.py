@@ -2,10 +2,12 @@
 Tests for Secator service functionality.
 """
 
+from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 from reNgine.definitions import ABORTED_TASK, FAILED_TASK, INITIATED_TASK, RUNNING_TASK, SUCCESS_TASK
 from reNgine.secator.service import (
+    _apply_effective_scan_params,
     _persist_scan_config_on_history,
     handle_scan_error,
     run_per_task_secator_scans,
@@ -428,6 +430,277 @@ class TestRunPerTaskSecatorScans(BaseTestCase):
         self.assertEqual(result["success_count"], 1)
 
 
+class TestRunPerTaskPersistsScanConfig(BaseTestCase):
+    """run_per_task_secator_scans must persist the RESOLVED config, not the raw user override."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.scan_history = self.data_generator.create_scan_history()
+        self.task = self.data_generator.create_secator_task()
+        self.task_type_to_id = {self.task.task_type: self.task.id}
+
+    @patch("reNgine.secator.service.start_secator_scan")
+    def test_scan_config_persisted_with_resolved_params(self, mock_start: MagicMock) -> None:
+        """Effective params resolved from scope/org are included in the persisted scan_config."""
+        mock_start.return_value = {"status": True, "scan_id": 1}
+        selected = {self.task.task_type: ["host1.example.com"]}
+
+        def apply_params(target: Any, secator_config: dict) -> None:
+            secator_config["rate_limit"] = 75
+            secator_config["timeout"] = 8
+
+        with patch("reNgine.secator.service._apply_effective_scan_params", side_effect=apply_params):
+            result = run_per_task_secator_scans(
+                target_id=self.scan_history.target_id,
+                user_id=self.user.id,
+                selected_targets_per_task=selected,
+                task_type_to_id=self.task_type_to_id,
+                secator_config={"profiles": []},
+            )
+
+        self.assertEqual(result["success_count"], 1)
+        scan = ScanHistory.objects.get(pk=result["scan_id"])
+        self.assertEqual(scan.scan_config.get("rate_limit"), 75)
+        self.assertEqual(scan.scan_config.get("timeout"), 8)
+
+    @patch("reNgine.secator.service.start_secator_scan")
+    def test_scan_config_not_persisted_when_scan_history_is_reused(self, mock_start: MagicMock) -> None:
+        """When an existing ScanHistory is reused, _apply_effective_scan_params is not called."""
+        existing_scan = self.data_generator.create_scan_history()
+        mock_start.return_value = {"status": True, "scan_id": existing_scan.id}
+        selected = {self.task.task_type: ["host1.example.com"]}
+
+        with patch("reNgine.secator.service._apply_effective_scan_params") as mock_apply:
+            run_per_task_secator_scans(
+                target_id=self.scan_history.target_id,
+                user_id=self.user.id,
+                selected_targets_per_task=selected,
+                task_type_to_id=self.task_type_to_id,
+                scan_history_id=existing_scan.id,
+            )
+
+        mock_apply.assert_not_called()
+
+
+class TestApplyEffectiveScanParams(BaseTestCase):
+    """Test _apply_effective_scan_params merges scope/target/org params into secator_config."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.target = self.data_generator.target
+
+    def _make_resolved(self, **overrides: Any) -> dict:
+        base: dict = {
+            "rate_limit": None,
+            "timeout": None,
+            "threads": None,
+            "retries": None,
+            "delay": None,
+            "proxy": None,
+            "user_agent": None,
+            "follow_redirect": None,
+            "depth": None,
+            "header": {},
+            "profiles": [],
+            "worker_ids": [],
+            "extra_config": {},
+        }
+        base.update(overrides)
+        return base
+
+    def _patch_resolution(self, resolved: dict):
+        """Patch resolve_scan_params and apply_resolved_to_secator_config for unit isolation."""
+        from targetApp.services.scope_params import apply_resolved_to_secator_config as real_apply
+
+        def side_effect_apply(config: dict, res: dict) -> None:
+            real_apply(config, res)
+
+        return (
+            patch("reNgine.secator.service.resolve_scan_params", return_value=resolved),
+            patch("reNgine.secator.service.apply_resolved_to_secator_config", side_effect=side_effect_apply),
+        )
+
+    def test_merges_scope_params_into_empty_config(self) -> None:
+        """Resolved params are added to an empty secator_config."""
+        resolved = self._make_resolved(rate_limit=50, timeout=10)
+        mock_scope = MagicMock()
+        with patch("reNgine.secator.service.get_scope_for_target", return_value=mock_scope):
+            with patch("reNgine.secator.service.resolve_scan_params", return_value=resolved):
+                config: dict = {}
+                _apply_effective_scan_params(self.target, config)
+        self.assertEqual(config.get("rate_limit"), 50)
+        self.assertEqual(config.get("timeout"), 10)
+
+    def test_user_values_are_not_overridden(self) -> None:
+        """Values already present in secator_config (user overrides) are preserved."""
+        resolved = self._make_resolved(rate_limit=50, timeout=10)
+        mock_scope = MagicMock()
+        with patch("reNgine.secator.service.get_scope_for_target", return_value=mock_scope):
+            with patch("reNgine.secator.service.resolve_scan_params", return_value=resolved):
+                config = {"rate_limit": 200, "timeout": 30}
+                _apply_effective_scan_params(self.target, config)
+        self.assertEqual(config["rate_limit"], 200)
+        self.assertEqual(config["timeout"], 30)
+
+    def test_zero_user_value_not_overridden_by_scope(self) -> None:
+        """Explicit user value of 0 is preserved; scope value does not override it."""
+        resolved = self._make_resolved(delay=5)
+        mock_scope = MagicMock()
+        with patch("reNgine.secator.service.get_scope_for_target", return_value=mock_scope):
+            with patch("reNgine.secator.service.resolve_scan_params", return_value=resolved):
+                config = {"delay": 0}
+                _apply_effective_scan_params(self.target, config)
+        self.assertEqual(config["delay"], 0)
+
+    def test_no_scope_passes_none_to_resolve(self) -> None:
+        """When no scope exists, resolve_scan_params is called with scope=None."""
+        resolved = self._make_resolved()
+        with patch("reNgine.secator.service.get_scope_for_target", return_value=None):
+            with patch("reNgine.secator.service.resolve_scan_params", return_value=resolved) as mock_resolve:
+                config: dict = {}
+                _apply_effective_scan_params(self.target, config)
+        mock_resolve.assert_called_once()
+        call_kwargs = mock_resolve.call_args[1]
+        self.assertIsNone(call_kwargs.get("scope"))
+
+    def test_header_from_resolved_are_merged(self) -> None:
+        """header from resolved params are forwarded into secator_config."""
+        target_headers = {"Authorization": "Bearer secret"}
+        resolved = self._make_resolved(header=target_headers)
+        mock_scope = MagicMock()
+        with patch("reNgine.secator.service.get_scope_for_target", return_value=mock_scope):
+            with patch("reNgine.secator.service.resolve_scan_params", return_value=resolved):
+                config: dict = {}
+                _apply_effective_scan_params(self.target, config)
+        self.assertEqual(config.get("header"), target_headers)
+
+    def test_scope_organization_passed_to_resolve(self) -> None:
+        """Organization from scope is extracted and forwarded to resolve_scan_params."""
+        mock_org = MagicMock()
+        mock_scope = MagicMock()
+        mock_scope.organization = mock_org
+        resolved = self._make_resolved()
+        with patch("reNgine.secator.service.get_scope_for_target", return_value=mock_scope):
+            with patch("reNgine.secator.service.resolve_scan_params", return_value=resolved) as mock_resolve:
+                _apply_effective_scan_params(self.target, {})
+        call_kwargs = mock_resolve.call_args[1]
+        self.assertEqual(call_kwargs.get("organization"), mock_org)
+
+
+class TestStartSecatorScanResolvesEffectiveParams(BaseTestCase):
+    """start_secator_scan applies scope/target/org params before launching."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.scan_history = self.data_generator.create_scan_history()
+
+    @patch("reNgine.secator.service.threading.Thread")
+    def test_scope_params_forwarded_to_initiate_secator_scan(self, mock_thread: MagicMock) -> None:
+        """rate_limit and timeout from scope are present in secator_config passed to initiate_secator_scan."""
+
+        def run_target_and_return_mock(*args, **kwargs):
+            kwargs.get("target", lambda: None)()
+            return Mock()
+
+        mock_thread.side_effect = run_target_and_return_mock
+
+        def apply_scope_params(target, secator_config: dict) -> None:
+            secator_config["rate_limit"] = 77
+            secator_config["timeout"] = 9
+
+        with patch("reNgine.secator.service._apply_effective_scan_params", side_effect=apply_scope_params):
+            with patch("reNgine.secator.service.initiate_secator_scan") as mock_initiate:
+                start_secator_scan(
+                    target_id=self.scan_history.target_id,
+                    user_id=self.user.id,
+                    execution_mode="tasks",
+                    task_ids=[1],
+                    secator_config={},
+                )
+        mock_initiate.assert_called_once()
+        forwarded_config = mock_initiate.call_args[1]["secator_config"]
+        self.assertEqual(forwarded_config.get("rate_limit"), 77)
+        self.assertEqual(forwarded_config.get("timeout"), 9)
+
+    @patch("reNgine.secator.service.threading.Thread")
+    def test_user_override_takes_precedence_over_scope(self, mock_thread: MagicMock) -> None:
+        """User-supplied rate_limit is not overwritten by scope resolution."""
+
+        def run_target_and_return_mock(*args, **kwargs):
+            kwargs.get("target", lambda: None)()
+            return Mock()
+
+        mock_thread.side_effect = run_target_and_return_mock
+
+        def apply_scope_params(target, secator_config: dict) -> None:
+            if secator_config.get("rate_limit") is None:
+                secator_config["rate_limit"] = 50
+
+        with patch("reNgine.secator.service._apply_effective_scan_params", side_effect=apply_scope_params):
+            with patch("reNgine.secator.service.initiate_secator_scan") as mock_initiate:
+                start_secator_scan(
+                    target_id=self.scan_history.target_id,
+                    user_id=self.user.id,
+                    execution_mode="tasks",
+                    task_ids=[1],
+                    secator_config={"rate_limit": 999},
+                )
+        mock_initiate.assert_called_once()
+        forwarded_config = mock_initiate.call_args[1]["secator_config"]
+        self.assertEqual(forwarded_config.get("rate_limit"), 999)
+
+    @patch("reNgine.secator.service.threading.Thread")
+    def test_random_proxy_applied_after_scope_resolution(self, mock_thread: MagicMock) -> None:
+        """Random proxy is not applied when scope already set a proxy."""
+
+        def run_target_and_return_mock(*args, **kwargs):
+            kwargs.get("target", lambda: None)()
+            return Mock()
+
+        mock_thread.side_effect = run_target_and_return_mock
+
+        def apply_scope_sets_proxy(target, secator_config: dict) -> None:
+            secator_config["proxy"] = "http://scope-proxy:8080"
+
+        with patch("reNgine.secator.service._apply_effective_scan_params", side_effect=apply_scope_sets_proxy):
+            with patch("reNgine.secator.service.initiate_secator_scan") as mock_initiate:
+                with patch("reNgine.utilities.proxy.get_random_proxy", return_value="http://random:9999"):
+                    start_secator_scan(
+                        target_id=self.scan_history.target_id,
+                        user_id=self.user.id,
+                        execution_mode="tasks",
+                        task_ids=[1],
+                        secator_config={},
+                    )
+        mock_initiate.assert_called_once()
+        forwarded_config = mock_initiate.call_args[1]["secator_config"]
+        self.assertEqual(forwarded_config.get("proxy"), "http://scope-proxy:8080")
+
+    @patch("reNgine.secator.service.threading.Thread")
+    def test_random_proxy_applied_when_scope_proxy_is_none(self, mock_thread: MagicMock) -> None:
+        """Random proxy is applied when scope resolution leaves proxy as None."""
+
+        def run_target_and_return_mock(*args, **kwargs):
+            kwargs.get("target", lambda: None)()
+            return Mock()
+
+        mock_thread.side_effect = run_target_and_return_mock
+
+        with patch("reNgine.secator.service._apply_effective_scan_params"):
+            with patch("reNgine.secator.service.initiate_secator_scan") as mock_initiate:
+                with patch("reNgine.utilities.proxy.get_random_proxy", return_value="http://random:9999"):
+                    start_secator_scan(
+                        target_id=self.scan_history.target_id,
+                        user_id=self.user.id,
+                        execution_mode="tasks",
+                        task_ids=[1],
+                        secator_config={},
+                    )
+        mock_initiate.assert_called_once()
+        forwarded_config = mock_initiate.call_args[1]["secator_config"]
+        self.assertEqual(forwarded_config.get("proxy"), "http://random:9999")
+
+
 class TestPersistScanConfigOnHistory(BaseTestCase):
     """Test cases for _persist_scan_config_on_history helper."""
 
@@ -464,7 +737,7 @@ class TestStartSecatorScanPersistsScanConfig(BaseTestCase):
 
     @patch("reNgine.secator.service.threading.Thread")
     def test_new_scan_persists_scan_config(self, mock_thread):
-        """When execution_mode creates a new scan, scan_config is persisted."""
+        """When execution_mode creates a new scan, scan_config is persisted (user values preserved after resolution)."""
         config = {"threads": 20, "delay": 1}
 
         def run_target_and_return_mock(*args, **kwargs):
@@ -473,14 +746,15 @@ class TestStartSecatorScanPersistsScanConfig(BaseTestCase):
 
         mock_thread.side_effect = run_target_and_return_mock
 
-        with patch("reNgine.secator.service.initiate_secator_scan"):
-            result = start_secator_scan(
-                target_id=self.scan_history.target_id,
-                user_id=self.user.id,
-                execution_mode="tasks",
-                task_ids=[1],
-                secator_config=config,
-            )
+        with patch("reNgine.secator.service._apply_effective_scan_params"):
+            with patch("reNgine.secator.service.initiate_secator_scan"):
+                result = start_secator_scan(
+                    target_id=self.scan_history.target_id,
+                    user_id=self.user.id,
+                    execution_mode="tasks",
+                    task_ids=[1],
+                    secator_config=config,
+                )
         self.assertTrue(result.get("status"))
         scan = ScanHistory.objects.get(pk=result["scan_id"])
         self.assertEqual(scan.scan_config, config)
@@ -497,15 +771,16 @@ class TestStartSecatorScanPersistsScanConfig(BaseTestCase):
 
         mock_thread.side_effect = run_target_and_return_mock
 
-        with patch("reNgine.secator.service.initiate_secator_scan"):
-            result = start_secator_scan(
-                target_id=self.scan_history.target_id,
-                user_id=self.user.id,
-                execution_mode="tasks",
-                task_ids=[1],
-                secator_config={"threads": 99},
-                scan_history_id=self.scan_history.id,
-            )
+        with patch("reNgine.secator.service._apply_effective_scan_params"):
+            with patch("reNgine.secator.service.initiate_secator_scan"):
+                result = start_secator_scan(
+                    target_id=self.scan_history.target_id,
+                    user_id=self.user.id,
+                    execution_mode="tasks",
+                    task_ids=[1],
+                    secator_config={"threads": 99},
+                    scan_history_id=self.scan_history.id,
+                )
         self.assertTrue(result.get("status"))
         self.scan_history.refresh_from_db()
         self.assertEqual(self.scan_history.scan_config, {"threads": 5})

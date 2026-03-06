@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import time
 
+from reNgine.secator.run_opts import build_run_opts
 from reNgine.utilities.logger import get_module_logger
 from scanEngine.models import SecatorWorker
 from scanEngine.services.worker_config import (
@@ -236,15 +237,12 @@ def _build_job_payload(
             subscan = SubScan.objects.filter(id=subscan_id).select_related("subdomain").first()
             if subscan and subscan.subdomain_id:
                 context["subdomain_id"] = subscan.subdomain_id
+    run_opts = build_run_opts(secator_config=secator_config, profile_names=profile_names)
     job = {
         "execution_mode": execution_mode,
         "targets": targets,
         "context": context,
-        "run_opts": {
-            "proxy": secator_config.get("proxy"),
-            "delay": secator_config.get("delay", 0),
-            "profiles": profile_names,
-        },
+        "run_opts": run_opts,
     }
     if execution_mode == "workflow":
         job["workflow_name"] = workflow_name
