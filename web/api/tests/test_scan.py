@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 
-from startScan.models import Domain, ScanHistory, Subdomain
+from startScan.models import Domain, ScanHistory, Subdomain, Technology
 from utils.test_base import BaseTestCase
 
 
@@ -543,6 +543,28 @@ class TestListTechnology(BaseTestCase):
             response.data["technologies"][0]["name"],
             self.data_generator.technology.name,
         )
+
+    def test_list_technology_filtered_by_scan_id(self):
+        """ListTechnologies with scan_id returns only technologies for that scan."""
+        scan1 = self.data_generator.scan_history
+        scan2 = self.data_generator.create_scan_history()
+        domain2 = self.data_generator.create_domain(scan_history=scan2)
+        sub2 = self.data_generator.create_subdomain(name="sub2.example.com", scan_history=scan2, domain=domain2)
+        tech2 = Technology.objects.create(name="Other Technology")
+        sub2.technologies.add(tech2)
+
+        url = reverse("api:listTechnologies")
+        response1 = self.client.get(url, {"scan_id": scan1.id})
+        self.assertEqual(response1.status_code, status.HTTP_200_OK)
+        tech_names_1 = {t["name"] for t in response1.data["technologies"]}
+        self.assertIn(self.data_generator.technology.name, tech_names_1)
+        self.assertNotIn("Other Technology", tech_names_1)
+
+        response2 = self.client.get(url, {"scan_id": scan2.id})
+        self.assertEqual(response2.status_code, status.HTTP_200_OK)
+        tech_names_2 = {t["name"] for t in response2.data["technologies"]}
+        self.assertIn("Other Technology", tech_names_2)
+        self.assertNotIn(self.data_generator.technology.name, tech_names_2)
 
 
 class TestDirectoryViewSet(BaseTestCase):

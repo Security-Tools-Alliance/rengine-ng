@@ -481,7 +481,10 @@ window.DETAIL_SCAN_API_CERTIFICATES_LIST = "{% url 'api:certificates_list' %}";
 <script src="{% static 'plugins/j-map/jquery-jvectormap.min.js' %}"></script>
 <script src="{% static 'plugins/j-map/maps/jquery-jvectormap-world-mill-en.js' %}"></script>
 <script type="text/javascript">
-const subdomain_datatable_columns = window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS || [];
+const subdomain_datatable_columns = (window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS || []).map(function(col) {
+	if (col && col.name === 'vuln_count') return Object.assign({}, col, { visible: false });
+	return col;
+});
 const vuln_datatable_columns = window.RENGINE_VULN_DATATABLE_COLUMNS || [];
 const subdomain_datatable_page_length = window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30;
 const subdomain_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];

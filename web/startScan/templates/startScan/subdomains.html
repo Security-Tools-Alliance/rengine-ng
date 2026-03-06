@@ -56,7 +56,10 @@ window.DETAIL_SCAN_API_CERTIFICATES_LIST = "{% url 'api:certificates_list' %}";
 <script type="text/javascript">
 window.SUBDOMAIN_DATATABLE_BASE_URL = "{% url 'api:subdomain-datatable-list' %}?project={{ current_project.slug|escapejs }}&format=datatables";
 {% if request.GET.ip_address %}window.SUBDOMAIN_DATATABLE_EXTRA_PARAMS = "&ip_address={{ request.GET.ip_address|escapejs }}";{% elif request.GET.name %}window.SUBDOMAIN_DATATABLE_EXTRA_PARAMS = "&name={{ request.GET.name|escapejs }}";{% else %}window.SUBDOMAIN_DATATABLE_EXTRA_PARAMS = "";{% endif %}
-const subdomain_datatable_columns = window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS || [];
+const subdomain_datatable_columns = (window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS || []).map(function(col) {
+	if (col && (col.name === 'vuln_count' || col.name === 'endpoint_count')) return Object.assign({}, col, { visible: false });
+	return col;
+});
 const subdomain_datatable_page_length = window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30;
 const subdomain_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
 

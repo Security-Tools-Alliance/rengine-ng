@@ -2455,17 +2455,15 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 
 function get_technologies(endpoint_url, subdomain_endpoint_url, scan_id=null, domain_id=null){
 	// this function will fetch and render tech in widget
-	let url = `${endpoint_url}?`;
-
+	const params = [];
 	if (scan_id) {
-		url += `scan_id=${scan_id}`;
+		params.push(`scan_id=${scan_id}`);
 	}
-
 	if (domain_id) {
-		url += `target_id=${domain_id}`;
+		params.push(`target_id=${domain_id}`);
 	}
-
-	url += `&format=json`;
+	params.push('format=json');
+	const url = `${endpoint_url}?${params.join('&')}`;
 
 	$.getJSON(url, function(data) {
 		$('#technologies-count').empty();
@@ -2478,7 +2476,11 @@ function get_technologies(endpoint_url, subdomain_endpoint_url, scan_id=null, do
 				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${subdomain_endpoint_url}', '${tech['name']}', scan_id=null, domain_id=${domain_id})">${tech['name']}</span>`);
 			}
 		}
-		$('#technologies-count').html(`<span class="badge badge-soft-primary me-1">${data['technologies'].length}</span>`);
+		const totalCount = data['total_count'] !== undefined ? data['total_count'] : data['technologies'].length;
+		const countLabel = totalCount > data['technologies'].length
+			? `${data['technologies'].length} (of ${totalCount})`
+			: String(data['technologies'].length);
+		$('#technologies-count').html(`<span class="badge badge-soft-primary me-1">${countLabel}</span>`);
 		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
 	});
 }

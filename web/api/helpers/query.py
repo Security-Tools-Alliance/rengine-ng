@@ -19,7 +19,7 @@ from reNgine.definitions import (
     SCAN_STATUSES_RECENTLY_COMPLETED,
     SUCCESS_TASK,
 )
-from reNgine.utilities.db import count_subquery
+from reNgine.utilities.db import count_subquery, count_subquery_related
 from reNgine.utilities.subdomain import get_interesting_subdomains
 
 
@@ -140,17 +140,47 @@ def build_subdomain_datatable_queryset(
     if scan_id is not None:
         base_filter["scan_history_id"] = scan_id
 
+    # When target_id is set, aggregate vulnerability counts by subdomain name (across all scans for that target).
+    # Otherwise count by subdomain_id only (single scan or global view).
+    target_vuln_filter = {"subdomain__domain__scan_history__target_id": target_id} if target_id is not None else None
+    if target_vuln_filter is not None:
+        vuln_info = count_subquery_related(
+            Vulnerability, "subdomain__name", outer_ref_name="name", filter_kwargs={**target_vuln_filter, "severity": 0}
+        )
+        vuln_low = count_subquery_related(
+            Vulnerability, "subdomain__name", outer_ref_name="name", filter_kwargs={**target_vuln_filter, "severity": 1}
+        )
+        vuln_medium = count_subquery_related(
+            Vulnerability, "subdomain__name", outer_ref_name="name", filter_kwargs={**target_vuln_filter, "severity": 2}
+        )
+        vuln_high = count_subquery_related(
+            Vulnerability, "subdomain__name", outer_ref_name="name", filter_kwargs={**target_vuln_filter, "severity": 3}
+        )
+        vuln_critical = count_subquery_related(
+            Vulnerability, "subdomain__name", outer_ref_name="name", filter_kwargs={**target_vuln_filter, "severity": 4}
+        )
+        vuln_total = count_subquery_related(
+            Vulnerability, "subdomain__name", outer_ref_name="name", filter_kwargs=target_vuln_filter
+        )
+    else:
+        vuln_info = count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 0})
+        vuln_low = count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 1})
+        vuln_medium = count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 2})
+        vuln_high = count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 3})
+        vuln_critical = count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 4})
+        vuln_total = count_subquery(Vulnerability, "subdomain_id")
+
     # Scalar count subqueries avoid cartesian products vs Count(distinct=...) over joins.
     queryset = (
         Subdomain.objects.filter(**base_filter)
         .annotate(
             endpoint_count=count_subquery(EndPoint, "subdomain_id"),
-            info_count=count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 0}),
-            low_count=count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 1}),
-            medium_count=count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 2}),
-            high_count=count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 3}),
-            critical_count=count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 4}),
-            vuln_count=count_subquery(Vulnerability, "subdomain_id"),
+            info_count=vuln_info,
+            low_count=vuln_low,
+            medium_count=vuln_medium,
+            high_count=vuln_high,
+            critical_count=vuln_critical,
+            vuln_count=vuln_total,
             subscan_count=count_subquery(SubScan, "subdomain_id"),
             certificate_count=count_subquery(Certificate, "subdomain_id"),
             todos_count=count_subquery(TodoNote, "subdomain_id", filter_kwargs={"is_done": False}),
