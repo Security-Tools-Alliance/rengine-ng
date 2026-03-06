@@ -27,6 +27,7 @@ from api.helpers.datatables import (
     get_task_status_filter_labels,
 )
 from api.serializers import IpSerializer
+from dashboard.models import Project
 from reNgine.core.data import safe_int_cast
 from reNgine.core.path import resolve_results_dir_under_base, safe_rmtree
 from reNgine.definitions import (
@@ -57,7 +58,6 @@ from reNgine.utilities.time import local_to_utc_aware
 from scanEngine.models import (
     EngineType,
     SecatorScan,
-    SecatorWorker,
     VulnerabilityReportSetting,
 )
 from startScan.models import (
@@ -84,7 +84,6 @@ from startScan.secator.ajax import render_secator_selection_json
 from startScan.secator.form import build_start_secator_scan_kwargs
 from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.constants import RENGINE_TARGET_TYPES_FOR_JS
-from dashboard.models import Project
 from targetApp.models import Organization, Target
 from targetApp.services.scan_param_definitions import PARAM_KEYS as SCAN_PARAM_KEYS
 from targetApp.services.scan_params_context import build_scan_params_form_context
@@ -955,9 +954,7 @@ def start_scan_ui(request, slug, target_id):
     scope = get_scope_for_target(target)
     organization = scope.organization if scope else target.organizations.first()
 
-    form_ctx = build_scan_params_form_context(
-        target=target, scope=scope, organization=organization, level="scan"
-    )
+    form_ctx = build_scan_params_form_context(target=target, scope=scope, organization=organization, level="scan")
     context = {
         "scan_history_active": "active",
         "target": target,
@@ -1040,7 +1037,9 @@ def start_multiple_scan(request, slug):
         "first_target_id": first_target_id,
     }
     context.update(form_ctx)
-    context["secator_workers"] = get_workers_for_scan_dropdown(scope=scope) if scope else get_workers_for_scan_dropdown()
+    context["secator_workers"] = (
+        get_workers_for_scan_dropdown(scope=scope) if scope else get_workers_for_scan_dropdown()
+    )
     return render(request, "startScan/start_multiple_scan_ui.html", context)
 
 

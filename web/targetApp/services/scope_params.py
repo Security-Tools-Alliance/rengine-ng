@@ -491,9 +491,7 @@ def get_allowed_workers_for_scope(scope: Any | None) -> list[tuple[Any, str]]:
     if scope is None:
         return [(None, "Local")]
     allow_local = _scope_allow_local(scope)
-    remote = list(
-        SecatorWorker.objects.active().filter(scopes=scope).order_by("name").values_list("id", "name")
-    )
+    remote = list(SecatorWorker.objects.active().filter(scopes=scope).order_by("name").values_list("id", "name"))
     options: list[tuple[Any, str]] = []
     if allow_local:
         options.append((None, "Local"))
@@ -599,9 +597,7 @@ def get_workers_for_scan_dropdown(
     if allowed_worker_ids is not None:
         if not allowed_worker_ids:
             return []
-        return list(
-            SecatorWorker.objects.active().filter(id__in=allowed_worker_ids).order_by("name")
-        )
+        return list(SecatorWorker.objects.active().filter(id__in=allowed_worker_ids).order_by("name"))
     return list(SecatorWorker.objects.active().order_by("name"))
 
 

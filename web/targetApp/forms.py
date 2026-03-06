@@ -233,25 +233,24 @@ class ScopeForm(forms.ModelForm):
 
         self.fields["workers"].queryset = SecatorWorker.objects.active()
         self.fields["workers"].help_text = (
-            "Remote workers allowed for scans in this scope. "
-            "Use \"Allow Local worker\" to include the reNgine server."
+            'Remote workers allowed for scans in this scope. Use "Allow Local worker" to include the reNgine server.'
         )
         if self.instance and self.instance.pk:
             base_qs = SecatorWorker.objects.active().filter(scopes=self.instance)
             default_id = getattr(self.instance, "default_worker_id", None)
             if default_id and not base_qs.filter(pk=default_id).exists():
                 self.fields["default_worker"].queryset = (
-                    base_qs | SecatorWorker.objects.filter(pk=default_id)
-                ).distinct().order_by("name")
+                    (base_qs | SecatorWorker.objects.filter(pk=default_id)).distinct().order_by("name")
+                )
             else:
                 self.fields["default_worker"].queryset = base_qs.order_by("name")
         else:
             self.fields["default_worker"].queryset = SecatorWorker.objects.active()
         self.fields["default_worker"].required = False
         self.fields["default_worker"].empty_label = "Local (this server)"
-        self.fields["default_worker"].help_text = (
-            "When the scope has 2 or more allowed workers, choose which one is pre-selected by default."
-        )
+        self.fields[
+            "default_worker"
+        ].help_text = "When the scope has 2 or more allowed workers, choose which one is pre-selected by default."
 
     class Meta:
         model = Scope

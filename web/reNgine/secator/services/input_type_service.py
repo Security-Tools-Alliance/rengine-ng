@@ -7,6 +7,7 @@ from typing import Any, List
 from secator.template import TemplateLoader
 import yaml
 
+
 INPUT_TYPE_NORMALIZE: dict = {"host_port": "host:port"}
 
 

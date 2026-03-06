@@ -1883,6 +1883,7 @@ class StartScan(APIView):
                 get_scope_for_target,
                 resolve_worker_for_scope,
             )
+
             scope = get_scope_for_target(target)
             worker_id = resolve_worker_for_scope(scope, worker_id)
 
@@ -2243,6 +2244,7 @@ class InitiateSubTask(APIView):
                             get_scope_for_target,
                             resolve_worker_for_scope,
                         )
+
                         scope = get_scope_for_target(target_for_scope)
                         worker_id = resolve_worker_for_scope(scope, worker_id)
                 result = start_secator_scan(
@@ -2599,6 +2601,7 @@ class PostScanParamsEffectivePreview(APIView):
         if level in ("scan", "target") and data.get("target_id") and (data.get("project_slug") or "").strip():
             from targetApp.models import Target
             from targetApp.services.scope_params import get_scope_for_target
+
             try:
                 target = Target.objects.get(
                     id=int(data["target_id"]),

@@ -42,7 +42,7 @@ from reNgine.definitions import (
 )
 from reNgine.services.repositories import EndpointRepository
 from reNgine.utilities.logger import get_module_logger
-from scanEngine.models import EngineType, SecatorWorker
+from scanEngine.models import EngineType
 from startScan.models import (
     CountryISO,
     CveId,
