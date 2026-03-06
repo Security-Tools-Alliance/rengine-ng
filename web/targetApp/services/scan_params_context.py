@@ -12,7 +12,13 @@ from typing import Any
 
 from startScan.secator.profiles import build_secator_profiles_context
 
-from .scope_params import PROFILE_CATEGORIES, build_effective_params_display, get_scope_for_target
+from .scope_params import (
+    PROFILE_CATEGORIES,
+    build_effective_params_display,
+    get_default_worker_for_scope,
+    get_scope_for_target,
+    scope_allow_local,
+)
 
 
 def build_scan_params_form_context(
@@ -93,7 +99,7 @@ def build_scan_params_form_context(
             "Leave fields empty to inherit from the level above or system defaults. Filled values apply at this level."
         )
 
-    return {
+    result = {
         "scan_params_level": level,
         "scan_params_effective": effective,
         "scan_params_values": values,
@@ -106,3 +112,8 @@ def build_scan_params_form_context(
         "scan_params_section_configure_button_label": "Configured" if has_overrides else "Configure",
         **profiles_ctx,
     }
+    effective_scope = scope if scope is not None else (get_scope_for_target(target) if target else None)
+    if effective_scope is not None:
+        result["scan_params_allow_local_worker"] = scope_allow_local(effective_scope)
+        result["scan_params_default_worker_id"] = get_default_worker_for_scope(effective_scope)
+    return result

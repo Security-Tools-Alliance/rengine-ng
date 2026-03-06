@@ -4,8 +4,8 @@
 
 <div class="row">
   <div class="col-md-6">
-    <div class="mb-3">
-      <label for="id_name" class="form-label">Scope Name *</label>
+    <div class="mb-1">
+      <label for="id_name" class="form-label mt-1">Scope Name *</label>
       {{ form.name }}
       {% if form.errors.name %}
       <div class="text-danger small mt-1">{{ form.errors.name|striptags }}</div>
@@ -13,8 +13,8 @@
     </div>
   </div>
   <div class="col-md-6">
-    <div class="mb-3">
-      <label for="id_organization" class="form-label">Organization *</label>
+    <div class="mb-1">
+      <label for="id_organization" class="form-label mt-1">Organization *</label>
       {{ form.organization }}
       {% if form.errors.organization %}
       <div class="text-danger small mt-1">{{ form.errors.organization|striptags }}</div>
@@ -25,20 +25,20 @@
 
 <div class="row">
   <div class="col-md-4">
-    <div class="mb-3">
-      <label for="id_scope_type" class="form-label">Scope Type *</label>
+    <div class="mb-1">
+      <label for="id_scope_type" class="form-label mt-1">Scope Type *</label>
       {{ form.scope_type }}
     </div>
   </div>
   <div class="col-md-4">
-    <div class="mb-3">
-      <label for="id_start_date" class="form-label">Start Date</label>
+    <div class="mb-1">
+      <label for="id_start_date" class="form-label mt-1">Start Date</label>
       {{ form.start_date }}
     </div>
   </div>
   <div class="col-md-4">
-    <div class="mb-3">
-      <label for="id_end_date" class="form-label">End Date</label>
+    <div class="mb-1">
+      <label for="id_end_date" class="form-label mt-1">End Date</label>
       {{ form.end_date }}
     </div>
   </div>
@@ -46,8 +46,8 @@
 
 <div class="row">
   <div class="col-12">
-    <div class="mb-3">
-      <label for="id_description" class="form-label">Description</label>
+    <div class="mb-1">
+      <label for="id_description" class="form-label mt-1">Description</label>
       {{ form.description }}
     </div>
   </div>
@@ -55,8 +55,8 @@
 
 <div class="row">
   <div class="col-12">
-    <div class="mb-3">
-      <label for="id_targets" class="form-label">Targets</label>
+    <div class="mb-1">
+      <label for="id_targets" class="form-label mt-1">Targets</label>
       {{ form.targets }}
     </div>
   </div>
@@ -64,15 +64,44 @@
 
 <div class="row">
   <div class="col-12">
-    <div class="mb-3">
-      <label for="id_workers" class="form-label">Workers <small class="text-muted">(empty = local worker)</small></label>
+    <div class="mb-1">
+      <label for="id_workers" class="form-label mt-1">Workers</label>
+      <div class="mb-1">
+        <div class="form-text">When checked, scans can run on this server. Uncheck to allow only the remote workers selected below.</div>
+        <div class="form-check mb-1">
+          {{ form.allow_local_worker }}
+          <label class="form-check-label" for="id_allow_local_worker">Allow Local worker</label>
+        </div>
+      </div>
+      {% if form.workers.help_text %}
+      <div class="form-text">{{ form.workers.help_text }}</div>
+      {% endif %}
       {{ form.workers }}
+      {% if form.errors.workers %}
+      <div class="text-danger small mt-1">{{ form.errors.workers|striptags }}</div>
+      {% endif %}
     </div>
   </div>
 </div>
+{% if show_default_worker %}
+<div class="row">
+  <div class="col-12">
+    <div class="mb-1">
+      <label for="id_default_worker" class="form-label mt-1">Default worker</label>
+      {% if form.default_worker.help_text %}
+      <div class="form-text">{{ form.default_worker.help_text }}</div>
+      {% endif %}
+      {{ form.default_worker }}
+      {% if form.errors.default_worker %}
+      <div class="text-danger small mt-1">{{ form.errors.default_worker|striptags }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <hr>
-{% include "shared/_scan_params_section.html" with section_collapse_id=section_collapse_id section_form_id="scan-params-form" scan_params_prefix="" id_prefix="scope_" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values %}
+{% include "startScan/_items/secator_advanced_config_accordion.html" with id_prefix="scope_" include_scan_params_section=True show_profiles=False show_simple_options=False scan_params_section_collapse_id=section_collapse_id scan_params_section_form_id="scan-params-form" scan_params_prefix="" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=False %}
 
 {% if form.non_field_errors %}
 <div class="alert alert-danger mt-2">

@@ -1,5 +1,6 @@
-{# Advanced Configuration Accordion - Contains Secator Profiles, Expert Mode, Simple Options, Expert Options, Suggestions #}
-{# Params: id_prefix (string, optional), show_random_proxy (bool, optional) #}
+{# Advanced Configuration Accordion - Contains Secator Profiles, Scan params (optional), Worker, Simple Options (legacy) #}
+{# Params: id_prefix, show_random_proxy, show_profiles (default True), show_simple_options (default True). #}
+{# When include_scan_params_section=True, the unified scan params section is rendered inside the accordion (replacing simple_options); pass scan_params_* and section_* vars. #}
 <div class="advanced-config-section mt-4">
   <div class="accordion">
     <div class="accordion-item">
@@ -10,15 +11,21 @@
       </div>
       <div id="{{ id_prefix|default:'' }}advancedConfig" class="accordion-collapse collapse">
         <div class="accordion-body">
-          <!-- Secator Profiles (default_profiles and custom_profiles_by_category from view context or empty for modal) -->
+          {% if show_profiles|default:True and not include_scan_params_section %}
+          {# Standalone profiles only when unified scan params section is not used (section already includes profiles) #}
           {% include 'startScan/_items/secator_profiles.html' with id_prefix=id_prefix|default:'' default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category %}
+          {% endif %}
+
+          {% if include_scan_params_section %}
+          {# Unified scan parameters (replaces legacy proxy/delay simple_options); content always visible inside accordion #}
+          {% include "shared/_scan_params_section.html" with section_collapse_id=scan_params_section_collapse_id section_form_id=scan_params_section_form_id|default:"" scan_params_prefix=scan_params_prefix|default:"" id_prefix=id_prefix scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_use_collapse=False scan_params_section_collapse_expanded=True scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial show_use_random_proxy=scan_params_show_use_random_proxy|default:False target=target scope=scope organization=organization current_project=current_project %}
+          {% elif show_simple_options|default:True %}
+          <!-- Legacy simple options (proxy, delay, use random proxy) - only when unified section is not used -->
+          {% include 'startScan/_items/secator_simple_options.html' with show_random_proxy=show_random_proxy|default:False id_prefix=id_prefix|default:'' %}
+          {% endif %}
 
           <!-- Optional worker (run on remote Secator host) -->
           {% include 'startScan/_items/secator_worker_select.html' with id_prefix=id_prefix|default:'' secator_workers=secator_workers|default:None %}
-
-          <!-- Simple Options -->
-          {% include 'startScan/_items/secator_simple_options.html' with show_random_proxy=show_random_proxy|default:False id_prefix=id_prefix|default:'' %}
-          
         </div>
       </div>
     </div>

@@ -232,6 +232,26 @@ class ScopeForm(forms.ModelForm):
             self.fields["targets"].queryset = Target.objects.for_project(project)
 
         self.fields["workers"].queryset = SecatorWorker.objects.active()
+        self.fields["workers"].help_text = (
+            "Remote workers allowed for scans in this scope. "
+            "Use \"Allow Local worker\" to include the reNgine server."
+        )
+        if self.instance and self.instance.pk:
+            base_qs = SecatorWorker.objects.active().filter(scopes=self.instance)
+            default_id = getattr(self.instance, "default_worker_id", None)
+            if default_id and not base_qs.filter(pk=default_id).exists():
+                self.fields["default_worker"].queryset = (
+                    base_qs | SecatorWorker.objects.filter(pk=default_id)
+                ).distinct().order_by("name")
+            else:
+                self.fields["default_worker"].queryset = base_qs.order_by("name")
+        else:
+            self.fields["default_worker"].queryset = SecatorWorker.objects.active()
+        self.fields["default_worker"].required = False
+        self.fields["default_worker"].empty_label = "Local (this server)"
+        self.fields["default_worker"].help_text = (
+            "When the scope has 2 or more allowed workers, choose which one is pre-selected by default."
+        )
 
     class Meta:
         model = Scope
@@ -244,6 +264,8 @@ class ScopeForm(forms.ModelForm):
             "description",
             "targets",
             "workers",
+            "allow_local_worker",
+            "default_worker",
         ]
         widgets = {
             "organization": forms.Select(
@@ -269,7 +291,16 @@ class ScopeForm(forms.ModelForm):
                     "class": "form-control select2-multiple",
                     "data-toggle": "select2",
                     "data-width": "100%",
-                    "data-placeholder": "Choose Workers (empty = local)",
+                    "data-placeholder": "Choose remote workers",
+                }
+            ),
+            "allow_local_worker": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "default_worker": forms.Select(
+                attrs={
+                    "class": "form-control select2",
+                    "data-toggle": "select2",
+                    "data-width": "100%",
+                    "data-placeholder": "Local (default)",
                 }
             ),
         }
@@ -280,6 +311,16 @@ class ScopeForm(forms.ModelForm):
         end = cleaned.get("end_date")
         if start and end and start > end:
             raise forms.ValidationError("Start date must be before end date.")
+        allow_local = cleaned.get("allow_local_worker", True)
+        workers = list(cleaned.get("workers") or [])
+        default_worker = cleaned.get("default_worker")
+        allowed_count = (1 if allow_local else 0) + len(workers)
+        if allowed_count >= 2 and default_worker is not None:
+            if default_worker not in workers:
+                self.add_error(
+                    "default_worker",
+                    "Default worker must be one of the allowed workers for this scope.",
+                )
         return cleaned
 
 

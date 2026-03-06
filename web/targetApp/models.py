@@ -140,6 +140,18 @@ class Scope(models.Model):
         related_name="scopes",
         blank=True,
     )
+    allow_local_worker = models.BooleanField(
+        default=True,
+        help_text="If True, Local (this server) is in the allowed workers list for this scope.",
+    )
+    default_worker = models.ForeignKey(
+        "scanEngine.SecatorWorker",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="scopes_as_default",
+        help_text="Default worker when the scope has 2+ allowed workers; null means Local.",
+    )
     insert_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:

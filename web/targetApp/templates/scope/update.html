@@ -25,7 +25,7 @@ Update Scope: {{ scope.name }}
   <div class="col-12">
     <div class="card">
       <div class="card-body">
-        <form method="POST" id="scan-params-form">
+        <form method="POST" id="scan-params-form" data-scope-worker-sync>
           {% csrf_token %}
           {% include "scope/_form.html" %}
           <button class="btn btn-primary mt-3 float-end" type="submit">Save Changes</button>

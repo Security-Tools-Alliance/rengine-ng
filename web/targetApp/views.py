@@ -85,7 +85,12 @@ from targetApp.services.scan_params_context import build_scan_params_form_contex
 from targetApp.services.scope_params import (
     _normalize_scan_config,
     build_effective_params_display,
+    get_allowed_workers_for_scope,
+    get_default_worker_for_scope,
+    get_scope_for_target,
+    get_workers_for_scan_dropdown,
     parse_scan_config_from_post,
+    scope_allow_local,
 )
 from targetApp.services.target_update import (
     build_update_target_context,
@@ -663,6 +668,7 @@ def add_target(request, slug):
                             "secator_configs": _get_secator_configs_for_add_target(),
                             "target_type_choices": dict(TARGET_TYPE_CHOICES),
                             "override_prefix": TARGET_OVERRIDE_PREFIX,
+                            "secator_workers": get_workers_for_scan_dropdown(),
                         }
                         context.update(build_scan_params_form_context(level="target"))
                         return render(request, "target/add.html", context)
@@ -862,6 +868,7 @@ def add_target(request, slug):
         "secator_configs": secator_configs,
         "target_type_choices": target_type_choices,
         "override_prefix": TARGET_OVERRIDE_PREFIX,
+        "secator_workers": get_workers_for_scan_dropdown(),
         "add_target_simple_tabs": _build_add_target_simple_tabs(target_type_choices, secator_configs),
         "import_txt_alert": mark_safe(
             "Your txt file must have list of domains separated by a new line."
@@ -1026,6 +1033,8 @@ def update_target(request, slug, id):
         override_header_initial=override_header_initial,
         scan_override=scan_override if override_form_fallback else None,
     )
+    scope = get_scope_for_target(target)
+    context["secator_workers"] = get_workers_for_scan_dropdown(scope=scope)
     return render(request, "target/update.html", context)
 
 
@@ -1235,7 +1244,8 @@ def target_summary(request, slug, id):
     )
 
     context.update(build_secator_profiles_context())
-    context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
+    scope = get_scope_for_target(target)
+    context["secator_workers"] = get_workers_for_scan_dropdown(scope=scope)
     return render(request, "target/summary.html", context)
 
 
@@ -1266,6 +1276,7 @@ def add_organization(request, slug):
         "organization_active": "active",
         "form": form,
         "section_collapse_id": "scanOverridesSectionOrgAdd",
+        "secator_workers": get_workers_for_scan_dropdown(),
     }
     context.update(build_scan_params_form_context())
     return render(request, "organization/add.html", context)
@@ -1354,6 +1365,7 @@ def update_organization(request, slug, id):
         "target_list": mark_safe(target_list),
         "form": form,
         "section_collapse_id": "scanOverridesSectionOrg",
+        "secator_workers": get_workers_for_scan_dropdown(),
     }
     context.update(build_scan_params_form_context(organization=organization))
     return render(request, "organization/update.html", context)
@@ -1403,11 +1415,19 @@ def add_scope(request, slug):
             form.save_m2m()
             messages.add_message(request, messages.INFO, "Scope %s added successfully" % (scope.name,))
             return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
+    initial_workers = form.initial.get("workers") or []
+    allowed_ids = [w.id for w in initial_workers] if initial_workers else []
+    allow_local = form.initial.get("allow_local_worker", True)
+    show_default_worker = (1 if allow_local else 0) + len(allowed_ids) >= 2
     context = {
         "scope_active": "active",
         "form": form,
         "slug": slug,
         "section_collapse_id": "scanOverridesSectionScopeAdd",
+        "secator_workers": get_workers_for_scan_dropdown(allowed_worker_ids=allowed_ids),
+        "show_default_worker": show_default_worker,
+        "scan_params_allow_local_worker": allow_local,
+        "scan_params_default_worker_id": None,
     }
     context.update(build_scan_params_form_context(level="scope"))
     return render(request, "scope/add.html", context)
@@ -1432,12 +1452,19 @@ def update_scope(request, slug, id):
             form.save_m2m()
             messages.add_message(request, messages.INFO, "Scope %s updated successfully" % (scope.name,))
             return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
+    allowed_options = get_allowed_workers_for_scope(scope)
+    show_default_worker = len(allowed_options) >= 2
+    default_worker_id = get_default_worker_for_scope(scope)
     context = {
         "scope_active": "active",
         "form": form,
         "scope": scope,
         "slug": slug,
         "section_collapse_id": "scanOverridesSectionScope",
+        "secator_workers": get_workers_for_scan_dropdown(scope=scope),
+        "show_default_worker": show_default_worker,
+        "scan_params_allow_local_worker": scope_allow_local(scope),
+        "scan_params_default_worker_id": default_worker_id,
     }
     context.update(build_scan_params_form_context(scope=scope, organization=scope.organization))
     return render(request, "scope/update.html", context)

@@ -30,12 +30,11 @@
 				{% include 'startScan/_items/secator_view_toggle.html' with id_prefix='subscan' %}
 
 				{% include 'startScan/_items/secator_selection_layout.html' with id_prefix='subscan' %}
-				<!-- Scan options (Path Filters only) and Advanced configuration -->
+				<!-- Scan options (Path Filters only) and Advanced Configuration (scan params + worker) -->
 				<div class="mt-3" id="subscan-options-advanced" style="display: none;">
 					{% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name='selected target(s)' id_prefix='subscan_' path_filters_only=True %}
-					{% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='subscan_' show_random_proxy=True %}
+					{% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='subscan_' show_simple_options=False include_scan_params_section=True scan_params_section_collapse_id="subscan-params-section" scan_params_section_form_id="" scan_params_prefix="" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_collapse_expanded=scan_params_section_collapse_expanded scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=True %}
 				</div>
-				<div id="subscan-effective-params" class="mt-3 mb-0"></div>
 			</div>
 			<div class="modal-footer">
 				<button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
@@ -190,18 +189,16 @@
 		$(document).on('show.bs.modal', '#subscan-modal', function() {
 			updateSubscanModalHeader();
 			const targetIdEl = document.getElementById('context_target_id');
-			const targetId = targetIdEl && targetIdEl.value ? targetIdEl.value.trim() : '';
-			const $container = $('#subscan-effective-params');
-			$container.empty();
-			if (targetId && window.SCAN_PARAMS_EFFECTIVE_HTML_URL) {
-				const csrfToken = typeof getCookie !== 'undefined' ? getCookie('csrftoken') : '';
-				$.get(window.SCAN_PARAMS_EFFECTIVE_HTML_URL, { target_id: targetId }, function(html) {
-					$container.html(html);
-				}).fail(function() {
-					$container.html('<p class="text-muted small">Effective parameters depend on the scan target.</p>');
-				});
-			} else if (!targetId) {
-				$container.html('<p class="text-muted small">Effective parameters depend on the scan target.</p>');
+			const targetId = (targetIdEl && targetIdEl.value ? targetIdEl.value.trim() : '') || '';
+			const $modal = $('#subscan-modal');
+			const blockRoot = $modal.find('[data-scan-params-block-root="true"]')[0];
+			if (blockRoot) {
+				blockRoot.setAttribute('data-scan-params-target-id', targetId);
+				if (targetId && typeof window.ScanParams !== 'undefined' && typeof window.ScanParams.schedulePreview === 'function') {
+					window.ScanParams.schedulePreview(blockRoot);
+				} else if (targetId && blockRoot.querySelector('input')) {
+					blockRoot.querySelector('input').dispatchEvent(new Event('change', { bubbles: true }));
+				}
 			}
 		});
 
@@ -210,7 +207,8 @@
 			const $modal = $('#subscan-modal');
 			$modal.find('.execution-mode-card').removeClass('selected');
 			$modal.removeClass('execution-mode-workflow execution-mode-tasks execution-mode-scan');
-			$('#subscan-effective-params').empty();
+			const blockRoot = $modal.find('[data-scan-params-block-root="true"]')[0];
+			if (blockRoot) blockRoot.setAttribute('data-scan-params-target-id', '');
 			$('#subscan-selection-container').empty();
 			$('#subscan-list-container').empty();
 			$('#subscan-content-row').hide();

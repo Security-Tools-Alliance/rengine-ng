@@ -2,10 +2,12 @@
   Single source of truth for "Effective scan parameters" display.
   Context: scan_params_effective (dict), optional scan_params_effective_title (string),
   optional scan_params_level ("organization"|"scope"|"target") to derive title if title not set.
-  Wrapped in #scan-params-effective-container for real-time JS replacement.
+  Optional scan_params_show_empty_placeholder (default True): when effective is empty, show the
+  level-specific placeholder message only if true; when false, container stays empty for JS.
+  Always renders #scan-params-effective-container so AJAX preview has a target.
 {% endcomment %}
-{% if scan_params_effective %}
 <div id="scan-params-effective-container" class="scan-params-effective-wrapper">
+{% if scan_params_effective %}
 <div class="alert alert-light border mb-3 mt-3">
   <p class="fw-semibold mb-2 small"><i class="fe-info me-1"></i>
     {% if scan_params_effective_title %}
@@ -69,5 +71,20 @@
   {% endif %}
   {% endwith %}
 </div>
+{% elif scan_params_show_empty_placeholder|default:True %}
+<div class="alert alert-light border mb-3 mt-3 text-muted small">
+  <p class="mb-0">
+    <i class="fe-info me-1"></i>
+    {% if scan_params_level == "organization" %}
+      No effective scan parameters are currently configured at the organization level.
+    {% elif scan_params_level == "scope" %}
+      No effective scan parameters are currently configured for this scope.
+    {% elif scan_params_level == "target" %}
+      Effective parameters depend on the scan target. Change fields to update.
+    {% else %}
+      No effective scan parameters are currently configured. Change fields to update.
+    {% endif %}
+  </p>
 </div>
 {% endif %}
+</div>

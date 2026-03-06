@@ -26,7 +26,7 @@ Add Scope
     <div class="card">
       <div class="card-body">
         <p>A scope groups targets under an organization with shared scan parameters. Define a bug bounty program, an engagement, or any other scope.</p>
-        <form method="POST" id="scan-params-form">
+        <form method="POST" id="scan-params-form" data-scope-worker-sync>
           {% csrf_token %}
           {% include "scope/_form.html" %}
           <button class="btn btn-primary mt-3 float-end" type="submit">Add Scope</button>

@@ -14,6 +14,7 @@ from targetApp.services.scope_params import (
     apply_resolved_to_secator_config,
     get_scope_for_target,
     resolve_scan_params,
+    resolve_worker_for_scope,
 )
 
 
@@ -388,7 +389,14 @@ def build_start_secator_scan_kwargs(
     optional_scan_history_id = safe_int_cast(post.get("scan_history_id"))
     if optional_scan_history_id is not None:
         kwargs["scan_history_id"] = optional_scan_history_id
+    effective_scope = scope
+    if effective_scope is None and target is not None:
+        effective_scope = get_scope_for_target(target)
     optional_worker_id = safe_int_cast(post.get("worker_id"))
+    if effective_scope is not None:
+        optional_worker_id = resolve_worker_for_scope(effective_scope, optional_worker_id)
+    elif scope_worker_ids and optional_worker_id is not None and optional_worker_id not in scope_worker_ids:
+        optional_worker_id = None
     if optional_worker_id is not None:
         kwargs["worker_id"] = optional_worker_id
     return kwargs

@@ -7,6 +7,26 @@ from typing import Any, List
 from secator.template import TemplateLoader
 import yaml
 
+INPUT_TYPE_NORMALIZE: dict = {"host_port": "host:port"}
+
+
+def _normalize_input_types(types: List[str]) -> List[str]:
+    """
+    Normalize input type strings to canonical Secator form (e.g. host_port -> host:port).
+    Preserves order and deduplicates after replacement.
+    """
+    seen: set = set()
+    result: List[str] = []
+    for t in types or []:
+        if not isinstance(t, str):
+            continue
+        raw = t.strip()
+        canonical = INPUT_TYPE_NORMALIZE.get(raw.lower(), raw)
+        if canonical and canonical not in seen:
+            seen.add(canonical)
+            result.append(canonical)
+    return result
+
 
 def _template_from_yaml_string(yaml_content: str) -> TemplateLoader:
     """
@@ -50,7 +70,8 @@ class InputTypeService:
             if workflow_obj.workflow_type == "builtin"
             else _template_from_yaml_string(workflow_obj.yaml_configuration or "")
         )
-        return list(config.get("input_types", []) or [])
+        raw = list(config.get("input_types", []) or [])
+        return _normalize_input_types(raw)
 
     @staticmethod
     def get_input_types_for_scan(scan_name: str) -> List[str]:
@@ -71,7 +92,8 @@ class InputTypeService:
             if scan_obj.scan_config_type == "builtin"
             else _template_from_yaml_string(scan_obj.yaml_configuration or "")
         )
-        return list(config.get("input_types", []) or [])
+        raw = list(config.get("input_types", []) or [])
+        return _normalize_input_types(raw)
 
     @staticmethod
     def get_input_types_for_task(task_name: str) -> List[str]:

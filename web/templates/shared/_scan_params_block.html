@@ -139,9 +139,17 @@
       <label class="form-label">Proxy
         {% if eff.proxy and eff.proxy.source != "default" %}<small class="text-muted">({{ eff.proxy.source }})</small>{% endif %}
       </label>
-      <input type="text" name="{{ pfx }}proxy" class="form-control"
+      <input type="text" name="{{ pfx }}proxy" id="{{ id_prefix|default:'' }}proxy-input" class="form-control"
              placeholder="socks5://host:port or http://host:port"
              value="{{ pv.proxy|default_if_none:'' }}">
+      {% if show_use_random_proxy %}
+      <div class="form-check mt-2">
+        <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useRandomProxy" name="use_random_proxy">
+        <label class="form-check-label" for="{{ id_prefix|default:'' }}useRandomProxy">
+          <small>Use random proxy from proxy settings</small>
+        </label>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>

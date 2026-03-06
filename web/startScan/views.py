@@ -84,10 +84,11 @@ from startScan.secator.ajax import render_secator_selection_json
 from startScan.secator.form import build_start_secator_scan_kwargs
 from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.constants import RENGINE_TARGET_TYPES_FOR_JS
+from dashboard.models import Project
 from targetApp.models import Organization, Target
 from targetApp.services.scan_param_definitions import PARAM_KEYS as SCAN_PARAM_KEYS
 from targetApp.services.scan_params_context import build_scan_params_form_context
-from targetApp.services.scope_params import get_scope_for_target
+from targetApp.services.scope_params import get_scope_for_target, get_workers_for_scan_dropdown
 
 
 PREFIX_SCAN = "[STARTSCAN]"
@@ -825,7 +826,8 @@ def detail_scan(request, id, slug):
 
     # Secator profiles context for subscan modal (Advanced config > profiles)
     ctx.update(build_secator_profiles_context())
-    ctx["secator_workers"] = SecatorWorker.objects.active().order_by("name")
+    scope = get_scope_for_target(scan.target) if getattr(scan, "target", None) else None
+    ctx["secator_workers"] = get_workers_for_scan_dropdown(scope=scope)
     ctx["rengine_target_types"] = RENGINE_TARGET_TYPES_FOR_JS
 
     scan_config = getattr(scan, "scan_config", None)
@@ -853,6 +855,7 @@ def detail_scan(request, id, slug):
 
 
 def all_subdomains(request, slug):
+    project = get_object_or_404(Project, slug=slug)
     subdomains = Subdomain.objects.filter(domain__scan_history__target__project__slug=slug)
     scan_engines = EngineType.objects.annotate(lower_name=Lower("engine_name")).order_by("lower_name")
     alive_subdomains = subdomains.filter(http_status__gt=0)  # TODO: replace this with is_alive() function
@@ -860,13 +863,15 @@ def all_subdomains(request, slug):
     context = {
         "scan_history_id": id,
         "scan_history_active": "active",
+        "current_project": project,
         "scan_engines": scan_engines,
         "subdomain_count": subdomains.values("name").distinct().count(),
         "alive_count": alive_subdomains.values("name").distinct().count(),
         "important_count": important_subdomains,
     }
     context.update(build_secator_profiles_context())
-    context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
+    context["secator_workers"] = get_workers_for_scan_dropdown()
+    context.update(build_scan_params_form_context(level="scan"))
     return render(request, "startScan/subdomains.html", context)
 
 
@@ -950,7 +955,9 @@ def start_scan_ui(request, slug, target_id):
     scope = get_scope_for_target(target)
     organization = scope.organization if scope else target.organizations.first()
 
-    form_ctx = build_scan_params_form_context(target=target, scope=scope, organization=organization)
+    form_ctx = build_scan_params_form_context(
+        target=target, scope=scope, organization=organization, level="scan"
+    )
     context = {
         "scan_history_active": "active",
         "target": target,
@@ -961,7 +968,7 @@ def start_scan_ui(request, slug, target_id):
         "rengine_target_types": RENGINE_TARGET_TYPES_FOR_JS,
     }
     context.update(form_ctx)
-    context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
+    context["secator_workers"] = get_workers_for_scan_dropdown(scope=scope)
     return render(request, "startScan/start_scan_ui.html", context)
 
 
@@ -1033,7 +1040,7 @@ def start_multiple_scan(request, slug):
         "first_target_id": first_target_id,
     }
     context.update(form_ctx)
-    context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
+    context["secator_workers"] = get_workers_for_scan_dropdown(scope=scope) if scope else get_workers_for_scan_dropdown()
     return render(request, "startScan/start_multiple_scan_ui.html", context)
 
 
@@ -1400,7 +1407,7 @@ def start_organization_scan(request, id, slug):
         "secator_scans": secator_scans,
     }
     context.update(form_ctx)
-    context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
+    context["secator_workers"] = get_workers_for_scan_dropdown()
     return render(request, "organization/start_scan.html", context)
 
 

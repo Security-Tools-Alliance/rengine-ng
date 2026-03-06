@@ -60,7 +60,7 @@ Update Target {{ form.value.value }}
           {% endif %}
 
           <hr>
-          {% include "shared/_scan_params_section.html" with section_collapse_id="scanOverridesSection" section_form_id="scan-params-form" scan_params_prefix=override_prefix id_prefix="target_" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values %}
+          {% include "startScan/_items/secator_advanced_config_accordion.html" with id_prefix="target_" include_scan_params_section=True show_profiles=False show_simple_options=False scan_params_section_collapse_id="scanOverridesSection" scan_params_section_form_id="scan-params-form" scan_params_prefix=override_prefix scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=False %}
 
           <button class="btn btn-primary submit-fn mt-3 float-end" type="submit">Update Target</button>
         </form>

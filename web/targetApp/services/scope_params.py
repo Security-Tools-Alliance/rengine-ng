@@ -363,7 +363,9 @@ def build_effective_params_display(
     target_config = _normalize_scan_config(raw)
     scope_config = _normalize_scan_config(getattr(scope, "scan_config", None) if scope else None)
     org_config = _normalize_scan_config(getattr(organization, "scan_config", None) if organization else None)
-    return _build_effective_display_from_config_dicts({}, target_config, scope_config, org_config)
+    result = _build_effective_display_from_config_dicts({}, target_config, scope_config, org_config)
+    result["worker"] = get_effective_worker_display(scope=scope)
+    return result
 
 
 def build_effective_params_display_from_configs(
@@ -371,18 +373,24 @@ def build_effective_params_display_from_configs(
     scope_config: dict[str, Any] | None = None,
     target_config: dict[str, Any] | None = None,
     user_override: dict[str, Any] | None = None,
+    scope: Any | None = None,
 ) -> dict[str, dict[str, Any]]:
     """
     Build effective params display from config dicts (e.g. draft form values + parent configs).
 
     Priority: user_override > target_config > scope_config > org_config > default.
     Used by the scan-params-effective-preview API for real-time effective block updates.
+    When scope is provided and user_override contains worker_id, the worker entry reflects
+    scan override; otherwise scope workers or "Local".
     """
     override = _normalize_scan_config(user_override) if user_override else {}
     target_c = _normalize_scan_config(target_config) if target_config else {}
     scope_c = _normalize_scan_config(scope_config) if scope_config else {}
     org_c = _normalize_scan_config(org_config) if org_config else {}
-    return _build_effective_display_from_config_dicts(override, target_c, scope_c, org_c)
+    result = _build_effective_display_from_config_dicts(override, target_c, scope_c, org_c)
+    worker_id = (user_override or {}).get("worker_id") if user_override else None
+    result["worker"] = get_effective_worker_display(worker_id=worker_id, scope=scope)
+    return result
 
 
 def _is_empty_dict_no_override(param: str, value: Any) -> bool:
@@ -457,6 +465,179 @@ def _resolve_worker_ids(scope: Any | None) -> list[int]:
         return []
     workers = SecatorWorker.objects.active().filter(scopes=scope)
     return list(workers.values_list("id", flat=True))
+
+
+def _scope_allow_local(scope: Any | None) -> bool:
+    """Return True if Local is in the allowed list for the scope (backward compat: default True)."""
+    if scope is None:
+        return True
+    return bool(getattr(scope, "allow_local_worker", True))
+
+
+def scope_allow_local(scope: Any | None) -> bool:
+    """Public helper: True if Local is in the scope's allowed workers (for templates/views)."""
+    return _scope_allow_local(scope)
+
+
+def get_allowed_workers_for_scope(scope: Any | None) -> list[tuple[Any, str]]:
+    """
+    Return the list of allowed options for the scope as (id_or_None, display_name).
+
+    - If allow_local_worker: (None, "Local") is included.
+    - Plus all active SecatorWorker in scope.workers, ordered by name, as (w.id, w.name).
+    - If the list would be empty (no Local and no workers), returns [(None, "Local")] so
+      scans can still run (exclusive Local fallback).
+    """
+    if scope is None:
+        return [(None, "Local")]
+    allow_local = _scope_allow_local(scope)
+    remote = list(
+        SecatorWorker.objects.active().filter(scopes=scope).order_by("name").values_list("id", "name")
+    )
+    options: list[tuple[Any, str]] = []
+    if allow_local:
+        options.append((None, "Local"))
+    for wid, wname in remote:
+        options.append((wid, wname or str(wid)))
+    if not options:
+        return [(None, "Local")]
+    return options
+
+
+def get_default_worker_for_scope(scope: Any | None) -> int | None:
+    """
+    Return the default worker for the scope: None (Local) or worker id (int).
+
+    - No scope or allowed list empty -> None (Local).
+    - One allowed option -> that one (None or worker id).
+    - Two or more -> scope.default_worker_id if set and in allowed list, else None (Local).
+    """
+    if scope is None:
+        return None
+    options = get_allowed_workers_for_scope(scope)
+    if not options:
+        return None
+    if len(options) == 1:
+        return options[0][0]
+    default_fk = getattr(scope, "default_worker", None)
+    if default_fk is not None and default_fk.id is not None:
+        for opt_id, _ in options:
+            if opt_id is not None and opt_id == default_fk.id:
+                return opt_id
+    return None
+
+
+def get_scope_worker_ids(scope: Any | None) -> list[int]:
+    """
+    Return active worker IDs allowed for the scope (public helper for validation).
+
+    Use this when validating that a user-provided worker_id is allowed for the scope.
+    Returns empty list if scope is None or scope has no workers.
+    For "is Local allowed", use scope_allow_local_for_validation(scope) or
+    get_scope_worker_validation(scope).
+    """
+    return _resolve_worker_ids(scope)
+
+
+def get_scope_worker_validation(scope: Any | None) -> dict[str, Any]:
+    """
+    Return validation info for scope workers: allow_local (bool) and worker_ids (list[int]).
+
+    Use when validating user-provided worker_id: allowed if (allow_local and worker_id empty)
+    or (worker_id in worker_ids).
+    """
+    if scope is None:
+        return {"allow_local": True, "worker_ids": []}
+    return {
+        "allow_local": _scope_allow_local(scope),
+        "worker_ids": _resolve_worker_ids(scope),
+    }
+
+
+def resolve_worker_for_scope(
+    scope: Any | None,
+    requested_worker_id: int | None,
+) -> int | None:
+    """
+    Resolve worker id for a scope: validate requested_worker_id against scope rules and
+    fall back to the scope default when invalid or not provided.
+
+    Used by the API and the form builder so worker selection logic stays in one place.
+    Returns None for Local, or a valid worker id (int). When scope is None, returns
+    requested_worker_id unchanged.
+    """
+    if scope is None:
+        return requested_worker_id
+    validation = get_scope_worker_validation(scope)
+    allowed = (validation["allow_local"] and requested_worker_id is None) or (
+        requested_worker_id is not None and requested_worker_id in validation["worker_ids"]
+    )
+    if not allowed or requested_worker_id is None:
+        return get_default_worker_for_scope(scope)
+    return requested_worker_id
+
+
+def get_workers_for_scan_dropdown(
+    scope: Any | None = None,
+    allowed_worker_ids: list[int] | None = None,
+    allow_local: bool | None = None,
+) -> list[Any]:
+    """
+    Return the list of SecatorWorker instances to show in the "Run on worker" dropdown.
+
+    - If scope is given: returns active workers linked to that scope, ordered by name.
+      The template must show Local option when allow_local_worker is True (pass
+      scope_allow_local(scope) and default_worker_id separately).
+    - If allowed_worker_ids is given (e.g. scope add form): returns workers whose id
+      is in that list, ordered by name. allow_local is independent (for scope add).
+    - If neither scope nor allowed_worker_ids: returns all active workers (no scope).
+
+    Deterministic order: order_by("name") for consistent UX.
+    """
+    if scope is not None:
+        return list(SecatorWorker.objects.active().filter(scopes=scope).order_by("name"))
+    if allowed_worker_ids is not None:
+        if not allowed_worker_ids:
+            return []
+        return list(
+            SecatorWorker.objects.active().filter(id__in=allowed_worker_ids).order_by("name")
+        )
+    return list(SecatorWorker.objects.active().order_by("name"))
+
+
+def get_effective_worker_display(
+    worker_id: int | str | None = None,
+    scope: Any | None = None,
+) -> dict[str, Any]:
+    """
+    Build the effective worker entry for the scan params effective display.
+
+    Priority: explicit worker_id (scan override) > scope default worker > "Local".
+    When no override is provided and scope is set, uses get_default_worker_for_scope(scope).
+    Returns {"value": str, "source": "scan"|"scope"|"default"}.
+    """
+    if worker_id is not None:
+        try:
+            wid = int(worker_id)
+            worker = SecatorWorker.objects.filter(id=wid).first()
+            if worker:
+                return {"value": worker.name, "source": "scan"}
+        except (TypeError, ValueError):
+            pass
+    if scope is not None:
+        default_id = get_default_worker_for_scope(scope)
+        if default_id is not None:
+            worker = SecatorWorker.objects.filter(id=default_id).first()
+            if worker:
+                return {"value": worker.name, "source": "scope"}
+        if not _scope_allow_local(scope):
+            options = get_allowed_workers_for_scope(scope)
+            if options and options[0][0] is not None:
+                first_worker = SecatorWorker.objects.filter(id=options[0][0]).first()
+                if first_worker:
+                    return {"value": first_worker.name, "source": "scope"}
+        return {"value": "Local", "source": "scope"}
+    return {"value": "Local", "source": "default"}
 
 
 def _resolve_extra_config(

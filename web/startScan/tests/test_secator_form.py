@@ -8,6 +8,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.http import QueryDict
 
+from scanEngine.models import SecatorWorker
 from startScan.secator.form import (
     build_start_secator_scan_kwargs,
     parse_execution_mode_params,
@@ -365,3 +366,53 @@ class TestSecatorFormHelpers(BaseTestCase):
         profiles = kwargs["secator_config"].get("profiles")
         self.assertIsNotNone(profiles)
         self.assertIn("aggressive", profiles)
+
+    def test_build_start_secator_scan_kwargs_worker_id_omitted_when_not_in_scope(self):
+        """When scope has allowed workers and POST worker_id is not in that list, worker_id is omitted."""
+        self.data_generator.create_organization()
+        scope = self.data_generator.create_scope()
+        target = self.data_generator.target
+        scope.targets.add(target)
+        allowed_worker = SecatorWorker.objects.create(
+            name="allowed-worker",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        disallowed_worker = SecatorWorker.objects.create(
+            name="disallowed-worker",
+            ssh_host="192.0.2.2",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope.workers.add(allowed_worker)
+        post = self._make_post("workflow", "execution_mode", "1", "workflow_id")
+        post["secator_config"] = "{}"
+        post["target_id"] = str(target.id)
+        post["worker_id"] = str(disallowed_worker.id)
+        kwargs = build_start_secator_scan_kwargs(post, target=target, scope=scope)
+        self.assertNotIn("worker_id", kwargs)
+
+    def test_build_start_secator_scan_kwargs_worker_id_included_when_in_scope(self):
+        """When scope has allowed workers and POST worker_id is in that list, worker_id is included."""
+        self.data_generator.create_organization()
+        scope = self.data_generator.create_scope()
+        target = self.data_generator.target
+        scope.targets.add(target)
+        allowed_worker = SecatorWorker.objects.create(
+            name="allowed-worker",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope.workers.add(allowed_worker)
+        post = self._make_post("workflow", "execution_mode", "1", "workflow_id")
+        post["secator_config"] = "{}"
+        post["target_id"] = str(target.id)
+        post["worker_id"] = str(allowed_worker.id)
+        kwargs = build_start_secator_scan_kwargs(post, target=target, scope=scope)
+        self.assertIn("worker_id", kwargs)
+        self.assertEqual(kwargs["worker_id"], allowed_worker.id)

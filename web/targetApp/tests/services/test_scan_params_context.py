@@ -45,3 +45,10 @@ class BuildScanParamsFormContextTest(BaseTestCase):
 
         ctx = build_scan_params_form_context(level="scope")
         self.assertEqual(ctx["scan_params_level"], "scope")
+
+    def test_level_override_scan(self) -> None:
+        """level='scan' is used for start-scan and subscan modal overrides."""
+        ctx = build_scan_params_form_context(level="scan")
+        self.assertEqual(ctx["scan_params_level"], "scan")
+        self.assertIn("scan_params_effective", ctx)
+        self.assertIn("scan_params_values", ctx)

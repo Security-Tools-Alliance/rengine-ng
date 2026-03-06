@@ -1874,6 +1874,17 @@ class StartScan(APIView):
             scan_history_id = None
 
         worker_id = get_request_worker_id(request)
+        try:
+            target = Target.objects.get(pk=target_id)
+        except (Target.DoesNotExist, TypeError, ValueError):
+            target = None
+        if target is not None:
+            from targetApp.services.scope_params import (
+                get_scope_for_target,
+                resolve_worker_for_scope,
+            )
+            scope = get_scope_for_target(target)
+            worker_id = resolve_worker_for_scope(scope, worker_id)
 
         try:
             resolved = resolve_selected_targets(
@@ -2222,6 +2233,18 @@ class InitiateSubTask(APIView):
                     subscan_id_arg = subscan.id
 
                 worker_id = get_request_worker_id(request)
+                if target_id_from_domain is not None:
+                    try:
+                        target_for_scope = Target.objects.get(pk=target_id_from_domain)
+                    except (Target.DoesNotExist, TypeError, ValueError):
+                        target_for_scope = None
+                    if target_for_scope is not None:
+                        from targetApp.services.scope_params import (
+                            get_scope_for_target,
+                            resolve_worker_for_scope,
+                        )
+                        scope = get_scope_for_target(target_for_scope)
+                        worker_id = resolve_worker_for_scope(scope, worker_id)
                 result = start_secator_scan(
                     target_id=target_id_from_domain,
                     user_id=request.user.id,
@@ -2568,9 +2591,22 @@ class PostScanParamsEffectivePreview(APIView):
 
         draft_raw = data.get("draft")
         draft = _normalize_scan_config(draft_raw) if draft_raw is not None else {}
-        allowed_keys = set(PARAM_KEYS) | {"profiles", "extra_config"}
+        allowed_keys = set(PARAM_KEYS) | {"profiles", "extra_config", "worker_id"}
         draft = {k: v for k, v in draft.items() if k in allowed_keys}
         scan_params_level = level
+
+        scope_for_worker = None
+        if level in ("scan", "target") and data.get("target_id") and (data.get("project_slug") or "").strip():
+            from targetApp.models import Target
+            from targetApp.services.scope_params import get_scope_for_target
+            try:
+                target = Target.objects.get(
+                    id=int(data["target_id"]),
+                    project__slug=(data.get("project_slug") or "").strip(),
+                )
+                scope_for_worker = get_scope_for_target(target)
+            except (Target.DoesNotExist, TypeError, ValueError):
+                pass
 
         try:
             if level == "organization":
@@ -2627,6 +2663,7 @@ class PostScanParamsEffectivePreview(APIView):
             scope_config=scope_config,
             target_config=target_config,
             user_override=user_override,
+            scope=scope_for_worker,
         )
 
         html = render_to_string(

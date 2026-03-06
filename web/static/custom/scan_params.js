@@ -357,6 +357,16 @@
       }
     });
     if (Object.keys(profiles).length) draft.profiles = profiles;
+    const $workerSelect = $scope.find('select[name="worker_id"], input[name="worker_id"]');
+    if ($workerSelect.length) {
+      const workerVal = $workerSelect.val();
+      if (workerVal !== undefined && workerVal !== null && String(workerVal).trim() !== '') {
+        const wid = parseInt(workerVal, 10);
+        if (!isNaN(wid)) {
+          draft.worker_id = wid;
+        }
+      }
+    }
     return draft;
   }
 
@@ -480,9 +490,10 @@
       success: function (html) {
         if (requestId !== effectivePreviewRequestIdMap.get(rootKey)) return;
         cleanupRootState(rootKey);
+        if (!root) return;
         if (html && typeof html === 'string') {
           $container.replaceWith(html);
-          const newContainer = document.getElementById('scan-params-effective-container');
+          const newContainer = root.querySelector('#scan-params-effective-container');
           if (newContainer && typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
             const tooltipTriggerList = [].slice.call(newContainer.querySelectorAll('[data-bs-toggle="tooltip"]'));
             tooltipTriggerList.forEach(function (el) {
@@ -527,12 +538,105 @@
         return 'input[name="' + prefix + p + '"], select[name="' + prefix + p + '"], textarea[name="' + prefix + p + '"]';
       }).join(', ');
       const profileSel = PROFILE_HIDDEN_NAMES.map(function (n) { return 'input[name="' + n + '"]'; }).join(', ');
+      const workerSel = 'select[name="worker_id"], input[name="worker_id"]';
 
-      $scope.on('input change', selInputs + ', ' + profileSel, function () {
+      $scope.on('input change', selInputs + ', ' + profileSel + ', ' + workerSel, function () {
         scheduleEffectivePreview(root);
       });
     });
   }
+
+  /**
+   * Rebuild the "Run on worker" dropdown from scope form: Allow Local checkbox and
+   * Workers multi-select. When only one option is allowed, pre-select it.
+   * Show/hide the Default worker row when 2+ options. Call on load and on change of
+   * Allow Local and Workers. Uses data-scope-worker-sync on the form as hook when present.
+   */
+  function syncScopeWorkerDropdown(scopeForm) {
+    const form = scopeForm || document.querySelector('form[data-scope-worker-sync]');
+    if (!form) return;
+    const workersMulti = form.querySelector('[id="id_workers"]');
+    const workerIdSelect = form.querySelector('select[name="worker_id"]');
+    if (!workersMulti || workersMulti.tagName !== 'SELECT' || !workerIdSelect) return;
+    if (!form.contains(workerIdSelect)) return;
+
+    const allowLocalEl = form.querySelector('[id="id_allow_local_worker"]');
+    const allowLocal = !allowLocalEl || allowLocalEl.checked;
+
+    const selected = [];
+    const opts = workersMulti.options;
+    for (let i = 0; i < opts.length; i++) {
+      const opt = opts[i];
+      if (opt.selected && opt.value) {
+        selected.push({ value: opt.value, text: opt.text.trim() || opt.value });
+      }
+    }
+
+    const currentVal = workerIdSelect.value;
+    workerIdSelect.innerHTML = '';
+    if (allowLocal) {
+      const localOpt = document.createElement('option');
+      localOpt.value = '';
+      localOpt.textContent = 'Local (this server)';
+      workerIdSelect.appendChild(localOpt);
+    }
+    selected.forEach(function (item) {
+      const opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.text;
+      workerIdSelect.appendChild(opt);
+    });
+
+    const optionsCount = (allowLocal ? 1 : 0) + selected.length;
+    const stillValid = (allowLocal && (currentVal === '' || currentVal === null)) ||
+      selected.some(function (item) { return item.value === currentVal; });
+    if (stillValid) {
+      workerIdSelect.value = currentVal;
+    } else if (optionsCount === 1) {
+      workerIdSelect.selectedIndex = 0;
+    } else {
+      workerIdSelect.value = '';
+    }
+
+    const defaultWorkerField = form.querySelector('[id="id_default_worker"]');
+    const defaultWorkerRow = defaultWorkerField && defaultWorkerField.closest('.row');
+    if (defaultWorkerRow) {
+      defaultWorkerRow.style.display = optionsCount >= 2 ? '' : 'none';
+    }
+  }
+
+  /**
+   * Bind sync of "Run on worker" dropdown to scope Allow Local checkbox and Workers multi-select.
+   * Runs only when a form with data-scope-worker-sync exists; elements are resolved within that form.
+   */
+  function initScopeWorkerSync() {
+    const scopeForm = document.querySelector('form[data-scope-worker-sync]');
+    if (!scopeForm) return;
+    const workersMulti = scopeForm.querySelector('[id="id_workers"]');
+    const workerIdSelect = scopeForm.querySelector('select[name="worker_id"]');
+    if (!workersMulti || !workerIdSelect) return;
+    syncScopeWorkerDropdown(scopeForm);
+    $(scopeForm).off('change.scanParamsScopeWorker', '#id_workers');
+    $(scopeForm).on('change.scanParamsScopeWorker', '#id_workers', function () {
+      syncScopeWorkerDropdown(scopeForm);
+    });
+    $(scopeForm).off('change.scanParamsScopeWorker', '#id_allow_local_worker');
+    $(scopeForm).on('change.scanParamsScopeWorker', '#id_allow_local_worker', function () {
+      syncScopeWorkerDropdown(scopeForm);
+    });
+    if (typeof $.fn.select2 !== 'undefined') {
+      $(scopeForm).off('select2:select.scanParamsScopeWorker select2:unselect.scanParamsScopeWorker', '#id_workers');
+      $(scopeForm).on('select2:select.scanParamsScopeWorker select2:unselect.scanParamsScopeWorker', '#id_workers', function () {
+        syncScopeWorkerDropdown(scopeForm);
+      });
+    }
+  }
+
+  window.ScanParams = {
+    schedulePreview: scheduleEffectivePreview,
+    syncScopeWorkerDropdown: syncScopeWorkerDropdown,
+    initScopeWorkerSync: initScopeWorkerSync
+  };
 
   $(document).ready(function () {
     $(document).on('change',
@@ -548,5 +652,6 @@
 
     initProfileCategories();
     bindEffectiveLiveUpdate();
+    initScopeWorkerSync();
   });
 })();

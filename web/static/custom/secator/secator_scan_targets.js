@@ -55,6 +55,7 @@
     url: ['http', 'https', 'url'],
     host: ['host'],
     'host:port': ['host:port', 'common_web_port', 'uncommon_web_port'],
+    host_port: ['host:port', 'common_web_port', 'uncommon_web_port'],
     ip: ['ip'],
     cidr_range: ['cidr_range'],
     email: ['email']

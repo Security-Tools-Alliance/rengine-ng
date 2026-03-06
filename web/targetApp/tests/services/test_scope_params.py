@@ -12,7 +12,12 @@ from targetApp.services.scope_params import (
     apply_resolved_to_secator_config,
     build_effective_params_display,
     build_effective_params_display_from_configs,
+    get_allowed_workers_for_scope,
+    get_default_worker_for_scope,
     get_scope_for_target,
+    get_scope_worker_ids,
+    get_scope_worker_validation,
+    get_workers_for_scan_dropdown,
     parse_target_scan_override_from_post,
     resolve_scan_params,
 )
@@ -538,6 +543,12 @@ class BuildEffectiveParamsDisplayTest(BaseTestCase):
         self.assertIs(result["follow_redirect"]["value"], True)
         self.assertEqual(result["follow_redirect"]["source"], "default")
 
+    def test_worker_display_default_when_no_scope(self):
+        result = build_effective_params_display()
+        self.assertIn("worker", result)
+        self.assertEqual(result["worker"]["value"], "Local")
+        self.assertEqual(result["worker"]["source"], "default")
+
 
 class BuildEffectiveParamsDisplayFromConfigsTest(BaseTestCase):
     """Tests for build_effective_params_display_from_configs (draft + parent configs)."""
@@ -551,6 +562,9 @@ class BuildEffectiveParamsDisplayFromConfigsTest(BaseTestCase):
         self.assertEqual(result["rate_limit"]["value"], 100)
         self.assertEqual(result["rate_limit"]["source"], "organization")
         self.assertEqual(result["timeout"]["source"], "default")
+        self.assertIn("worker", result)
+        self.assertEqual(result["worker"]["value"], "Local")
+        self.assertEqual(result["worker"]["source"], "default")
 
     def test_user_override_source_scan(self):
         result = build_effective_params_display_from_configs(
@@ -859,3 +873,264 @@ class GetScopeForTargetTest(BaseTestCase):
         mock_logger.log_line.assert_called()
         call_args = mock_logger.log_line.call_args
         self.assertIn("multiple scopes", call_args[0][2])
+
+
+class GetScopeWorkerIdsTest(BaseTestCase):
+    """Tests for get_scope_worker_ids helper."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_organization()
+
+    def test_none_scope_returns_empty(self):
+        self.assertEqual(get_scope_worker_ids(None), [])
+
+    def test_scope_with_no_workers_returns_empty(self):
+        scope = self.data_generator.create_scope()
+        self.assertEqual(get_scope_worker_ids(scope), [])
+
+    def test_scope_with_workers_returns_active_ids(self):
+        worker1 = SecatorWorker.objects.create(
+            name="w1",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        worker2 = SecatorWorker.objects.create(
+            name="w2",
+            ssh_host="192.0.2.2",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope = self.data_generator.create_scope()
+        scope.workers.add(worker1, worker2)
+        result = get_scope_worker_ids(scope)
+        self.assertEqual(set(result), {worker1.id, worker2.id})
+
+
+class GetWorkersForScanDropdownTest(BaseTestCase):
+    """Tests for get_workers_for_scan_dropdown helper."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_organization()
+
+    def test_no_scope_no_allowed_returns_all_active_workers(self):
+        worker = SecatorWorker.objects.create(
+            name="standalone-worker",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        result = get_workers_for_scan_dropdown()
+        ids = [w.id for w in result]
+        self.assertIn(worker.id, ids)
+        self.assertEqual([w.name for w in result], sorted([w.name for w in result]))
+
+    def test_scope_with_workers_returns_scope_workers_ordered_by_name(self):
+        worker_a = SecatorWorker.objects.create(
+            name="worker-a",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        worker_b = SecatorWorker.objects.create(
+            name="worker-b",
+            ssh_host="192.0.2.2",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope = self.data_generator.create_scope()
+        scope.workers.add(worker_b, worker_a)
+        result = get_workers_for_scan_dropdown(scope=scope)
+        self.assertEqual([w.id for w in result], [worker_a.id, worker_b.id])
+        self.assertEqual([w.name for w in result], ["worker-a", "worker-b"])
+
+    def test_scope_with_no_workers_returns_empty(self):
+        scope = self.data_generator.create_scope()
+        result = get_workers_for_scan_dropdown(scope=scope)
+        self.assertEqual(result, [])
+
+    def test_allowed_worker_ids_empty_returns_empty(self):
+        result = get_workers_for_scan_dropdown(allowed_worker_ids=[])
+        self.assertEqual(result, [])
+
+    def test_allowed_worker_ids_filters_and_orders(self):
+        worker1 = SecatorWorker.objects.create(
+            name="z-worker",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        worker2 = SecatorWorker.objects.create(
+            name="a-worker",
+            ssh_host="192.0.2.2",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        result = get_workers_for_scan_dropdown(allowed_worker_ids=[worker1.id, worker2.id])
+        self.assertEqual([w.name for w in result], ["a-worker", "z-worker"])
+        self.assertEqual(set(w.id for w in result), {worker1.id, worker2.id})
+
+
+class GetAllowedWorkersForScopeTest(BaseTestCase):
+    """Tests for get_allowed_workers_for_scope."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_organization()
+
+    def test_none_scope_returns_local_only(self):
+        result = get_allowed_workers_for_scope(None)
+        self.assertEqual(result, [(None, "Local")])
+
+    def test_scope_allow_local_no_workers_returns_local_only(self):
+        scope = self.data_generator.create_scope()
+        scope.allow_local_worker = True
+        scope.save()
+        result = get_allowed_workers_for_scope(scope)
+        self.assertEqual(result, [(None, "Local")])
+
+    def test_scope_disallow_local_no_workers_returns_local_fallback(self):
+        scope = self.data_generator.create_scope()
+        scope.allow_local_worker = False
+        scope.save()
+        result = get_allowed_workers_for_scope(scope)
+        self.assertEqual(result, [(None, "Local")])
+
+    def test_scope_allow_local_with_one_worker_returns_local_and_worker(self):
+        worker = SecatorWorker.objects.create(
+            name="remote-1",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope = self.data_generator.create_scope()
+        scope.workers.add(worker)
+        result = get_allowed_workers_for_scope(scope)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0], (None, "Local"))
+        self.assertEqual(result[1][0], worker.id)
+        self.assertEqual(result[1][1], worker.name)
+
+    def test_scope_disallow_local_with_one_worker_returns_worker_only(self):
+        worker = SecatorWorker.objects.create(
+            name="remote-1",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope = self.data_generator.create_scope()
+        scope.allow_local_worker = False
+        scope.save()
+        scope.workers.add(worker)
+        result = get_allowed_workers_for_scope(scope)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0][0], worker.id)
+        self.assertEqual(result[0][1], worker.name)
+
+
+class GetDefaultWorkerForScopeTest(BaseTestCase):
+    """Tests for get_default_worker_for_scope."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_organization()
+
+    def test_none_scope_returns_none(self):
+        self.assertIsNone(get_default_worker_for_scope(None))
+
+    def test_scope_one_option_local_returns_none(self):
+        scope = self.data_generator.create_scope()
+        scope.allow_local_worker = True
+        scope.save()
+        self.assertIsNone(get_default_worker_for_scope(scope))
+
+    def test_scope_one_option_remote_returns_worker_id(self):
+        worker = SecatorWorker.objects.create(
+            name="only-remote",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope = self.data_generator.create_scope()
+        scope.allow_local_worker = False
+        scope.save()
+        scope.workers.add(worker)
+        self.assertEqual(get_default_worker_for_scope(scope), worker.id)
+
+    def test_scope_two_options_no_default_returns_none(self):
+        worker = SecatorWorker.objects.create(
+            name="w1",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope = self.data_generator.create_scope()
+        scope.workers.add(worker)
+        scope.default_worker = None
+        scope.save()
+        result = get_default_worker_for_scope(scope)
+        self.assertIsNone(result)
+
+    def test_scope_two_options_with_default_returns_worker_id(self):
+        worker = SecatorWorker.objects.create(
+            name="default-w",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope = self.data_generator.create_scope()
+        scope.workers.add(worker)
+        scope.default_worker = worker
+        scope.save()
+        self.assertEqual(get_default_worker_for_scope(scope), worker.id)
+
+
+class GetScopeWorkerValidationTest(BaseTestCase):
+    """Tests for get_scope_worker_validation."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_organization()
+
+    def test_none_scope_returns_allow_local_true_empty_ids(self):
+        result = get_scope_worker_validation(None)
+        self.assertEqual(result["allow_local"], True)
+        self.assertEqual(result["worker_ids"], [])
+
+    def test_scope_allow_local_no_workers(self):
+        scope = self.data_generator.create_scope()
+        scope.allow_local_worker = True
+        scope.save()
+        result = get_scope_worker_validation(scope)
+        self.assertEqual(result["allow_local"], True)
+        self.assertEqual(result["worker_ids"], [])
+
+    def test_scope_disallow_local_with_workers(self):
+        worker = SecatorWorker.objects.create(
+            name="w1",
+            ssh_host="192.0.2.1",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope = self.data_generator.create_scope()
+        scope.allow_local_worker = False
+        scope.save()
+        scope.workers.add(worker)
+        result = get_scope_worker_validation(scope)
+        self.assertEqual(result["allow_local"], False)
+        self.assertEqual(result["worker_ids"], [worker.id])

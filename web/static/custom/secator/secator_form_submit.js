@@ -68,18 +68,47 @@
         .filter(Boolean);
 
       const useRandomProxy = $form.find('input[name="use_random_proxy"]').is(':checked');
-      const proxyValue = useRandomProxy ? null : ($form.find('input[name="proxy"]').val() || '');
+      const proxyValue = useRandomProxy ? null : ($form.find('input[name="proxy"], input[name="override_proxy"]').val() || '');
+
+      const scalarParamNames = ['threads', 'rate_limit', 'timeout', 'retries', 'delay', 'depth', 'follow_redirect', 'proxy', 'user_agent', 'header'];
+      const secatorConfig = {
+        proxy: proxyValue,
+        delay: (function() {
+          const v = $form.find('input[name="delay"], input[name="override_delay"]').val();
+          const n = parseInt(v, 10);
+          return !isNaN(n) ? n : 0;
+        })(),
+        profiles: profiles
+      };
+      scalarParamNames.forEach(function(param) {
+        if (param === 'proxy' || param === 'delay') return;
+        const prefixed = 'override_' + param;
+        const $el = $form.find('input[name="' + param + '"], select[name="' + param + '"], textarea[name="' + param + '"], input[name="' + prefixed + '"], select[name="' + prefixed + '"], textarea[name="' + prefixed + '"]');
+        if (!$el.length) return;
+        const raw = $el.val();
+        if (raw === undefined || raw === null || String(raw).trim() === '') return;
+        const v = String(raw).trim();
+        if (param === 'threads' || param === 'rate_limit' || param === 'timeout' || param === 'retries' || param === 'depth') {
+          const n = parseInt(v, 10);
+          if (!isNaN(n)) secatorConfig[param] = n;
+        } else if (param === 'follow_redirect') {
+          secatorConfig[param] = v === 'True' || v === 'true' || v === '1';
+        } else if (param === 'header') {
+          try {
+            const o = JSON.parse(v);
+            if (typeof o === 'object' && o !== null) secatorConfig[param] = o;
+          } catch (e) { /* skip invalid JSON */ }
+        } else {
+          secatorConfig[param] = v;
+        }
+      });
 
       const formData = {
         execution_mode: executionMode,
         imported_subdomains: ($form.find('[id$="importSubdomainFormControlTextarea"], #importSubdomainFormControlTextarea').val() || '').split('\n').filter(s => s.trim()),
         out_of_scope_subdomains: ($form.find('[id$="outOfScopeSubdomainTextarea"], #outOfScopeSubdomainTextarea').val() || '').split('\n').filter(s => s.trim()),
         url_filter: $form.find('[id$="filterPath"], #filterPath').val(),
-        secator_config: {
-          proxy: proxyValue,
-          delay: parseInt($form.find('input[name="delay"]').val()) || 0,
-          profiles: profiles
-        }
+        secator_config: secatorConfig
       };
       if (targetId) formData.target_id = parseInt(targetId, 10);
 
