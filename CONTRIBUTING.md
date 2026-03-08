@@ -130,3 +130,11 @@ pre-commit install --config docker/web/pre-commit-config.yaml
 With this setup, all Python files will be automatically checked and formatted according to the project rules before each commit.  
 
 This alternative method is convenient for contributors who do not run the full Docker stack locally.
+
+## Developer documentation
+
+To understand the **architecture 3.0**, **centralized behaviour** (scan config, DataTables, paths, logging, HTML escaping), and how to use **AI-assisted coding** (Cursor / Claude) with the project's rules and skills, see the **Developer guide** in the wiki:
+
+**[Developer guide](https://github.com/Security-Tools-Alliance/rengine-ng/wiki/dev-guide)**
+
+The repository includes Cursor rules in `.cursor/rules/` and a context skill in `.cursor/skills/rengine-ng-context/`. The wiki contains a [rules and skills reference](https://github.com/Security-Tools-Alliance/rengine-ng/wiki/dev-rules-reference) and guides for DataTables, security centralization, and AI-assisted coding.

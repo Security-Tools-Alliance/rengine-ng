@@ -15,21 +15,6 @@
                     "remoteRoot": "/home/rengine/rengine"
                 }
             ]
-        },
-        {
-            "name": "Python: Remote Attach Celery",
-            "type": "debugpy",
-            "request": "attach",
-            "connect": {
-                "host": "127.0.0.1",
-                "port": 5679
-            },
-            "pathMappings": [
-                {
-                    "localRoot": "${workspaceFolder}/web",
-                    "remoteRoot": "/home/rengine/rengine"
-                }
-            ]
         }
     ]
 }
