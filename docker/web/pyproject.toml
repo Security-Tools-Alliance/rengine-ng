@@ -48,7 +48,7 @@ pycvesearch = "1.0"
 redis = "5.0.3"
 requests = "2.32.5"
 scapy = "2.5.0"
-secator = {version = "^0.25.1", extras = ["redis"]}
+secator = {version = "^0.25.7", extras = ["redis"]}
 tldextract = "3.5.0"
 uvicorn = { extras = ["standard"], version = "0.35.0" }
 validators = "^0.35"
