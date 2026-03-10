@@ -48,6 +48,14 @@ POSTGRES_HOST="${POSTGRES_DIRECT_HOST:-db}" POSTGRES_PORT="${POSTGRES_DIRECT_POR
 print_msg "Ensure scheduled scans cron (if any schedule exists)"
 poetry run -C $RENGINE_FOLDER python3 manage.py ensure_scheduled_scans_cron || true
 
+# Initialize Secator API key if it doesn't exist
+print_msg "Initialize Secator API key"
+poetry run -C $RENGINE_FOLDER python3 manage.py generate_secator_api_key || true
+
+# Load Secator components from Secator library (tasks, workflows, scans)
+print_msg "Loading Secator components (from Secator library)"
+poetry run -C $RENGINE_FOLDER python3 manage.py load_secator_all || true
+
 print_msg "Collect static files"
 poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --noinput
 

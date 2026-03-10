@@ -110,7 +110,7 @@ define gpu_config
 	$(eval export DOCKER_RUNTIME)
 endef
 
-.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword makemigrations migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list
+.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword makemigrations migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list secator-init secator-key secator-load secator-check
 
 pull:			## Pull pre-built Docker images from repository.
 	${DOCKER_COMPOSE_FILE_CMD} pull
@@ -247,6 +247,32 @@ db-restore:		## Restore database from backup. Use BACKUP=name (without .tar.gz) 
 	sudo tar xvzf $(BACKUP_DIR)/$$backup_arg.tar.gz -C $(PG_VOLUME); \
 	echo "Starting db..."; ${DOCKER_COMPOSE_FILE_CMD} start db; \
 	echo "Done."
+
+# Secator Initialization Targets
+secator-init:		## Initialize Secator (generate API key + load all from Secator)
+	@echo "=== Secator Initialization ==="
+	@make secator-key
+	@make secator-load
+
+secator-key:		## Generate or regenerate Secator API key
+	@echo "=== Generating Secator API Key ==="
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py generate_secator_api_key --recreate --show-key
+
+secator-load:		## Load Secator components (tasks, workflows, scans)
+	@echo "=== Loading Secator Components ==="
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py load_secator_all
+
+secator-check:		## Check Secator configuration and status
+	@echo "=== Checking Secator Configuration ==="
+	@echo "Checking API key..."
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py generate_secator_api_key
+	@echo ""
+	@echo "Checking loaded tasks..."
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py shell -c "from scanEngine.models import Task; print(f'Tasks loaded: {Task.objects.count()}')"
+	@echo "Checking loaded workflows..."
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py shell -c "from scanEngine.models import Workflow; print(f'Workflows loaded: {Workflow.objects.count()}')"
+	@echo "Checking loaded scans..."
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py shell -c "from scanEngine.models import Scan; print(f'Scans loaded: {Scan.objects.count()}')"
 
 down:			## Down all services and remove containers.
 	${DOCKER_COMPOSE_FILE_CMD} down
@@ -398,6 +424,12 @@ help:			## Show this help.
 	@echo "  make db-list                           				List available backups"
 	@echo "  make db-restore [BACKUP=name] [PG_VOLUME=/path]			Restore; BACKUP=name without .tar.gz"
 	@echo "  make db-restore                        				Restore: choose backup by number"
+	@echo ""
+	@echo "Secator Initialization:"
+	@echo "  make secator-init                        				Initialize Secator (generate API key + load all from Secator)"
+	@echo "  make secator-key                         				Generate or regenerate Secator API key"
+	@echo "  make secator-load                        				Load Secator components (tasks, workflows, scans)"
+	@echo "  make secator-check                       				Check Secator configuration and status"
 
 %:
 	@:

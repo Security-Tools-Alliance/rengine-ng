@@ -259,3 +259,84 @@ if [[ $answer == "y" ]]; then
 else
   log "Update cancelled." $COLOR_YELLOW
 fi
+
+# After successful update, run initialization commands
+if [[ $answer == "y" ]]; then
+  log "\nRunning post-update initialization..." $COLOR_CYAN
+
+  # Wait for the web container to be ready
+  log "Waiting for web container to be ready..." $COLOR_CYAN
+  for i in {1..30}; do
+    if docker exec rengine-web-1 echo "ready" >/dev/null 2>&1; then
+      log "Web container is ready!" $COLOR_GREEN
+      break
+    fi
+    if [ $i -eq 30 ]; then
+      log "Timeout waiting for web container" $COLOR_RED
+      exit 1
+    fi
+    sleep 2
+  done
+
+  # Generate Secator API key if it doesn't exist
+  log "Checking Secator API key..." $COLOR_CYAN
+  HAS_API_KEY_OUTPUT=$(docker exec rengine-web-1 bash -c 'poetry run python3 manage.py generate_secator_api_key 2>&1' || echo "")
+
+  if echo "$HAS_API_KEY_OUTPUT" | grep -q "already exists"; then
+    log "Secator API key already exists" $COLOR_GREEN
+  else
+    log "Generating Secator API key..." $COLOR_CYAN
+    SECATOR_API_KEY=$(docker exec rengine-web-1 bash -c 'poetry run python3 manage.py generate_secator_api_key --recreate --show-key 2>&1' | grep -A1 "API Key" | tail -n1 | tr -d ' ')
+
+    if [ -n "$SECATOR_API_KEY" ]; then
+      log "Secator API key generated" $COLOR_GREEN
+
+      # Update .env file with Secator API configuration
+      ENV_FILE="../.env"
+
+      # Only update .env if it exists and is writable
+      if [ -f "$ENV_FILE" ] && [ -w "$ENV_FILE" ]; then
+        # Remove existing Secator API configuration from .env
+        sed -i '/^SECATOR_ADDONS_API_ENABLED=/d' "$ENV_FILE"
+        sed -i '/^SECATOR_ADDONS_API_KEY=/d' "$ENV_FILE"
+        sed -i '/^SECATOR_ADDONS_API_HEADER_NAME=/d' "$ENV_FILE"
+        sed -i '/^SECATOR_ADDONS_API_URL=/d' "$ENV_FILE"
+        sed -i '/^SECATOR_ADDONS_API_FORCE_SSL=/d' "$ENV_FILE"
+        sed -i '/^SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT=/d' "$ENV_FILE"
+        # Also remove legacy variable names if present
+        sed -i '/^RENGINE_API_KEY=/d' "$ENV_FILE"
+        sed -i '/^RENGINE_API_URL=/d' "$ENV_FILE"
+
+        # Add Secator API configuration to .env
+        {
+          echo ""
+          echo "# Secator Worker API Configuration (auto-generated during update)"
+          echo "SECATOR_ADDONS_API_ENABLED=true"
+          echo "SECATOR_ADDONS_API_KEY=$SECATOR_API_KEY"
+          echo "SECATOR_ADDONS_API_HEADER_NAME=Api-Key"
+          echo "SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT="
+          echo "SECATOR_ADDONS_API_URL=https://proxy/api/secator"
+          echo "SECATOR_ADDONS_API_FORCE_SSL=false"
+        } >> "$ENV_FILE"
+
+        log "Secator API configuration added to .env" $COLOR_GREEN
+      else
+        log "Warning: Could not update .env file. Manually add the following to your .env:" $COLOR_YELLOW
+        log "SECATOR_ADDONS_API_ENABLED=true" $COLOR_YELLOW
+        log "SECATOR_ADDONS_API_KEY=$SECATOR_API_KEY" $COLOR_YELLOW
+        log "SECATOR_ADDONS_API_HEADER_NAME=Api-Key" $COLOR_YELLOW
+        log "SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT=" $COLOR_YELLOW
+        log "SECATOR_ADDONS_API_URL=https://proxy/api/secator" $COLOR_YELLOW
+        log "SECATOR_ADDONS_API_FORCE_SSL=false" $COLOR_YELLOW
+      fi
+    else
+      log "Warning: Failed to generate Secator API key" $COLOR_YELLOW
+    fi
+  fi
+
+  # Load Secator components (tasks, workflows, scans)
+  log "Loading Secator components (tasks, workflows, scans)..." $COLOR_CYAN
+  docker exec rengine-web-1 bash -c 'poetry run python3 manage.py load_secator_all'
+
+  log "Post-update initialization completed!" $COLOR_GREEN
+fi
