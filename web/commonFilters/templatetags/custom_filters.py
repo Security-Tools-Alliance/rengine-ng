@@ -119,16 +119,15 @@ def parse_references(value):
             logger.error(f"Failed to parse array format for value: {value}")
             logger.debug("Both AST literal_eval and JSON parsing failed", exc_info=True)
 
-        # Try to parse as JSON
+        # Try to parse as JSON (value may be plain text/markdown from AI reports)
         try:
             parsed = json.loads(value)
             if isinstance(parsed, list):
                 return parsed
             elif isinstance(parsed, str):
                 return [parsed]
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON format for value: {value}")
-            logger.debug(f"JSON decode error details: {e}", exc_info=True)
+        except json.JSONDecodeError:
+            pass
 
         # Split by common separators and filter URLs
         # Look for URLs in the text

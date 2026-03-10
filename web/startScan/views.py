@@ -14,7 +14,6 @@ from django.utils import timezone
 from django.utils.html import mark_safe
 import markdown
 from rolepermissions.decorators import has_permission_decorator
-from reNgine.llm.utils import convert_markdown_to_html
 from weasyprint import CSS, HTML
 
 from api.helpers.datatables import (
@@ -44,6 +43,7 @@ from reNgine.definitions import (
     SKIPPED_TASK,
     SUCCESS_TASK,
 )
+from reNgine.llm.utils import convert_markdown_to_html
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.services.repositories import EndpointRepository
 from reNgine.settings import RENGINE_RESULTS

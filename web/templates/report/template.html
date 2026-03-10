@@ -168,7 +168,7 @@
 
       #contents h2 {
         font-size: 20pt;
-        Intereight: 400;
+        font-weight: 400;
         margin-bottom: 3cm;
       }
 
@@ -242,17 +242,17 @@
         page: chapter;
       }
 
-      #boxes {
+      .boxes {
         display: flex;
         flex-wrap: wrap;
         justify-content: space-between;
       }
 
-      #boxes section h4 {
+      .boxes section h4 {
         margin-bottom: 0;
       }
 
-      #boxes section p {
+      .boxes section p {
         background: {{primary_color}};
         display: block;
         font-size: 15pt;
@@ -365,7 +365,6 @@
       .table {
         margin: 0 0 40px 0;
         width: 100%;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         display: table;
         border-spacing: 0 0.4em;
       }
@@ -381,7 +380,7 @@
       }
 
       .header {
-        Intereight: 900;
+        font-weight: 900;
         color: #ffffff;
       }
 
@@ -493,7 +492,7 @@
     {# recon section #}
     {% if show_recon %}
       <h4 id="reconnaissance-summary" class="subheading">Reconnaissance</h4>
-      <div id="boxes">
+      <div class="boxes">
         <section style="width: 30%">
           <p class="bg-success">Subdomains
             <br>
@@ -526,7 +525,7 @@
       <article>
         <br>
         <h4 id="vulnerability-summary" class="subheading">Vulnerability Summary</h4>
-        <div id="boxes">
+        <div class="boxes">
           <section style="width: 30%">
             <p class="bg-critical">Critical
               <br>
@@ -652,7 +651,7 @@
     {# vulnerability_summary only when vuln_report #}
     {% if show_vuln %}
       <article style="page-break-before: always" class="summary">
-        <h3 id="vulnerability-summary" class="page_title">Summary of Vulnerabilities Identified</h3>
+        <h3 id="vulnerabilities-identified" class="page_title">Summary of Vulnerabilities Identified</h3>
         {% if all_vulnerabilities.count > 0 %}
         <p>Listed below are the vulnerabilities identified on <span class="primary-color">{{scan_object.domain.name}}</span></p>
         <div class="table">
@@ -877,7 +876,7 @@
           {{scan_object.get_unknown_vulnerability_count}} of them were Unknown Severity.
         </p>
         <h4 class="subheading">Vulnerability Breakdown by Severity</h4>
-        <div id="boxes">
+        <div class="boxes">
           <section style="width: 30%">
             <p class="bg-critical">Critical
               <br>
