@@ -53,7 +53,7 @@ tldextract = "3.5.0"
 uvicorn = { extras = ["standard"], version = "0.35.0" }
 validators = "^0.35"
 watchdog = "4.0.0"
-weasyprint = "62.3"
+weasyprint = "63.0"
 xmltodict = "0.13.0"
 
 [tool.poetry.group.dev.dependencies]

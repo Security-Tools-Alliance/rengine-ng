@@ -990,17 +990,17 @@
                 {% if vulnerability.description %}
                   <br>
                   <span class="mini-heading">Description</span><br>
-                  {{vulnerability.description|linebreaks|safe}}
+                  {{ vulnerability.description|safe }}
                 {% endif %}
                 {% if vulnerability.impact %}
                   <br>
                   <span class="mini-heading">Impact</span><br>
-                  {{vulnerability.impact|linebreaks|safe}}
+                  {{ vulnerability.impact|safe }}
                 {% endif %}
                 {% if vulnerability.remediation %}
                   <br>
                   <span class="mini-heading">Remediation</span><br>
-                  {{vulnerability.remediation|linebreaks|safe}}
+                  {{ vulnerability.remediation|safe }}
                 {% endif %}
                 <br>
                 <span class="mini-heading">Vulnerable URL(s)</span><br>
@@ -1037,7 +1037,7 @@
                               {% endfor %}
                           </ul>
                       {% else %}
-                          <p>{{ vulnerability.references }}</p>
+                          <div>{{ vulnerability.references_display|safe }}</div>
                       {% endif %}
                   {% endwith %}
                 {% endif %}

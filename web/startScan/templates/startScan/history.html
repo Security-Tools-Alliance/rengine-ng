@@ -141,8 +141,8 @@ window.SCAN_HISTORY_DATATABLE_URL = "{% url 'api:listScanHistory' %}";
 window.SCAN_HISTORY_PROJECT_SLUG = "{{ current_project.slug|escapejs }}";
 window.SCAN_HISTORY_DETAIL_SCAN_BASE = "{% url 'detail_scan' current_project.slug 0 %}".replace('/0', '/');
 window.SCAN_HISTORY_START_SCAN_BASE = "{% url 'start_scan' current_project.slug 0 %}".replace('/0', '/');
-window.SCAN_HISTORY_DELETE_SCAN_BASE = "{% url 'delete_scan' current_project.slug 0 %}".replace('/0', '/');
-window.SCAN_HISTORY_CREATE_REPORT_BASE = "{% url 'create_report' current_project.slug 0 %}".replace('/0', '/');
+window.SCAN_HISTORY_DELETE_SCAN_BASE = "{% url 'delete_scan' current_project.slug 0 %}".replace(/\/0\/delete$/, '/');
+window.SCAN_HISTORY_CREATE_REPORT_BASE = "{% url 'create_report' current_project.slug 0 %}".replace(/\/0\/create_report$/, '/');
 window.SCAN_HISTORY_STOP_SCAN_URL = "{% url 'api:stop_scan' %}";
 window.SCAN_HISTORY_CAN_INITIATE = {{ user|can:'initiate_scans_subscans'|yesno:"true,false" }};
 window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno:"true,false" }};
@@ -313,10 +313,10 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
               }
             }
             if (window.SCAN_HISTORY_CAN_MODIFY_RESULTS && (status === 2 || status === 3 || status === 0)) {
-              html += '<a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" title="Delete Scan Results" onclick="delete_scan(\'' + window.SCAN_HISTORY_DELETE_SCAN_BASE + idEnc + '\'); return false;"><i class="fe-trash-2"></i></a>';
+              html += '<a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" title="Delete Scan Results" onclick="delete_scan(\'' + window.SCAN_HISTORY_DELETE_SCAN_BASE + idEnc + '/delete\'); return false;"><i class="fe-trash-2"></i></a>';
             }
             if (status !== -1) {
-              const reportUrl = window.SCAN_HISTORY_CREATE_REPORT_BASE + idEnc;
+              const reportUrl = window.SCAN_HISTORY_CREATE_REPORT_BASE + idEnc + '/create_report';
               const targetVal = window.safeAttr(String(row.target_value || ''));
               html += '<a href="#" class="btn btn-sm btn-soft-info" data-toggle="tooltip" title="Scan Report" onclick="initiate_report(\'' + reportUrl + '\', ' + idEnc + ', \'True\', \'True\', \'True\', \'' + targetVal + '\'); return false;"><i class="fe-download"></i></a>';
             }
