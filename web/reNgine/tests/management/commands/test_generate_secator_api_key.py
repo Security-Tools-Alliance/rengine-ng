@@ -8,7 +8,6 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from dashboard.models import UserAPIKey
-from reNgine.utilities.api_key_generator import has_secator_api_key
 
 
 class TestGenerateSecatorApiKeyManagementCommand(TestCase):
@@ -17,11 +16,13 @@ class TestGenerateSecatorApiKeyManagementCommand(TestCase):
     def setUp(self):
         """Clean up any existing secator user before tests."""
         from dashboard.models import User
+
         User.objects.filter(username="secator-worker").delete()
 
     def tearDown(self):
         """Clean up after tests."""
         from dashboard.models import User
+
         User.objects.filter(username="secator-worker").delete()
 
     def test_generate_secator_api_key_command_creates_user(self):
@@ -33,6 +34,7 @@ class TestGenerateSecatorApiKeyManagementCommand(TestCase):
         self.assertIn("System API key generated successfully", output)
 
         from dashboard.models import User
+
         user = User.objects.get(username="secator-worker")
         self.assertEqual(user.email, "secator@rengine.local")
         self.assertTrue(user.is_active)
@@ -44,6 +46,7 @@ class TestGenerateSecatorApiKeyManagementCommand(TestCase):
         call_command("generate_secator_api_key", stdout=out)
 
         from dashboard.models import User
+
         user = User.objects.get(username="secator-worker")
         api_key = UserAPIKey.objects.get(user=user, is_system=True)
         self.assertTrue(api_key.is_system)
@@ -61,6 +64,7 @@ class TestGenerateSecatorApiKeyManagementCommand(TestCase):
         self.assertIn("already exists", output2)
 
         from dashboard.models import User
+
         user = User.objects.get(username="secator-worker")
         count = UserAPIKey.objects.filter(user=user, is_system=True).count()
         self.assertEqual(count, 1)
@@ -71,6 +75,7 @@ class TestGenerateSecatorApiKeyManagementCommand(TestCase):
         call_command("generate_secator_api_key", stdout=out1)
 
         from dashboard.models import User
+
         user = User.objects.get(username="secator-worker")
         first_key = UserAPIKey.objects.get(user=user, is_system=True)
         first_key_id = first_key.id
@@ -139,4 +144,3 @@ class TestGenerateSecatorApiKeyManagementCommand(TestCase):
             pass
         except CommandError:
             self.fail("Unexpected CommandError when calling --help")
-

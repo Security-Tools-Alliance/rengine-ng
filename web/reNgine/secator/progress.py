@@ -11,8 +11,8 @@ from reNgine.definitions import (
     ABORTED_TASK,
     FAILED_TASK,
     INITIATED_TASK,
-    RUNNING_TASK,
     RUNNING_BACKGROUND,
+    RUNNING_TASK,
     SKIPPED_TASK,
     SUCCESS_TASK,
 )
