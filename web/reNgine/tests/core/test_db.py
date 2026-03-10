@@ -42,6 +42,18 @@ class ResolveDbHostPortTestCase(unittest.TestCase):
         self.assertEqual(host, "db")
         self.assertEqual(port, "5432")
 
+    def test_createsuperuser_uses_direct_when_use_pgbouncer(self):
+        environ = _make_environ()
+        host, port = resolve_db_host_port(environ, True, False, ["manage.py", "createsuperuser"])
+        self.assertEqual(host, "db")
+        self.assertEqual(port, "5432")
+
+    def test_makemigrations_uses_direct_when_use_pgbouncer(self):
+        environ = _make_environ()
+        host, port = resolve_db_host_port(environ, True, False, ["manage.py", "makemigrations"])
+        self.assertEqual(host, "db")
+        self.assertEqual(port, "5432")
+
     def test_test_mode_without_pgbouncer_uses_primary(self):
         environ = _make_environ()
         host, port = resolve_db_host_port(environ, False, False, ["manage.py", "test"])

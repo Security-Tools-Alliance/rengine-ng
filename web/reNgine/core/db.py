@@ -12,6 +12,22 @@ from reNgine.utilities.logger import get_module_logger
 
 logger = get_module_logger(__name__)
 
+# Management commands that require a direct PostgreSQL connection (e.g. migrations,
+# superuser creation). When USE_PGBOUNCER=1, these use POSTGRES_DIRECT_* instead of
+# PgBouncer to avoid "wrong password type" and transaction-pooling limitations.
+DB_DIRECT_COMMANDS = frozenset(
+    {
+        "createsuperuser",
+        "dbshell",
+        "flush",
+        "makemigrations",
+        "migrate",
+        "showmigrations",
+        "sqlmigrate",
+        "test",
+    }
+)
+
 
 def resolve_db_host_port(
     environ: Callable[..., str],
@@ -22,15 +38,16 @@ def resolve_db_host_port(
     """
     Resolve PostgreSQL host and port for DATABASES config.
 
-    Uses PgBouncer (POSTGRES_HOST/POSTGRES_PORT) unless: (1) running tests, or
-    (2) use_pgbouncer and probe_at_startup are True and the probe fails or
-    psycopg2 is missing—then falls back to POSTGRES_DIRECT_HOST/POSTGRES_DIRECT_PORT.
+    Uses PgBouncer (POSTGRES_HOST/POSTGRES_PORT) unless: (1) the management command
+    is in DB_DIRECT_COMMANDS (e.g. migrate, createsuperuser), or (2) use_pgbouncer
+    and probe_at_startup are True and the probe fails or psycopg2 is missing—then
+    falls back to POSTGRES_DIRECT_HOST/POSTGRES_DIRECT_PORT.
 
     Args:
         environ: Callable returning env vars (e.g. env("KEY") or env("KEY", default="x")).
         use_pgbouncer: Whether PgBouncer is configured.
         probe_at_startup: Whether to probe PgBouncer and fallback to direct on failure.
-        argv: Process argv; if argv[1] == "test" and use_pgbouncer, use direct PostgreSQL.
+        argv: Process argv; if argv[1] is in DB_DIRECT_COMMANDS and use_pgbouncer, use direct PostgreSQL.
 
     Returns:
         (host, port) as strings.
@@ -40,7 +57,7 @@ def resolve_db_host_port(
     direct_host = environ("POSTGRES_DIRECT_HOST", default="db")
     direct_port = str(environ("POSTGRES_DIRECT_PORT", default="5432"))
 
-    if len(argv) > 1 and argv[1] == "test" and use_pgbouncer:
+    if len(argv) > 1 and argv[1] in DB_DIRECT_COMMANDS and use_pgbouncer:
         return direct_host, direct_port
 
     if not (use_pgbouncer and probe_at_startup):
