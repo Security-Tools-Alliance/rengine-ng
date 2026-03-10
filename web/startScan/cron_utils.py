@@ -17,8 +17,9 @@ Call sites (all delegate to ensure_run_scheduled_scans_cron()):
      post_save (when created and enabled), calls ensure_run_scheduled_scans_cron()
      so the crontab is updated as soon as the first schedule is created from the UI.
 
-The wrapper script (run_scheduled_scans.sh) and cron daemon are started in the
-entrypoint; this module only ensures the crontab line is present.
+The wrapper script (run_scheduled_scans.sh) is run every minute by a loop in the
+entrypoint (no cron daemon, runs as rengine). This module ensures the crontab
+line when crontab is available (e.g. if cron is installed elsewhere).
 """
 
 import os

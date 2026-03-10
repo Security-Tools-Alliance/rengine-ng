@@ -19,6 +19,19 @@ if [ ! -f "$SSH_KEY" ] && command -v ssh-keygen >/dev/null 2>&1; then
   ssh-keygen -t ed25519 -f "$SSH_KEY" -N "" -q
   chmod 600 "$SSH_KEY" "${SSH_KEY}.pub" 2>/dev/null || true
 fi
+[ -d "$SSH_DIR" ] && chmod 700 "$SSH_DIR" 2>/dev/null || true
+[ -f "$SSH_KEY" ] && chmod 600 "$SSH_KEY" 2>/dev/null || true
+[ -f "${SSH_KEY}.pub" ] && chmod 600 "${SSH_KEY}.pub" 2>/dev/null || true
+
+# Create wrapper script for run_scheduled_scans (used by scheduled-scans loop)
+RUN_SCHEDULED_SCRIPT="${USER_HOME}/run_scheduled_scans.sh"
+if [ ! -x "$RUN_SCHEDULED_SCRIPT" ]; then
+  printf '#!/bin/bash\ncd "%s" && poetry run python3 manage.py run_scheduled_scans\n' "$RENGINE_FOLDER" > "$RUN_SCHEDULED_SCRIPT"
+  chmod +x "$RUN_SCHEDULED_SCRIPT"
+fi
+
+# Run scheduled scans every minute (no cron daemon, no root required)
+( while true; do "$RUN_SCHEDULED_SCRIPT" 2>/dev/null || true; sleep 60; done ) &
 
 print_msg "Installing dev dependencies"
 poetry install --only dev --no-root
@@ -28,6 +41,9 @@ poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
 
 print_msg "Migrate database"
 poetry run -C $RENGINE_FOLDER python3 manage.py migrate
+
+print_msg "Ensure scheduled scans (if any schedule exists)"
+poetry run -C $RENGINE_FOLDER python3 manage.py ensure_scheduled_scans_cron || true
 
 print_msg "Collect static files"
 poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --noinput

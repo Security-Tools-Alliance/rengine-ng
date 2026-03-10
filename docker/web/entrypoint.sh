@@ -24,17 +24,15 @@ fi
 [ -f "$SSH_KEY" ] && chmod 600 "$SSH_KEY" 2>/dev/null || true
 [ -f "${SSH_KEY}.pub" ] && chmod 600 "${SSH_KEY}.pub" 2>/dev/null || true
 
-# Create wrapper script for run_scheduled_scans (used by cron)
+# Create wrapper script for run_scheduled_scans (used by scheduled-scans loop)
 RUN_SCHEDULED_SCRIPT="${USER_HOME}/run_scheduled_scans.sh"
 if [ ! -x "$RUN_SCHEDULED_SCRIPT" ]; then
   printf '#!/bin/bash\ncd "%s" && poetry run python3 manage.py run_scheduled_scans\n' "$RENGINE_FOLDER" > "$RUN_SCHEDULED_SCRIPT"
   chmod +x "$RUN_SCHEDULED_SCRIPT"
 fi
 
-# Start cron so scheduled scans can run
-if command -v cron >/dev/null 2>&1; then
-  cron
-fi
+# Run scheduled scans every minute (no cron daemon, no root required)
+( while true; do "$RUN_SCHEDULED_SCRIPT" 2>/dev/null || true; sleep 60; done ) &
 
 print_msg "Generate Django migrations files"
 poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
@@ -44,8 +42,8 @@ print_msg "Migrate database"
 POSTGRES_HOST="${POSTGRES_DIRECT_HOST:-db}" POSTGRES_PORT="${POSTGRES_DIRECT_PORT:-5432}" \
   poetry run -C $RENGINE_FOLDER python3 manage.py migrate
 
-# Ensure run_scheduled_scans is in crontab if any schedule exists
-print_msg "Ensure scheduled scans cron (if any schedule exists)"
+# Ensure scheduled-scans job is registered (crontab if cron available; loop above runs the script every minute)
+print_msg "Ensure scheduled scans (if any schedule exists)"
 poetry run -C $RENGINE_FOLDER python3 manage.py ensure_scheduled_scans_cron || true
 
 # Initialize Secator API key if it doesn't exist
