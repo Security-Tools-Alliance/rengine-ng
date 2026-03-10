@@ -10,6 +10,7 @@ from reNgine.definitions import (
     FAILED_TASK,
     INITIATED_TASK,
     RUNNING_TASK,
+    RUNNING_BACKGROUND,
     SKIPPED_TASK,
     SUCCESS_TASK,
 )
@@ -55,6 +56,24 @@ class TestMapSecatorStatusToRengine(unittest.TestCase):
             SecatorProgressSync.map_secator_status_to_rengine("   "),
             UNKNOWN_SECATOR_STATUS_FALLBACK,
         )
+
+    def test_rengine_numeric_status_codes_mapped_directly(self):
+        """Numeric strings for reNgine codes are accepted and returned as-is."""
+        cases = [
+            ("-1", INITIATED_TASK),
+            ("0", FAILED_TASK),
+            ("1", RUNNING_TASK),
+            ("2", SUCCESS_TASK),
+            ("3", ABORTED_TASK),
+            ("4", RUNNING_BACKGROUND),
+            ("5", SKIPPED_TASK),
+        ]
+        for status_str, expected in cases:
+            with self.subTest(status_str=status_str):
+                self.assertEqual(
+                    SecatorProgressSync.map_secator_status_to_rengine(status_str),
+                    expected,
+                )
 
     def test_unknown_status_returns_fallback(self):
         """Unknown Secator status returns UNKNOWN_SECATOR_STATUS_FALLBACK."""

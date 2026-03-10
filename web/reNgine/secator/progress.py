@@ -12,6 +12,7 @@ from reNgine.definitions import (
     FAILED_TASK,
     INITIATED_TASK,
     RUNNING_TASK,
+    RUNNING_BACKGROUND,
     SKIPPED_TASK,
     SUCCESS_TASK,
 )
@@ -27,6 +28,11 @@ TERMINAL_RUNNER_STATUSES = frozenset({"SUCCESS", "FAILURE", "FAILED", "REVOKED"}
 
 UNKNOWN_SECATOR_STATUS_FALLBACK = INITIATED_TASK
 
+# reNgine status codes accepted when client sends numeric status instead of string.
+RENGINE_STATUS_CODES = frozenset(
+    {INITIATED_TASK, FAILED_TASK, RUNNING_TASK, SUCCESS_TASK, ABORTED_TASK, RUNNING_BACKGROUND, SKIPPED_TASK}
+)
+
 
 class SecatorProgressSync:
     """Service for synchronizing Secator runner progress with ScanHistory."""
@@ -37,7 +43,8 @@ class SecatorProgressSync:
         Map Secator status to reNgine status.
 
         Args:
-            secator_status: Secator status string (RUNNING, SUCCESS, FAILURE, etc.).
+            secator_status: Secator status string (RUNNING, SUCCESS, FAILURE, etc.),
+                or numeric string for reNgine code ("-1", "0", "1", "2", "3", "4", "5").
                 None or empty string map to UNKNOWN_SECATOR_STATUS_FALLBACK.
 
         Returns:
@@ -54,7 +61,14 @@ class SecatorProgressSync:
         }
         if secator_status is None or not secator_status.strip():
             return UNKNOWN_SECATOR_STATUS_FALLBACK
-        normalized = secator_status.upper()
+        stripped = secator_status.strip()
+        try:
+            code = int(stripped)
+            if code in RENGINE_STATUS_CODES:
+                return code
+        except (ValueError, TypeError):
+            pass
+        normalized = stripped.upper()
         if normalized not in status_map:
             logger.log_line(
                 PREFIX_SECATOR_PROGRESS,
