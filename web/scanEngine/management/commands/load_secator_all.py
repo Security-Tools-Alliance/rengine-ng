@@ -1,5 +1,5 @@
 """
-Django management command to load all Secator components (tasks, workflows, scans).
+Django management command to load all Secator components (tasks, profiles, workflows, scans).
 """
 
 from django.core.management import call_command
@@ -8,13 +8,18 @@ from .secator_loader_base import SecatorLoaderBase
 
 
 class Command(SecatorLoaderBase):
-    help = "Load all Secator components (tasks, workflows, scans)"
+    help = "Load all Secator components (tasks, profiles, workflows, scans)"
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--tasks-only",
             action="store_true",
             help="Load only tasks",
+        )
+        parser.add_argument(
+            "--profiles-only",
+            action="store_true",
+            help="Load only profiles",
         )
         parser.add_argument(
             "--workflows-only",
@@ -29,19 +34,26 @@ class Command(SecatorLoaderBase):
 
     def handle(self, *args, **options):
         tasks_only = options["tasks_only"]
+        profiles_only = options["profiles_only"]
         workflows_only = options["workflows_only"]
         scans_only = options["scans_only"]
 
         self.stdout.write("Loading all Secator components...")
 
-        # Determine which components to load
-        load_tasks = tasks_only or (not workflows_only and not scans_only)
-        load_workflows = workflows_only or (not tasks_only and not scans_only)
-        load_scans = scans_only or (not tasks_only and not workflows_only)
+        no_filter = not (tasks_only or profiles_only or workflows_only or scans_only)
+        load_tasks = tasks_only or no_filter
+        load_profiles = profiles_only or no_filter
+        load_workflows = workflows_only or no_filter
+        load_scans = scans_only or no_filter
 
         if load_tasks:
             self.stdout.write("Loading tasks...")
             call_command("load_tasks")
+            self.stdout.write("")
+
+        if load_profiles:
+            self.stdout.write("Loading profiles...")
+            call_command("load_profiles")
             self.stdout.write("")
 
         if load_workflows:
