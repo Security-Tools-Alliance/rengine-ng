@@ -1,5 +1,5 @@
 ---
-description: Testing standards for reNgine-ng, including structure, BaseTestCase usage, TestDataGenerator, anonymisation, and deterministic behaviour.
+description: Testing standards for reNgine-ng, including structure, BaseTestCase usage, TestDataGenerator, positive/negative and security-related tests, centralised invalid data, and deterministic behaviour.
 alwaysApply: true
 ---
 
@@ -46,11 +46,23 @@ class TargetServiceTestCase(BaseTestCase):
         self.assertIsNotNone(summary)
 ```
 
+## Positive and negative test data
+
+- For each behaviour under test, include both **valid** (happy path) and **invalid or malicious** cases. Assert the expected outcome: success for valid inputs, rejection or validation error for invalid ones.
+- **Valid data**: use only `TestDataGenerator` from `utils.test_utils`; do not hand-roll fixtures.
+- **Invalid or malicious data**: use the centralised constants from `utils.test_utils` — `BadPathSamples` and `BadUrlSamples` — and do not duplicate magic strings across test files. If you need additional bad-input constants, add them there and reuse.
+
+## Security-related tests
+
+- For code that handles paths, URLs, user input, API responses, or displayed content, add tests that verify **rejection** of invalid or malicious inputs (e.g. path traversal, dangerous URL schemes).
+- Refer to the rule **rengine-ng-security.mdc** for the security rules that must be enforced; tests should assert that those rules are upheld. Do not duplicate the rule text; only reference it and add tests that validate the behaviour.
+
 ## Determinism and isolation
 
 - Tests must be deterministic and independent of timing.
 - Avoid relying on `sleep`, real network calls, or external services.
 - Cover edge cases, especially around error handling.
+- Do not duplicate test data: valid data comes from `TestDataGenerator`, invalid/malicious data from `BadPathSamples` / `BadUrlSamples` in `utils.test_utils`.
 
 ## Running tests
 

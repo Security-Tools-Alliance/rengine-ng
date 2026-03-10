@@ -34,7 +34,7 @@ Project context and technology stack for the reNgine-ng security assessment plat
 ## Conventions (from project rules)
 
 - Code and comments in English; SOLID, KISS, DRY.
-- Types on new code; tests for changes; `BaseTestCase` and `TestDataGenerator` for tests; anonymize test data.
+- Types on new code; tests for changes; `BaseTestCase` and `TestDataGenerator` for tests; anonymize test data. Tests must cover both valid and invalid/malicious inputs; security-sensitive code must have tests that assert correct rejection of bad data. Use the centralised test data (`TestDataGenerator` for valid, `BadPathSamples` / `BadUrlSamples` in `utils.test_utils` for invalid); see rengine-ng-tests.mdc and rengine-ng-security.mdc.
 - Private methods at the bottom of the file.
 - No path built from user input without `reNgine.core.path` / `reNgine.core.validators` helpers; no raw exception messages to the client.
 - **Scan config**: Organization, Scope, Target, and ScanHistory each have a `scan_config` JSONField. Parameters resolve via `resolve_scan_params()` in `web/targetApp/services/scope_params.py` following Organization → Scope → Target → Scan hierarchy. See `rengine-ng-coding.mdc` for full details.

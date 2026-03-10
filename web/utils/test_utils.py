@@ -53,7 +53,11 @@ from startScan.models import (
 from targetApp.models import Organization, Scope, Target
 
 
-__all__ = ["TestDataGenerator"]
+__all__ = [
+    "BadPathSamples",
+    "BadUrlSamples",
+    "TestDataGenerator",
+]
 
 
 class TestDataGenerator:
@@ -840,6 +844,38 @@ http_crawl: {}
         )
         schedule.save()
         return schedule
+
+
+class BadPathSamples:
+    """
+    Centralised path strings for testing path traversal and safe path handling.
+
+    Use these constants in tests instead of hardcoding; this is the single
+    reference for invalid or malicious path inputs. See rengine-ng-tests.mdc.
+    """
+
+    TRAVERSAL_DOTDOT = ".."
+    TRAVERSAL_PARENT = "../etc"
+    TRAVERSAL_MIDDLE = "a/../b"
+    TRAVERSAL_MIDDLE_FILE = "a/../b/file.png"
+    TRAVERSAL_SCAN_RESULTS = "scan_1/../results"
+    TRAVERSAL_FOO_BAR = "foo/../bar"
+    TRAVERSAL_REPORTS_PUBLIC = "reports/../public"
+    ABSOLUTE_LEADING_SLASH = "/etc/passwd"
+    EMPTY = ""
+    BLANK = "   "
+
+
+class BadUrlSamples:
+    """
+    Centralised URL strings for testing URL validation (dangerous schemes, etc.).
+
+    Use these constants in tests instead of hardcoding; this is the single
+    reference for invalid or malicious URL inputs. See rengine-ng-tests.mdc.
+    """
+
+    JAVASCRIPT_SCHEME = "javascript:alert(1)"
+    DATA_SCHEME_HTML = "data:text/html,<script>alert(1)</script>"
 
 
 class TestValidation:

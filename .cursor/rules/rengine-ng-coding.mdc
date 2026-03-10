@@ -55,7 +55,7 @@ Organization, Scope, Target, and ScanHistory each carry a `scan_config` JSONFiel
 - **Shared UI**: All four forms (org, scope, target, scan) include `web/templates/shared/_scan_params_block.html` and load `web/static/custom/scan_params.js` (non-scan pages) or `secator_scan_core.js` (scan page). See `rengine-ng-frontend.mdc` for template details.
 - **POST parsing**: `parse_scan_config_from_post(post, prefix, profiles_dict, existing_config)` in `scope_params.py` converts form data into the JSON structure.
 
-For testing conventions (BaseTestCase, TestDataGenerator, anonymisation, determinism) and `make test` commands, see the rule `rengine-ng-tests.mdc`.
+For testing conventions (BaseTestCase, TestDataGenerator, positive/negative and security-related tests, centralised invalid data, anonymisation, determinism) and `make test` commands, see the rule `rengine-ng-tests.mdc`.
 
 For Secator usage (workflows, scans, tasks, documentation), see the rule `rengine-ng-secator.mdc` and the skill `rengine-ng-context`.
 
