@@ -33,17 +33,22 @@ fi
 # Run scheduled scans every minute (no cron daemon, no root required)
 ( while true; do "$RUN_SCHEDULED_SCRIPT" 2>/dev/null || true; sleep 60; done ) &
 
+# Use direct PostgreSQL (not PgBouncer) for management commands that need it (migrations, cron).
+run_with_direct_db() {
+  POSTGRES_HOST="${POSTGRES_DIRECT_HOST:-db}" POSTGRES_PORT="${POSTGRES_DIRECT_PORT:-5432}" "$@"
+}
+
 print_msg "Installing dev dependencies"
 poetry install --only dev --no-root
 
 print_msg "Generate Django migrations files"
-poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
+run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
 
 print_msg "Migrate database"
-poetry run -C $RENGINE_FOLDER python3 manage.py migrate
+run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py migrate
 
 print_msg "Ensure scheduled scans (if any schedule exists)"
-poetry run -C $RENGINE_FOLDER python3 manage.py ensure_scheduled_scans_cron || true
+run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py ensure_scheduled_scans_cron || true
 
 print_msg "Collect static files"
 poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --noinput

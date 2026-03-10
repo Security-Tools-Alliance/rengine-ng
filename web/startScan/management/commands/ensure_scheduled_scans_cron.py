@@ -20,4 +20,7 @@ class Command(BaseCommand):
         if ensure_run_scheduled_scans_cron():
             self.stdout.write(self.style.SUCCESS("Cron job present or installed."))
         else:
-            self.stdout.write("Cron not available or not updated (e.g. outside web container).")
+            self.stdout.write(
+                "Crontab not available (e.g. outside web container). "
+                "In the web container without cron package, scheduled scans run via the entrypoint loop."
+            )

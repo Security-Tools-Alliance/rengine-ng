@@ -34,25 +34,28 @@ fi
 # Run scheduled scans every minute (no cron daemon, no root required)
 ( while true; do "$RUN_SCHEDULED_SCRIPT" 2>/dev/null || true; sleep 60; done ) &
 
+# Use direct PostgreSQL (not PgBouncer) for management commands that need it (migrations, cron, API key, load).
+run_with_direct_db() {
+  POSTGRES_HOST="${POSTGRES_DIRECT_HOST:-db}" POSTGRES_PORT="${POSTGRES_DIRECT_PORT:-5432}" "$@"
+}
+
 print_msg "Generate Django migrations files"
-poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
+run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
 
 print_msg "Migrate database"
-# Migrations run against PostgreSQL directly (not via PgBouncer) to avoid transaction-pool issues.
-POSTGRES_HOST="${POSTGRES_DIRECT_HOST:-db}" POSTGRES_PORT="${POSTGRES_DIRECT_PORT:-5432}" \
-  poetry run -C $RENGINE_FOLDER python3 manage.py migrate
+run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py migrate
 
 # Ensure scheduled-scans job is registered (crontab if cron available; loop above runs the script every minute)
 print_msg "Ensure scheduled scans (if any schedule exists)"
-poetry run -C $RENGINE_FOLDER python3 manage.py ensure_scheduled_scans_cron || true
+run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py ensure_scheduled_scans_cron || true
 
 # Initialize Secator API key if it doesn't exist
 print_msg "Initialize Secator API key"
-poetry run -C $RENGINE_FOLDER python3 manage.py generate_secator_api_key || true
+run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py generate_secator_api_key || true
 
 # Load Secator components from Secator library (tasks, workflows, scans)
 print_msg "Loading Secator components (from Secator library)"
-poetry run -C $RENGINE_FOLDER python3 manage.py load_secator_all || true
+run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py load_secator_all || true
 
 print_msg "Collect static files"
 poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --noinput

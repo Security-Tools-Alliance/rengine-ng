@@ -54,6 +54,13 @@ class ResolveDbHostPortTestCase(unittest.TestCase):
         self.assertEqual(host, "db")
         self.assertEqual(port, "5432")
 
+    def test_makemigrations_uses_direct_when_argv_is_python_manage_py_cmd(self):
+        """Invocation as python3 manage.py makemigrations (e.g. from entrypoint) uses direct DB."""
+        environ = _make_environ()
+        host, port = resolve_db_host_port(environ, True, False, ["python3", "manage.py", "makemigrations"])
+        self.assertEqual(host, "db")
+        self.assertEqual(port, "5432")
+
     def test_test_mode_without_pgbouncer_uses_primary(self):
         environ = _make_environ()
         host, port = resolve_db_host_port(environ, False, False, ["manage.py", "test"])

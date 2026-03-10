@@ -47,7 +47,8 @@ def resolve_db_host_port(
         environ: Callable returning env vars (e.g. env("KEY") or env("KEY", default="x")).
         use_pgbouncer: Whether PgBouncer is configured.
         probe_at_startup: Whether to probe PgBouncer and fallback to direct on failure.
-        argv: Process argv; if argv[1] is in DB_DIRECT_COMMANDS and use_pgbouncer, use direct PostgreSQL.
+        argv: Process argv; command name is argv[2] when argv[1] is manage.py (e.g. python3 manage.py cmd),
+        else argv[1]; if that command is in DB_DIRECT_COMMANDS and use_pgbouncer, use direct PostgreSQL.
 
     Returns:
         (host, port) as strings.
@@ -57,7 +58,14 @@ def resolve_db_host_port(
     direct_host = environ("POSTGRES_DIRECT_HOST", default="db")
     direct_port = str(environ("POSTGRES_DIRECT_PORT", default="5432"))
 
-    if len(argv) > 1 and argv[1] in DB_DIRECT_COMMANDS and use_pgbouncer:
+    cmd: str | None = None
+    if len(argv) > 2:
+        first = argv[1]
+        if first == "manage.py" or (isinstance(first, str) and first.endswith("manage.py")):
+            cmd = argv[2] if isinstance(argv[2], str) else None
+    if cmd is None and len(argv) > 1 and isinstance(argv[1], str):
+        cmd = argv[1]
+    if use_pgbouncer and cmd is not None and cmd in DB_DIRECT_COMMANDS:
         return direct_host, direct_port
 
     if not (use_pgbouncer and probe_at_startup):
