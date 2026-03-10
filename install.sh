@@ -250,27 +250,17 @@ fix_project_ownership() {
 check_gpu_support() {
     log "Checking for GPU support..." $COLOR_CYAN
     
-    # Execute GPU detection with error handling
+    # Execute GPU detection with error handling (do not write to .env here; main() does a single remove+append)
     if ! GPU_TYPE=$(./scripts/gpu_support.sh 2>/dev/null); then
         log "GPU detection script failed, continuing with CPU-only setup" $COLOR_YELLOW
-        # Add default GPU configuration
-        {
-            echo "GPU=0"
-            echo "GPU_TYPE=none"
-            echo "DOCKER_RUNTIME=none"
-        } >> .env
+        GPU_TYPE=none
         return 1
     fi
-    
+
     # Validate GPU_TYPE output
     if [[ ! "$GPU_TYPE" =~ ^(nvidia|amd|none)$ ]]; then
         log "Invalid GPU type detected: $GPU_TYPE, continuing with CPU-only setup" $COLOR_YELLOW
-        # Add default GPU configuration
-        {
-            echo "GPU=0"
-            echo "GPU_TYPE=none"
-            echo "DOCKER_RUNTIME=none"
-        } >> .env
+        GPU_TYPE=none
         return 1
     fi
     
@@ -437,19 +427,19 @@ main() {
   check_docker
   check_docker_compose
 
-  # Add GPU support check here
+  # Add GPU support check here (always normalize .env: remove any existing GPU block then write once)
+  if [ -f .env ]; then
+    sed -i '/^GPU=/d' .env
+    sed -i '/^GPU_TYPE=/d' .env
+    sed -i '/^DOCKER_RUNTIME=/d' .env
+  fi
   if check_gpu_support; then
     if [ $isNonInteractive = true ]; then
         # Load existing GPU configuration from .env
         if [ -f .env ]; then
             GPU_ENABLED=$(grep "^GPU=" .env | cut -d '=' -f2)
             if [ "$GPU_ENABLED" = "1" ]; then
-                # Remove existing GPU-related configurations
-                sed -i '/^GPU=/d' .env
-                sed -i '/^GPU_TYPE=/d' .env
-                sed -i '/^DOCKER_RUNTIME=/d' .env
-                
-                # Add GPU configuration to environment
+                # Add GPU configuration to environment (existing GPU vars already removed above)
                 {
                     echo "GPU=1"
                     echo "GPU_TYPE=$GPU_TYPE"
@@ -457,6 +447,11 @@ main() {
                 } >> .env
                 log "GPU support has been enabled from existing configuration" $COLOR_GREEN
             else
+                {
+                    echo "GPU=0"
+                    echo "GPU_TYPE=none"
+                    echo "DOCKER_RUNTIME=none"
+                } >> .env
                 log "GPU support is disabled in .env" $COLOR_YELLOW
             fi
         fi
@@ -465,12 +460,7 @@ main() {
         read -p "" gpu_choice
         case $gpu_choice in
             [Yy]* )
-                # Remove existing GPU-related configurations
-                sed -i '/^GPU=/d' .env
-                sed -i '/^GPU_TYPE=/d' .env
-                sed -i '/^DOCKER_RUNTIME=/d' .env
-                
-                # Add GPU configuration to environment
+                # Add GPU configuration to environment (existing GPU vars already removed above)
                 {
                     echo "GPU=1"
                     echo "GPU_TYPE=$GPU_TYPE"
@@ -479,11 +469,7 @@ main() {
                 log "GPU support will be enabled" $COLOR_GREEN
                 ;;
             * )
-                # Remove existing GPU-related configurations
-                sed -i '/^GPU=/d' .env
-                sed -i '/^GPU_TYPE=/d' .env
-                sed -i '/^DOCKER_RUNTIME=/d' .env
-                # Add default GPU configuration
+                # Add default GPU configuration (existing GPU vars already removed above)
                 {
                     echo "GPU=0"
                     echo "GPU_TYPE=none"
@@ -621,17 +607,17 @@ main() {
   if [ -n "$SECATOR_API_KEY" ]; then
     log "Secator API key generated successfully" $COLOR_GREEN
     
-    # Remove existing Secator API configuration from .env
+    # Remove existing Secator API configuration and comment from .env to avoid duplicates on reinstall
+    sed -i '/# Secator Worker API Configuration (auto-generated)/d' .env
     sed -i '/^SECATOR_ADDONS_API_ENABLED=/d' .env
     sed -i '/^SECATOR_ADDONS_API_KEY=/d' .env
     sed -i '/^SECATOR_ADDONS_API_HEADER_NAME=/d' .env
     sed -i '/^SECATOR_ADDONS_API_URL=/d' .env
     sed -i '/^SECATOR_ADDONS_API_FORCE_SSL=/d' .env
     sed -i '/^SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT=/d' .env
-    # Also remove legacy variable names if present
     sed -i '/^RENGINE_API_KEY=/d' .env
     sed -i '/^RENGINE_API_URL=/d' .env
-    
+
     # Add Secator API configuration to .env
     {
       echo ""
