@@ -110,7 +110,7 @@ define gpu_config
 	$(eval export DOCKER_RUNTIME)
 endef
 
-.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword makemigrations migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list secator-init secator-key secator-load secator-check
+.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword makemigrations migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list secator-init secator-key secator-load secator-check secator-health
 
 pull:			## Pull pre-built Docker images from repository.
 	${DOCKER_COMPOSE_FILE_CMD} pull
@@ -254,9 +254,9 @@ secator-init:		## Initialize Secator (generate API key + load all from Secator)
 	@make secator-key
 	@make secator-load
 
-secator-key:		## Generate or regenerate Secator API key
-	@echo "=== Generating Secator API Key ==="
-	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py generate_secator_api_key --recreate --show-key
+secator-key:		## Generate Secator API key only if none exists (use --recreate in manage.py for regeneration)
+	@echo "=== Generating Secator API Key (if missing) ==="
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py generate_secator_api_key --show-key
 
 secator-load:		## Load Secator components (tasks, workflows, scans)
 	@echo "=== Loading Secator Components ==="
@@ -273,6 +273,17 @@ secator-check:		## Check Secator configuration and status
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py shell -c "from scanEngine.models import Workflow; print(f'Workflows loaded: {Workflow.objects.count()}')"
 	@echo "Checking loaded scans..."
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py shell -c "from scanEngine.models import Scan; print(f'Scans loaded: {Scan.objects.count()}')"
+
+# SECATOR_HEALTH_URL defaults to local reNgine instance; override for remote (e.g. SECATOR_HEALTH_URL=https://rengine.example.com/api/secator/health/)
+SECATOR_HEALTH_URL ?= https://127.0.0.1/api/secator/health/
+secator-health:		## Test Secator API health (findings endpoint). Uses SECATOR_ADDONS_API_KEY from .env; override URL with SECATOR_HEALTH_URL=...
+	@if [ -z "$(SECATOR_ADDONS_API_KEY)" ]; then \
+		echo "Error: SECATOR_ADDONS_API_KEY is not set in .env. Run 'make secator-key' or set it in .env."; \
+		exit 1; \
+	fi
+	@echo "Testing Secator API health at $(SECATOR_HEALTH_URL)..."
+	@code=$$(curl -k -s -o /dev/null -w "%{http_code}" -I "$(SECATOR_HEALTH_URL)" -H "Authorization: Api-Key $(SECATOR_ADDONS_API_KEY)"); \
+	if [ "$$code" = "200" ]; then echo "Secator API health check OK (HTTP $$code)"; else echo "Secator API health check failed (HTTP $$code)"; exit 1; fi
 
 down:			## Down all services and remove containers.
 	${DOCKER_COMPOSE_FILE_CMD} down
@@ -427,9 +438,10 @@ help:			## Show this help.
 	@echo ""
 	@echo "Secator Initialization:"
 	@echo "  make secator-init                        				Initialize Secator (generate API key + load all from Secator)"
-	@echo "  make secator-key                         				Generate or regenerate Secator API key"
+	@echo "  make secator-key                         				Generate Secator API key only if none exists"
 	@echo "  make secator-load                        				Load Secator components (tasks, workflows, scans)"
 	@echo "  make secator-check                       				Check Secator configuration and status"
+	@echo "  make secator-health [SECATOR_HEALTH_URL=<url>]			Test Secator API health (uses SECATOR_ADDONS_API_KEY from .env)"
 
 %:
 	@:
