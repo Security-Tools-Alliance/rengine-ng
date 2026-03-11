@@ -9,10 +9,6 @@ if [[ -z "$REPO_ROOT" || "$REPO_ROOT" == "/" ]]; then
   echo "Error: REPO_ROOT resolved to an invalid path. Aborting." >&2
   exit 1
 fi
-if [[ "$REPO_ROOT" == "/root" || "$REPO_ROOT" =~ ^/home/ ]]; then
-  echo "Error: REPO_ROOT must not be a home directory ($REPO_ROOT). Aborting." >&2
-  exit 1
-fi
 if [[ ! -f "$REPO_ROOT/Makefile" ]]; then
   echo "Error: $REPO_ROOT does not look like the reNgine-ng repo root (Makefile missing). Aborting." >&2
   exit 1

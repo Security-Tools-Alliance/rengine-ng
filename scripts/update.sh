@@ -120,11 +120,18 @@ log_to_file() {
 
 # Create timestamped update log file under REPO_ROOT/logs/ and write optional first message.
 # Call this at the start of each major code path (resume, post-update, normal) so all runs are logged.
+# Log file and logs/ dir are chown'd to GIT_AS_USER so they are owned by the current user, not root.
 setup_update_log() {
   local first_msg="${1:-}"
   mkdir -p "$REPO_ROOT/logs"
+  if [[ -n "$GIT_AS_USER" && "$GIT_AS_USER" != "root" ]]; then
+    chown "$GIT_AS_USER" "$REPO_ROOT/logs" 2>/dev/null || true
+  fi
   LOG_FILE="$REPO_ROOT/logs/rengine_update_$(date +%Y-%m-%d_%H%M%S).log"
   : > "$LOG_FILE"
+  if [[ -n "$GIT_AS_USER" && "$GIT_AS_USER" != "root" ]]; then
+    chown "$GIT_AS_USER" "$LOG_FILE" 2>/dev/null || true
+  fi
   [[ -n "$first_msg" ]] && log_to_file "$first_msg"
 }
 
