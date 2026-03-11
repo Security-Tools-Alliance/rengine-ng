@@ -384,6 +384,21 @@ usageFunction()
   exit 1
 }
 
+# Append to .env any KEY=value line from .env-dist whose KEY is not already present in .env.
+# Preserves existing user values; only adds missing keys (e.g. PGBOUNCER_*, new options).
+merge_env_from_dist() {
+  [ ! -f .env-dist ] && return 0
+  local line key
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      if ! grep -q "^${key}=" .env 2>/dev/null; then
+        echo "$line" >> .env
+      fi
+    fi
+  done < .env-dist
+}
+
 # Main installation process
 main() {
   cat web/art/reNgine.txt
@@ -419,6 +434,14 @@ main() {
         ;;
     esac
   done
+
+  # Ensure .env exists and add any missing keys from .env-dist (e.g. PGBOUNCER, new options)
+  if [ ! -f .env ]; then
+    cp .env-dist .env
+    log "Created .env from .env-dist" $COLOR_GREEN
+  elif [ -f .env-dist ]; then
+    merge_env_from_dist
+  fi
 
   log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
 
