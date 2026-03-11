@@ -553,9 +553,12 @@ main() {
 
   # Non-interactive install
   if [ "$isNonInteractive" = true ]; then
+    # Preserve INSTALL_TYPE from command line (e.g. INSTALL_TYPE=source ./install.sh -n) so .env does not override it
+    SAVED_INSTALL_TYPE="${INSTALL_TYPE:-}"
     # Load and verify .env file
     if [ -f .env ]; then
         export $(grep -v '^#' .env | xargs)
+        [ -n "$SAVED_INSTALL_TYPE" ] && export INSTALL_TYPE="$SAVED_INSTALL_TYPE"
     else
         log "Error: .env file not found, copy/paste the .env-dist file to .env and edit it" $COLOR_RED
         exit 1
