@@ -41,7 +41,6 @@ show_usage() {
   echo "  NON_INTERACTIVE=1              Same as -n"
   echo "  RENGINE_UPDATE_INSTALL_TYPE    pre-built or source (default: pre-built)"
   echo "  RENGINE_UPDATE_APPLY_CHANGES    y or n to apply local changes after pull (default: n)"
-  echo "  RENGINE_UPDATE_ALLOW_RESET=1   Allow git reset --hard when discarding local changes (non-interactive)"
   echo ""
   echo "Example: sudo ./scripts/update.sh"
   echo "         sudo ./scripts/update.sh -n --force"
@@ -72,6 +71,19 @@ if [ "$(whoami)" != "root" ]; then
   log "Example: sudo ./scripts/update.sh (from repository root)" $COLOR_RED
   exit 1
 fi
+
+# Run git as the user who invoked sudo, so repo files keep correct ownership (not root).
+GIT_AS_USER="${SUDO_USER:-}"
+if [[ -z "$GIT_AS_USER" ]]; then
+  GIT_AS_USER=$(stat -c '%U' "$REPO_ROOT" 2>/dev/null) || GIT_AS_USER=$(stat -f '%Su' "$REPO_ROOT" 2>/dev/null) || true
+fi
+run_git() {
+  if [[ -n "$GIT_AS_USER" && "$GIT_AS_USER" != "root" ]]; then
+    sudo -u "$GIT_AS_USER" git "$@"
+  else
+    git "$@"
+  fi
+}
 
 # Function to compare version strings
 version_compare() {
@@ -268,7 +280,7 @@ run_post_update_flow() {
 
   if [[ "$apply_changes" == "y" ]]; then
     log "Reapplying local changes (git stash apply)..." $COLOR_CYAN
-    if (cd "$REPO_ROOT" && sudo -u rengine git stash apply) >> "$LOG_FILE" 2>&1; then
+    if (cd "$REPO_ROOT" && run_git stash apply) >> "$LOG_FILE" 2>&1; then
       log "Local changes reapplied successfully." $COLOR_GREEN
       log_to_file "git stash apply completed"
     else
@@ -327,91 +339,193 @@ CURRENT_VERSION=$(cat "$VERSION_FILE")
 
 require_commands jq curl
 
-LATEST_VERSION=$(curl -s https://api.github.com/repos/Security-Tools-Alliance/rengine-ng/releases/latest \
-  | jq -r '.tag_name // empty' \
-  | sed 's/^v//')
-if [[ -z "$LATEST_VERSION" ]]; then
-  log "Could not fetch latest version from GitHub (rate limit, network, or malformed tag)." $COLOR_RED
-  log_to_file "ERROR: could not fetch or parse latest version from GitHub releases API"
-  exit 1
-fi
+CURRENT_BRANCH=$(cd "$REPO_ROOT" && run_git branch --show-current 2>/dev/null)
+[[ -z "$CURRENT_BRANCH" ]] && CURRENT_BRANCH="(detached HEAD)"
 
 cat "$REPO_ROOT/web/art/reNgine.txt"
-version_compare "$CURRENT_VERSION" "$LATEST_VERSION"
-comparison_result=$?
 
-log "" $COLOR_DEFAULT
-log "Current version: $CURRENT_VERSION" $COLOR_CYAN
-log "Latest version: $LATEST_VERSION" $COLOR_CYAN
-log "" $COLOR_DEFAULT
-log_to_file "Current: $CURRENT_VERSION, Latest: $LATEST_VERSION, comparison_result=$comparison_result"
-
-# comparison_result: 0 = equal, 1 = current > latest, 2 = current < latest
-SHOULD_PROCEED=0
-case $comparison_result in
-  0)
-    log "You are already on the latest version." $COLOR_GREEN
-    if [[ $FORCE_UPDATE -eq 1 ]]; then
-      SHOULD_PROCEED=1
-    elif [[ $NON_INTERACTIVE -eq 1 ]]; then
-      log "Non-interactive mode and no --force: skipping update." $COLOR_YELLOW
-      log_to_file "Exit: already latest, non-interactive without force"
-      log "Update log written to: $LOG_FILE" $COLOR_GREEN
-      exit 0
-    else
-      answer=$(ask_or_default "Do you want to force the update anyway? (y/n) " "n")
-      if [[ "$answer" == "y" ]]; then
-        SHOULD_PROCEED=1
-      else
-        log_to_file "Exit: user declined force update"
-        log "Update log written to: $LOG_FILE" $COLOR_GREEN
-        exit 0
-      fi
-    fi
-    ;;
-  1)
-    log "Your version is newer than the latest release." $COLOR_YELLOW
-    if [[ $FORCE_UPDATE -eq 1 ]]; then
-      SHOULD_PROCEED=1
-    elif [[ $NON_INTERACTIVE -eq 1 ]]; then
-      log "Non-interactive mode and no --force: skipping update." $COLOR_YELLOW
-      log_to_file "Exit: version newer, non-interactive without force"
-      log "Update log written to: $LOG_FILE" $COLOR_GREEN
-      exit 0
-    else
-      answer=$(ask_or_default "Do you want to force the update anyway? (y/n) " "n")
-      if [[ "$answer" == "y" ]]; then
-        SHOULD_PROCEED=1
-      else
-        log_to_file "Exit: user declined force update"
-        log "Update log written to: $LOG_FILE" $COLOR_GREEN
-        exit 0
-      fi
-    fi
-    ;;
-  2)
-    log "An update is available." $COLOR_CYAN
-    if [[ $NON_INTERACTIVE -eq 1 ]]; then
-      SHOULD_PROCEED=1
-    else
-      answer=$(ask_or_default "Do you want to update to the latest version? (y/n) " "y")
-      if [[ "$answer" == "y" ]]; then
-        SHOULD_PROCEED=1
-      fi
-    fi
-    if [[ $SHOULD_PROCEED -eq 0 ]]; then
-      log "Update cancelled." $COLOR_YELLOW
-      log_to_file "Exit: user cancelled update"
-      log "Update log written to: $LOG_FILE" $COLOR_GREEN
-      exit 0
-    fi
-    ;;
-  *)
-    log "Error comparing versions." $COLOR_RED
-    log_to_file "ERROR: version comparison failed"
+if [[ "$CURRENT_BRANCH" == "master" || "$CURRENT_BRANCH" == "main" ]]; then
+  # Stable branch: compare local version to GitHub latest release
+  LATEST_VERSION=$(curl -s https://api.github.com/repos/Security-Tools-Alliance/rengine-ng/releases/latest \
+    | jq -r '.tag_name // empty' \
+    | sed 's/^v//')
+  if [[ -z "$LATEST_VERSION" ]]; then
+    log "Could not fetch latest version from GitHub (rate limit, network, or malformed tag)." $COLOR_RED
+    log_to_file "ERROR: could not fetch or parse latest version from GitHub releases API"
     exit 1
-    ;;
-esac
+  fi
+  version_compare "$CURRENT_VERSION" "$LATEST_VERSION"
+  comparison_result=$?
+
+  log "" $COLOR_DEFAULT
+  log "Current version: $CURRENT_VERSION (branch: $CURRENT_BRANCH)" $COLOR_CYAN
+  log "Latest version: $LATEST_VERSION (stable, from GitHub release)" $COLOR_CYAN
+  log "Update will bring you to the latest stable release." $COLOR_CYAN
+  log "" $COLOR_DEFAULT
+  log_to_file "Current: $CURRENT_VERSION (branch: $CURRENT_BRANCH), Latest: $LATEST_VERSION (stable), comparison_result=$comparison_result"
+
+  # comparison_result: 0 = equal, 1 = current > latest, 2 = current < latest
+  SHOULD_PROCEED=0
+  case $comparison_result in
+    0)
+      log "You are already on the latest version." $COLOR_GREEN
+      if [[ $FORCE_UPDATE -eq 1 ]]; then
+        SHOULD_PROCEED=1
+      elif [[ $NON_INTERACTIVE -eq 1 ]]; then
+        log "Non-interactive mode and no --force: skipping update." $COLOR_YELLOW
+        log_to_file "Exit: already latest, non-interactive without force"
+        log "Update log written to: $LOG_FILE" $COLOR_GREEN
+        exit 0
+      else
+        answer=$(ask_or_default "Do you want to force the update anyway? (y/n) " "n")
+        if [[ "$answer" == "y" ]]; then
+          SHOULD_PROCEED=1
+        else
+          log_to_file "Exit: user declined force update"
+          log "Update log written to: $LOG_FILE" $COLOR_GREEN
+          exit 0
+        fi
+      fi
+      ;;
+    1)
+      log "Your version is newer than the latest release." $COLOR_YELLOW
+      if [[ $FORCE_UPDATE -eq 1 ]]; then
+        SHOULD_PROCEED=1
+      elif [[ $NON_INTERACTIVE -eq 1 ]]; then
+        log "Non-interactive mode and no --force: skipping update." $COLOR_YELLOW
+        log_to_file "Exit: version newer, non-interactive without force"
+        log "Update log written to: $LOG_FILE" $COLOR_GREEN
+        exit 0
+      else
+        answer=$(ask_or_default "Do you want to force the update anyway? (y/n) " "n")
+        if [[ "$answer" == "y" ]]; then
+          SHOULD_PROCEED=1
+        else
+          log_to_file "Exit: user declined force update"
+          log "Update log written to: $LOG_FILE" $COLOR_GREEN
+          exit 0
+        fi
+      fi
+      ;;
+    2)
+      log "An update is available." $COLOR_CYAN
+      if [[ $NON_INTERACTIVE -eq 1 ]]; then
+        SHOULD_PROCEED=1
+      else
+        answer=$(ask_or_default "Do you want to update to the latest version? (y/n) " "y")
+        if [[ "$answer" == "y" ]]; then
+          SHOULD_PROCEED=1
+        fi
+      fi
+      if [[ $SHOULD_PROCEED -eq 0 ]]; then
+        log "Update cancelled." $COLOR_YELLOW
+        log_to_file "Exit: user cancelled update"
+        log "Update log written to: $LOG_FILE" $COLOR_GREEN
+        exit 0
+      fi
+      ;;
+    *)
+      log "Error comparing versions." $COLOR_RED
+      log_to_file "ERROR: version comparison failed"
+      exit 1
+      ;;
+  esac
+else
+  # Non-stable branch: compare local to origin/branch version; show stable for info
+  log "Fetching origin to read remote branch version..." $COLOR_CYAN
+  (cd "$REPO_ROOT" && run_git fetch origin) >> "$LOG_FILE" 2>&1 || true
+
+  REMOTE_BRANCH_VERSION=$(cd "$REPO_ROOT" && run_git show "origin/$CURRENT_BRANCH:web/reNgine/version.txt" 2>/dev/null) || REMOTE_BRANCH_VERSION=""
+  STABLE_VERSION=$(curl -s https://api.github.com/repos/Security-Tools-Alliance/rengine-ng/releases/latest \
+    | jq -r '.tag_name // empty' \
+    | sed 's/^v//') || STABLE_VERSION=""
+  [[ -z "$STABLE_VERSION" ]] && STABLE_VERSION="(unavailable)"
+
+  log "" $COLOR_DEFAULT
+  log "Current version: $CURRENT_VERSION (branch: $CURRENT_BRANCH)" $COLOR_CYAN
+  if [[ -n "$REMOTE_BRANCH_VERSION" ]]; then
+    log "Remote branch version: $REMOTE_BRANCH_VERSION (origin/$CURRENT_BRANCH)" $COLOR_CYAN
+  else
+    log "Remote branch version: (unable to read or branch not on origin)" $COLOR_YELLOW
+  fi
+  log "Stable version: $STABLE_VERSION (from GitHub release)" $COLOR_CYAN
+  log "Update will pull from origin; you will get the version of your current branch (not the stable release)." $COLOR_CYAN
+  log "" $COLOR_DEFAULT
+
+  if [[ -n "$REMOTE_BRANCH_VERSION" ]]; then
+    version_compare "$CURRENT_VERSION" "$REMOTE_BRANCH_VERSION"
+    comparison_result=$?
+  else
+    comparison_result=2
+  fi
+  log_to_file "Current: $CURRENT_VERSION (branch: $CURRENT_BRANCH), Remote branch: $REMOTE_BRANCH_VERSION, Stable: $STABLE_VERSION, comparison_result=$comparison_result"
+
+  SHOULD_PROCEED=0
+  case $comparison_result in
+    0)
+      log "You are already up to date for this branch." $COLOR_GREEN
+      if [[ $FORCE_UPDATE -eq 1 ]]; then
+        SHOULD_PROCEED=1
+      elif [[ $NON_INTERACTIVE -eq 1 ]]; then
+        log "Non-interactive mode and no --force: skipping update." $COLOR_YELLOW
+        log_to_file "Exit: already up to date for branch, non-interactive without force"
+        log "Update log written to: $LOG_FILE" $COLOR_GREEN
+        exit 0
+      else
+        answer=$(ask_or_default "Do you want to force the pull anyway? (y/n) " "n")
+        if [[ "$answer" == "y" ]]; then
+          SHOULD_PROCEED=1
+        else
+          log_to_file "Exit: user declined force pull"
+          log "Update log written to: $LOG_FILE" $COLOR_GREEN
+          exit 0
+        fi
+      fi
+      ;;
+    1)
+      log "Your local version is ahead of origin. Pull may merge or fast-forward." $COLOR_YELLOW
+      if [[ $FORCE_UPDATE -eq 1 ]]; then
+        SHOULD_PROCEED=1
+      elif [[ $NON_INTERACTIVE -eq 1 ]]; then
+        log "Non-interactive mode and no --force: skipping update." $COLOR_YELLOW
+        log_to_file "Exit: local ahead of origin, non-interactive without force"
+        log "Update log written to: $LOG_FILE" $COLOR_GREEN
+        exit 0
+      else
+        answer=$(ask_or_default "Do you want to pull anyway? (y/n) " "n")
+        if [[ "$answer" == "y" ]]; then
+          SHOULD_PROCEED=1
+        else
+          log_to_file "Exit: user declined pull"
+          log "Update log written to: $LOG_FILE" $COLOR_GREEN
+          exit 0
+        fi
+      fi
+      ;;
+    2)
+      log "An update is available for your branch." $COLOR_CYAN
+      if [[ $NON_INTERACTIVE -eq 1 ]]; then
+        SHOULD_PROCEED=1
+      else
+        answer=$(ask_or_default "Do you want to update to the latest version of this branch? (y/n) " "y")
+        if [[ "$answer" == "y" ]]; then
+          SHOULD_PROCEED=1
+        fi
+      fi
+      if [[ $SHOULD_PROCEED -eq 0 ]]; then
+        log "Update cancelled." $COLOR_YELLOW
+        log_to_file "Exit: user cancelled update"
+        log "Update log written to: $LOG_FILE" $COLOR_GREEN
+        exit 0
+      fi
+      ;;
+    *)
+      log "Error comparing versions." $COLOR_RED
+      log_to_file "ERROR: version comparison failed"
+      exit 1
+      ;;
+  esac
+fi
 
 if [[ $SHOULD_PROCEED -eq 0 ]]; then
   log "Update log written to: $LOG_FILE" $COLOR_GREEN
@@ -457,39 +571,14 @@ if ! (cd "$REPO_ROOT" && make down) >> "$LOG_FILE" 2>&1; then
   exit 1
 fi
 
-log_to_file "Proceeding: git pull"
-log "Pulling latest code..." $COLOR_CYAN
-if [[ "${RENGINE_UPDATE_APPLY_CHANGES:-n}" == "y" ]]; then
-  if ! (cd "$REPO_ROOT" && sudo -u rengine git stash save 2>/dev/null; sudo -u rengine git pull && sudo -u rengine git stash apply 2>/dev/null) >> "$LOG_FILE" 2>&1; then
-    log "Failed to update and apply local changes" $COLOR_RED
-    log_to_file "ERROR: git pull (with stash) failed"
-    log "Update failed. Update log written to: $LOG_FILE" $COLOR_YELLOW
-    log "Please attach this file when reporting the issue to maintainers." $COLOR_YELLOW
-    exit 1
-  fi
-else
-  # Discard local changes to tracked files and pull (reset --hard is destructive)
-  if [[ $NON_INTERACTIVE -eq 1 ]]; then
-    if [[ "${RENGINE_UPDATE_ALLOW_RESET:-0}" != "1" ]]; then
-      log "In non-interactive mode, discarding local changes requires RENGINE_UPDATE_ALLOW_RESET=1. Set it to allow git reset --hard before pull." $COLOR_RED
-      log_to_file "ERROR: git reset --hard not allowed (RENGINE_UPDATE_ALLOW_RESET not set)"
-      exit 1
-    fi
-  else
-    read -p "This will permanently discard all local changes to tracked files. Continue? (y/n): " confirm_reset
-    if [[ "$confirm_reset" != "y" && "$confirm_reset" != "Y" ]]; then
-      log "Update cancelled (reset --hard not confirmed)." $COLOR_YELLOW
-      log_to_file "Update cancelled: user declined reset --hard"
-      exit 1
-    fi
-  fi
-  if ! (cd "$REPO_ROOT" && sudo -u rengine git reset --hard HEAD && sudo -u rengine git pull) >> "$LOG_FILE" 2>&1; then
-    log "Failed to update" $COLOR_RED
-    log_to_file "ERROR: git pull failed"
-    log "Update failed. Update log written to: $LOG_FILE" $COLOR_YELLOW
-    log "Please attach this file when reporting the issue to maintainers." $COLOR_YELLOW
-    exit 1
-  fi
+log_to_file "Proceeding: git stash + git pull (current branch)"
+log "Stashing local changes and pulling latest code..." $COLOR_CYAN
+if ! (cd "$REPO_ROOT" && run_git stash save 2>/dev/null; run_git pull) >> "$LOG_FILE" 2>&1; then
+  log "Failed to update" $COLOR_RED
+  log_to_file "ERROR: git pull failed"
+  log "Update failed. Update log written to: $LOG_FILE" $COLOR_YELLOW
+  log "Please attach this file when reporting the issue to maintainers." $COLOR_YELLOW
+  exit 1
 fi
 
 # Re-exec the script in post-update mode so the NEW script (after git pull) runs the rest
