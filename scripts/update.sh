@@ -180,8 +180,22 @@ run_post_update_flow() {
   local install_type
   local apply_changes
 
-  install_type="$(ask_or_default "Do you want to update from pre-built images or build from source? (pre-built/source, default is pre-built): " "pre-built" "RENGINE_UPDATE_INSTALL_TYPE" "pre-built|source")"
-  apply_changes="$(ask_or_default "Do you want to apply your local changes after updating? (y/n): " "n" "RENGINE_UPDATE_APPLY_CHANGES" "y|n")"
+  # After re-exec (--post-update), reuse exported answers to avoid asking again
+  if [[ "$skip_initial_steps" -eq 1 && -n "${RENGINE_UPDATE_INSTALL_TYPE:-}" && -n "${RENGINE_UPDATE_APPLY_CHANGES:-}" ]]; then
+    install_type="${RENGINE_UPDATE_INSTALL_TYPE}"
+    apply_changes="${RENGINE_UPDATE_APPLY_CHANGES}"
+    if [[ "$install_type" != "pre-built" && "$install_type" != "source" ]]; then
+      log "Error: invalid RENGINE_UPDATE_INSTALL_TYPE '$install_type'. Must be 'pre-built' or 'source'." $COLOR_RED
+      return 1
+    fi
+    if [[ "$apply_changes" != "y" && "$apply_changes" != "n" ]]; then
+      log "Error: invalid RENGINE_UPDATE_APPLY_CHANGES '$apply_changes'. Must be 'y' or 'n'." $COLOR_RED
+      return 1
+    fi
+  else
+    install_type="$(ask_or_default "Do you want to update from pre-built images or build from source? (pre-built/source, default is pre-built): " "pre-built" "RENGINE_UPDATE_INSTALL_TYPE" "pre-built|source")"
+    apply_changes="$(ask_or_default "Do you want to apply your local changes after updating? (y/n): " "n" "RENGINE_UPDATE_APPLY_CHANGES" "y|n")"
+  fi
 
   log "Install type: $install_type, Apply local changes: $apply_changes" $COLOR_CYAN
   log_to_file "Install type: $install_type, Apply local changes: $apply_changes"
@@ -343,6 +357,7 @@ CURRENT_BRANCH=$(cd "$REPO_ROOT" && run_git branch --show-current 2>/dev/null)
 [[ -z "$CURRENT_BRANCH" ]] && CURRENT_BRANCH="(detached HEAD)"
 
 cat "$REPO_ROOT/web/art/reNgine.txt"
+echo ""
 
 if [[ "$CURRENT_BRANCH" == "master" || "$CURRENT_BRANCH" == "main" ]]; then
   # Stable branch: compare local version to GitHub latest release
