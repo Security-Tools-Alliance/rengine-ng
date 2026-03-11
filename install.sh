@@ -386,8 +386,14 @@ usageFunction()
 
 # Append to .env any KEY=value line from .env-dist whose KEY is not already present in .env.
 # Preserves existing user values; only adds missing keys (e.g. PGBOUNCER_*, new options).
+# Exception: POSTGRES_HOST and POSTGRES_PORT are always taken from .env-dist so the app
+# uses the connection target defined there (e.g. pgbouncer:6432 when using PgBouncer).
 merge_env_from_dist() {
   [ ! -f .env-dist ] && return 0
+  if [ -f .env ]; then
+    sed -i '/^POSTGRES_HOST=/d' .env
+    sed -i '/^POSTGRES_PORT=/d' .env
+  fi
   local line key
   while IFS= read -r line; do
     if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
