@@ -1,11 +1,9 @@
 from contextlib import suppress
 import os
-from pathlib import Path
 import traceback
 
 import tldextract
 import validators
-import yaml
 
 from reNgine.settings import CELERY_REMOTE_DEBUG, CELERY_REMOTE_DEBUG_PORT
 from reNgine.utilities.logger import get_module_logger
@@ -116,63 +114,21 @@ def determine_target_type(target_name):
 
 def determine_scan_type_from_engine_name(engine_name):
     """
-    Determine the scan type based on engine name by reading the scan_type from the engine's YAML configuration.
-
-    This function reads the scan_type directly from the engine's YAML file in the Global vars section,
-    providing a more direct and maintainable approach.
+    Determine the scan type from the engine name using the EngineType model (database).
 
     Args:
         engine_name (str): The name of the scan engine
 
     Returns:
         str: Scan type - 'internet' or 'internal_network'
-
-    Examples:
-        >>> determine_scan_type_from_engine_name("Internal Network - Port Scan")
-        'internal_network'
-        >>> determine_scan_type_from_engine_name("Initial Scan - reNgine recommended")
-        'internet'
-        >>> determine_scan_type_from_engine_name("Custom Engine")
-        'internet'
     """
     try:
-        # Look for the engine's YAML file in default_scan_engines directory
-        engines_dir = Path(__file__).parent.parent.parent / "config" / "default_scan_engines"
-        yaml_file_path = engines_dir / f"{engine_name}.yaml"
+        from scanEngine.models import EngineType
 
-        if yaml_file_path.exists():
-            # Read the engine's YAML configuration
-            with open(yaml_file_path, "r", encoding="utf-8") as f:
-                engine_config = yaml.safe_load(f)
-
-            # Extract scan_type from the configuration
-            if isinstance(engine_config, dict) and "scan_type" in engine_config:
-                scan_type = engine_config["scan_type"]
-                logger.log_line(
-                    PREFIX_MISC,
-                    "SCAN_TYPE",
-                    "Found scan_type in engine '%s': %s" % (engine_name, scan_type),
-                    level="debug",
-                )
-                return scan_type
-            else:
-                logger.log_line(
-                    PREFIX_MISC,
-                    "SCAN_TYPE",
-                    "No scan_type found in engine '%s', using default" % (engine_name,),
-                    level="warning",
-                )
-        else:
-            logger.log_line(
-                PREFIX_MISC,
-                "SCAN_TYPE",
-                "Engine file not found: %s, using default" % (yaml_file_path,),
-                level="warning",
-            )
-
-        # Fallback to default
+        engine = EngineType.objects.filter(engine_name=engine_name).first()
+        if engine and getattr(engine, "scan_type", None):
+            return engine.scan_type
         return "internet"
-
     except Exception as e:
         logger.log_line(
             PREFIX_MISC,
@@ -180,4 +136,4 @@ def determine_scan_type_from_engine_name(engine_name):
             "Error determining scan type for engine '%s': %s" % (engine_name, e),
             level="error",
         )
-        return "internet"  # Safe fallback
+        return "internet"
