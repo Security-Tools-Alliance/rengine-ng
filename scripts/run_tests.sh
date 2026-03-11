@@ -3,8 +3,12 @@
 # Exit on any error
 set -e
 
+# Resolve script and repo paths so this script can be run as: ./scripts/run_tests.sh (from repo root)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # Import common functions
-source "$(pwd)/common_functions.sh"
+source "$SCRIPT_DIR/common_functions.sh"
 
 # Function to determine host architecture
 get_host_architecture() {
@@ -157,7 +161,7 @@ generate_test_names() {
 FORMATTED_TEST_NAMES=$(generate_test_names)
 
 # Create log directory if it doesn't exist
-LOG_DIR="$(pwd)/../logs/tests"
+LOG_DIR="$REPO_ROOT/logs/tests"
 mkdir -p "$LOG_DIR"
 
 # Generate a unique log file name
@@ -317,7 +321,7 @@ TEE_PID=$!
 
     # Compress the project directory
     log "Compressing project files..." $COLOR_CYAN
-    (cd .. && tar -czf "$TEST_DIR/rengine-project.tar.gz" --exclude='docker/secrets' .)
+    (cd "$REPO_ROOT" && tar -czf "$TEST_DIR/rengine-project.tar.gz" --exclude='docker/secrets' .)
 
     cd "$TEST_DIR"
 

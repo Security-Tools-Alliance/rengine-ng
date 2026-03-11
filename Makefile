@@ -110,7 +110,7 @@ define gpu_config
 	$(eval export DOCKER_RUNTIME)
 endef
 
-.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword makemigrations migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list secator-init secator-key secator-load secator-check secator-health
+.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword makemigrations migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list secator-init secator-key secator-load secator-check secator-health update-check
 
 pull:			## Pull pre-built Docker images from repository.
 	${DOCKER_COMPOSE_FILE_CMD} pull
@@ -261,6 +261,9 @@ secator-key:		## Generate Secator API key only if none exists (use --recreate in
 secator-load:		## Load Secator components (tasks, workflows, scans)
 	@echo "=== Loading Secator Components ==="
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py load_secator_all
+
+update-check:		## Check if a reNgine-ng update is available (current vs GitHub latest release)
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py rengine_update_check
 
 secator-check:		## Check Secator configuration and status
 	@echo "=== Checking Secator Configuration ==="
@@ -442,6 +445,7 @@ help:			## Show this help.
 	@echo "  make secator-load                        				Load Secator components (tasks, workflows, scans)"
 	@echo "  make secator-check                       				Check Secator configuration and status"
 	@echo "  make secator-health [SECATOR_HEALTH_URL=<url>]			Test Secator API health (uses SECATOR_ADDONS_API_KEY from .env)"
+	@echo "  make update-check                        				Check if a reNgine-ng update is available"
 
 %:
 	@:

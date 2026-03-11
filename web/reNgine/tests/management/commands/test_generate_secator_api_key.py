@@ -144,3 +144,30 @@ class TestGenerateSecatorApiKeyManagementCommand(TestCase):
             pass
         except CommandError:
             self.fail("Unexpected CommandError when calling --help")
+
+    def test_generate_secator_api_key_command_raw_key_output(self):
+        """Test that --raw-key with --recreate prints only the key to stdout."""
+        out = StringIO()
+        err = StringIO()
+        call_command(
+            "generate_secator_api_key",
+            "--recreate",
+            "--raw-key",
+            stdout=out,
+            stderr=err,
+        )
+        key_output = out.getvalue().strip()
+        self.assertRegex(key_output, r"^[A-Za-z0-9._-]{32,}$", "raw-key output should be a single token")
+        self.assertEqual(len(key_output.splitlines()), 1, "raw-key should output a single line")
+
+    def test_generate_secator_api_key_command_raw_key_already_exists_exits_nonzero(self):
+        """Test that --raw-key without --recreate when key exists exits with error."""
+        call_command("generate_secator_api_key", stdout=StringIO())
+        with self.assertRaises(SystemExit) as ctx:
+            call_command(
+                "generate_secator_api_key",
+                "--raw-key",
+                stdout=StringIO(),
+                stderr=StringIO(),
+            )
+        self.assertEqual(ctx.exception.code, 1)

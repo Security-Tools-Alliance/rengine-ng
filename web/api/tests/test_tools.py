@@ -75,7 +75,7 @@ class TestOllamaManager(BaseTestCase):
 class TestRengineUpdateCheck(BaseTestCase):
     """Tests for checking reNgine updates."""
 
-    @patch("requests.get")
+    @patch("reNgine.utilities.update_check.requests.get")
     def test_rengine_update_check(self, mock_get):
         """Test checking for reNgine updates."""
         mock_get.return_value.json.return_value = [{"name": "v2.0.0", "body": "Changelog"}]

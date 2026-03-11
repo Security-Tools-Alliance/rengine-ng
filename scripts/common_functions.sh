@@ -20,3 +20,15 @@ log() {
   printf "$1\r\n"
   tput sgr0  # Reset text color
 }
+
+# Ensure required commands are in PATH; exit with a consistent message if any are missing.
+# Usage: require_commands jq curl
+require_commands() {
+  local cmd
+  for cmd in "$@"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      log "Error: $cmd is required but not installed. Please install $cmd and re-run this script." $COLOR_RED
+      exit 1
+    fi
+  done
+}

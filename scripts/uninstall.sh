@@ -1,17 +1,38 @@
 #!/bin/bash
 
-# Import common functions
-source "$(pwd)/common_functions.sh"
+# Resolve script and repo paths so this script can be run as: sudo ./scripts/uninstall.sh (from repo root)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-cat ../web/art/reNgine.txt
+# Guard: ensure REPO_ROOT is safe and really the reNgine-ng repo root before any destructive operation
+if [[ -z "$REPO_ROOT" || "$REPO_ROOT" == "/" ]]; then
+  echo "Error: REPO_ROOT resolved to an invalid path. Aborting." >&2
+  exit 1
+fi
+if [[ "$REPO_ROOT" == "/root" || "$REPO_ROOT" =~ ^/home/ ]]; then
+  echo "Error: REPO_ROOT must not be a home directory ($REPO_ROOT). Aborting." >&2
+  exit 1
+fi
+if [[ ! -f "$REPO_ROOT/Makefile" ]]; then
+  echo "Error: $REPO_ROOT does not look like the reNgine-ng repo root (Makefile missing). Aborting." >&2
+  exit 1
+fi
+if [[ ! -f "$REPO_ROOT/web/reNgine/version.txt" ]]; then
+  echo "Error: $REPO_ROOT does not look like the reNgine-ng repo root (web/reNgine/version.txt missing). Aborting." >&2
+  exit 1
+fi
+
+# Import common functions
+source "$SCRIPT_DIR/common_functions.sh"
+
+cat "$REPO_ROOT/web/art/reNgine.txt"
 
 # Check for root privileges
-if [ "$(whoami)" != "root" ]
-  then
+if [ "$(whoami)" != "root" ]; then
   log ""
   log "Error uninstalling reNgine-ng: please run this script as root!" $COLOR_RED
-  log "Example: sudo ./uninstall.sh" $COLOR_RED
-  exit
+  log "Example: sudo ./scripts/uninstall.sh (from repository root)" $COLOR_RED
+  exit 1
 fi
 
 log ""
@@ -27,7 +48,7 @@ then
   log ""
 
   log "Stopping reNgine-ng..." $COLOR_CYAN
-  if (cd .. && make down); then
+  if (cd "$REPO_ROOT" && make down); then
     log "Stopped reNgine-ng" $COLOR_GREEN
   else
     log "Failed to stop reNgine-ng" $COLOR_RED
@@ -54,9 +75,9 @@ then
   log "Removing static files and secrets from reNgine-ng..." $COLOR_CYAN
 
   # Remove web/staticfiles directory
-  if [ -d "../web/staticfiles" ]; then
+  if [ -d "$REPO_ROOT/web/staticfiles" ]; then
     log "Removing web/staticfiles directory..." $COLOR_CYAN
-    if (cd .. && rm -rf web/staticfiles); then
+    if (cd "$REPO_ROOT" && rm -rf web/staticfiles); then
       log "Removed web/staticfiles directory" $COLOR_GREEN
     else
       log "Warning: Failed to remove web/staticfiles directory" $COLOR_YELLOW
@@ -66,9 +87,9 @@ then
   fi
 
   # Remove docker/secrets directory
-  if [ -d "../docker/secrets" ]; then
+  if [ -d "$REPO_ROOT/docker/secrets" ]; then
     log "Removing docker/secrets directory..." $COLOR_CYAN
-    if (cd .. && rm -rf docker/secrets); then
+    if (cd "$REPO_ROOT" && rm -rf docker/secrets); then
       log "Removed docker/secrets directory" $COLOR_GREEN
     else
       log "Warning: Failed to remove docker/secrets directory" $COLOR_YELLOW
@@ -92,7 +113,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]
 then
   log ""
   log "Removing all Docker images related to reNgine-ng..." $COLOR_CYAN
-  if (cd .. && make remove_images); then
+  if (cd "$REPO_ROOT" && make remove_images); then
     log "Removed all Docker images" $COLOR_GREEN
   else
     log "Warning: Failed to remove some or all Docker images" $COLOR_YELLOW

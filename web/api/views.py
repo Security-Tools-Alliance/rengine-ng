@@ -17,7 +17,6 @@ from django.template.defaultfilters import slugify
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from packaging import version
 import requests
 from rest_framework import viewsets
 from rest_framework.decorators import action, api_view
@@ -112,7 +111,6 @@ from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, i
 from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.settings import (
-    RENGINE_CURRENT_VERSION,
     RENGINE_GF_PATTERNS_DIR,
     RENGINE_NUCLEI_TEMPLATES_DIR,
 )
@@ -2722,42 +2720,52 @@ class ListInterestingKeywords(APIView):
 
 class RengineUpdateCheck(APIView):
     def get(self, request):
-        github_api = "https://api.github.com/repos/Security-Tools-Alliance/rengine-ng/releases"
-        response = requests.get(github_api).json()
-        if "message" in response:
-            return Response({"status": False, "message": "RateLimited"})
+        from reNgine.utilities.update_check import get_update_info
 
-        return_response = {}
-
-        # get current version_number
-        # remove quotes from current_version
-        current_version = (
-            RENGINE_CURRENT_VERSION[1:] if RENGINE_CURRENT_VERSION[0] == "v" else RENGINE_CURRENT_VERSION
-        ).replace("'", "")
-
-        # for consistency remove v from both if exists
-        latest_version = re.search(
-            r"v(\d+\.)?(\d+\.)?(\*|\d+)",
-            ((response[0]["name"])[1:] if response[0]["name"][0] == "v" else response[0]["name"]),
-        )
-
-        latest_version = latest_version.group(0) if latest_version else None
-
-        if not latest_version:
-            latest_version = re.search(
-                r"(\d+\.)?(\d+\.)?(\*|\d+)",
-                ((response[0]["name"])[1:] if response[0]["name"][0] == "v" else response[0]["name"]),
+        info = get_update_info()
+        if not info.get("status"):
+            error_type_str = str(info.get("error_type", "")).lower()
+            transient_error_types = {
+                "ratelimited",
+                "rate_limited",
+                "rate-limit",
+                "upstream_unavailable",
+                "github_downtime",
+            }
+            internal_error_types = {
+                "invalid_version",
+                "invalid_response",
+                "parse_error",
+                "no_releases",
+                "unexpected_response",
+                "internal_error",
+            }
+            if error_type_str in transient_error_types:
+                status_code = 503
+            elif error_type_str in internal_error_types or error_type_str:
+                status_code = 500
+            else:
+                status_code = 500
+            return Response(
+                {
+                    "status": False,
+                    "message": info.get("message", "Update check failed"),
+                    "description": info.get(
+                        "description",
+                        "Unable to determine update status due to an internal error.",
+                    ),
+                    "error_type": error_type_str or None,
+                },
+                status=status_code,
             )
-            if latest_version:
-                latest_version = latest_version.group(0)
-
-        return_response["status"] = True
-        return_response["latest_version"] = latest_version
-        return_response["current_version"] = current_version
-        return_response["update_available"] = version.parse(current_version) < version.parse(latest_version)
-        if version.parse(current_version) < version.parse(latest_version):
-            return_response["changelog"] = response[0]["body"]
-
+        return_response = {
+            "status": True,
+            "latest_version": info["latest_version"],
+            "current_version": info["current_version"],
+            "update_available": info["update_available"],
+        }
+        if info.get("changelog") is not None:
+            return_response["changelog"] = info["changelog"]
         return Response(return_response)
 
 

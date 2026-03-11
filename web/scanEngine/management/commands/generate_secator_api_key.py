@@ -21,14 +21,22 @@ class Command(BaseCommand):
             action="store_true",
             help="Show the generated API key (only works when creating a new key)",
         )
+        parser.add_argument(
+            "--raw-key",
+            action="store_true",
+            help="Machine-readable: print only the API key to stdout (requires --recreate). Diagnostics to stderr. Exit non-zero if key could not be output.",
+        )
 
     def handle(self, *args, **options):
         recreate = options.get("recreate", False)
         show_key = options.get("show_key", False)
+        raw_key = options.get("raw_key", False)
 
         try:
-            # Check if key already exists
             if has_secator_api_key() and not recreate:
+                if raw_key:
+                    self.stderr.write("System API key already exists. Use --recreate to generate a new one.\n")
+                    raise SystemExit(1)
                 self.stdout.write(
                     self.style.WARNING("System API key already exists. Use --recreate to generate a new one.")
                 )
@@ -39,11 +47,17 @@ class Command(BaseCommand):
                 )
                 return
 
-            # Generate the key
-            if recreate:
+            if recreate and not raw_key:
                 self.stdout.write(self.style.WARNING("Recreating system API key..."))
 
             key, created = generate_secator_api_key(recreate=recreate)
+
+            if raw_key:
+                if created and key:
+                    self.stdout.write(key)
+                    return
+                self.stderr.write("No key could be generated or retrieved.\n")
+                raise SystemExit(1)
 
             if created:
                 self.stdout.write(self.style.SUCCESS("✓ System API key generated successfully!"))
@@ -76,5 +90,10 @@ class Command(BaseCommand):
             self.stdout.write("")
             self.stdout.write("This key is used by Secator workers to authenticate with the reNgine API.")
 
+        except SystemExit:
+            raise
         except Exception as e:
+            if raw_key:
+                self.stderr.write("Failed to generate system API key: %s\n" % (e,))
+                raise SystemExit(1)
             raise CommandError(f"Failed to generate system API key: {str(e)}")
