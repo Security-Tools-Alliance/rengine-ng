@@ -5547,48 +5547,41 @@ class SecatorFindingCreate(SecatorAPIBase):
             if not finding_type:
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
 
-            # Tag whois (jswhois): route to DomainRepository, store raw WHOIS in DomainInfo.extra_data
-            if (
-                finding_type == "tag"
-                and finding_data.get("name") == "whois"
-                and finding_data.get("category") == "info"
-            ):
-                is_valid, error_response, scan_history, target = self.validate_scan_context(
-                    scan_history_id, target_id, finding_type
-                )
-                if not is_valid:
-                    return error_response
-                target_id = target.id
-                domain_name = (finding_data.get("match") or "").strip()
-                from reNgine.services.repositories.domain_repository import DomainRepository
+            # Centralized tag routing (whois, url_pattern, asn, ignored, fallback to Technology)
+            if finding_type == "tag":
+                from reNgine.secator.tag_routing import dispatch_secator_tag
 
-                domain_info = DomainRepository().save_raw_whois_from_secator_tag(
+                def _validate_tag_context(sh_id, t_id):
+                    return self.validate_scan_context(sh_id, t_id, "tag")
+
+                result = dispatch_secator_tag(
+                    finding_data,
                     scan_history_id,
                     target_id,
-                    domain_name,
-                    finding_data.get("value") or "",
+                    _validate_tag_context,
+                    is_update=False,
                 )
-                if domain_info:
+                if result[0] == "ignored":
+                    return Response({"status": True, "id": result[1]})
+                if result[0] == "success":
+                    saved_obj = result[1]
                     self.logger.log_finding_save(
-                        "CREATE", finding_type, domain_info, scan_history_id, target_id, success=True
+                        "CREATE", finding_type, saved_obj, scan_history_id, target_id, success=True
                     )
-                    return Response({"status": True, "id": str(domain_info.id)})
-                self.logger.log_finding_save(
-                    "CREATE",
-                    finding_type,
-                    None,
-                    scan_history_id,
-                    target_id,
-                    success=False,
-                    error_message="save_raw_whois_from_secator_tag returned None",
-                )
-                return Response(
-                    {
-                        "status": False,
-                        "error": "Failed to save whois tag. Domain not found or validation error.",
-                    },
-                    status=422,
-                )
+                    return Response({"status": True, "id": str(saved_obj.id)})
+                if result[0] == "error":
+                    status_code, err_msg = result[1], result[2]
+                    self.logger.log_finding_save(
+                        "CREATE",
+                        finding_type,
+                        None,
+                        scan_history_id,
+                        target_id,
+                        success=False,
+                        error_message=err_msg,
+                    )
+                    return Response({"status": False, "error": err_msg}, status=status_code)
+                # fallback: continue to TechnologyRepository below
 
             # Get repository for finding type
             repository_class = self.get_repository_for_finding_type(finding_type)
@@ -5757,48 +5750,43 @@ class SecatorFindingUpdate(SecatorAPIBase):
                 )
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
 
-            # Tag whois (jswhois): route to DomainRepository, store raw WHOIS in DomainInfo.extra_data
-            if (
-                finding_type == "tag"
-                and finding_data.get("name") == "whois"
-                and finding_data.get("category") == "info"
-            ):
-                is_valid, error_response, scan_history, target = self.validate_scan_context(
-                    scan_history_id, target_id, finding_type, prefix=self.logger.PREFIX_FINDING
-                )
-                if not is_valid:
-                    return error_response
-                target_id = target.id
-                domain_name = (finding_data.get("match") or "").strip()
-                from reNgine.services.repositories.domain_repository import DomainRepository
+            # Centralized tag routing (whois, url_pattern, asn, ignored, fallback to Technology)
+            if finding_type == "tag":
+                from reNgine.secator.tag_routing import dispatch_secator_tag
 
-                domain_info = DomainRepository().save_raw_whois_from_secator_tag(
-                    scan_history_id,
-                    target_id,
-                    domain_name,
-                    finding_data.get("value") or "",
-                )
-                if domain_info:
-                    self.logger.log_finding_save(
-                        "UPDATE", finding_type, domain_info, scan_history_id, target_id, success=True
+                def _validate_tag_context_update(sh_id, t_id):
+                    return self.validate_scan_context(
+                        sh_id, t_id, "tag", prefix=self.logger.PREFIX_FINDING
                     )
-                    return Response({"status": True, "id": str(domain_info.id)})
-                self.logger.log_finding_save(
-                    "UPDATE",
-                    finding_type,
-                    None,
+
+                result = dispatch_secator_tag(
+                    finding_data,
                     scan_history_id,
                     target_id,
-                    success=False,
-                    error_message="save_raw_whois_from_secator_tag returned None",
+                    _validate_tag_context_update,
+                    is_update=True,
                 )
-                return Response(
-                    {
-                        "status": False,
-                        "error": "Failed to save whois tag. Domain not found or validation error.",
-                    },
-                    status=400,
-                )
+                if result[0] == "ignored":
+                    return Response({"status": True, "id": result[1]})
+                if result[0] == "success":
+                    saved_obj = result[1]
+                    self.logger.log_finding_save(
+                        "UPDATE", finding_type, saved_obj, scan_history_id, target_id, success=True
+                    )
+                    return Response({"status": True, "id": str(saved_obj.id)})
+                if result[0] == "error":
+                    status_code, err_msg = result[1], result[2]
+                    self.logger.log_finding_save(
+                        "UPDATE",
+                        finding_type,
+                        None,
+                        scan_history_id,
+                        target_id,
+                        success=False,
+                        error_message=err_msg,
+                    )
+                    return Response({"status": False, "error": err_msg}, status=status_code)
+                # fallback: continue to TechnologyRepository below
 
             # Get repository for finding type
             repository_class = self.get_repository_for_finding_type(finding_type)

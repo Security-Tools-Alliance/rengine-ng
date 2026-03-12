@@ -175,6 +175,85 @@ class EndpointRepository:
 
         return endpoint
 
+    def add_gf_pattern_from_secator_tag(
+        self,
+        scan_history_id: int,
+        target_id: int,
+        http_url: str,
+        pattern_name: str,
+    ) -> Optional[EndPoint]:
+        """
+        Add a GF pattern name to an endpoint's matched_gf_patterns from Secator gf tag.
+
+        Finds or creates the EndPoint for the given URL in this scan, then appends
+        the pattern name to matched_gf_patterns (comma-separated, deduplicated, max 10000 chars).
+        """
+        http_url = (http_url or "").strip()
+        pattern_name = (pattern_name or "").strip()
+        if not http_url:
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "add_gf_pattern: empty URL",
+                level="warning",
+            )
+            return None
+        if not pattern_name:
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "add_gf_pattern: empty pattern name",
+                level="warning",
+            )
+            return None
+        if not is_valid_url(http_url):
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "add_gf_pattern: invalid URL: %s" % (http_url,),
+                level="warning",
+            )
+            return None
+
+        host = urlparse(http_url).hostname or ""
+        target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
+        domain = resolve_domain_for_scan(
+            scan_history_id,
+            host,
+            target_value,
+            create=True,
+            log_failure={
+                "logger": logger,
+                "prefix": PREFIX_ENDPOINT_REPO,
+                "extra": "target_id=%s, url=%s" % (target_id, http_url),
+            },
+        )
+        if not domain:
+            return None
+
+        scan_history = ScanHistory.objects.get(id=scan_history_id)
+        defaults = {
+            "domain": domain,
+            "discovered_date": timezone.now(),
+        }
+        endpoint, _ = EndPoint.objects.update_or_create(
+            http_url=http_url,
+            scan_history=scan_history,
+            defaults=defaults,
+        )
+
+        current = (endpoint.matched_gf_patterns or "").strip()
+        parts = [p.strip() for p in current.split(",") if p.strip()]
+        if pattern_name not in parts:
+            parts.append(pattern_name)
+        new_value = ",".join(parts)
+        max_len = EndPoint._meta.get_field("matched_gf_patterns").max_length
+        if len(new_value) > max_len:
+            new_value = new_value[:max_len].rsplit(",", 1)[0] if "," in new_value[:max_len] else new_value[:max_len]
+        endpoint.matched_gf_patterns = new_value
+        endpoint.save()
+        return endpoint
+
     @staticmethod
     def _extract_secator_source(item: Dict[str, Any], max_length: int = 200) -> Optional[str]:
         """Extract source from Secator finding (_source or _context.node_id). Returns truncated string or None."""

@@ -2008,6 +2008,7 @@ class IpAddress(models.Model):
     protocol = models.CharField(
         max_length=10, null=True, blank=True, choices=IP_PROTOCOL_CHOICES, help_text="IP protocol: IPv4 or IPv6"
     )
+    extra_data = models.JSONField(null=True, blank=True, help_text="Optional data e.g. ASN from getasn")
 
     def __str__(self):
         return str(self.address)

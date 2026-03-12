@@ -112,6 +112,38 @@ class DomainRepository:
         domain.save()
         return domain_info
 
+    def save_asn_from_secator_tag(
+        self,
+        scan_history_id: int,
+        target_id: int,
+        domain_name: str,
+        asn_value: str,
+    ) -> Optional[DomainInfo]:
+        """
+        Store ASN info from Secator getasn tag in DomainInfo.extra_data["asn"].
+
+        Creates Domain and DomainInfo if needed. Used when getasn input is a host/domain.
+        """
+        normalized = normalize_domain_name(domain_name) if domain_name else None
+        if not normalized:
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "save_asn: empty domain name after normalization",
+                level="warning",
+            )
+            return None
+        domain = get_or_create_domain_for_target(scan_history_id, normalized)
+        if not domain:
+            return None
+        domain_info, _ = self._get_or_create_domain_info(domain)
+        self._ensure_extra_data_initialized(domain_info)
+        domain_info.extra_data["asn"] = asn_value
+        domain_info.save()
+        domain.domain_info = domain_info
+        domain.save()
+        return domain_info
+
     def _process_secator_domain_item(
         self, item: Dict[str, Any], scan_history_id: int, target_id: int
     ) -> Optional[DomainInfo]:

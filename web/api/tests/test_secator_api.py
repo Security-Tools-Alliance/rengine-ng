@@ -285,6 +285,87 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertIn("error", response.data)
         mock_save_from_secator.assert_called_once()
 
+    def test_create_tag_whois_success(self):
+        """Tag whois (jswhois) is routed to DomainInfo and returns 200 with domain_info id."""
+        finding_data = {
+            "_type": "tag",
+            "category": "info",
+            "name": "whois",
+            "match": "example.com",
+            "value": "raw whois response",
+            "_context": {
+                "scan_history_id": self.data_generator.scan_history.id,
+                "target_id": self.data_generator.target.id,
+            },
+        }
+        response = self.client.post(self.url, finding_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertIn("id", response.data)
+        from startScan.models import DomainInfo
+
+        self.assertTrue(DomainInfo.objects.filter(id=int(response.data["id"])).exists())
+
+    def test_create_tag_url_pattern_success(self):
+        """Tag url_pattern (gf) is routed to EndPoint.matched_gf_patterns and returns 200."""
+        target_value = getattr(self.data_generator.target, "value", None) or "example.com"
+        http_url = "https://%s/path?q=1" % (target_value,)
+        finding_data = {
+            "_type": "tag",
+            "category": "url_pattern",
+            "name": "xss",
+            "match": http_url,
+            "value": http_url,
+            "_context": {
+                "scan_history_id": self.data_generator.scan_history.id,
+                "target_id": self.data_generator.target.id,
+            },
+        }
+        response = self.client.post(self.url, finding_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertIn("id", response.data)
+        from startScan.models import EndPoint
+
+        self.assertTrue(EndPoint.objects.filter(id=int(response.data["id"])).exists())
+
+    def test_create_tag_asn_domain_success(self):
+        """Tag asn with host match is routed to DomainInfo.extra_data and returns 200."""
+        finding_data = {
+            "_type": "tag",
+            "category": "info",
+            "name": "asn",
+            "match": "example.com",
+            "value": "AS12345 Org Name",
+            "_context": {
+                "scan_history_id": self.data_generator.scan_history.id,
+                "target_id": self.data_generator.target.id,
+            },
+        }
+        response = self.client.post(self.url, finding_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertIn("id", response.data)
+
+    def test_create_tag_ignored_returns_200(self):
+        """Ignored tag (e.g. net_interface) returns 200 with synthetic id, no DB persistence."""
+        finding_data = {
+            "_type": "tag",
+            "category": "info",
+            "name": "net_interface",
+            "match": "eth0",
+            "value": "eth0",
+            "_context": {
+                "scan_history_id": self.data_generator.scan_history.id,
+                "target_id": self.data_generator.target.id,
+            },
+        }
+        response = self.client.post(self.url, finding_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertIn("id", response.data)
+        self.assertIn("tag_ignored", response.data["id"])
+
 
 class TestSecatorFindingUpdate(BaseTestCase):
     """Test cases for SecatorFindingUpdate endpoint."""
@@ -316,6 +397,26 @@ class TestSecatorFindingUpdate(BaseTestCase):
         response = self.client.put(url, "not a dict", content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(response.data["status"])
+
+    def test_update_tag_whois_success(self):
+        """Tag whois UPDATE is routed via dispatcher and returns 200 with domain_info id."""
+        finding_id = "tag_whois_1"
+        url = reverse("api:secator_finding_update", kwargs={"finding_id": finding_id})
+        update_data = {
+            "_type": "tag",
+            "category": "info",
+            "name": "whois",
+            "match": "example.com",
+            "value": "updated raw whois",
+            "_context": {
+                "scan_history_id": self.data_generator.scan_history.id,
+                "target_id": self.data_generator.target.id,
+            },
+        }
+        response = self.client.put(url, update_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertIn("id", response.data)
 
 
 class TestSecatorAPIAuthentication(BaseTestCase):
