@@ -1617,6 +1617,20 @@ class Vulnerability(models.Model):
     source = models.CharField(max_length=200, null=True, blank=True)
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
     endpoint = models.ForeignKey(EndPoint, on_delete=models.CASCADE, blank=True, null=True)
+    ip_address = models.ForeignKey(
+        "IpAddress",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="vulnerabilities",
+    )
+    port = models.ForeignKey(
+        "Port",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="vulnerabilities",
+    )
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     template = models.CharField(max_length=100, null=True, blank=True)
     template_url = models.CharField(max_length=2500, null=True, blank=True)

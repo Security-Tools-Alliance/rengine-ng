@@ -15,6 +15,7 @@ from django.db.models import Count
 from django.utils import timezone
 import validators
 
+from reNgine.core.secator_target import parse_secator_target_value
 from reNgine.core.validators import is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
@@ -116,6 +117,10 @@ class EndpointRepository:
             )
             return None
 
+        parsed = parse_secator_target_value(http_url)
+        if parsed.is_valid and parsed.kind == "url" and parsed.url_normalized:
+            http_url = parsed.url_normalized
+
         host = urlparse(http_url).hostname or ""
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
         domain = resolve_domain_for_scan(
@@ -214,6 +219,10 @@ class EndpointRepository:
                 level="warning",
             )
             return None
+
+        parsed = parse_secator_target_value(http_url)
+        if parsed.is_valid and parsed.kind == "url" and parsed.url_normalized:
+            http_url = parsed.url_normalized
 
         host = urlparse(http_url).hostname or ""
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""

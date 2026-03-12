@@ -490,22 +490,33 @@
    * Return HTML for subdomain vuln count badges (total, info, low, medium, high, critical).
    * Uses data-* attributes and class js-vuln-modal-trigger; a delegated click listener (see
    * attachVulnModalTriggerListener) reads these and calls get_vulnerability_modal. This avoids
-   * fragile onclick string concatenation. Options: vulnerabilityListUrl.
+   * fragile onclick string concatenation. Options: vulnerabilityListUrl, scanId (optional; adds data-scan-id for detail scan modal).
+   * Requires window.safeAttr and window.safeText (from escape.js); throws if missing to avoid XSS.
    */
   const getSubdomainVulnCountBadgesHtml = function (row, options) {
     const opts = options || {};
     const vulnListUrl = opts.vulnerabilityListUrl || "";
+    const scanId = opts.scanId != null && opts.scanId !== "" ? String(opts.scanId) : "";
     const safeAttrFn = window.safeAttr;
     const safeTextFn = window.safeText;
+    if (typeof safeAttrFn !== "function" || typeof safeTextFn !== "function") {
+      throw new Error("getSubdomainVulnCountBadgesHtml requires window.safeAttr and window.safeText (load escape.js first).");
+    }
+    const safeAttrVal = function (value) {
+      return safeAttrFn(String(value == null ? "" : value));
+    };
+
     if (!row) return "";
-    const urlAttr = typeof safeAttrFn === "function" ? safeAttrFn(vulnListUrl) : vulnListUrl;
-    const idAttr = typeof safeAttrFn === "function" ? safeAttrFn(String(row.id)) : String(row.id);
-    const nameAttr = typeof safeAttrFn === "function" ? safeAttrFn(String(row.name || "")) : String(row.name || "");
+    const urlAttr = safeAttrVal(vulnListUrl);
+    const idAttr = safeAttrVal(row.id);
+    const nameAttr = safeAttrVal(row.name || "");
+    const scanIdAttr = scanId ? safeAttrVal(scanId) : "";
+    const dataScanId = scanIdAttr ? " data-scan-id=\"" + scanIdAttr + "\"" : "";
     const total = (row.info_count || 0) + (row.low_count || 0) + (row.medium_count || 0) + (row.high_count || 0) + (row.critical_count || 0);
     let html = "";
     if (total > 0) {
-      const totalDisplay = typeof safeTextFn === "function" ? safeTextFn(total) : total;
-      html += "<span class=\"pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link js-vuln-modal-trigger\" title=\"All Vulnerabilities\" role=\"button\" tabindex=\"0\" data-vuln-list-url=\"" + urlAttr + "\" data-subdomain-id=\"" + idAttr + "\" data-subdomain-name=\"" + nameAttr + "\">" + totalDisplay + " <i class=\"fas fa-bug\"></i></span>";
+      const totalDisplay = safeTextFn(total);
+      html += "<span class=\"pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link js-vuln-modal-trigger\" title=\"All Vulnerabilities\" role=\"button\" tabindex=\"0\" data-vuln-list-url=\"" + urlAttr + "\" data-subdomain-id=\"" + idAttr + "\" data-subdomain-name=\"" + nameAttr + "\"" + dataScanId + ">" + totalDisplay + " <i class=\"fas fa-bug\"></i></span>";
     }
     const parts = [
       [row.info_count, 0, "badge-soft-info", "Info", "Informational Vulnerabilities"],
@@ -516,9 +527,9 @@
     ];
     parts.forEach(function (p) {
       if (p[0] > 0) {
-        const display = typeof safeTextFn === "function" ? safeTextFn(p[0]) : p[0];
-        const title = typeof safeAttrFn === "function" ? safeAttrFn(p[4]) : p[4];
-        html += "<span class=\"pl-2 pr-2 me-1 mt-1 badge " + p[2] + " bs-tooltip badge-link js-vuln-modal-trigger\" title=\"" + title + "\" role=\"button\" tabindex=\"0\" data-vuln-list-url=\"" + urlAttr + "\" data-severity-index=\"" + p[1] + "\" data-subdomain-id=\"" + idAttr + "\" data-subdomain-name=\"" + nameAttr + "\">" + display + " " + p[3] + "</span>";
+        const display = safeTextFn(p[0]);
+        const title = safeAttrVal(p[4]);
+        html += "<span class=\"pl-2 pr-2 me-1 mt-1 badge " + p[2] + " bs-tooltip badge-link js-vuln-modal-trigger\" title=\"" + title + "\" role=\"button\" tabindex=\"0\" data-vuln-list-url=\"" + urlAttr + "\" data-severity-index=\"" + p[1] + "\" data-subdomain-id=\"" + idAttr + "\" data-subdomain-name=\"" + nameAttr + "\"" + dataScanId + ">" + display + " " + p[3] + "</span>";
       }
     });
     return html ? "<div>" + html + "</div>" : "";

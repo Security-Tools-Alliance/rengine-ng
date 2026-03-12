@@ -40,13 +40,13 @@ class EmployeeRepository:
             item: Secator UserAccount item
             scan_history_id: ID of the scan history
             target_id: ID of the target (reNgine-ng scan context)
-            rengine_context: Optional context (unused)
+            rengine_context: Optional context (subdomain_id, endpoint_id)
 
         Returns:
             Employee: Saved employee object or None
         """
         try:
-            return self._process_secator_employee_item(item, scan_history_id, target_id)
+            return self._process_secator_employee_item(item, scan_history_id, target_id, rengine_context or {})
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_EMPLOYEE_REPO,
@@ -73,8 +73,13 @@ class EmployeeRepository:
             return None
 
     def _process_secator_employee_item(
-        self, item: Dict[str, Any], scan_history_id: int, target_id: int
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        target_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[Employee]:
+        ctx = rengine_context or {}
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
         domain = get_or_create_domain_for_target(scan_history_id, target_value) if target_value else None
         if not domain:
@@ -136,7 +141,7 @@ class EmployeeRepository:
                 level="debug",
             )
 
-        # Associate with subdomain/endpoint if URL is provided
+        self._apply_rengine_context_to_employee(employee, ctx, scan_history_id)
         if url:
             self._associate_with_target(employee, url, scan_history_id)
 
@@ -412,6 +417,31 @@ class EmployeeRepository:
                 level="error",
             )
             return []
+
+    def _apply_rengine_context_to_employee(
+        self,
+        employee: Employee,
+        rengine_context: Dict[str, Any],
+        scan_history_id: int,
+    ) -> None:
+        """Set subdomain and endpoint from rengine_context when valid for this scan."""
+        update_fields: List[str] = []
+        if subdomain_id := rengine_context.get("subdomain_id"):
+            if (
+                employee.subdomain_id != subdomain_id
+                and Subdomain.objects.filter(id=subdomain_id, scan_history_id=scan_history_id).exists()
+            ):
+                employee.subdomain_id = subdomain_id
+                update_fields.append("subdomain_id")
+        if endpoint_id := rengine_context.get("endpoint_id"):
+            if (
+                employee.endpoint_id != endpoint_id
+                and EndPoint.objects.filter(id=endpoint_id, scan_history_id=scan_history_id).exists()
+            ):
+                employee.endpoint_id = endpoint_id
+                update_fields.append("endpoint_id")
+        if update_fields:
+            employee.save(update_fields=update_fields)
 
     def _associate_with_target(self, employee: Employee, url: str, scan_history_id: int) -> None:
         """

@@ -5584,6 +5584,9 @@ class SecatorFindingCreate(SecatorAPIBase):
                         runner = SecatorRunner.objects.get(id=runner_id)
                         if getattr(runner, "subscan_id", None):
                             context["subscan_id"] = runner.subscan_id
+                            subscan = SubScan.objects.filter(id=runner.subscan_id).select_related("subdomain").first()
+                            if subscan and subscan.subdomain_id:
+                                context["subdomain_id"] = subscan.subdomain_id
                     except SecatorRunner.DoesNotExist:
                         pass
 
@@ -5783,6 +5786,9 @@ class SecatorFindingUpdate(SecatorAPIBase):
                         runner = SecatorRunner.objects.get(id=runner_id)
                         if getattr(runner, "subscan_id", None):
                             context["subscan_id"] = runner.subscan_id
+                            subscan = SubScan.objects.filter(id=runner.subscan_id).select_related("subdomain").first()
+                            if subscan and subscan.subdomain_id:
+                                context["subdomain_id"] = subscan.subdomain_id
                     except SecatorRunner.DoesNotExist:
                         pass
 
