@@ -10,7 +10,11 @@ from typing import Any, Dict, Optional, Tuple
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
-from reNgine.utilities.domain import get_domain_for_scan_by_name
+from reNgine.utilities.domain import (
+    get_domain_for_scan_by_name,
+    get_or_create_domain_for_target,
+    normalize_domain_name,
+)
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
 from startScan.models import (
@@ -76,6 +80,38 @@ class DomainRepository:
             )
             return None
 
+    def save_raw_whois_from_secator_tag(
+        self,
+        scan_history_id: int,
+        target_id: int,
+        domain_name: str,
+        raw_whois_text: str,
+    ) -> Optional[DomainInfo]:
+        """
+        Store raw WHOIS text from Secator jswhois tag in DomainInfo.extra_data["raw_whois"].
+
+        Creates Domain and DomainInfo if needed. Does not populate structured WHOIS fields.
+        """
+        normalized = normalize_domain_name(domain_name) if domain_name else None
+        if not normalized:
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "raw_whois: empty domain name after normalization",
+                level="warning",
+            )
+            return None
+        domain = get_or_create_domain_for_target(scan_history_id, normalized)
+        if not domain:
+            return None
+        domain_info, created = self._get_or_create_domain_info(domain)
+        self._ensure_extra_data_initialized(domain_info)
+        domain_info.extra_data["raw_whois"] = raw_whois_text
+        domain_info.save()
+        domain.domain_info = domain_info
+        domain.save()
+        return domain_info
+
     def _process_secator_domain_item(
         self, item: Dict[str, Any], scan_history_id: int, target_id: int
     ) -> Optional[DomainInfo]:
@@ -91,6 +127,8 @@ class DomainRepository:
             return None
 
         domain = get_domain_for_scan_by_name(scan_history_id, domain_name)
+        if not domain:
+            domain = get_or_create_domain_for_target(scan_history_id, domain_name)
         if not domain:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,

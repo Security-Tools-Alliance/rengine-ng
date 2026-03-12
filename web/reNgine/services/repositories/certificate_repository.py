@@ -63,15 +63,15 @@ class CertificateRepository:
                 level="error",
             )
             return None
-        except Exception:
+        except Exception as e:
             logger.log_line(
                 PREFIX_CERT_REPO,
                 "SAVE",
-                "Error saving certificate from Secator",
+                "Error saving certificate from Secator: %s" % (e,),
                 level="error",
                 exc_info=True,
             )
-            raise
+            return None
 
     def _process_secator_certificate_item(
         self, item: Dict[str, Any], scan_history_id: int, target_id: int

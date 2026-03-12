@@ -5547,6 +5547,49 @@ class SecatorFindingCreate(SecatorAPIBase):
             if not finding_type:
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
 
+            # Tag whois (jswhois): route to DomainRepository, store raw WHOIS in DomainInfo.extra_data
+            if (
+                finding_type == "tag"
+                and finding_data.get("name") == "whois"
+                and finding_data.get("category") == "info"
+            ):
+                is_valid, error_response, scan_history, target = self.validate_scan_context(
+                    scan_history_id, target_id, finding_type
+                )
+                if not is_valid:
+                    return error_response
+                target_id = target.id
+                domain_name = (finding_data.get("match") or "").strip()
+                from reNgine.services.repositories.domain_repository import DomainRepository
+
+                domain_info = DomainRepository().save_raw_whois_from_secator_tag(
+                    scan_history_id,
+                    target_id,
+                    domain_name,
+                    finding_data.get("value") or "",
+                )
+                if domain_info:
+                    self.logger.log_finding_save(
+                        "CREATE", finding_type, domain_info, scan_history_id, target_id, success=True
+                    )
+                    return Response({"status": True, "id": str(domain_info.id)})
+                self.logger.log_finding_save(
+                    "CREATE",
+                    finding_type,
+                    None,
+                    scan_history_id,
+                    target_id,
+                    success=False,
+                    error_message="save_raw_whois_from_secator_tag returned None",
+                )
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Failed to save whois tag. Domain not found or validation error.",
+                    },
+                    status=422,
+                )
+
             # Get repository for finding type
             repository_class = self.get_repository_for_finding_type(finding_type)
             if not repository_class:
@@ -5713,6 +5756,49 @@ class SecatorFindingUpdate(SecatorAPIBase):
                     {"prefix": self.logger.PREFIX_FINDING, "action": "UPDATE", "id": finding_id},
                 )
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
+
+            # Tag whois (jswhois): route to DomainRepository, store raw WHOIS in DomainInfo.extra_data
+            if (
+                finding_type == "tag"
+                and finding_data.get("name") == "whois"
+                and finding_data.get("category") == "info"
+            ):
+                is_valid, error_response, scan_history, target = self.validate_scan_context(
+                    scan_history_id, target_id, finding_type, prefix=self.logger.PREFIX_FINDING
+                )
+                if not is_valid:
+                    return error_response
+                target_id = target.id
+                domain_name = (finding_data.get("match") or "").strip()
+                from reNgine.services.repositories.domain_repository import DomainRepository
+
+                domain_info = DomainRepository().save_raw_whois_from_secator_tag(
+                    scan_history_id,
+                    target_id,
+                    domain_name,
+                    finding_data.get("value") or "",
+                )
+                if domain_info:
+                    self.logger.log_finding_save(
+                        "UPDATE", finding_type, domain_info, scan_history_id, target_id, success=True
+                    )
+                    return Response({"status": True, "id": str(domain_info.id)})
+                self.logger.log_finding_save(
+                    "UPDATE",
+                    finding_type,
+                    None,
+                    scan_history_id,
+                    target_id,
+                    success=False,
+                    error_message="save_raw_whois_from_secator_tag returned None",
+                )
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Failed to save whois tag. Domain not found or validation error.",
+                    },
+                    status=400,
+                )
 
             # Get repository for finding type
             repository_class = self.get_repository_for_finding_type(finding_type)

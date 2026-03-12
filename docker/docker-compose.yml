@@ -70,6 +70,8 @@ services:
     command: ['worker']
     env_file:
       - ../.env
+    environment:
+      - PYTHONWARNINGS=ignore::urllib3.exceptions.InsecureRequestWarning
     volumes:
       - scan_results:/home/secator/.secator/reports
       - nuclei_templates:/home/secator/nuclei-templates

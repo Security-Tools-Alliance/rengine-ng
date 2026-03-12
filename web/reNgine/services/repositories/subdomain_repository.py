@@ -6,7 +6,7 @@ Handles Subdomain database operations with enriched Secator integration.
 import contextlib
 from typing import Any, Dict, Optional
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import IntegrityError
 from django.utils import timezone
 
@@ -182,17 +182,29 @@ class SubdomainRepository:
             scan_history = ScanHistory.objects.get(id=scan_history_id)
         except ObjectDoesNotExist:
             return None
+
+        existing = Subdomain.objects.filter(
+            name=normalized, scan_history=scan_history
+        ).order_by("id").first()
+        if existing:
+            return existing
+
         defaults = {
             "domain": domain,
             "is_imported_subdomain": False,
             "discovered_date": timezone.now(),
         }
-        subdomain, _ = Subdomain.objects.get_or_create(
-            name=normalized,
-            scan_history=scan_history,
-            defaults=defaults,
-        )
-        return subdomain
+        try:
+            subdomain, _ = Subdomain.objects.get_or_create(
+                name=normalized,
+                scan_history=scan_history,
+                defaults=defaults,
+            )
+            return subdomain
+        except MultipleObjectsReturned:
+            return Subdomain.objects.filter(
+                name=normalized, scan_history=scan_history
+            ).order_by("id").first()
 
     def _map_extra_data_to_subdomain_fields(self, extra_data: Dict[str, Any], defaults: Dict[str, Any]) -> None:
         # Map common extra data fields to subdomain fields

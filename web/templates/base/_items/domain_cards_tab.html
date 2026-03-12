@@ -72,6 +72,9 @@
 									<li class="nav-item">
 										<a href="#domain-card-{{ domain.id }}-technical-tab" data-bs-toggle="tab" class="nav-link">Technical</a>
 									</li>
+									<li class="nav-item">
+										<a href="#domain-card-{{ domain.id }}-raw-whois-tab" data-bs-toggle="tab" class="nav-link">Raw response</a>
+									</li>
 								</ul>
 								<div class="tab-content mt-2">
 									<div class="tab-pane active" id="domain-card-{{ domain.id }}-registrant-tab">
@@ -120,6 +123,13 @@
 										</div>
 										{% else %}
 										<div class="alert alert-info mb-0">No technical data.</div>
+										{% endif %}
+									</div>
+									<div class="tab-pane" id="domain-card-{{ domain.id }}-raw-whois-tab">
+										{% if domain_info.extra_data and domain_info.extra_data.raw_whois %}
+										<pre class="mb-0 p-2 bg-light border rounded font-13">{{ domain_info.extra_data.raw_whois|escape }}</pre>
+										{% else %}
+										<div class="alert alert-info mb-0">No raw WHOIS data.</div>
 										{% endif %}
 									</div>
 								</div>
