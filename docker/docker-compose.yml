@@ -26,6 +26,7 @@ services:
     env_file:
       - ../.env
     environment:
+      - AUTH_TYPE=scram-sha-256
       - DB_HOST=db
       - DB_PORT=5432
       - DB_USER=${POSTGRES_USER}

@@ -24,13 +24,20 @@ class Command(BaseCommand):
         parser.add_argument(
             "--raw-key",
             action="store_true",
-            help="Machine-readable: print only the API key to stdout (requires --recreate). Diagnostics to stderr. Exit non-zero if key could not be output.",
+            help="Machine-readable: print only the API key to stdout, or to --output-file if given. Diagnostics to stderr. Exit non-zero if key could not be output.",
+        )
+        parser.add_argument(
+            "--output-file",
+            type=str,
+            metavar="PATH",
+            help="When used with --raw-key: write the API key to this file (inside container) instead of stdout. Scripts use this to avoid parsing mixed terminal output.",
         )
 
     def handle(self, *args, **options):
         recreate = options.get("recreate", False)
         show_key = options.get("show_key", False)
         raw_key = options.get("raw_key", False)
+        output_file = options.get("output_file")
 
         try:
             if has_secator_api_key() and not recreate:
@@ -54,6 +61,10 @@ class Command(BaseCommand):
 
             if raw_key:
                 if created and key:
+                    if output_file:
+                        with open(output_file, "w") as f:
+                            f.write(key)
+                        return
                     self.stdout.write(key)
                     return
                 self.stderr.write("No key could be generated or retrieved.\n")
@@ -93,7 +104,10 @@ class Command(BaseCommand):
         except SystemExit:
             raise
         except Exception as e:
+            err_msg = str(e)
+            if getattr(e, "__cause__", None) is not None:
+                err_msg = f"{err_msg} (cause: {e.__cause__})"
             if raw_key:
-                self.stderr.write("Failed to generate system API key: %s\n" % (e,))
+                self.stderr.write("Failed to generate system API key: %s\n" % (err_msg,))
                 raise SystemExit(1)
-            raise CommandError(f"Failed to generate system API key: {str(e)}")
+            raise CommandError(f"Failed to generate system API key: {err_msg}")

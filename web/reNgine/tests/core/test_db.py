@@ -61,6 +61,20 @@ class ResolveDbHostPortTestCase(unittest.TestCase):
         self.assertEqual(host, "db")
         self.assertEqual(port, "5432")
 
+    def test_entrypoint_setup_uses_direct_when_use_pgbouncer(self):
+        """entrypoint_setup (and its sub-calls) use direct DB to avoid PgBouncer SCRAM issues."""
+        environ = _make_environ()
+        host, port = resolve_db_host_port(environ, True, False, ["manage.py", "entrypoint_setup"])
+        self.assertEqual(host, "db")
+        self.assertEqual(port, "5432")
+
+    def test_run_scheduled_scans_uses_direct_when_use_pgbouncer(self):
+        """run_scheduled_scans (background loop in container) uses direct DB to avoid PgBouncer."""
+        environ = _make_environ()
+        host, port = resolve_db_host_port(environ, True, False, ["manage.py", "run_scheduled_scans"])
+        self.assertEqual(host, "db")
+        self.assertEqual(port, "5432")
+
     def test_test_mode_without_pgbouncer_uses_primary(self):
         environ = _make_environ()
         host, port = resolve_db_host_port(environ, False, False, ["manage.py", "test"])

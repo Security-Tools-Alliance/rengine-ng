@@ -32,3 +32,118 @@ require_commands() {
     fi
   done
 }
+
+# Default web container name for reNgine-ng (used by install.sh and update.sh).
+RENGINE_WEB_CONTAINER="rengine-web-1"
+
+# Run a command inside the web container. Usage: run_in_web_container "cmd"
+run_in_web_container() {
+  local cmd="$1"
+  local container="${2:-$RENGINE_WEB_CONTAINER}"
+  docker exec "$container" bash -c "$cmd"
+}
+
+# Path used inside the web container to pass the key back (avoids parsing mixed stdout from manage.py).
+RENGINE_SECATOR_KEY_FILE="/tmp/rengine_secator_key_script.txt"
+
+# Output Secator API key from container (create if missing; do not use --recreate). Empty if key exists or error.
+# Uses --output-file in the container so we do not depend on stdout (avoids logo/banner mixed in).
+# When the command fails, the error message is written to stderr so the caller can capture and display it.
+# Optional first arg: container name; default RENGINE_WEB_CONTAINER.
+get_secator_api_key_from_container() {
+  local container="${1:-$RENGINE_WEB_CONTAINER}"
+  local err_file
+  err_file=$(mktemp) || return 1
+  docker exec "$container" rm -f "$RENGINE_SECATOR_KEY_FILE" 2>/dev/null || true
+  run_in_web_container "poetry run python3 manage.py generate_secator_api_key --raw-key --output-file=$RENGINE_SECATOR_KEY_FILE" "$container" 2> "$err_file"
+  local exitcode=$?
+  local key
+  key=$(docker exec "$container" cat "$RENGINE_SECATOR_KEY_FILE" 2>/dev/null | tr -d '\r\n')
+  docker exec "$container" rm -f "$RENGINE_SECATOR_KEY_FILE" 2>/dev/null || true
+  if [ "$exitcode" -ne 0 ] && [ -s "$err_file" ]; then
+    cat "$err_file" >&2
+  fi
+  rm -f "$err_file"
+  printf '%s' "$key"
+}
+
+# Return 0 if a Secator API key already exists in DB, 1 otherwise. Optional first arg: container name.
+has_secator_api_key_in_db() {
+  local container="${1:-$RENGINE_WEB_CONTAINER}"
+  local out
+  out=$(run_in_web_container 'poetry run python3 manage.py generate_secator_api_key 2>&1' "$container" || true)
+  echo "$out" | grep -q "already exists"
+}
+
+# Remove existing Secator block from env_file and append standard block with key. Uses temp file then mv.
+# Usage: write_secator_env_block /path/to/.env "api_key_value"
+write_secator_env_block() {
+  local env_file="$1"
+  local key="$2"
+  [[ -z "$env_file" || -z "$key" ]] && return 1
+  [[ ! -f "$env_file" || ! -w "$env_file" ]] && return 1
+  local tmp_file
+  tmp_file=$(mktemp "${env_file}.XXXXXX") || return 1
+  awk '
+    BEGIN { skip = 0 }
+    /^# Secator Worker API Configuration/ { next }
+    /^# BEGIN Secator Worker API Configuration/ { skip = 1; next }
+    /^# END Secator Worker API Configuration/ { skip = 0; next }
+    skip == 1 { next }
+    /^SECATOR_ADDONS_API_ENABLED=/ { next }
+    /^SECATOR_ADDONS_API_KEY=/ { next }
+    /^SECATOR_ADDONS_API_HEADER_NAME=/ { next }
+    /^SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT=/ { next }
+    /^SECATOR_ADDONS_API_URL=/ { next }
+    /^SECATOR_ADDONS_API_FORCE_SSL=/ { next }
+    /^RENGINE_API_KEY=/ { next }
+    /^RENGINE_API_URL=/ { next }
+    { print }
+  ' "$env_file" > "$tmp_file" || { rm -f "$tmp_file"; return 1; }
+  {
+    echo ""
+    echo "# Secator Worker API Configuration (auto-generated)"
+    echo "SECATOR_ADDONS_API_ENABLED=true"
+    echo "SECATOR_ADDONS_API_KEY=$key"
+    echo "SECATOR_ADDONS_API_HEADER_NAME=Api-Key"
+    echo "SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT="
+    echo "SECATOR_ADDONS_API_URL=https://proxy/api/secator"
+    echo "SECATOR_ADDONS_API_FORCE_SSL=false"
+  } >> "$tmp_file" || { rm -f "$tmp_file"; return 1; }
+  mv "$tmp_file" "$env_file"
+  # When run as root (e.g. sudo), restore .env ownership to the user who invoked sudo
+  if [[ "$EUID" -eq 0 && -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
+    chown "$SUDO_USER:$SUDO_USER" "$env_file" 2>/dev/null || chown "$SUDO_USER" "$env_file" 2>/dev/null || true
+  fi
+}
+
+# Set SCRIPT_DIR and REPO_ROOT from the path of the script that sources common_functions.
+# Usage: resolve_repo_paths "${BASH_SOURCE[0]}"  (call from the script that was sourced)
+resolve_repo_paths() {
+  local script_path="${1:?}"
+  SCRIPT_DIR="$(cd "$(dirname "$script_path")" && pwd)"
+  REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+}
+
+# Exit with message if not running as root. Use for scripts that must be run with sudo (e.g. update.sh).
+require_running_as_root() {
+  if [ "$(whoami)" != "root" ]; then
+    log "Error updating reNgine-ng: please run this script as root!" $COLOR_RED
+    log "Example: sudo ./scripts/update.sh (from repository root)" $COLOR_RED
+    exit 1
+  fi
+}
+
+# Exit if not run with sudo from a non-root user (e.g. install.sh).
+require_sudo_from_non_root() {
+  if [ -z "${SUDO_USER:-}" ]; then
+    log "Error: This script must be run with sudo." $COLOR_RED
+    log "Example: 'sudo ./install.sh'" $COLOR_RED
+    exit 1
+  fi
+  if [ "$EUID" -eq 0 ] && { [ "$SUDO_USER" = "root" ] || [ -z "$SUDO_USER" ]; }; then
+    log "Error: Do not run this script as root user. Use 'sudo' with a non-root user." $COLOR_RED
+    log "Example: 'sudo ./install.sh'" $COLOR_RED
+    exit 1
+  fi
+}

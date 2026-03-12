@@ -3,12 +3,9 @@
 # Exit on any error
 set -e
 
-# Resolve script and repo paths so this script can be run as: ./scripts/run_tests.sh (from repo root)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-# Import common functions
-source "$SCRIPT_DIR/common_functions.sh"
+# Import common functions and resolve script/repo paths (run as: ./scripts/run_tests.sh from repo root)
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common_functions.sh"
+resolve_repo_paths "${BASH_SOURCE[0]}"
 
 # Function to determine host architecture
 get_host_architecture() {

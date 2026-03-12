@@ -14,14 +14,21 @@ logger = get_module_logger(__name__)
 
 # Management commands that require a direct PostgreSQL connection (e.g. migrations,
 # superuser creation). When USE_PGBOUNCER=1, these use POSTGRES_DIRECT_* instead of
-# PgBouncer to avoid "wrong password type" and transaction-pooling limitations.
+# PgBouncer to avoid "wrong password type" (SCRAM) and transaction-pooling limitations.
+# entrypoint_setup and run_scheduled_scans are included so the entrypoint and the
+# background cron loop use direct DB even when container env points at PgBouncer.
 DB_DIRECT_COMMANDS = frozenset(
     {
+        "collectstatic",
         "createsuperuser",
         "dbshell",
+        "entrypoint_setup",
         "flush",
+        "generate_secator_api_key",
+        "load_secator_all",
         "makemigrations",
         "migrate",
+        "run_scheduled_scans",
         "showmigrations",
         "sqlmigrate",
         "test",

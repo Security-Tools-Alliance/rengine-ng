@@ -34,9 +34,9 @@ check_old_data() {
 
 # Function to perform migration
 perform_migration() {
-    echo "========================================="
+    echo "==============================================================================="
     echo "Old PostgreSQL data detected - Starting migration to current PostgreSQL version"
-    echo "========================================="
+    echo "==============================================================================="
     
     # Clean up any existing temporary directories
     echo "Cleaning up temporary directories..."
@@ -120,9 +120,9 @@ perform_migration() {
     }
     
     if [ $? -eq 0 ]; then
-        echo "========================================="
+        echo "=================================
         echo "Migration completed successfully!"
-        echo "========================================="
+        echo "=================================
         
         # Clear the original data directory and copy new data
         echo "Replacing old data with migrated data..."

@@ -2,6 +2,8 @@
 Tests for generate_secator_api_key Django management command.
 """
 
+import os
+import tempfile
 from io import StringIO
 
 from django.core.management import call_command
@@ -171,3 +173,27 @@ class TestGenerateSecatorApiKeyManagementCommand(TestCase):
                 stderr=StringIO(),
             )
         self.assertEqual(ctx.exception.code, 1)
+
+    def test_generate_secator_api_key_command_raw_key_output_file(self):
+        """Test that --raw-key --output-file writes only the key to the file (no terminal noise)."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            output_path = f.name
+        try:
+            call_command(
+                "generate_secator_api_key",
+                "--recreate",
+                "--raw-key",
+                output_file=output_path,
+                stdout=StringIO(),
+                stderr=StringIO(),
+            )
+            with open(output_path) as f:
+                key_content = f.read().strip()
+            self.assertRegex(
+                key_content,
+                r"^[A-Za-z0-9._-]{32,}$",
+                "output file should contain only the key, no banner or extra lines",
+            )
+            self.assertEqual(len(key_content.splitlines()), 1)
+        finally:
+            os.unlink(output_path)

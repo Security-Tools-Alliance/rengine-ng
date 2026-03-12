@@ -1,11 +1,8 @@
 #!/bin/bash
 
-# Resolve script and repo paths so this script can be run as: sudo ./scripts/update.sh (from repo root)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-# Import common functions
-source "$SCRIPT_DIR/common_functions.sh"
+# Import common functions and resolve script/repo paths (run as: sudo ./scripts/update.sh from repo root)
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common_functions.sh"
+resolve_repo_paths "${BASH_SOURCE[0]}"
 
 # Parse arguments and strip known flags so "$@" does not accumulate on re-exec
 POST_UPDATE=0
@@ -65,12 +62,7 @@ for arg in "$@"; do
   fi
 done
 
-# Check for root privileges
-if [ "$(whoami)" != "root" ]; then
-  log "Error updating reNgine-ng: please run this script as root!" $COLOR_RED
-  log "Example: sudo ./scripts/update.sh (from repository root)" $COLOR_RED
-  exit 1
-fi
+require_running_as_root
 
 # Run git as the user who invoked sudo, so repo files keep correct ownership (not root).
 GIT_AS_USER="${SUDO_USER:-}"
@@ -233,7 +225,7 @@ run_post_update_flow() {
 
   log "Waiting for web container to be ready..." $COLOR_CYAN
   for i in $(seq 1 30); do
-    if docker exec rengine-web-1 echo "ready" >/dev/null 2>&1; then
+    if docker exec "$RENGINE_WEB_CONTAINER" echo "ready" >/dev/null 2>&1; then
       log "Web container is ready!" $COLOR_GREEN
       break
     fi
@@ -246,47 +238,31 @@ run_post_update_flow() {
   done
 
   log "Checking Secator API key..." $COLOR_CYAN
-  HAS_API_KEY_OUTPUT=$(docker exec rengine-web-1 bash -c 'poetry run python3 manage.py generate_secator_api_key 2>&1' || echo "")
-  if echo "$HAS_API_KEY_OUTPUT" | grep -q "already exists"; then
+  # Do not use --recreate; only create key when missing. User may regenerate manually with --recreate.
+  if has_secator_api_key_in_db; then
     log "Secator API key already exists" $COLOR_GREEN
   else
     log "Generating Secator API key..." $COLOR_CYAN
-    SECATOR_API_KEY=$(docker exec rengine-web-1 bash -c 'poetry run python3 manage.py generate_secator_api_key --recreate --raw-key 2>/dev/null' | tr -d '\r\n')
+    SECATOR_KEY_ERR=$(mktemp)
+    SECATOR_API_KEY=$(get_secator_api_key_from_container 2>"$SECATOR_KEY_ERR")
     if [[ -z "$SECATOR_API_KEY" ]]; then
-      log "Failed to obtain Secator API key from generate_secator_api_key (empty output from --raw-key). Check container logs or run the command manually." $COLOR_RED
-      log_to_file "ERROR: could not obtain Secator API key from generate_secator_api_key --raw-key"
+      log "Secator API key could not be generated:" $COLOR_RED
+      if [[ -s "$SECATOR_KEY_ERR" ]]; then
+        while IFS= read -r line; do log "$line" $COLOR_RED; done < "$SECATOR_KEY_ERR"
+        log_to_file "ERROR: generate_secator_api_key failed: $(cat "$SECATOR_KEY_ERR")"
+      else
+        log "Empty output from generate_secator_api_key --raw-key. Run the command manually for details." $COLOR_RED
+        log_to_file "ERROR: could not obtain Secator API key from generate_secator_api_key --raw-key"
+      fi
+      rm -f "$SECATOR_KEY_ERR"
       return 1
     fi
+    rm -f "$SECATOR_KEY_ERR"
     log "Secator API key generated" $COLOR_GREEN
-    ENV_FILE="$REPO_ROOT/.env"
-    if [[ -f "$ENV_FILE" && -w "$ENV_FILE" ]]; then
-      TMP_ENV_FILE="${ENV_FILE}.tmp.$$"
-      awk '
-        BEGIN { skip_block = 0 }
-        /^# BEGIN Secator Worker API Configuration \(auto-generated during update\)/ { skip_block = 1; next }
-        /^# END Secator Worker API Configuration \(auto-generated during update\)/ { skip_block = 0; next }
-        skip_block == 1 { next }
-        /^SECATOR_ADDONS_API_ENABLED=/ { next }
-        /^SECATOR_ADDONS_API_KEY=/ { next }
-        /^SECATOR_ADDONS_API_HEADER_NAME=/ { next }
-        /^SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT=/ { next }
-        /^SECATOR_ADDONS_API_URL=/ { next }
-        /^SECATOR_ADDONS_API_FORCE_SSL=/ { next }
-        { print }
-      ' "$ENV_FILE" > "$TMP_ENV_FILE" && mv "$TMP_ENV_FILE" "$ENV_FILE"
-      {
-        echo ""
-        echo "# BEGIN Secator Worker API Configuration (auto-generated during update)"
-        echo "SECATOR_ADDONS_API_ENABLED=true"
-        echo "SECATOR_ADDONS_API_KEY=$SECATOR_API_KEY"
-        echo "SECATOR_ADDONS_API_HEADER_NAME=Api-Key"
-        echo "SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT="
-        echo "SECATOR_ADDONS_API_URL=https://proxy/api/secator"
-        echo "SECATOR_ADDONS_API_FORCE_SSL=false"
-        echo "# END Secator Worker API Configuration (auto-generated during update)"
-        echo ""
-      } >> "$ENV_FILE"
+    if write_secator_env_block "$REPO_ROOT/.env" "$SECATOR_API_KEY"; then
       log "Secator API configuration written to .env" $COLOR_GREEN
+      log "Restarting web service (cold) to load new API key..." $COLOR_CYAN
+      (cd "$REPO_ROOT" && make restart web COLD=1) >> "$LOG_FILE" 2>&1 || log "Warning: make restart web COLD=1 failed" $COLOR_YELLOW
     else
       log "Warning: Could not update .env file. Manually add Secator API configuration." $COLOR_YELLOW
     fi
@@ -294,7 +270,7 @@ run_post_update_flow() {
   log_to_file "Secator API key check completed"
 
   log "Loading Secator components (tasks, workflows, scans)..." $COLOR_CYAN
-  if ! docker exec rengine-web-1 bash -c 'poetry run python3 manage.py load_secator_all' >> "$LOG_FILE" 2>&1; then
+  if ! docker exec "$RENGINE_WEB_CONTAINER" bash -c 'poetry run python3 manage.py load_secator_all' >> "$LOG_FILE" 2>&1; then
     log "Warning: load_secator_all had non-zero exit" $COLOR_YELLOW
   fi
   log_to_file "load_secator_all completed"

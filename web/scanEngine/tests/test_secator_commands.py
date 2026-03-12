@@ -10,6 +10,7 @@ import sys
 from unittest.mock import MagicMock, mock_open, patch
 
 from django.core.management import call_command
+from django.core.management.base import CommandError
 import yaml
 
 from scanEngine.models import SecatorProfile, SecatorScan, SecatorTask, SecatorWorkflow
@@ -200,6 +201,40 @@ input_types:
             # Check that only load_scans was called
             self.assertEqual(mock_call.call_count, 1)
             mock_call.assert_called_with("load_scans")
+
+    def test_entrypoint_setup_calls_all_commands(self):
+        """Test entrypoint_setup invokes makemigrations, migrate, cron, load_secator_all, collectstatic."""
+        with patch(
+            "scanEngine.management.commands.entrypoint_setup.call_command"
+        ) as mock_call:
+            out = StringIO()
+            call_command("entrypoint_setup", stdout=out)
+            self.assertGreaterEqual(mock_call.call_count, 5)
+            calls = [c[0][0] for c in mock_call.call_args_list]
+            self.assertEqual(calls[0], "makemigrations")
+            self.assertEqual(calls[1], "migrate")
+            self.assertEqual(calls[2], "ensure_scheduled_scans_cron")
+            self.assertEqual(calls[3], "load_secator_all")
+            self.assertEqual(calls[4], "collectstatic")
+            mock_call.assert_any_call("collectstatic", "--noinput")
+
+    def test_entrypoint_setup_continues_when_optional_commands_fail(self):
+        """Test entrypoint_setup still runs collectstatic when cron or load_secator_all raise."""
+        with patch(
+            "scanEngine.management.commands.entrypoint_setup.call_command"
+        ) as mock_call:
+            def side_effect(cmd, *args, **kwargs):
+                if cmd == "ensure_scheduled_scans_cron":
+                    raise CommandError("cron not available")
+                if cmd == "load_secator_all":
+                    raise CommandError("load failed")
+                return None
+
+            mock_call.side_effect = side_effect
+            out = StringIO()
+            call_command("entrypoint_setup", stdout=out)
+            calls = [c[0][0] for c in mock_call.call_args_list]
+            self.assertIn("collectstatic", calls)
 
 
 class TestSecatorLoaderBase(BaseTestCase):

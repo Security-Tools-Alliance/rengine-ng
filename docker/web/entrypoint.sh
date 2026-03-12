@@ -2,9 +2,9 @@
 
 print_msg() {
   printf "\r\n"
-  printf "========================================\r\n"
+  printf "============================================================\r\n"
   printf "$1\r\n"
-  printf "========================================\r\n\r\n"
+  printf "============================================================\r\n\r\n"
 }
 
 USER_HOME="${HOME:-/home/rengine}"
@@ -39,26 +39,9 @@ run_with_direct_db() {
   POSTGRES_HOST="${POSTGRES_DIRECT_HOST:-db}" POSTGRES_PORT="${POSTGRES_DIRECT_PORT:-5432}" "$@"
 }
 
-print_msg "Generate Django migrations files"
-run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
-
-print_msg "Migrate database"
-run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py migrate
-
-# Ensure scheduled-scans job is registered (crontab if cron available; loop above runs the script every minute)
-print_msg "Ensure scheduled scans (if any schedule exists)"
-run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py ensure_scheduled_scans_cron || true
-
-# Initialize Secator API key if it doesn't exist
-print_msg "Initialize Secator API key"
-run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py generate_secator_api_key || true
-
-# Load Secator components from Secator library (tasks, workflows, scans)
-print_msg "Loading Secator components (from Secator library)"
-run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py load_secator_all || true
-
-print_msg "Collect static files"
-poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --noinput
+# Run all setup steps in a single Python process to avoid repeated Django startup time
+print_msg "Django setup (migrations, cron, Secator load, collectstatic)"
+run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py entrypoint_setup
 
 print_msg "Starting ASGI server with Uvicorn"
 poetry run -C $RENGINE_FOLDER uvicorn reNgine.asgi:application \

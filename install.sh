@@ -207,10 +207,8 @@ fix_volumes_permissions() {
   
   declare -a volumes=(
     "rengine_gf_patterns"
-    "rengine_github_repos"
     "rengine_nuclei_templates"
     "rengine_scan_results"
-    "rengine_tool_config"
     "rengine_wordlist"
   )
 
@@ -360,21 +358,7 @@ check_gpu_support() {
     esac
 }
 
-# Check for root privileges
-if [ $EUID -eq 0 ]; then
-  if [ "$SUDO_USER" = "root" ] || [ "$SUDO_USER" = "" ]; then
-    log "Error: Do not run this script as root user. Use 'sudo' with a non-root user." $COLOR_RED
-    log "Example: 'sudo ./install.sh'" $COLOR_RED
-    exit 1
-  fi
-fi
-
-# Check if the script is run with sudo
-if [ -z "$SUDO_USER" ]; then
-  log "Error: This script must be run with sudo." $COLOR_RED
-  log "Example: 'sudo ./install.sh'" $COLOR_RED
-  exit 1
-fi
+require_sudo_from_non_root
 
 usageFunction()
 {
@@ -633,41 +617,26 @@ main() {
   make superuser_create isNonInteractive=$isNonInteractive
 
   log "Generating Secator API key..." $COLOR_CYAN
-  # Generate Secator API key using Django management command
-  SECATOR_API_KEY=$(docker exec rengine-web-1 bash -c 'poetry run python3 manage.py generate_secator_api_key --recreate --show-key 2>&1 | grep -A1 "API Key" | tail -n1' | tr -d ' ')
-  
+  SECATOR_KEY_ERR=$(mktemp)
+  SECATOR_API_KEY=$(get_secator_api_key_from_container 2>"$SECATOR_KEY_ERR")
   if [ -n "$SECATOR_API_KEY" ]; then
     log "Secator API key generated successfully" $COLOR_GREEN
-    
-    # Remove existing Secator API configuration and comment from .env to avoid duplicates on reinstall
-    sed -i '/# Secator Worker API Configuration (auto-generated)/d' .env
-    sed -i '/^SECATOR_ADDONS_API_ENABLED=/d' .env
-    sed -i '/^SECATOR_ADDONS_API_KEY=/d' .env
-    sed -i '/^SECATOR_ADDONS_API_HEADER_NAME=/d' .env
-    sed -i '/^SECATOR_ADDONS_API_URL=/d' .env
-    sed -i '/^SECATOR_ADDONS_API_FORCE_SSL=/d' .env
-    sed -i '/^SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT=/d' .env
-    sed -i '/^RENGINE_API_KEY=/d' .env
-    sed -i '/^RENGINE_API_URL=/d' .env
-
-    # Add Secator API configuration to .env
-    {
-      echo ""
-      echo "# Secator Worker API Configuration (auto-generated)"
-      echo "SECATOR_ADDONS_API_ENABLED=true"
-      echo "SECATOR_ADDONS_API_KEY=$SECATOR_API_KEY"
-      echo "SECATOR_ADDONS_API_HEADER_NAME=Api-Key"
-      echo "SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT="
-      echo "SECATOR_ADDONS_API_URL=https://proxy/api/secator"
-      echo "SECATOR_ADDONS_API_FORCE_SSL=false"
-    } >> .env
-    
-    log "Secator API key has been added to .env file" $COLOR_GREEN
+    if write_secator_env_block ".env" "$SECATOR_API_KEY"; then
+      log "Secator API key has been added to .env file" $COLOR_GREEN
+      log "Restarting web service (cold) to load new API key..." $COLOR_CYAN
+      make restart web COLD=1
+    fi
   else
-    log "Warning: Failed to generate Secator API key. This may affect Secator worker functionality." $COLOR_YELLOW
-    log "You can manually generate the key later using: make shell" $COLOR_YELLOW
-    log "Then run: python3 manage.py generate_secator_api_key --recreate --show-key" $COLOR_YELLOW
+    if [ -s "$SECATOR_KEY_ERR" ]; then
+      log "Secator API key could not be generated:" $COLOR_RED
+      while IFS= read -r line; do log "$line" $COLOR_RED; done < "$SECATOR_KEY_ERR"
+      log "Fix the error above (e.g. database connection, PgBouncer auth). Then run: make shell, then python3 manage.py generate_secator_api_key --recreate --show-key" $COLOR_YELLOW
+    else
+      log "Secator API key already exists (key is created only when missing)." $COLOR_GREEN
+      log "To regenerate manually: make shell, then python3 manage.py generate_secator_api_key --recreate --show-key" $COLOR_YELLOW
+    fi
   fi
+  rm -f "$SECATOR_KEY_ERR"
 
   log "reNgine-ng is successfully installed and started!" $COLOR_GREEN
   log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN
