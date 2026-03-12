@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.db.models import CharField, F, Func, Q, Value
+from django.db.models import CharField, Count, F, Func, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Coalesce, Lower
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -85,7 +85,15 @@ from scanEngine.wordlists import (
 from scanEngine.wordlists import (
     short_name_from_stem as _wordlist_short_name_from_stem,
 )
-from startScan.models import ScanHistory
+from startScan.models import (
+    Domain,
+    EndPoint,
+    Exploit,
+    ScanHistory,
+    Secret,
+    Subdomain,
+    Vulnerability,
+)
 
 
 PREFIX_SCAN_ENGINE_VIEWS = "[SCAN_ENGINE_VIEWS]"
@@ -838,6 +846,42 @@ def secator_scan_detail(request, scan_id):
 
     # TODO: Filter by this SecatorScan when ScanHistory is linked to SecatorScan.
     # Until then, recent_scans is unfiltered (last 10 non-legacy scans globally).
+    domain_count_subq = (
+        Domain.objects.filter(scan_history_id=OuterRef("pk"))
+        .values("scan_history_id")
+        .annotate(c=Count("name", distinct=True))
+        .values("c")[:1]
+    )
+    subdomain_count_subq = (
+        Subdomain.objects.filter(scan_history_id=OuterRef("pk"))
+        .values("scan_history_id")
+        .annotate(c=Count("name", distinct=True))
+        .values("c")[:1]
+    )
+    endpoint_count_subq = (
+        EndPoint.objects.filter(scan_history_id=OuterRef("pk"))
+        .values("scan_history_id")
+        .annotate(c=Count("http_url", distinct=True))
+        .values("c")[:1]
+    )
+    vulnerability_count_subq = (
+        Vulnerability.objects.filter(scan_history_id=OuterRef("pk"))
+        .values("scan_history_id")
+        .annotate(c=Count("id"))
+        .values("c")[:1]
+    )
+    secret_count_subq = (
+        Secret.objects.filter(scan_history_id=OuterRef("pk"))
+        .values("scan_history_id")
+        .annotate(c=Count("id"))
+        .values("c")[:1]
+    )
+    exploit_count_subq = (
+        Exploit.objects.filter(scan_history_id=OuterRef("pk"))
+        .values("scan_history_id")
+        .annotate(c=Count("id"))
+        .values("c")[:1]
+    )
     recent_scans = (
         ScanHistory.objects.filter(
             scan_type__isnull=False,
@@ -845,6 +889,14 @@ def secator_scan_detail(request, scan_id):
         )
         .select_related("target__project")
         .prefetch_related("secatorrunner_set__worker")
+        .annotate(
+            domain_count=Coalesce(Subquery(domain_count_subq), Value(0)),
+            subdomain_count=Coalesce(Subquery(subdomain_count_subq), Value(0)),
+            endpoint_count=Coalesce(Subquery(endpoint_count_subq), Value(0)),
+            vulnerability_count=Coalesce(Subquery(vulnerability_count_subq), Value(0)),
+            secret_count=Coalesce(Subquery(secret_count_subq), Value(0)),
+            exploit_count=Coalesce(Subquery(exploit_count_subq), Value(0)),
+        )
         .order_by("-start_scan_date")[:10]
     )
 

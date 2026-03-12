@@ -10,6 +10,7 @@ from reNgine.core.validators import is_valid_ip
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress
 
+
 logger = get_module_logger(__name__)
 
 
@@ -63,7 +64,5 @@ def save_asn_from_secator_tag(
 
     from reNgine.services.repositories.domain_repository import DomainRepository
 
-    domain_info = DomainRepository().save_asn_from_secator_tag(
-        scan_history_id, target_id, match, value
-    )
+    domain_info = DomainRepository().save_asn_from_secator_tag(scan_history_id, target_id, match, value)
     return domain_info

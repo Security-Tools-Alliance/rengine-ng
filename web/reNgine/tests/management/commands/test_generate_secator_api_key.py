@@ -2,9 +2,9 @@
 Tests for generate_secator_api_key Django management command.
 """
 
+from io import StringIO
 import os
 import tempfile
-from io import StringIO
 
 from django.core.management import call_command
 from django.test import TestCase

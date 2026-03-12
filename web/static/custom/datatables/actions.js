@@ -153,13 +153,19 @@
     const s = n(opts.subdomainCount);
     const e = n(opts.endpointCount);
     const v = n(opts.vulnerabilityCount);
+    const sec = n(opts.secretCount);
+    const expl = n(opts.exploitCount);
     const vulnTitleRaw = opts.vulnTooltip != null && opts.vulnTooltip !== "" ? String(opts.vulnTooltip) : "Vulnerabilities";
     const vulnTitle = safeAttr(vulnTitleRaw);
+    const secretBadge = '<span class="badge badge-pills badge-soft-warning mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Secrets"><i class="fe-lock me-1"></i>' + sec + '</span> ';
+    const exploitBadge = '<span class="badge badge-pills badge-soft-danger mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Exploits"><i class="fe-crosshair me-1"></i>' + expl + '</span> ';
     return (
       '<span class="badge badge-pills bg-secondary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Domains"><i class="fe-globe me-1"></i>' + d + '</span> ' +
       '<span class="badge badge-pills bg-info mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Subdomains"><i class="fe-layers me-1"></i>' + s + '</span> ' +
       '<span class="badge badge-pills bg-warning mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Endpoints"><i class="fe-link me-1"></i>' + e + '</span> ' +
-      '<span class="badge badge-pills bg-danger mt-1 me-1" data-toggle="tooltip" data-placement="top" title="' + vulnTitle + '"><i class="fe-alert-triangle me-1"></i>' + v + "</span>"
+      '<span class="badge badge-pills bg-danger mt-1 me-1" data-toggle="tooltip" data-placement="top" title="' + vulnTitle + '"><i class="fe-alert-triangle me-1"></i>' + v + "</span> " +
+      secretBadge +
+      exploitBadge
     );
   };
 

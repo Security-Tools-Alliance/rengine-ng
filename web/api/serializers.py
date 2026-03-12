@@ -44,6 +44,7 @@ from startScan.models import (
     ScanHistory,
     ScanSchedule,
     SecatorRunner,
+    Secret,
     Subdomain,
     SubScan,
     Technology,
@@ -149,6 +150,8 @@ class TargetSerializer(serializers.ModelSerializer):
     subdomain_count = serializers.IntegerField(read_only=True, default=0)
     endpoint_count = serializers.IntegerField(read_only=True, default=0)
     vulnerability_count = serializers.IntegerField(read_only=True, default=0)
+    secret_count = serializers.IntegerField(read_only=True, default=0)
+    exploit_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Target
@@ -170,12 +173,16 @@ class TargetSerializer(serializers.ModelSerializer):
             "subdomain_count",
             "endpoint_count",
             "vulnerability_count",
+            "secret_count",
+            "exploit_count",
         ]
         datatables_always_serialize = (
             "domain_count",
             "subdomain_count",
             "endpoint_count",
             "vulnerability_count",
+            "secret_count",
+            "exploit_count",
         )
 
     def get_name(self, obj):
@@ -1021,11 +1028,15 @@ class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
         subdomain_count = obj.get_subdomain_count() if callable(getattr(obj, "get_subdomain_count", None)) else 0
         endpoint_count = obj.get_endpoint_count() if callable(getattr(obj, "get_endpoint_count", None)) else 0
         vuln_count = obj.get_vulnerability_count() if callable(getattr(obj, "get_vulnerability_count", None)) else 0
+        secret_count = obj.get_secret_count() if callable(getattr(obj, "get_secret_count", None)) else 0
+        exploit_count = obj.get_exploit_count() if callable(getattr(obj, "get_exploit_count", None)) else 0
         return {
             "domain_count": domain_count,
             "subdomain_count": subdomain_count,
             "endpoint_count": endpoint_count,
             "vulnerability_count": vuln_count,
+            "secret_count": secret_count,
+            "exploit_count": exploit_count,
         }
 
     def get_scan_engine_text(self, obj):
@@ -2298,6 +2309,28 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
             "reference",
         ]
         depth = 1
+
+
+class SecretSerializer(serializers.ModelSerializer):
+    discovered_date = serializers.SerializerMethodField()
+
+    def get_discovered_date(self, obj):
+        if obj.discovered_date:
+            return obj.discovered_date.strftime("%b %d, %Y %H:%M")
+        return ""
+
+    class Meta:
+        model = Secret
+        fields = [
+            "id",
+            "scan_history",
+            "rule_name",
+            "matched_at",
+            "source",
+            "value",
+            "extra_data",
+            "discovered_date",
+        ]
 
 
 class ProjectSerializer(serializers.ModelSerializer):

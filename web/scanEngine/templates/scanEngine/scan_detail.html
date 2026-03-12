@@ -94,6 +94,7 @@
                                     <thead>
                                         <tr>
                                             <th>Scan</th>
+                                            <th class="text-center">Summary</th>
                                             <th>Started</th>
                                             <th>Worker</th>
                                             <th>Status</th>
@@ -108,6 +109,14 @@
                                                 {% else %}
                                                 <span>{{ history.target.value|default:"" }} #{{ history.id }}</span>
                                                 {% endif %}
+                                            </td>
+                                            <td class="text-left">
+                                                <span class="badge badge-pills bg-secondary mt-1 me-1" data-toggle="tooltip" title="Domains"><i class="fe-globe me-1"></i>{{ history.domain_count|default:0 }}</span>
+                                                <span class="badge badge-pills bg-info mt-1 me-1" data-toggle="tooltip" title="Subdomains"><i class="fe-layers me-1"></i>{{ history.subdomain_count|default:0 }}</span>
+                                                <span class="badge badge-pills bg-warning mt-1 me-1" data-toggle="tooltip" title="Endpoints"><i class="fe-link me-1"></i>{{ history.endpoint_count|default:0 }}</span>
+                                                <span class="badge badge-pills bg-danger mt-1 me-1" data-toggle="tooltip" title="Vulnerabilities"><i class="fe-alert-triangle me-1"></i>{{ history.vulnerability_count|default:0 }}</span>
+                                                <span class="badge badge-pills badge-soft-warning mt-1 me-1" data-toggle="tooltip" title="Secrets"><i class="fe-lock me-1"></i>{{ history.secret_count|default:0 }}</span>
+                                                <span class="badge badge-pills badge-soft-danger mt-1 me-1" data-toggle="tooltip" title="Exploits"><i class="fe-crosshair me-1"></i>{{ history.exploit_count|default:0 }}</span>
                                             </td>
                                             <td>{{ history.start_scan_date|date:"M d, Y H:i" }}</td>
                                             <td><span class="badge badge-soft-secondary">{{ history.secator_worker_name|default:"Local" }}</span></td>

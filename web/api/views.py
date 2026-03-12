@@ -47,6 +47,7 @@ from api.helpers.datatables import (
     DATATABLE_COLUMN_MAP_SCAN_HISTORY,
     DATATABLE_COLUMN_MAP_SCHEDULED_SCANS,
     DATATABLE_COLUMN_MAP_SCOPES,
+    DATATABLE_COLUMN_MAP_SECRET,
     DATATABLE_COLUMN_MAP_SUBDOMAIN,
     DATATABLE_COLUMN_MAP_SUBDOMAIN_CHANGES,
     DATATABLE_COLUMN_MAP_SUBSCAN_HISTORY,
@@ -158,6 +159,7 @@ from startScan.models import (
     Email,
     Employee,
     EndPoint,
+    Exploit,
     IpAddress,
     LLMVulnerabilityReport,
     MetaFinderDocument,
@@ -166,6 +168,7 @@ from startScan.models import (
     ScanActivity,
     ScanHistory,
     ScanSchedule,
+    Secret,
     Subdomain,
     SubScan,
     Technology,
@@ -213,6 +216,7 @@ from .serializers import (
     SecatorWorkerCreateUpdateSerializer,
     SecatorWorkerDetailSerializer,
     SecatorWorkerListSerializer,
+    SecretSerializer,
     SubdomainChangesSerializer,
     SubdomainSerializer,
     SubScanDatatableSerializer,
@@ -897,11 +901,25 @@ class ListTargetsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, 
             .annotate(c=Count("id"))
             .values("c")[:1]
         )
+        secret_count_subq = (
+            Secret.objects.filter(scan_history__target_id=OuterRef("pk"))
+            .values("scan_history__target_id")
+            .annotate(c=Count("id"))
+            .values("c")[:1]
+        )
+        exploit_count_subq = (
+            Exploit.objects.filter(scan_history__target_id=OuterRef("pk"))
+            .values("scan_history__target_id")
+            .annotate(c=Count("id"))
+            .values("c")[:1]
+        )
         qs = qs.prefetch_related("scopes").annotate(
             domain_count=Coalesce(Subquery(domain_count_subq), Value(0)),
             subdomain_count=Coalesce(Subquery(subdomain_count_subq), Value(0)),
             endpoint_count=Coalesce(Subquery(endpoint_count_subq), Value(0)),
             vulnerability_count=Coalesce(Subquery(vulnerability_count_subq), Value(0)),
+            secret_count=Coalesce(Subquery(secret_count_subq), Value(0)),
+            exploit_count=Coalesce(Subquery(exploit_count_subq), Value(0)),
             scope_group_name=Coalesce(Subquery(first_scope_name), Value("No scope")),
         )
         return qs
@@ -4528,6 +4546,31 @@ class VulnerabilityViewSet(DatatableListMixin, DatatablePaginationMixin, Advance
         return qs.order_by(order_str)
 
 
+class SecretViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.ReadOnlyModelViewSet):
+    queryset = Secret.objects.none()
+    serializer_class = SecretSerializer
+    datatable_default_ordering = ("-discovered_date",)
+    datatable_column_map = DATATABLE_COLUMN_MAP_SECRET
+
+    def get_queryset(self):
+        req = self.request
+        scan_id = safe_int_cast(req.query_params.get("scan_history"))
+        slug = req.query_params.get("project")
+
+        if slug:
+            qs = Secret.objects.filter(scan_history__target__project__slug=slug)
+            if scan_id:
+                qs = qs.filter(scan_history_id=scan_id)
+        elif scan_id:
+            qs = Secret.objects.filter(scan_history_id=scan_id)
+        else:
+            qs = Secret.objects.none()
+
+        qs = qs.select_related("scan_history")
+        self.queryset = qs
+        return self.queryset
+
+
 class GetIpDetails(APIView):
     def get(self, request, format=None):
         req = self.request
@@ -5755,9 +5798,7 @@ class SecatorFindingUpdate(SecatorAPIBase):
                 from reNgine.secator.tag_routing import dispatch_secator_tag
 
                 def _validate_tag_context_update(sh_id, t_id):
-                    return self.validate_scan_context(
-                        sh_id, t_id, "tag", prefix=self.logger.PREFIX_FINDING
-                    )
+                    return self.validate_scan_context(sh_id, t_id, "tag", prefix=self.logger.PREFIX_FINDING)
 
                 result = dispatch_secator_tag(
                     finding_data,

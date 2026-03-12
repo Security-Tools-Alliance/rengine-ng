@@ -780,6 +780,7 @@ def detail_scan(request, id, slug):
         "unknown_count": unknown_count,
         "total_vulnerability_count": total_count,
         "total_vul_ignore_info_count": total_count_ignore_info,
+        "total_secret_count": scan.get_secret_count(),
         "vulnerability_list": vulns.order_by("-severity").all(),
         "scan_history_active": "active",
         "scan_engines": scan_engines,

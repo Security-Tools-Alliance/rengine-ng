@@ -183,9 +183,7 @@ class SubdomainRepository:
         except ObjectDoesNotExist:
             return None
 
-        existing = Subdomain.objects.filter(
-            name=normalized, scan_history=scan_history
-        ).order_by("id").first()
+        existing = Subdomain.objects.filter(name=normalized, scan_history=scan_history).order_by("id").first()
         if existing:
             return existing
 
@@ -202,9 +200,7 @@ class SubdomainRepository:
             )
             return subdomain
         except MultipleObjectsReturned:
-            return Subdomain.objects.filter(
-                name=normalized, scan_history=scan_history
-            ).order_by("id").first()
+            return Subdomain.objects.filter(name=normalized, scan_history=scan_history).order_by("id").first()
 
     def _map_extra_data_to_subdomain_fields(self, extra_data: Dict[str, Any], defaults: Dict[str, Any]) -> None:
         # Map common extra data fields to subdomain fields

@@ -9,7 +9,9 @@ from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):
-    help = "Run migrations, ensure scheduled scans cron, load Secator components, collect static files (single process)."
+    help = (
+        "Run migrations, ensure scheduled scans cron, load Secator components, collect static files (single process)."
+    )
 
     def _print_section(self, title: str) -> None:
         """Print a section header matching entrypoint.sh print_msg style."""
@@ -32,18 +34,14 @@ class Command(BaseCommand):
             call_command("ensure_scheduled_scans_cron")
         except CommandError:
             self.stdout.write(
-                self.style.WARNING(
-                    "ensure_scheduled_scans_cron failed or skipped (e.g. no cron in container)."
-                )
+                self.style.WARNING("ensure_scheduled_scans_cron failed or skipped (e.g. no cron in container).")
             )
 
         self._print_section("Loading Secator components (from Secator library)")
         try:
             call_command("load_secator_all")
         except CommandError:
-            self.stdout.write(
-                self.style.WARNING("load_secator_all failed or skipped.")
-            )
+            self.stdout.write(self.style.WARNING("load_secator_all failed or skipped."))
 
         self._print_section("Collect static files")
         call_command("collectstatic", "--noinput")

@@ -5,10 +5,10 @@ Unit tests for Secator tag routing (get_tag_handler, is_tag_ignored, dispatch_se
 from unittest.mock import MagicMock
 
 from reNgine.secator.tag_routing import (
+    TAG_IGNORED,
     dispatch_secator_tag,
     get_tag_handler,
     is_tag_ignored,
-    TAG_IGNORED,
 )
 from utils.test_base import BaseTestCase
 
@@ -32,6 +32,14 @@ class TestTagRoutingHandlers(BaseTestCase):
     def test_get_tag_handler_asn(self):
         """Handler for (info, asn) is registered."""
         handler = get_tag_handler("info", "asn")
+        self.assertIsNotNone(handler)
+
+    def test_get_tag_handler_secret_any_name(self):
+        """Handler for (secret, *) is registered (category-only)."""
+        handler = get_tag_handler("secret", "aws_access_key")
+        self.assertIsNotNone(handler)
+        self.assertTrue(callable(handler))
+        handler = get_tag_handler("secret", "generic_api_key")
         self.assertIsNotNone(handler)
 
     def test_get_tag_handler_unknown_returns_none(self):
@@ -107,3 +115,30 @@ class TestDispatchSecatorTag(BaseTestCase):
         self.assertEqual(result[0], "success")
         self.assertIsNotNone(result[1])
         self.assertIsNotNone(getattr(result[1], "id", None))
+
+    def test_dispatch_secret_success_returns_secret(self):
+        """Secret tag with valid context returns success and Secret instance."""
+        finding_data = {
+            "category": "secret",
+            "name": "aws_access_key",
+            "match": "file.go:10:5",
+            "value": "AKIAIOSFODNN7EXAMPLE",
+            "_context": {
+                "scan_history_id": self.data_generator.scan_history.id,
+                "target_id": self.data_generator.target.id,
+            },
+        }
+        result = dispatch_secator_tag(
+            finding_data,
+            self.data_generator.scan_history.id,
+            self.data_generator.target.id,
+            self._validate_ok,
+            is_update=False,
+        )
+        self.assertEqual(result[0], "success")
+        self.assertIsNotNone(result[1])
+        from startScan.models import Secret
+
+        self.assertIsInstance(result[1], Secret)
+        self.assertEqual(result[1].rule_name, "aws_access_key")
+        self.assertEqual(result[1].value, "AKIAIOSFODNN7EXAMPLE")

@@ -100,6 +100,7 @@ from .views import (
     SecatorRunnerUpdate,
     SecatorWorkerCheckIn,
     SecatorWorkerViewSet,
+    SecretViewSet,
     StartScan,
     StopActivity,
     StopScan,
@@ -131,6 +132,7 @@ router.register(r"listSubdomains", SubdomainsViewSet, basename="subdomains")
 router.register(r"listEndpoints", EndPointViewSet, basename="endpoints")
 router.register(r"listDirectories", DirectoryViewSet, basename="directories")
 router.register(r"listVulnerability", VulnerabilityViewSet, basename="vulnerabilities")
+router.register(r"listSecret", SecretViewSet, basename="secrets")
 router.register(r"listInterestingSubdomains", InterestingSubdomainViewSet, basename="interesting-subdomains")
 router.register(r"listInterestingEndpoints", InterestingEndpointViewSet, basename="interesting-endpoints")
 router.register(r"listSubdomainChanges", SubdomainChangesViewSet, basename="subdomain-changes")

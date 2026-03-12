@@ -79,6 +79,15 @@ DATATABLE_COLUMN_MAP_VULNERABILITY = {
     "15": "open_status",
 }
 
+DATATABLE_COLUMN_MAP_SECRET = {
+    "0": "id",
+    "1": "rule_name",
+    "2": "matched_at",
+    "3": "source",
+    "4": "value",
+    "5": "discovered_date",
+}
+
 DATATABLE_COLUMN_MAP_IPS = {
     "0": "address",
     "1": "alive",

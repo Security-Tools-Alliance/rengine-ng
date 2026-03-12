@@ -366,6 +366,31 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertIn("id", response.data)
         self.assertIn("tag_ignored", response.data["id"])
 
+    def test_create_tag_secret_success(self):
+        """Tag secret (gitleaks/trivy/trufflehog) is routed to Secret and returns 200 with secret id."""
+        finding_data = {
+            "_type": "tag",
+            "category": "secret",
+            "name": "aws_access_key",
+            "match": "repo/.env:5:10",
+            "value": "AKIAIOSFODNN7EXAMPLE",
+            "_context": {
+                "scan_history_id": self.data_generator.scan_history.id,
+                "target_id": self.data_generator.target.id,
+            },
+        }
+        response = self.client.post(self.url, finding_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertIn("id", response.data)
+        from startScan.models import Secret
+
+        secret = Secret.objects.filter(id=int(response.data["id"])).first()
+        self.assertIsNotNone(secret)
+        self.assertEqual(secret.rule_name, "aws_access_key")
+        self.assertEqual(secret.value, "AKIAIOSFODNN7EXAMPLE")
+        self.assertEqual(secret.matched_at, "repo/.env:5:10")
+
 
 class TestSecatorFindingUpdate(BaseTestCase):
     """Test cases for SecatorFindingUpdate endpoint."""

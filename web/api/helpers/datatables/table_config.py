@@ -43,6 +43,9 @@ TABLE_ID_ORGANIZATION_LIST = "organization_list"
 # No filter context. Template: startScan/templates/startScan/detail_scan.html (vulnerabilities tab).
 TABLE_ID_VULNERABILITIES = "vulnerabilities"
 
+# No filter context. Template: startScan/templates/startScan/detail_scan.html (secrets tab).
+TABLE_ID_SECRETS = "secrets"
+
 # No filter context. Template: startScan/templates/startScan/schedule_scan_list.html.
 TABLE_ID_SCHEDULED_SCANS = "scheduled_scans"
 
@@ -102,6 +105,12 @@ DATATABLE_TABLE_CONFIGS: dict[str, dict[str, Any]] = {
         "filter_context": None,
         "row_group_cookie_key": ROW_GROUP_COOKIE_VULNERABILITIES,
         "row_group_selector": ROW_GROUP_SELECTOR_VULN,
+    },
+    TABLE_ID_SECRETS: {
+        "table_id": TABLE_ID_SECRETS,
+        "filter_context": None,
+        "row_group_cookie_key": None,
+        "row_group_selector": None,
     },
     TABLE_ID_SCHEDULED_SCANS: {
         "table_id": TABLE_ID_SCHEDULED_SCANS,

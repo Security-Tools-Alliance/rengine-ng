@@ -111,6 +111,16 @@ class ScanHistory(models.Model):
             return self.vuln_count
         return Vulnerability.objects.filter(scan_history__id=self.id).count()
 
+    def get_secret_count(self):
+        if hasattr(self, "secret_count"):
+            return self.secret_count
+        return Secret.objects.filter(scan_history__id=self.id).count()
+
+    def get_exploit_count(self):
+        if hasattr(self, "exploit_count"):
+            return self.exploit_count
+        return Exploit.objects.filter(scan_history__id=self.id).count()
+
     def get_domain_count(self):
         if hasattr(self, "domain_count"):
             return self.domain_count
@@ -1738,6 +1748,27 @@ class Vulnerability(models.Model):
             models.Index(fields=["scan_history_id", "name"], name="ss_vuln_scan_name_idx"),
             models.Index(fields=["domain_id", "name"], name="ss_vuln_target_name_idx"),
             models.Index(fields=["subdomain_id", "severity"], name="ss_vuln_subdomain_severity_idx"),
+        ]
+
+
+class Secret(models.Model):
+    """Secret finding from Secator tasks (gitleaks, trufflehog, trivy). Stored in plain text for reconnaissance context."""
+
+    id = models.AutoField(primary_key=True)
+    scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE)
+    rule_name = models.CharField(max_length=500)
+    matched_at = models.CharField(max_length=2000)
+    source = models.CharField(max_length=100, null=True, blank=True)
+    value = models.TextField()
+    extra_data = models.JSONField(null=True, blank=True)
+    discovered_date = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.rule_name} @ {self.matched_at}"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["scan_history_id"], name="ss_secret_scan_idx"),
         ]
 
 

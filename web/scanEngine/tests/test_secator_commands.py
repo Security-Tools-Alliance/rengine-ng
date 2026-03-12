@@ -204,9 +204,7 @@ input_types:
 
     def test_entrypoint_setup_calls_all_commands(self):
         """Test entrypoint_setup invokes makemigrations, migrate, cron, load_secator_all, collectstatic."""
-        with patch(
-            "scanEngine.management.commands.entrypoint_setup.call_command"
-        ) as mock_call:
+        with patch("scanEngine.management.commands.entrypoint_setup.call_command") as mock_call:
             out = StringIO()
             call_command("entrypoint_setup", stdout=out)
             self.assertGreaterEqual(mock_call.call_count, 5)
@@ -220,9 +218,8 @@ input_types:
 
     def test_entrypoint_setup_continues_when_optional_commands_fail(self):
         """Test entrypoint_setup still runs collectstatic when cron or load_secator_all raise."""
-        with patch(
-            "scanEngine.management.commands.entrypoint_setup.call_command"
-        ) as mock_call:
+        with patch("scanEngine.management.commands.entrypoint_setup.call_command") as mock_call:
+
             def side_effect(cmd, *args, **kwargs):
                 if cmd == "ensure_scheduled_scans_cron":
                     raise CommandError("cron not available")

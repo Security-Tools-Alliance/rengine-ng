@@ -97,6 +97,11 @@ Scan Findings
 					<a class="nav-link" id="pills-vulnerabilities-tab" data-bs-toggle="tab" aria-expanded="false" href="#vulnerabilities-tab">Vulnerabilities</a>
 				</li>
 				{% endif %}
+				{% if total_secret_count > 0 %}
+				<li class="nav-item">
+					<a class="nav-link" id="pills-secrets-tab" data-bs-toggle="tab" aria-expanded="false" href="#secrets-tab">Secret</a>
+				</li>
+				{% endif %}
 				{% if 'osint' in history.tasks %}
 				<li class="nav-item">
 					<a class="nav-link" id="pills-osint-tab" data-bs-toggle="tab" aria-expanded="false" href="#osint-tab">OSINT</a>
@@ -812,6 +817,13 @@ Scan Findings
 	</div>
 	{% endif %}
 
+	{# Secrets Section #}
+	{% if total_secret_count > 0 %}
+	<div class="tab-pane" id="secrets-tab">
+		{% include 'base/_items/secret_tab_content.html' %}
+	</div>
+	{% endif %}
+
 	{# OSINT Section #}
 	{% if 'osint' in history.tasks %}
 	<div class="tab-pane" id="osint-tab">
@@ -1116,6 +1128,7 @@ window.DETAIL_SCAN_API_LIST_SUBSCANS = "{% url 'api:listSubScans' %}";
 
 <script type="text/javascript">
 const vuln_datatable_columns = window.RENGINE_VULN_DATATABLE_COLUMNS || [];
+const secret_datatable_columns = window.RENGINE_SECRET_DATATABLE_COLUMNS || [];
 const subdomain_datatable_columns = (window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS || []).map(function(col) {
 	if (col && col.name === 'vuln_count') return Object.assign({}, col, { visible: false });
 	return col;
@@ -1442,6 +1455,35 @@ $(document).ready(function() {
 			window.localStorage.setItem('vuln_status_checkbox', $(this).is(':checked'));
 		});
 
+		});
+	{% endif %}
+
+	{% if total_secret_count > 0 %}
+		$("#pills-secrets-tab").on("click", function() {
+			if ($.fn.DataTable && $.fn.DataTable.isDataTable("#secret_results")) {
+				return;
+			}
+			var secret_ajax_url = "{% url 'api:secrets-list' %}?scan_history={{ scan_history_id }}&format=datatables";
+			var colDefs = window.RengineDatatableColumnDefs || {};
+			var secret_table = window.initServerSideDataTable("#secret_results", {
+				destroy: true,
+				ajax: { url: secret_ajax_url },
+				scrollY: "60vh",
+				order: window.getRengineDatatableOrderFromNames(secret_datatable_columns, [["discovered_date", "desc"]]),
+				columns: secret_datatable_columns,
+				columnDefs: [
+					{ orderable: false, targets: "action:name" },
+					colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("rule_name:name") : { targets: "rule_name:name" },
+					colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("matched_at:name") : { targets: "matched_at:name" },
+					colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("source:name") : { targets: "source:name" },
+					colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("value:name") : { targets: "value:name" },
+					colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("discovered_date:name") : { targets: "discovered_date:name" },
+					{ targets: "action:name", render: function() { return ""; } },
+				],
+			});
+			$("#reload_secrets_table_btn").off("click").on("click", function() {
+				if (secret_table && secret_table.ajax) secret_table.ajax.reload();
+			});
 		});
 	{% endif %}
 
