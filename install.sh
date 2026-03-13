@@ -368,27 +368,6 @@ usageFunction()
   exit 1
 }
 
-# Append to .env any KEY=value line from .env-dist whose KEY is not already present in .env.
-# Preserves existing user values; only adds missing keys (e.g. PGBOUNCER_*, new options).
-# Exception: POSTGRES_HOST and POSTGRES_PORT are always taken from .env-dist so the app
-# uses the connection target defined there (e.g. pgbouncer:6432 when using PgBouncer).
-merge_env_from_dist() {
-  [ ! -f .env-dist ] && return 0
-  if [ -f .env ]; then
-    sed -i '/^POSTGRES_HOST=/d' .env
-    sed -i '/^POSTGRES_PORT=/d' .env
-  fi
-  local line key
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-      key="${BASH_REMATCH[1]}"
-      if ! grep -q "^${key}=" .env 2>/dev/null; then
-        echo "$line" >> .env
-      fi
-    fi
-  done < .env-dist
-}
-
 # Main installation process
 main() {
   cat web/art/reNgine.txt
@@ -430,7 +409,7 @@ main() {
     cp .env-dist .env
     log "Created .env from .env-dist" $COLOR_GREEN
   elif [ -f .env-dist ]; then
-    merge_env_from_dist
+    merge_env_from_dist_at_root "$(pwd)"
   fi
 
   log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN

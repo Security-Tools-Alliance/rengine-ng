@@ -33,6 +33,30 @@ require_commands() {
   done
 }
 
+# Append to .env any KEY=value line from .env-dist whose KEY is not already present in .env.
+# root_dir: repository root containing .env and .env-dist.
+# Preserves existing user values; only adds missing keys. Exception: POSTGRES_HOST and POSTGRES_PORT
+# are always taken from .env-dist (lines removed from .env then re-added from .env-dist).
+merge_env_from_dist_at_root() {
+  local root_dir="${1:?}"
+  local env_dist="${root_dir}/.env-dist"
+  local env_file="${root_dir}/.env"
+  [[ ! -f "$env_dist" ]] && return 0
+  if [[ -f "$env_file" ]]; then
+    sed -i '/^POSTGRES_HOST=/d' "$env_file"
+    sed -i '/^POSTGRES_PORT=/d' "$env_file"
+  fi
+  local line key
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      if ! grep -q "^${key}=" "$env_file" 2>/dev/null; then
+        echo "$line" >> "$env_file"
+      fi
+    fi
+  done < "$env_dist"
+}
+
 # Default web container name for reNgine-ng (used by install.sh and update.sh).
 RENGINE_WEB_CONTAINER="rengine-web-1"
 

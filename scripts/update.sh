@@ -223,6 +223,10 @@ run_post_update_flow() {
   fi
   log_to_file "make up / build_up completed"
 
+  log "Merging .env with .env-dist (add missing keys, keep POSTGRES_HOST/POSTGRES_PORT from dist)..." $COLOR_CYAN
+  merge_env_from_dist_at_root "$REPO_ROOT"
+  log_to_file "merge_env_from_dist_at_root completed"
+
   log "Waiting for web container to be ready..." $COLOR_CYAN
   for i in $(seq 1 30); do
     if docker exec "$RENGINE_WEB_CONTAINER" echo "ready" >/dev/null 2>&1; then
@@ -238,34 +242,42 @@ run_post_update_flow() {
   done
 
   log "Checking Secator API key..." $COLOR_CYAN
-  # Do not use --recreate; only create key when missing. User may regenerate manually with --recreate.
-  if has_secator_api_key_in_db; then
-    log "Secator API key already exists" $COLOR_GREEN
+  # Do not use --recreate in scripts; user may regenerate manually with --recreate.
+  # If .env already has a non-empty SECATOR_ADDONS_API_KEY, skip generation to avoid double invocation.
+  if grep -q '^SECATOR_ADDONS_API_KEY=.\+' "$REPO_ROOT/.env" 2>/dev/null; then
+    log "Secator API key already configured in .env" $COLOR_GREEN
   else
     log "Generating Secator API key..." $COLOR_CYAN
-    SECATOR_KEY_ERR=$(mktemp)
+    SECATOR_KEY_ERR=$(mktemp) || { log_to_file "ERROR: could not create temp file for Secator key stderr"; return 1; }
     SECATOR_API_KEY=$(get_secator_api_key_from_container 2>"$SECATOR_KEY_ERR")
-    if [[ -z "$SECATOR_API_KEY" ]]; then
-      log "Secator API key could not be generated:" $COLOR_RED
-      if [[ -s "$SECATOR_KEY_ERR" ]]; then
-        while IFS= read -r line; do log "$line" $COLOR_RED; done < "$SECATOR_KEY_ERR"
-        log_to_file "ERROR: generate_secator_api_key failed: $(cat "$SECATOR_KEY_ERR")"
+    if [[ -n "$SECATOR_API_KEY" ]]; then
+      log "Secator API key generated" $COLOR_GREEN
+      if write_secator_env_block "$REPO_ROOT/.env" "$SECATOR_API_KEY"; then
+        log "Secator API configuration written to .env" $COLOR_GREEN
+        log "Restarting web service (cold) to load new API key..." $COLOR_CYAN
+        (cd "$REPO_ROOT" && make restart web COLD=1) >> "$LOG_FILE" 2>&1 || log "Warning: make restart web COLD=1 failed" $COLOR_YELLOW
       else
-        log "Empty output from generate_secator_api_key --raw-key. Run the command manually for details." $COLOR_RED
-        log_to_file "ERROR: could not obtain Secator API key from generate_secator_api_key --raw-key"
+        log "Warning: Could not update .env file. Manually add Secator API configuration." $COLOR_YELLOW
       fi
-      rm -f "$SECATOR_KEY_ERR"
-      return 1
+    else
+      if [[ -s "$SECATOR_KEY_ERR" ]] && grep -q "already exists" "$SECATOR_KEY_ERR" 2>/dev/null; then
+        log "Secator API key already exists in database but could not be retrieved; .env may be out of sync." $COLOR_YELLOW
+        log "To fix: make shell, then python3 manage.py generate_secator_api_key --recreate --show-key, and add SECATOR_ADDONS_API_KEY to .env" $COLOR_YELLOW
+        log_to_file "WARNING: Secator key exists in DB but not in .env; user should sync manually"
+      else
+        log "Secator API key could not be generated:" $COLOR_RED
+        if [[ -s "$SECATOR_KEY_ERR" ]]; then
+          while IFS= read -r line; do log "$line" $COLOR_RED; done < "$SECATOR_KEY_ERR"
+          log_to_file "ERROR: generate_secator_api_key failed: $(cat "$SECATOR_KEY_ERR")"
+        else
+          log "Empty output from generate_secator_api_key --raw-key. Run the command manually for details." $COLOR_RED
+          log_to_file "ERROR: could not obtain Secator API key from generate_secator_api_key --raw-key"
+        fi
+        rm -f "$SECATOR_KEY_ERR"
+        return 1
+      fi
     fi
     rm -f "$SECATOR_KEY_ERR"
-    log "Secator API key generated" $COLOR_GREEN
-    if write_secator_env_block "$REPO_ROOT/.env" "$SECATOR_API_KEY"; then
-      log "Secator API configuration written to .env" $COLOR_GREEN
-      log "Restarting web service (cold) to load new API key..." $COLOR_CYAN
-      (cd "$REPO_ROOT" && make restart web COLD=1) >> "$LOG_FILE" 2>&1 || log "Warning: make restart web COLD=1 failed" $COLOR_YELLOW
-    else
-      log "Warning: Could not update .env file. Manually add Secator API configuration." $COLOR_YELLOW
-    fi
   fi
   log_to_file "Secator API key check completed"
 
