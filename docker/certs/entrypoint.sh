@@ -7,10 +7,10 @@ cert() {
   echo "Creating new certificate for ${COMMON_NAME}"
   
   # Generate a new RSA key pair if does not exist
-  if ! test -f ${CERT}_rsa.key; then
+  if ! test -f ${FILENAME}_rsa.key; then
     openssl genrsa -out ${FILENAME}.key 4096
   else
-    mv ${CERT}_rsa.key ${FILENAME}.key
+    mv ${FILENAME}_rsa.key ${FILENAME}.key
   fi
 
   # Request a new certificate for the generated key pair
@@ -43,13 +43,17 @@ cd /certs
 if (! test -f ca.key) || (! test -f ca.crt); then
   echo "Creating new CA..."
   openssl genrsa -out ca.key 4096
+  # Unique CA subject per instance so (issuer, serial) does not collide across instances
+  CA_CN="${AUTHORITY_NAME}-${DOMAIN_NAME}"
   openssl req -new -x509 -sha256 \
    -passin pass:${AUTHORITY_PASSWORD} \
    -passout pass:${AUTHORITY_PASSWORD} \
    -extensions v3_ca -key ca.key -out ca.crt -days 3650 \
-   -subj "/C=${COUNTRY_CODE}/O=${COMPANY}/CN=${AUTHORITY_NAME}"
+   -subj "/C=${COUNTRY_CODE}/O=${COMPANY}/CN=${CA_CN}"
 
-  echo "01" > ca.srl
+  # Random initial serial so each instance gets a distinct (issuer, serial) pair
+  serial=$(od -A n -N 4 -t u4 /dev/urandom 2>/dev/null | tr -d ' ')
+  echo "${serial:-1}" > ca.srl
 fi
 
 # Create a new certificate for the DOMAIN_NAME
