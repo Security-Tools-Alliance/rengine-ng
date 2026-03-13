@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0116_vulnerability_ip_address_port'),
+        ("startScan", "0116_vulnerability_ip_address_port"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='ipaddress',
-            name='extra_data',
-            field=models.JSONField(blank=True, help_text='Optional data e.g. ASN from getasn', null=True),
+            model_name="ipaddress",
+            name="extra_data",
+            field=models.JSONField(blank=True, help_text="Optional data e.g. ASN from getasn", null=True),
         ),
     ]

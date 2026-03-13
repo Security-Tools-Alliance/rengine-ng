@@ -202,8 +202,7 @@ def get_interesting_endpoints(scan_history=None, target=None, target_id=None):
     provided = [scan_history is not None, target_id is not None, target is not None]
     if sum(provided) == 0:
         raise ValueError(
-            "get_interesting_endpoints requires exactly one of "
-            "scan_history, target_id, or target to be provided"
+            "get_interesting_endpoints requires exactly one of scan_history, target_id, or target to be provided"
         )
     if sum(provided) > 1:
         raise ValueError(
