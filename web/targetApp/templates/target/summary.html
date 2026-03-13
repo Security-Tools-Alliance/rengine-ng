@@ -44,6 +44,9 @@ Target Summary
 				<li class="nav-item">
 					<a class="nav-link" id="pills-endpoints-tab" data-bs-toggle="tab" aria-expanded="false" href="#endpoints-tab">URLs</a>
 				</li>
+				<li class="nav-item interesting-tab-show" style="display: none">
+					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" href="#interesting-tab">Interesting Recon</a>
+				</li>
 				<li class="nav-item">
 					<a class="nav-link" id="pills-vulnerabilities-tab" data-bs-toggle="tab" aria-expanded="false" href="#vulnerabilities-tab">Vulnerabilities</a>
 				</li>
@@ -430,6 +433,47 @@ Target Summary
 	{% include 'base/_items/endpoint_tab_content.html' with target_summary=True%}
 </div>
 
+<div class="tab-pane interesting-tab-show" style="display: none" id="interesting-tab">
+	<div class="row">
+		<div class="col-xl-12">
+			<div class="card" id="interesting_subdomain_div">
+				<div class="card-body">
+					<h4 class="header-title mb-0"><span id="interesting_subdomain_count_badge"><span class="spinner-border spinner-border-sm me-1"></span></span> Interesting Subdomains</h4>
+					<table id="interesting_subdomains" class="table dt-responsive w-100">
+						<thead>
+							<tr>
+								<th>Subdomain</th>
+								<th>Page Title</th>
+								<th>HTTP Status</th>
+								<th>Content Length</th>
+								<th>HTTP URL</th>
+								<th>Tech Stack</th>
+							</tr>
+						</thead>
+					</table>
+				</div>
+			</div>
+		</div>
+		<div class="col-xl-12" id="interesting_endpoint_div">
+			<div class="card">
+				<div class="card-body">
+					<h4 class="header-title mb-0"><span id="interesting_endpoint_count_badge"><span class="spinner-border spinner-border-sm me-1"></span></span> Interesting Endpoints</h4>
+					<table id="interesting_endpoints" class="table dt-responsive w-100">
+						<thead>
+							<tr>
+								<th>URL</th>
+								<th>Title</th>
+								<th>HTTP Status</th>
+								<th>Content Length</th>
+							</tr>
+						</thead>
+					</table>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
 <div class="tab-pane" id="vulnerabilities-tab">
 	{% include 'base/_items/vulnerability_tab_content.html' %}
 </div>
@@ -497,6 +541,13 @@ $(document).ready(function(){
 	const ps1 = new PerfectScrollbar(document.querySelector('.endpoint-search'));
 	const ps2 = new PerfectScrollbar(document.querySelector('.vulnerability-search'));
 	if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('[data-toggle="tooltip"]'));
+
+	if (typeof get_interesting_subdomains === 'function') {
+		get_interesting_subdomains('{% url "api:interesting-subdomains-list" %}', '{{ current_project.slug|escapejs }}', {{ target.id }}, null);
+	}
+	if (typeof get_interesting_endpoints === 'function') {
+		get_interesting_endpoints('{% url "api:interesting-endpoints-list" %}', '{{ current_project.slug|escapejs }}', {{ target.id }}, null);
+	}
 	// HTTP STATUS Breakdown chart
 	// depending on http_status_breakdown, generate color
 	var colors = [

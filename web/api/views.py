@@ -3669,7 +3669,7 @@ class SubdomainsViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
         return Subdomain.objects.none()
 
 
-class SubdomainChangesViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
+class SubdomainChangesViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.ModelViewSet):
     """
     This viewset will return the Subdomain changes
     To get the new subdomains, we will look for ScanHistory with
@@ -3767,7 +3767,7 @@ class SubdomainChangesViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
         return queryset
 
 
-class EndPointChangesViewSet(viewsets.ModelViewSet):
+class EndPointChangesViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.ModelViewSet):
     """
     This viewset will return the EndPoint changes
     """
@@ -3776,6 +3776,7 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
     serializer_class = EndPointChangesSerializer
     ordering = ("http_url",)
     filter_backends = []
+    datatable_default_ordering = None
 
     datatable_column_map = DATATABLE_COLUMN_MAP_ENDPOINT_CHANGES
 
@@ -3859,7 +3860,7 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
             )
 
 
-class InterestingSubdomainViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
+class InterestingSubdomainViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.ModelViewSet):
     queryset = Subdomain.objects.none()
     serializer_class = SubdomainSerializer
     ordering = ("name",)
@@ -3879,7 +3880,7 @@ class InterestingSubdomainViewSet(DatatablePaginationMixin, viewsets.ModelViewSe
         if scan_id:
             queryset = get_interesting_subdomains(scan_history=scan_id)
         elif target_id:
-            queryset = get_interesting_subdomains(domain_id=target_id)
+            queryset = get_interesting_subdomains(target_id=target_id)
         else:
             queryset = get_interesting_subdomains()
 
@@ -3925,7 +3926,7 @@ class InterestingSubdomainViewSet(DatatablePaginationMixin, viewsets.ModelViewSe
         return apply_datatables_order(qs, self.request, self.datatable_column_map, default_order="content_length")
 
 
-class InterestingEndpointViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
+class InterestingEndpointViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.ModelViewSet):
     queryset = EndPoint.objects.none()
     serializer_class = EndpointSerializer
     ordering = ("http_url",)
@@ -3956,9 +3957,9 @@ class InterestingEndpointViewSet(DatatablePaginationMixin, viewsets.ModelViewSet
         if scan_id:
             queryset = get_interesting_endpoints(scan_history=scan_id)
         elif target_id:
-            queryset = get_interesting_endpoints(target=target_id)
+            queryset = get_interesting_endpoints(target_id=target_id)
         else:
-            queryset = get_interesting_endpoints()
+            queryset = EndPoint.objects.none()
 
         # FKs: select_related. M2M: prefetch_related (techs, endpoint_subscan_ids).
         if hasattr(queryset, "select_related"):

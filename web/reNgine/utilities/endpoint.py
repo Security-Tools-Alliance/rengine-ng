@@ -180,16 +180,37 @@ def get_http_urls(
     return endpoints
 
 
-def get_interesting_endpoints(scan_history=None, target=None):
+def get_interesting_endpoints(scan_history=None, target=None, target_id=None):
     """Get EndPoint objects matching InterestingLookupModel conditions.
 
+    Exactly one of ``scan_history``, ``target_id``, or ``target`` must be
+    provided. Providing more than one is considered a programming error and
+    will raise a ``ValueError``.
+
     Args:
-        scan_history (startScan.models.ScanHistory): Scan history.
-        target (str): Domain id.
+        scan_history: Scan history id.
+        target_id: Target id (filter by target across all scans).
+        target: Domain id (legacy; filter by domain).
 
     Returns:
-        django.db.Q: QuerySet object.
+        QuerySet of matching EndPoint objects.
+
+    Raises:
+        ValueError: If zero or more than one of ``scan_history``,
+            ``target_id``, or ``target`` are provided.
     """
+    provided = [scan_history is not None, target_id is not None, target is not None]
+    if sum(provided) == 0:
+        raise ValueError(
+            "get_interesting_endpoints requires exactly one of "
+            "scan_history, target_id, or target to be provided"
+        )
+    if sum(provided) > 1:
+        raise ValueError(
+            "get_interesting_endpoints received multiple filters; only one of "
+            "scan_history, target_id, or target may be provided"
+        )
+
     from scanEngine.models import InterestingLookupModel
 
     lookup_keywords = get_lookup_keywords()
@@ -200,12 +221,13 @@ def get_interesting_endpoints(scan_history=None, target=None):
     title_lookup = lookup_obj.title_lookup
     condition_200_http_lookup = lookup_obj.condition_200_http_lookup
 
-    # Filter on domain_id, scan_history_id
     query = EndPoint.objects
-    if target:
-        query = query.filter(domain__id=target)
-    elif scan_history:
+    if scan_history is not None:
         query = query.filter(scan_history__id=scan_history)
+    elif target_id is not None:
+        query = query.filter(scan_history__target_id=target_id)
+    else:
+        query = query.filter(domain__id=target)
 
     # Filter on HTTP status code 200
     if condition_200_http_lookup:

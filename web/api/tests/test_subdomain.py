@@ -223,7 +223,7 @@ class TestInterestingSubdomainViewSet(BaseTestCase):
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.subdomain.name)
 
     def test_list_interesting_subdomains_by_domain(self):
-        """Test listing interesting subdomains by target (target_id)."""
+        """Test listing interesting subdomains by target (target_id) and scan_id."""
         api_url = reverse("api:interesting-subdomains-list")
         response = self.client.get(
             api_url,
@@ -236,3 +236,41 @@ class TestInterestingSubdomainViewSet(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.subdomain.name)
+
+    def test_list_interesting_subdomains_by_target_id_only(self):
+        """Test listing interesting subdomains filtered by target_id only (target summary context)."""
+        api_url = reverse("api:interesting-subdomains-list")
+        response = self.client.get(
+            api_url,
+            {
+                "project": self.data_generator.project.slug,
+                "target_id": self.data_generator.target.id,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("results", response.data)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["name"], self.data_generator.subdomain.name)
+
+    def test_list_interesting_subdomains_datatables_format(self):
+        """Test that list with start/length returns DataTables server-side format."""
+        api_url = reverse("api:interesting-subdomains-list")
+        response = self.client.get(
+            api_url,
+            {
+                "project": self.data_generator.project.slug,
+                "scan_id": self.data_generator.scan_history.id,
+                "start": "0",
+                "length": "10",
+                "draw": "1",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("recordsTotal", response.data)
+        self.assertIn("recordsFiltered", response.data)
+        self.assertIn("data", response.data)
+        self.assertIn("draw", response.data)
+        self.assertIsInstance(response.data["data"], list)
+        self.assertGreaterEqual(response.data["recordsTotal"], 1)
+        self.assertGreaterEqual(len(response.data["data"]), 1)
+        self.assertEqual(response.data["data"][0]["name"], self.data_generator.subdomain.name)
