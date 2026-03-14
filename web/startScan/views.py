@@ -85,7 +85,7 @@ from startScan.secator.ajax import render_secator_selection_json
 from startScan.secator.form import build_start_secator_scan_kwargs
 from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.constants import RENGINE_TARGET_TYPES_FOR_JS
-from targetApp.models import Organization, Target
+from targetApp.models import Organization, Scope, Target
 from targetApp.services.scan_param_definitions import PARAM_KEYS as SCAN_PARAM_KEYS
 from targetApp.services.scan_params_context import build_scan_params_form_context
 from targetApp.services.scope_params import get_scope_for_target, get_workers_for_scan_dropdown
@@ -1354,62 +1354,163 @@ def visualise(request, id):
     return render(request, "startScan/visualise.html", context)
 
 
+QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD = 15
+
+
+def _run_quick_scan_for_targets(
+    request,
+    target_list,
+    entity_name: str,
+    redirect_view_name: str,
+    redirect_kwargs: dict,
+    form_redirect_view_name: str,
+    form_redirect_kwargs: dict,
+    *,
+    scope=None,
+):
+    """
+    Run quick scan for each target in target_list. Used by start_organization_scan and start_scope_scan.
+
+    On full or partial success (at least one scan started), redirects to redirect_view_name.
+    When all scans fail (scan_count == 0 and failed_count > 0), shows an error and redirects back
+    to the form (form_redirect_view_name). Raises ValueError if build_start_secator_scan_kwargs fails.
+    """
+    secator_kwargs = build_start_secator_scan_kwargs(request.POST, scope=scope)
+    scan_count = 0
+    failed_count = 0
+    for target in target_list:
+        sc, fc = _run_secator_scan_or_per_task(request, target.id, secator_kwargs)
+        scan_count += sc
+        failed_count += fc
+
+    if scan_count == 0 and failed_count > 0:
+        messages.error(
+            request,
+            "No quick scans could be started for the selected targets. "
+            "Please review your selection and scan configuration, then try again.",
+        )
+        return redirect(form_redirect_view_name, **form_redirect_kwargs)
+
+    if scan_count > 0:
+        messages.add_message(
+            request, messages.INFO, f"Started {scan_count} scans for {entity_name}"
+        )
+    if failed_count > 0:
+        messages.add_message(
+            request,
+            messages.WARNING,
+            f"Started {scan_count} scan(s), but {failed_count} scan(s) failed to start.",
+        )
+    return HttpResponseRedirect(reverse(redirect_view_name, kwargs=redirect_kwargs))
+
+
+def _quick_scan_form_context(target_list, scan_type: str, *, scope=None, organization=None):
+    """
+    Build common context for quick scan form (organization or scope). Returns dict with
+    target_list, target_ids, scan_type, secator_scans, secator_workers, and build_scan_params_form_context keys.
+    """
+    target_list = list(target_list)
+    target_ids = ",".join(str(t.id) for t in target_list)
+    form_ctx = build_scan_params_form_context(scope=scope, organization=organization)
+    secator_scans = SecatorScan.objects.filter(scan_type=scan_type, is_active=True)
+    secator_workers = get_workers_for_scan_dropdown(scope=scope)
+    return {
+        "target_list": target_list,
+        "target_ids": target_ids,
+        "scan_type": scan_type,
+        "secator_scans": secator_scans,
+        "secator_workers": secator_workers,
+        **form_ctx,
+    }
+
+
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
 def start_organization_scan(request, id, slug):
     organization = get_object_or_404(Organization, id=id)
 
-    # Handle AJAX request for dynamic loading
     if request.GET.get("ajax") == "true":
         return render_secator_selection_json(request)
 
     if request.method == "POST":
-        # Collect parameters (same logic as start_scan_ui)
+        target_list = list(organization.get_targets())
+        if not target_list:
+            messages.warning(request, "No targets to scan for this organization.")
+            return redirect("start_organization_scan", slug=slug, id=id)
         try:
-            secator_kwargs = build_start_secator_scan_kwargs(request.POST)
+            return _run_quick_scan_for_targets(
+                request,
+                target_list,
+                f"organization {organization.name}",
+                "list_organization",
+                {"slug": slug},
+                "start_organization_scan",
+                {"slug": slug, "id": id},
+            )
         except ValueError as exc:
             messages.error(request, str(exc))
             return redirect("start_organization_scan", slug=slug, id=id)
 
-        domain_list = organization.get_domains()
-        scan_count = 0
-        failed_count = 0
-        for domain in domain_list:
-            sc, fc = _run_secator_scan_or_per_task(request, domain.id, secator_kwargs)
-            scan_count += sc
-            failed_count += fc
-
-        if scan_count > 0:
-            messages.add_message(
-                request, messages.INFO, f"Started {scan_count} scans for organization {organization.name}"
-            )
-        if failed_count > 0:
-            messages.add_message(request, messages.WARNING, f"Failed to start {failed_count} scans")
-
-        return HttpResponseRedirect(reverse("list_organization", kwargs={"slug": slug}))
-
-    # GET request
     scan_type = request.GET.get("scan_type", "internet")
-
-    # No longer use old EngineType, only for backward compatibility
-    # New scans use only Secator
-    secator_scans = SecatorScan.objects.filter(scan_type=scan_type, is_active=True)
-
-    # Optimize domain list query
-    domain_list = organization.get_domains().select_related()
-
-    form_ctx = build_scan_params_form_context(organization=organization)
-    context = {
-        "organization_data_active": "true",
-        "list_organization_li": "active",
-        "organization": organization,
-        "domain_list": domain_list,
-        "domain_ids": ",".join(str(d.id) for d in domain_list),
-        "scan_type": scan_type,
-        "secator_scans": secator_scans,
-    }
-    context.update(form_ctx)
-    context["secator_workers"] = get_workers_for_scan_dropdown()
+    target_list = list(organization.get_targets())
+    context = _quick_scan_form_context(target_list, scan_type, organization=organization)
+    context["organization_data_active"] = "true"
+    context["list_organization_li"] = "active"
+    context["organization"] = organization
+    context["quick_scan_entity_label"] = "organization"
+    context["quick_scan_entity_name"] = organization.name
+    context["quick_scan_id_prefix"] = "start_org_scan"
+    context["quick_scan_scan_params_level"] = "organization"
+    context["quick_scan_scan_params_organization_id"] = organization.id
+    context["quick_scan_scan_params_scope_id"] = ""
+    context["quick_scan_target_collapse_threshold"] = QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD
+    context["quick_scan_extra_target_count"] = max(
+        0, len(target_list) - QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD
+    )
     return render(request, "organization/start_scan.html", context)
+
+
+@has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
+def start_scope_scan(request, id, slug):
+    scope = get_object_or_404(Scope, id=id, organization__project__slug=slug)
+
+    if request.GET.get("ajax") == "true":
+        return render_secator_selection_json(request)
+
+    if request.method == "POST":
+        target_list = list(scope.targets.all())
+        if not target_list:
+            messages.warning(request, "No targets to scan for this scope.")
+            return redirect("start_scope_scan", slug=slug, id=id)
+        try:
+            return _run_quick_scan_for_targets(
+                request,
+                target_list,
+                f"scope {scope.name}",
+                "list_scope",
+                {"slug": slug},
+                "start_scope_scan",
+                {"slug": slug, "id": id},
+                scope=scope,
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect("start_scope_scan", slug=slug, id=id)
+
+    scan_type = request.GET.get("scan_type", "internet")
+    target_list = list(scope.targets.all())
+    context = _quick_scan_form_context(target_list, scan_type, scope=scope)
+    context["scope"] = scope
+    context["quick_scan_entity_label"] = "scope"
+    context["quick_scan_entity_name"] = scope.name
+    context["quick_scan_id_prefix"] = "start_scope_scan"
+    context["quick_scan_scan_params_level"] = "scope"
+    context["quick_scan_scan_params_organization_id"] = scope.organization_id
+    context["quick_scan_scan_params_scope_id"] = scope.id
+    context["quick_scan_target_collapse_threshold"] = QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD
+    context["quick_scan_extra_target_count"] = max(
+        0, len(target_list) - QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD
+    )
+    return render(request, "scope/start_scan.html", context)
 
 
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)

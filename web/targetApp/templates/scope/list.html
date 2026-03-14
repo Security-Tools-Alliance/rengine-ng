@@ -92,8 +92,10 @@ Scopes
 window.SCOPE_LIST_DATATABLE_URL = "{% url 'api:scopes-datatable-list' %}";
 window.SCOPE_LIST_PROJECT_SLUG = "{{ current_project.slug|escapejs }}";
 window.SCOPE_LIST_SCOPE_DETAIL_BASE = "{% url 'scope_detail' current_project.slug 0 %}".replace('/0', '/');
+window.SCOPE_LIST_START_SCAN_BASE = "{% url 'start_scope_scan' current_project.slug 0 %}".replace('/0', '/');
 window.SCOPE_LIST_UPDATE_SCOPE_BASE = "{% url 'update_scope' current_project.slug 0 %}".replace('/0', '/');
 window.SCOPE_LIST_DELETE_SCOPE_BASE = "{% url 'delete_scope' current_project.slug 0 %}".replace('/0', '/');
+window.SCOPE_LIST_CAN_INITIATE_SCANS = {{ user|can:'initiate_scans_subscans'|yesno:"true,false" }};
 window.SCOPE_LIST_CAN_MODIFY_TARGETS = {{ user|can:'modify_targets'|yesno:"true,false" }};
 </script>
 {{ datatable_row_group_config|json_script:"datatable-row-group-config" }}
@@ -202,12 +204,22 @@ $(document).ready(function() {
         className: 'text-center',
         orderable: false,
         render: function(data, type, row) {
-          if (!window.SCOPE_LIST_CAN_MODIFY_TARGETS) return '';
+          if (!window.SCOPE_LIST_CAN_INITIATE_SCANS && !window.SCOPE_LIST_CAN_MODIFY_TARGETS) {
+            return '';
+          }
           const idEnc = window.safeAttr(String(row.id));
-          const updateUrl = window.SCOPE_LIST_UPDATE_SCOPE_BASE + idEnc;
-          const deleteUrl = window.SCOPE_LIST_DELETE_SCOPE_BASE + idEnc;
-          return '<a href="' + updateUrl + '" class="btn btn-soft-primary btn-sm" data-toggle="tooltip" title="Edit"><i class="fe-edit-2"></i></a> ' +
-            '<button type="button" class="btn btn-soft-danger btn-sm js-delete-scope-row" data-delete-url="' + deleteUrl + '" data-toggle="tooltip" title="Delete" aria-label="Delete scope"><i class="fe-trash-2"></i></button>';
+          let html = '<div class="d-flex flex-wrap gap-1 justify-content-center">';
+          if (window.SCOPE_LIST_CAN_INITIATE_SCANS) {
+            html += '<a href="' + window.SCOPE_LIST_START_SCAN_BASE + idEnc + '" class="btn btn-sm btn-soft-success" data-toggle="tooltip" title="Quick Scan Entire Scope"><i class="fe-zap"></i></a>';
+          }
+          if (window.SCOPE_LIST_CAN_MODIFY_TARGETS) {
+            const updateUrl = window.SCOPE_LIST_UPDATE_SCOPE_BASE + idEnc;
+            const deleteUrl = window.SCOPE_LIST_DELETE_SCOPE_BASE + idEnc;
+            html += '<a href="' + updateUrl + '" class="btn btn-soft-primary btn-sm" data-toggle="tooltip" title="Edit"><i class="fe-edit-2"></i></a>';
+            html += '<button type="button" class="btn btn-soft-danger btn-sm js-delete-scope-row" data-delete-url="' + deleteUrl + '" data-toggle="tooltip" title="Delete" aria-label="Delete scope"><i class="fe-trash-2"></i></button>';
+          }
+          html += '</div>';
+          return html;
         }
       }
     ],

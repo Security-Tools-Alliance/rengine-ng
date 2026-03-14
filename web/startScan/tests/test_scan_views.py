@@ -260,6 +260,109 @@ class TestSecatorProfilesContext(BaseTestCase):
         self.assertIn("custom_profiles_by_category", response.context)
         self.assertIn(b'id="start_org_scan_execution_mode"', response.content)
 
+    def test_start_organization_scan_get_returns_target_list_context(self):
+        """start_organization_scan GET should provide target_list and target_ids (not domain_list)."""
+        response = self.client.get(
+            reverse(
+                "start_organization_scan",
+                kwargs={"slug": self.data_generator.project.slug, "id": self.data_generator.organization.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("target_list", response.context)
+        self.assertIn("target_ids", response.context)
+        self.assertNotIn("domain_list", response.context)
+
+    def test_start_organization_scan_post_empty_targets_redirects_with_warning(self):
+        """start_organization_scan POST with no targets should redirect back to form."""
+        self.data_generator.organization.targets.clear()
+        data = {
+            "execution_mode": "scan",
+            "secator_scan_type": "domain",
+        }
+        response = self.client.post(
+            reverse(
+                "start_organization_scan",
+                kwargs={"slug": self.data_generator.project.slug, "id": self.data_generator.organization.id},
+            ),
+            data,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(
+            response,
+            reverse(
+                "start_organization_scan",
+                kwargs={"slug": self.data_generator.project.slug, "id": self.data_generator.organization.id},
+            ),
+            fetch_redirect_response=False,
+        )
+
+    def test_start_scope_scan_get_returns_200_and_quick_scan_context(self):
+        """start_scope_scan GET should return 200 and quick scan form context."""
+        scope = self.data_generator.create_scope()
+        response = self.client.get(
+            reverse(
+                "start_scope_scan",
+                kwargs={"slug": self.data_generator.project.slug, "id": scope.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("target_list", response.context)
+        self.assertIn("target_ids", response.context)
+        self.assertIn("quick_scan_entity_name", response.context)
+        self.assertEqual(response.context["quick_scan_entity_name"], scope.name)
+        self.assertIn(b'id="start_scope_scan_execution_mode"', response.content)
+
+    def test_start_scope_scan_post_empty_targets_redirects_with_warning(self):
+        """start_scope_scan POST with no targets should redirect back to form."""
+        scope = self.data_generator.create_scope()
+        scope.targets.clear()
+        data = {
+            "execution_mode": "scan",
+            "secator_scan_type": "domain",
+        }
+        response = self.client.post(
+            reverse(
+                "start_scope_scan",
+                kwargs={"slug": self.data_generator.project.slug, "id": scope.id},
+            ),
+            data,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(
+            response,
+            reverse(
+                "start_scope_scan",
+                kwargs={"slug": self.data_generator.project.slug, "id": scope.id},
+            ),
+            fetch_redirect_response=False,
+        )
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    @patch("startScan.views._run_secator_scan_or_per_task")
+    def test_start_scope_scan_post_with_targets_redirects_to_list_scope(self, mock_run):
+        """start_scope_scan POST with targets should run scans and redirect to list_scope."""
+        mock_run.return_value = (1, 0)
+        scope = self.data_generator.create_scope()
+        data = {
+            "execution_mode": "scan",
+            "secator_scan_type": "domain",
+        }
+        response = self.client.post(
+            reverse(
+                "start_scope_scan",
+                kwargs={"slug": self.data_generator.project.slug, "id": scope.id},
+            ),
+            data,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(
+            response,
+            reverse("list_scope", kwargs={"slug": self.data_generator.project.slug}),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(mock_run.call_count, 1)
+
     def test_start_multiple_scan_renders_custom_profile_option(self):
         """start_multiple_scan should render custom profile options when they exist."""
         profile_name = f"custom-speed-{str(uuid.uuid4())[:8]}"

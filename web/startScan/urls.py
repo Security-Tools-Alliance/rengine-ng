@@ -22,6 +22,7 @@ urlpatterns = [
         name="schedule_organization_scan",
     ),
     path("<slug:slug>/organization/start/<int:id>", views.start_organization_scan, name="start_organization_scan"),
+    path("<slug:slug>/scope/start/<int:id>", views.start_scope_scan, name="start_scope_scan"),
     path("<slug:slug>/target/start/<int:target_id>", views.start_scan_ui, name="start_scan"),
     path("<slug:slug>/target/schedule/<int:host_id>", views.schedule_scan, name="schedule_scan"),
     path("<slug:slug>/scheduled", views.scheduled_scan_view, name="scheduled_scan_view"),
