@@ -243,13 +243,6 @@ run_post_update_flow() {
   done
 
   log "Checking Secator API key..." $COLOR_CYAN
-  export RENGINE_UPDATE_LOG_FILE="$LOG_FILE"
-  log_to_file "Secator API key check: REPO_ROOT=$REPO_ROOT env_file=$REPO_ROOT/.env"
-  if [[ -f "$REPO_ROOT/.env" ]]; then
-    log_to_file "Secator API key check: .env exists, grep SECATOR_ADDONS_API_KEY => $(grep -E '^SECATOR_ADDONS_API_KEY=' "$REPO_ROOT/.env" 2>/dev/null || echo 'no match')"
-  else
-    log_to_file "Secator API key check: .env not found"
-  fi
   if ensure_secator_api_key_in_env "$REPO_ROOT/.env" "$REPO_ROOT" "$LOG_FILE"; then
     log_to_file "Secator API key check completed"
   else

@@ -63,60 +63,18 @@ RENGINE_WEB_CONTAINER="rengine-web-1"
 # Placeholder value in .env-dist; if this is the only value in .env, the key is not really configured.
 RENGINE_SECATOR_API_KEY_PLACEHOLDER="your-generated-api-key-here"
 
-# Write a debug line to stderr and to the update log when RENGINE_UPDATE_LOG_FILE is set (by update.sh).
-# Usage: _secator_debug "msg" [log_file]. Also appends to RENGINE_UPDATE_LOG_FILE so debug always lands in the update log.
-_secator_debug() {
-  local msg="$1"
-  local log_file="${2:-}"
-  echo "[SECATOR_DEBUG] $msg" >&2
-  local target=""
-  if [[ -n "$log_file" && -w "$log_file" ]]; then
-    target="$log_file"
-  elif [[ -n "${RENGINE_UPDATE_LOG_FILE:-}" && -w "$RENGINE_UPDATE_LOG_FILE" ]]; then
-    target="$RENGINE_UPDATE_LOG_FILE"
-  fi
-  if [[ -n "$target" ]]; then
-    echo "$(date -Iseconds) [SECATOR_DEBUG] $msg" >> "$target"
-  fi
-}
-
 # Return 0 if env_file has a real Secator API key (present and not the placeholder). Return 1 otherwise.
-# Optional second arg: debug_log_file — when set, detailed diagnostic lines are appended (and printed to stderr).
 # Normalize value (strip control chars, trim) so placeholder is never mistaken for configured on any system.
 is_secator_api_key_configured() {
   local env_file="${1:?}"
-  local debug_log="${2:-}"
-  _secator_debug "is_secator_api_key_configured: env_file=$env_file" "$debug_log"
-  if [[ ! -f "$env_file" ]]; then
-    _secator_debug "is_secator_api_key_configured: file missing, return 1 (not configured)" "$debug_log"
-    return 1
-  fi
-  local raw
+  [[ ! -f "$env_file" ]] && return 1
+  local raw val
   raw=$(grep -E '^SECATOR_ADDONS_API_KEY=' "$env_file" 2>/dev/null | head -1 | cut -d= -f2-)
-  local raw_len=${#raw}
-  local raw_hex
-  raw_hex=$(printf '%s' "$raw" | od -A n -t x1 2>/dev/null | head -3 | tr -d '\n' || echo "N/A")
-  _secator_debug "is_secator_api_key_configured: raw value length=$raw_len hex_prefix=$raw_hex" "$debug_log"
-  local val
   val=$(printf '%s' "$raw" | tr -d '\r\n' | tr -d '\000-\037\177' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-  local val_len=${#val}
-  _secator_debug "is_secator_api_key_configured: after normalize length=$val_len val='$val'" "$debug_log"
-  if [[ -z "$val" ]]; then
-    _secator_debug "is_secator_api_key_configured: empty after normalize, return 1 (not configured)" "$debug_log"
-    return 1
-  fi
-  local placeholder_ref="$RENGINE_SECATOR_API_KEY_PLACEHOLDER"
-  _secator_debug "is_secator_api_key_configured: placeholder_ref='$placeholder_ref' length=${#placeholder_ref}" "$debug_log"
-  local cmp_literal=0 cmp_var=0 cmp_prefix=0
-  [[ "$val" == "your-generated-api-key-here" ]] && cmp_literal=1
-  [[ "$val" == "$placeholder_ref" ]] && cmp_var=1
-  [[ "$val" == "your-generated-api-key-here"* ]] && cmp_prefix=1
-  _secator_debug "is_secator_api_key_configured: cmp_literal=$cmp_literal cmp_var=$cmp_var cmp_prefix=$cmp_prefix" "$debug_log"
-  if [[ $cmp_literal -eq 1 || $cmp_var -eq 1 || $cmp_prefix -eq 1 ]]; then
-    _secator_debug "is_secator_api_key_configured: value is placeholder, return 1 (not configured)" "$debug_log"
-    return 1
-  fi
-  _secator_debug "is_secator_api_key_configured: value is not placeholder, return 0 (configured)" "$debug_log"
+  [[ -z "$val" ]] && return 1
+  [[ "$val" == "your-generated-api-key-here" ]] && return 1
+  [[ "$val" == "$RENGINE_SECATOR_API_KEY_PLACEHOLDER" ]] && return 1
+  [[ "$val" == "your-generated-api-key-here"* ]] && return 1
   return 0
 }
 
@@ -209,7 +167,7 @@ ensure_secator_api_key_in_env() {
   local env_file="${1:?}"
   local repo_root="${2:?}"
   local make_log_file="${3:-}"
-  if is_secator_api_key_configured "$env_file" "$make_log_file"; then
+  if is_secator_api_key_configured "$env_file"; then
     log "Secator API key already configured in .env" $COLOR_GREEN
     return 0
   fi
