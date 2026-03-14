@@ -530,9 +530,7 @@ const subdomain_datatable_columns = (window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS 
 	return col;
 });
 const vuln_datatable_columns = window.RENGINE_VULN_DATATABLE_COLUMNS || [];
-const subdomain_datatable_page_length = window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30;
 const subdomain_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
-const vuln_datatable_page_length = window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30;
 const vuln_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
 
 $(document).ready(function(){
@@ -726,7 +724,6 @@ $(document).ready(function(){
 			"layout": subdomainLayout,
 			"stripeClasses": [],
 			"lengthMenu": subdomain_datatable_length_menu,
-			"pageLength": subdomain_datatable_page_length,
 			'serverSide': true,
 			"ajax": {
 					url: subdomain_ajax_url,
@@ -1000,7 +997,8 @@ $(document).ready(function(){
 		if (typeof window.getRengineDatatableConfig === 'function' && typeof window.initServerSideDataTable === 'function') {
 			subdomain_datatables = window.initServerSideDataTable('#subdomain_scan_results', window.getRengineDatatableConfig('#subdomain_scan_results', subdomainTableOpts));
 		} else {
-			subdomain_datatables = $('#subdomain_scan_results').DataTable(subdomainTableOpts);
+			var fallbackPageLength = window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength('subdomain_scan_results') : 30;
+			subdomain_datatables = $('#subdomain_scan_results').DataTable(Object.assign({}, subdomainTableOpts, { pageLength: fallbackPageLength }));
 		}
 
 			window.attachRengineDatatableRowGroupSelector(subdomain_datatables, {
@@ -1100,7 +1098,7 @@ $(document).ready(function(){
 		var is_grouping = false;
 		var grouping_col = 3;
 		var vuln_ajax_url = '{% url "api:vulnerabilities-list" %}?target_id={{target.id}}&format=datatables';
-		var vulnerability_table = window.initServerSideDataTable('#vulnerability_results', {
+		var vulnerability_table = window.initServerSideDataTable('#vulnerability_results', window.getRengineDatatableConfig('#vulnerability_results', {
 			destroy: false,
 			stripeClasses: [],
 			scrollY: "60vh",
@@ -1233,7 +1231,7 @@ $(document).ready(function(){
 				$(row).addClass('table-success text-strike');
 			}
 		},
-		});
+		}));
 		$('#vulnerability-search-button').click(function() {
 			vulnerability_table.search($('#vulnerability-search').val()).draw();
 		});

@@ -1133,9 +1133,7 @@ const subdomain_datatable_columns = (window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS 
 	if (col && col.name === 'vuln_count') return Object.assign({}, col, { visible: false });
 	return col;
 });
-const vuln_datatable_page_length = window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30;
 const vuln_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
-const subdomain_datatable_page_length = window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30;
 const subdomain_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
 
 $(document).ready(function() {
@@ -1327,7 +1325,7 @@ $(document).ready(function() {
 			var is_grouping = false;
 			var grouping_col = 3;
 			var vuln_ajax_url = '{% url "api:vulnerabilities-list" %}?scan_history={{scan_history_id}}&format=datatables';
-			var vulnerability_table = window.initServerSideDataTable('#vulnerability_results', {
+			var vulnerability_table = window.initServerSideDataTable('#vulnerability_results', window.getRengineDatatableConfig('#vulnerability_results', {
 				destroy: true,
 				ajax: {
 					url: vuln_ajax_url
@@ -1410,7 +1408,7 @@ $(document).ready(function() {
 						$(row).addClass('table-success text-strike');
 					}
 				},
-			});
+			}));
 
 			if (window.DETAIL_SCAN_VULN_ROW_GROUP_SELECTOR && window.attachRengineDatatableRowGroupSelector) {
 				window.attachRengineDatatableRowGroupSelector(vulnerability_table, {
@@ -1465,7 +1463,7 @@ $(document).ready(function() {
 			}
 			var secret_ajax_url = "{% url 'api:secrets-list' %}?scan_history={{ scan_history_id }}&format=datatables";
 			var colDefs = window.RengineDatatableColumnDefs || {};
-			var secret_table = window.initServerSideDataTable("#secret_results", {
+			var secret_table = window.initServerSideDataTable("#secret_results", window.getRengineDatatableConfig("#secret_results", {
 				destroy: true,
 				ajax: { url: secret_ajax_url },
 				scrollY: "60vh",
@@ -1480,7 +1478,7 @@ $(document).ready(function() {
 					colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("discovered_date:name") : { targets: "discovered_date:name" },
 					{ targets: "action:name", render: function() { return ""; } },
 				],
-			});
+			}));
 			$("#reload_secrets_table_btn").off("click").on("click", function() {
 				if (secret_table && secret_table.ajax) secret_table.ajax.reload();
 			});
@@ -1500,7 +1498,7 @@ $(document).ready(function() {
 				{ data: 'is_interesting', name: 'is_interesting' },
 			];
 			var directoryTableOrder = window.getRengineDatatableOrderFromNames(directoryTableColumns, [['http_url', 'desc']]);
-			var directory_table = window.initServerSideDataTable('#directories-table', {
+			var directory_table = window.initServerSideDataTable('#directories-table', window.getRengineDatatableConfig('#directories-table', {
 				destroy: true,
 				scrollY: "50vh",
 				ajax: {
@@ -1663,7 +1661,7 @@ $(document).ready(function() {
 					// 	$(row).hide();
 					// }
 				},
-			});
+			}));
 		});
 	{% endif %}
 
@@ -1806,7 +1804,7 @@ $(document).ready(function() {
 		var subd_grouping_col = 8;
 		var subdomainScrollerOpts = window.getRengineDatatableScrollerOptions ? window.getRengineDatatableScrollerOptions("60vh") : {};
 		var subdomainLayout = window.getRengineDatatableLayoutFull ? window.getRengineDatatableLayoutFull() : window.RENGINE_DATATABLE_LAYOUT_FULL;
-		var subdomain_datatables = $('#subdomain_scan_results').DataTable(Object.assign({
+		var subdomain_datatables = window.initServerSideDataTable('#subdomain_scan_results', window.getRengineDatatableConfig('#subdomain_scan_results', Object.assign({
 			"headerCallback": function(e, a, t, n, s) {
 				e.getElementsByTagName("th")[0].innerHTML='<div class="form-check ms-1 form-check-primary"><input type="checkbox" class="float-start form-check-input chk-parent" id="head_checkbox" onclick=mainCheckBoxSelected(this)>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>\n'
 			},
@@ -1819,7 +1817,6 @@ $(document).ready(function() {
 			"layout": subdomainLayout,
 			"lengthMenu": subdomain_datatable_length_menu,
 			"responsive": true,
-			"pageLength": subdomain_datatable_page_length,
 			'serverSide': true,
 			"ajax": {
 					url: subdomain_ajax_url,
@@ -2085,7 +2082,7 @@ $(document).ready(function() {
 						$(row).addClass('table-danger');
 					}
 				},
-			}, subdomainScrollerOpts));
+			}, subdomainScrollerOpts)));
 
 			window.attachRengineDatatableRowGroupSelector(subdomain_datatables, {
 				selector: 'input[name="grouping_subd_row"]',
@@ -2286,7 +2283,7 @@ $(document).ready(function() {
 			}
 		}
 	}
-	var s3Table = window.initServerSideDataTable('#s3-datatable', {
+	var s3Table = window.initServerSideDataTable('#s3-datatable', window.getRengineDatatableConfig('#s3-datatable', {
 		ajax: {
       url: s3_ajax_url,
       data: function(d) {
@@ -2304,7 +2301,7 @@ $(document).ready(function() {
 		initComplete: function() {
 			if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('#s3-datatable [data-toggle="tooltip"]'));
 		}
-	});
+	}));
 
   if (window.attachDatatableFilters) {
     window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('s3_buckets', s3Table, { onApply: function() { s3Table.draw(); } }));

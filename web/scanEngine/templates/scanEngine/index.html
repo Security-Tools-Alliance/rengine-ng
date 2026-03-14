@@ -185,7 +185,6 @@ Scan Engines <small class="text-muted">(Legacy)</small>
       columns: scan_engine_columns,
       order: window.getRengineDatatableOrderFromNames(scan_engine_columns, [['engine_name', 'asc']]),
       lengthMenu: [20, 30, 40, 50],
-      pageLength: 20,
       columnDefs: [
         { targets: 'id:name', visible: false },
         { targets: 'engine_name:name', width: '30%', render: function(data) { return data || ''; } },

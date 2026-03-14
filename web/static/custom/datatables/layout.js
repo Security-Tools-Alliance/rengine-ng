@@ -41,9 +41,54 @@
     return { scrollY: height, deferRender: true, scroller: true };
   };
 
-  const getRengineDatatablePageLength = function () {
+  const PAGE_LENGTH_STORAGE_KEY_PREFIX = "rengine-datatable-pageLength-";
+
+  const getDefaultPageLength = function () {
     const n = window.RENGINE_DATATABLE_PAGE_LENGTH;
     return typeof n === "number" && n > 0 ? n : 30;
+  };
+
+  /**
+   * Returns the page length to use for a DataTable. If tableId is given, uses the user's
+   * saved value for that table (if valid and in length menu), otherwise the global default.
+   *
+   * @param {string} [tableId] - Optional table identifier (e.g. from the table's id attribute).
+   * @returns {number} Page length to use.
+   */
+  const getRengineDatatablePageLength = function (tableId) {
+    const defaultLen = getDefaultPageLength();
+    if (!tableId || typeof window.localStorage === "undefined") {
+      return defaultLen;
+    }
+    try {
+      const key = PAGE_LENGTH_STORAGE_KEY_PREFIX + String(tableId);
+      const stored = window.localStorage.getItem(key);
+      if (stored === null) return defaultLen;
+      const parsed = parseInt(stored, 10);
+      if (Number.isNaN(parsed)) return defaultLen;
+      const pair = getRengineDatatableLengthMenu();
+      const allowed = Array.isArray(pair[0]) ? pair[0] : [10, 20, 30, 50, 100, 200, 500, 1000, -1];
+      if (allowed.indexOf(parsed) === -1) return defaultLen;
+      return parsed;
+    } catch (e) {
+      return defaultLen;
+    }
+  };
+
+  /**
+   * Saves the user's page length choice for a table. Call when the length menu changes.
+   *
+   * @param {string} tableId - Table identifier (must match the id used in getRengineDatatablePageLength).
+   * @param {number} value - Selected page length (e.g. -1 for "All").
+   */
+  const setRengineDatatablePageLength = function (tableId, value) {
+    if (!tableId || typeof window.localStorage === "undefined") return;
+    try {
+      const key = PAGE_LENGTH_STORAGE_KEY_PREFIX + String(tableId);
+      window.localStorage.setItem(key, String(value));
+    } catch (e) {
+      // ignore storage errors
+    }
   };
 
   const getRengineDatatableLengthMenu = function () {
@@ -56,6 +101,7 @@
   window.getRengineDatatableLayoutFull = getRengineDatatableLayoutFull;
   window.getRengineDatatableScrollerOptions = getRengineDatatableScrollerOptions;
   window.getRengineDatatablePageLength = getRengineDatatablePageLength;
+  window.setRengineDatatablePageLength = setRengineDatatablePageLength;
   window.getRengineDatatableLengthMenu = getRengineDatatableLengthMenu;
 
   if (window.RENGINE_DATATABLE_USE_SCROLLER && !hasScrollerPlugin() && (window.console && typeof window.console.warn === "function")) {

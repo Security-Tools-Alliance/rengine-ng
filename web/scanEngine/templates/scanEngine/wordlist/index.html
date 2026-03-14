@@ -88,7 +88,6 @@ $(document).ready(function() {
     columns: wordlist_columns,
     order: window.getRengineDatatableOrderFromNames(wordlist_columns, [['name', 'asc']]),
     lengthMenu: [5, 10, 20, 50],
-    pageLength: 50,
     columnDefs: [
       { targets: 'action:name', className: 'text-center', render: function(data) { return data || ''; } }
     ],

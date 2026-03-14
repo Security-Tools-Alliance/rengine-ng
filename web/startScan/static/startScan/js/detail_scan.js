@@ -294,7 +294,6 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		layout: endpointLayout,
 		lengthMenu: window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]],
 		responsive: true,
-		pageLength: window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
 		serverSide: true,
 		ajax: { url: lookup_url },
 		rowGroup: {

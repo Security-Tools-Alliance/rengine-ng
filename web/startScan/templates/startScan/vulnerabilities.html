@@ -36,7 +36,6 @@ var vuln_datatable_columns = window.RENGINE_VULN_DATATABLE_COLUMNS || [];
 var vuln_default_order = window.RENGINE_DATATABLE_VULN_DEFAULT_ORDER || [['cvss_score', 'desc']];
 var vuln_rowgroup_base = window.RENGINE_DATATABLE_VULN_ROW_GROUP_BASE || { dataSrc: 'severity', rowLabel: 'Vulnerabilities', emptyGroupLabel: '' };
 var vuln_groups = window.RENGINE_DATATABLE_VULN_ROW_GROUP_GROUPS || [];
-const vuln_datatable_page_length = window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30;
 const vuln_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
 
 $(document).ready(function() {
@@ -58,7 +57,6 @@ $(document).ready(function() {
 		"destroy": true,
 		"stripeClasses": [],
 		"lengthMenu": vuln_datatable_length_menu,
-		"pageLength": vuln_datatable_page_length,
 		"ajax": { url: vuln_ajax_url },
 		"order": vuln_initial_state.order,
 		"rowGroup": vuln_initial_state.rowGroup,

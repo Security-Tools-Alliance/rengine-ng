@@ -34,13 +34,24 @@
     return true;
   }
 
+  function tableIdFromSelector(selector) {
+    if (!selector || typeof selector !== "string") return null;
+    const s = selector.trim().replace(/^#/, "");
+    return s.length > 0 ? s : null;
+  }
+
   const getRengineDatatableConfig = function (tableSelector, options) {
     const opts = options || {};
+    const tableId = tableIdFromSelector(tableSelector);
     const scrollY = opts.scrollY || "60vh";
     const scrollerOpts =
       typeof window.getRengineDatatableScrollerOptions === "function"
         ? window.getRengineDatatableScrollerOptions(scrollY)
         : {};
+    const pageLength =
+      typeof window.getRengineDatatablePageLength === "function"
+        ? window.getRengineDatatablePageLength(tableId)
+        : 30;
     const baseOptions = {
       serverSide: true,
       processing: true,
@@ -54,10 +65,7 @@
         typeof window.getRengineDatatableLengthMenu === "function"
           ? window.getRengineDatatableLengthMenu()
           : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]],
-      pageLength:
-        typeof window.getRengineDatatablePageLength === "function"
-          ? window.getRengineDatatablePageLength()
-          : 30
+      pageLength: pageLength
     };
     const merged = Object.assign({}, baseOptions, scrollerOpts, opts);
     if (merged.ajax && merged.ajax.dataSrc === undefined) merged.ajax.dataSrc = "data";
@@ -80,7 +88,14 @@
       }
       if (typeof userInitComplete === "function") userInitComplete.apply(this, arguments);
     };
-    return window.jQuery(tableSelector).DataTable(merged);
+    const table = window.jQuery(tableSelector).DataTable(merged);
+    const tableId = tableIdFromSelector(tableSelector);
+    if (tableId && typeof window.setRengineDatatablePageLength === "function") {
+      table.on("length.dt", function (_e, _settings, len) {
+        window.setRengineDatatablePageLength(tableId, len);
+      });
+    }
+    return table;
   };
 
   /**
