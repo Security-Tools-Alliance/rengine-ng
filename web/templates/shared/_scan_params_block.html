@@ -168,13 +168,13 @@
   <div class="col-md-6">
     <div class="mb-3">
       <label class="form-label">
-        HTTP Headers <small class="text-muted">(JSON object)</small>
+        HTTP Headers <small class="text-muted">(one per line: "Name": "value")</small>
         {% if eff.header and eff.header.source != "default" %}
         <small class="text-muted">({{ eff.header.source }} defined)</small>
         {% endif %}
       </label>
-      <textarea name="{{ pfx }}header" class="form-control" rows="2"
-                placeholder='{"X-Api-Key": "secret", "Cookie": "session=abc"}'>{% if header_initial %}{{ header_initial|escape }}{% elif pv.header %}{{ pv.header|escape }}{% endif %}</textarea>
+      <textarea name="{{ pfx }}header" class="form-control" rows="3"
+                placeholder='"X-Api-Key": "secret"&#10;"Cookie": "session=abc"'>{{ header_initial|default:""|escape }}</textarea>
     </div>
   </div>
 </div>

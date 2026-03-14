@@ -7,11 +7,11 @@ scan_params_effective, scan_params_values, and default_profiles are built.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from startScan.secator.profiles import build_secator_profiles_context
 
+from .scan_param_definitions import header_dict_to_lines
 from .scope_params import (
     PROFILE_CATEGORIES,
     build_effective_params_display,
@@ -81,7 +81,7 @@ def build_scan_params_form_context(
     entity_profile_categories = [cat for cat in PROFILE_CATEGORIES if values["profiles"].get(cat, "").strip()]
     header_val = values.get("header")
     if isinstance(header_val, dict):
-        header_initial = json.dumps(header_val, indent=2, sort_keys=True)
+        header_initial = header_dict_to_lines(header_val)
     else:
         header_initial = ""
 

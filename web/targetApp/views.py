@@ -91,6 +91,7 @@ from targetApp.services.scope_params import (
     get_workers_for_scan_dropdown,
     parse_scan_config_from_post,
     scope_allow_local,
+    strip_empty_override_keys,
 )
 from targetApp.services.target_update import (
     build_update_target_context,
@@ -1021,7 +1022,7 @@ def update_target(request, slug, id):
                     messages.error(request, msg)
             else:
                 updated_target = form.save(commit=False)
-                updated_target.scan_config = scan_override or None
+                updated_target.scan_config = strip_empty_override_keys(scan_override or {}) or None
                 updated_target.save()
                 messages.add_message(request, messages.INFO, "Target %s modified!" % (target.value,))
                 return http.HttpResponseRedirect(reverse("list_target", kwargs={"slug": slug}))
@@ -1266,7 +1267,7 @@ def add_organization(request, slug):
                 description=data["description"],
                 project=project,
                 insert_date=timezone.now(),
-                scan_config=scan_config or None,
+                scan_config=strip_empty_override_keys(scan_config or {}) or None,
             )
             for target in data.get("targets") or []:
                 organization.targets.add(target)
@@ -1336,7 +1337,7 @@ def update_organization(request, slug, id):
                 organization.targets.clear()
                 organization.name = data["name"]
                 organization.description = data["description"]
-                organization.scan_config = scan_config or None
+                organization.scan_config = strip_empty_override_keys(scan_config or {}) or None
                 organization.save()
                 for target in data.get("targets") or []:
                     organization.targets.add(target)
@@ -1410,7 +1411,7 @@ def add_scope(request, slug):
             for msg in errors:
                 messages.error(request, msg)
         else:
-            scope.scan_config = config or None
+            scope.scan_config = strip_empty_override_keys(config or {}) or None
             scope.save()
             form.save_m2m()
             messages.add_message(request, messages.INFO, "Scope %s added successfully" % (scope.name,))
@@ -1447,7 +1448,7 @@ def update_scope(request, slug, id):
             for msg in errors:
                 messages.error(request, msg)
         else:
-            updated_scope.scan_config = config or None
+            updated_scope.scan_config = strip_empty_override_keys(config or {}) or None
             updated_scope.save()
             form.save_m2m()
             messages.add_message(request, messages.INFO, "Scope %s updated successfully" % (scope.name,))

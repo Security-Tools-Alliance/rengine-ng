@@ -152,6 +152,15 @@ class Scope(models.Model):
         related_name="scopes_as_default",
         help_text="Default worker when the scope has 2+ allowed workers; null means Local.",
     )
+    restrict_findings_to_target = models.BooleanField(
+        default=False,
+        help_text="If True, only findings whose domain/host is the target or in the allowed list are created.",
+    )
+    allowed_finding_domains = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of domain names (e.g. ['easi-services.fr']) allowed in addition to the target when restrict_findings_to_target is True.",
+    )
     insert_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:

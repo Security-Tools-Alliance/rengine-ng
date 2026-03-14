@@ -93,22 +93,91 @@ ORDERED_PARAM_KEYS_FOR_FORM = (
 
 TARGET_OVERRIDE_PREFIX = "override_"
 
+# Keys for which an empty dict means "no override"; do not persist in scan_config.
+DICT_PARAM_KEYS_EMPTY_IS_NO_OVERRIDE = ("header", "profiles", "extra_config")
+
 # User-facing copy for header (Scope, Target, target update form, scope form).
-HEADER_HELP_TEXT = 'Optional HTTP headers as a JSON object, e.g. {"X-Api-Key": "secret"}. Must be a valid JSON object.'
+HEADER_HELP_TEXT = 'One header per line in the form "Header-Name": "header value".'
 HEADER_ERROR_MUST_BE_OBJECT = 'Request headers must be a JSON object (e.g. {"X-Header": "value"}).'
 HEADER_ERROR_INVALID_JSON = "Invalid JSON. Changes were not applied."
+HEADER_ERROR_INVALID_LINE = 'Invalid header line. Use format "Header-Name": "value" (one per line).'
+
+
+def header_dict_to_lines(header_dict: dict[str, Any]) -> str:
+    """
+    Convert a header dict (as stored in scan_config) to multiline text for the form.
+
+    Each line is "key": "value" with value escaped for internal double quotes.
+    """
+    if not header_dict or not isinstance(header_dict, dict):
+        return ""
+    lines = []
+    for k, v in sorted(header_dict.items()):
+        if not isinstance(k, str):
+            continue
+        val_str = str(v) if v is not None else ""
+        val_str = val_str.replace("\\", "\\\\").replace('"', '\\"')
+        lines.append('"%s": "%s"' % (k, val_str))
+    return "\n".join(lines)
+
+
+def _parse_header_line(line: str) -> tuple[str, str] | None:
+    """
+    Parse a single line in the form "key": "value". Returns (key, value) or None if invalid.
+
+    Supported escape sequences in the value are only \\ (backslash) and \\\" (escaped
+    double quote). Other escapes (e.g. \\n, \\t) are not interpreted and remain literal.
+    """
+    line = line.strip()
+    if not line:
+        return None
+    if not line.startswith('"'):
+        return None
+    colon_pos = line.find('": "', 1)
+    if colon_pos < 0:
+        return None
+    key = line[1:colon_pos].strip()
+    rest = line[colon_pos + 4 :].rstrip()
+    if not rest.endswith('"'):
+        return None
+    value = rest[:-1].replace("\\\\", "\\").replace('\\"', '"')
+    return (key, value)
+
+
+def parse_header_lines(text: str) -> tuple[dict[str, Any] | None, str | None]:
+    """
+    Parse multiline header text (one "name": "value" per line) into a dict.
+
+    Value escaping: only \\ and \\" are supported (see _parse_header_line).
+    Returns (dict, None) on success, (None, error_message) on invalid line.
+    Empty or whitespace-only text returns ({}, None).
+    """
+    if not text or not text.strip():
+        return ({}, None)
+    result: dict[str, Any] = {}
+    for line in text.splitlines():
+        parsed = _parse_header_line(line)
+        if parsed is None:
+            if line.strip():
+                return (None, HEADER_ERROR_INVALID_LINE)
+            continue
+        key, value = parsed
+        if key:
+            result[key] = value
+    return (result, None)
 
 
 def parse_header_value(value: Any) -> tuple[dict[str, Any] | None, str | None]:
     """
-    Parse and validate header from form/POST: must be a JSON object or empty.
+    Parse and validate header from form/POST: multiline format (one "name": "value" per line)
+    or legacy JSON object. Result is stored in DB as JSON.
 
     Used by parse_scan_config_from_post when building scan_config from POST so
     behavior and error messages stay consistent across org, scope, and target forms.
 
     Returns:
         (parsed_dict, None) on success (parsed_dict may be None for "clear").
-        (None, error_message) when value is invalid JSON or not a JSON object.
+        (None, error_message) when value is invalid.
     """
     if value is None or value == "":
         return (None, None)
@@ -118,10 +187,13 @@ def parse_header_value(value: Any) -> tuple[dict[str, Any] | None, str | None]:
         value = value.strip()
         if not value:
             return (None, None)
+        parsed, err = parse_header_lines(value)
+        if parsed is not None:
+            return (parsed, None)
         try:
             parsed = json.loads(value)
         except (json.JSONDecodeError, TypeError):
-            return (None, HEADER_ERROR_INVALID_JSON)
+            return (None, err or HEADER_ERROR_INVALID_JSON)
         if not isinstance(parsed, dict):
             return (None, HEADER_ERROR_MUST_BE_OBJECT)
         return (parsed, None)

@@ -1263,3 +1263,46 @@ class TestDomainRepository(BaseTestCase):
         ns_names = [ns.name for ns in name_servers]
         self.assertIn("ns1.example.com", ns_names)
         self.assertIn("ns2.example.com", ns_names)
+
+
+class DomainRepositoryFindingScopeFilterTest(BaseTestCase):
+    """Tests for DomainRepository with restrict_findings_to_target scope."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_organization()
+        self.data_generator.create_scope(restrict_findings_to_target=True, allowed_finding_domains=[])
+        self.scope = self.data_generator.scope
+        self.target = self.data_generator.target
+        self.scan_history = self.data_generator.create_scan_history()
+        self.domain_repo = DomainRepository()
+
+    def test_save_raw_whois_out_of_scope_domain_returns_none(self):
+        """When scope restricts findings, domain not in allowed list is not created."""
+        result = self.domain_repo.save_raw_whois_from_secator_tag(
+            self.scan_history.id,
+            self.target.id,
+            "out-of-scope-unrelated.com",
+            "raw whois text",
+        )
+        self.assertIsNone(result)
+
+    def test_save_raw_whois_ip_as_domain_returns_none(self):
+        """IP must not be created as Domain when scope restricts findings."""
+        result = self.domain_repo.save_raw_whois_from_secator_tag(
+            self.scan_history.id,
+            self.target.id,
+            "192.168.1.1",
+            "raw whois text",
+        )
+        self.assertIsNone(result)
+
+    def test_save_raw_whois_target_domain_succeeds(self):
+        """Target domain is allowed when scope restricts findings."""
+        result = self.domain_repo.save_raw_whois_from_secator_tag(
+            self.scan_history.id,
+            self.target.id,
+            self.target.value,
+            "raw whois text",
+        )
+        self.assertIsNotNone(result)

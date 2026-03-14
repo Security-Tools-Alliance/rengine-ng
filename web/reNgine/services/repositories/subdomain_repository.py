@@ -4,7 +4,7 @@ Handles Subdomain database operations with enriched Secator integration.
 """
 
 import contextlib
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import IntegrityError
@@ -16,10 +16,21 @@ from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import Domain, IpAddress, ScanHistory, Subdomain, Technology
 from targetApp.models import Target
+from targetApp.services.scope_params import get_finding_scope_filter_host_for_target
 
 
 PREFIX_SUBDOMAIN_REPO = "[SUBDOMAIN_REPO]"
 logger = get_module_logger(__name__)
+
+
+def _host_scope_filter(rengine_context: Optional[Dict[str, Any]], target_id: int) -> Optional[Callable[[str], bool]]:
+    """Resolve host filter from context or from target_id."""
+    if rengine_context:
+        filters = rengine_context.get("finding_scope_filters") or {}
+        fn = filters.get("host_filter")
+        if fn is not None and callable(fn):
+            return fn
+    return get_finding_scope_filter_host_for_target(target_id)
 
 
 class SubdomainRepository:
@@ -94,7 +105,9 @@ class SubdomainRepository:
             )
             return None
 
-        subdomain = self.get_or_create_from_host(scan_history_id, target_id, subdomain_name)
+        subdomain = self.get_or_create_from_host(
+            scan_history_id, target_id, subdomain_name, rengine_context=rengine_context
+        )
         if not subdomain:
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
@@ -156,16 +169,23 @@ class SubdomainRepository:
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
         return resolve_domain_for_scan(scan_history_id, subdomain_name, target_value, create=True)
 
-    def get_or_create_from_host(self, scan_history_id: int, target_id: int, hostname: str) -> Optional[Subdomain]:
+    def get_or_create_from_host(
+        self,
+        scan_history_id: int,
+        target_id: int,
+        hostname: str,
+        rengine_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Subdomain]:
         """
         Get or create a Subdomain for the given scan and host (hostname or IP).
 
         Single entry point for "obtain subdomain for this host" used by Endpoint, Ip, Port,
         Record, Certificate, and Vulnerability repositories. Uses is_acceptable_subdomain_name
-        (accepts FQDNs, .lan/.local, and IPs).
+        (accepts FQDNs, .lan/.local, and IPs). When scope restricts findings, host filter
+        is applied; IPs are allowed for subdomains.
 
         Returns:
-            Subdomain or None if hostname is empty, invalid, or domain resolution fails.
+            Subdomain or None if hostname is empty, invalid, out of scope, or domain resolution fails.
         """
         if not hostname or not isinstance(hostname, str):
             return None
@@ -173,6 +193,15 @@ class SubdomainRepository:
         if not normalized:
             return None
         if not is_acceptable_subdomain_name(normalized):
+            return None
+        scope_filter = _host_scope_filter(rengine_context, target_id)
+        if scope_filter is not None and not scope_filter(normalized):
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "GET_OR_CREATE",
+                "Host out of scope (restrict_findings_to_target)",
+                level="debug",
+            )
             return None
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
         domain = resolve_domain_for_scan(scan_history_id, normalized, target_value, create=True)

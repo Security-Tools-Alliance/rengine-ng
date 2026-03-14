@@ -5,7 +5,7 @@ Handles DomainInfo database operations from Secator Domain output type.
 
 import contextlib
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
@@ -25,10 +25,21 @@ from startScan.models import (
     Registrar,
     WhoisStatus,
 )
+from targetApp.services.scope_params import get_finding_scope_filter_domain_for_target
 
 
 PREFIX_DOMAIN_REPO = "[DOMAIN_REPO]"
 logger = get_module_logger(__name__)
+
+
+def _domain_scope_filter(rengine_context: Optional[Dict[str, Any]], target_id: int) -> Optional[Callable[[str], bool]]:
+    """Resolve domain filter from context or from target_id."""
+    if rengine_context:
+        filters = rengine_context.get("finding_scope_filters") or {}
+        fn = filters.get("domain_filter")
+        if fn is not None and callable(fn):
+            return fn
+    return get_finding_scope_filter_domain_for_target(target_id)
 
 
 class DomainRepository:
@@ -54,7 +65,7 @@ class DomainRepository:
             DomainInfo: Saved domain info object or None
         """
         try:
-            return self._process_secator_domain_item(item, scan_history_id, target_id)
+            return self._process_secator_domain_item(item, scan_history_id, target_id, rengine_context=rengine_context)
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
@@ -86,6 +97,7 @@ class DomainRepository:
         target_id: int,
         domain_name: str,
         raw_whois_text: str,
+        rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[DomainInfo]:
         """
         Store raw WHOIS text from Secator jswhois tag in DomainInfo.extra_data["raw_whois"].
@@ -99,6 +111,15 @@ class DomainRepository:
                 "SAVE",
                 "raw_whois: empty domain name after normalization",
                 level="warning",
+            )
+            return None
+        scope_filter = _domain_scope_filter(rengine_context, target_id)
+        if scope_filter is not None and not scope_filter(normalized):
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "raw_whois: domain out of scope (restrict_findings_to_target)",
+                level="debug",
             )
             return None
         domain = get_or_create_domain_for_target(scan_history_id, normalized)
@@ -118,6 +139,7 @@ class DomainRepository:
         target_id: int,
         domain_name: str,
         asn_value: str,
+        rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[DomainInfo]:
         """
         Store ASN info from Secator getasn tag in DomainInfo.extra_data["asn"].
@@ -133,6 +155,15 @@ class DomainRepository:
                 level="warning",
             )
             return None
+        scope_filter = _domain_scope_filter(rengine_context, target_id)
+        if scope_filter is not None and not scope_filter(normalized):
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "save_asn: domain out of scope (restrict_findings_to_target)",
+                level="debug",
+            )
+            return None
         domain = get_or_create_domain_for_target(scan_history_id, normalized)
         if not domain:
             return None
@@ -145,7 +176,11 @@ class DomainRepository:
         return domain_info
 
     def _process_secator_domain_item(
-        self, item: Dict[str, Any], scan_history_id: int, target_id: int
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        target_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[DomainInfo]:
         domain_name, whois = self._validate_and_extract_domain_data(item)
         if not domain_name or not whois:
@@ -158,15 +193,35 @@ class DomainRepository:
             )
             return None
 
-        domain = get_domain_for_scan_by_name(scan_history_id, domain_name)
+        normalized = normalize_domain_name(domain_name) if domain_name else None
+        if not normalized:
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Domain item rejected: failed to normalize domain_name",
+                level="warning",
+            )
+            return None
+
+        scope_filter = _domain_scope_filter(rengine_context, target_id)
+        if scope_filter is not None and not scope_filter(normalized):
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Domain item out of scope (restrict_findings_to_target)",
+                level="debug",
+            )
+            return None
+
+        domain = get_domain_for_scan_by_name(scan_history_id, normalized)
         if not domain:
-            domain = get_or_create_domain_for_target(scan_history_id, domain_name)
+            domain = get_or_create_domain_for_target(scan_history_id, normalized)
         if not domain:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
                 "SAVE",
                 "Domain item rejected: no existing domain matches (scan_history_id=%s, target_id=%s, domain_name=%s)"
-                % (scan_history_id, target_id, domain_name),
+                % (scan_history_id, target_id, normalized),
                 level="warning",
             )
             return None
@@ -179,7 +234,7 @@ class DomainRepository:
         self._associate_admin_and_tech_contacts(domain_info, extra_data_internal, domain)
         self._store_whois_payload(domain_info, whois, item)
 
-        self._save_and_finalize_domain_info(domain_info, extra_data_internal, domain, domain_name, created)
+        self._save_and_finalize_domain_info(domain_info, extra_data_internal, domain, normalized, created)
 
         return domain_info
 

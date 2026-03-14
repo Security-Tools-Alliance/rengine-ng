@@ -311,6 +311,43 @@
     return '';
   }
 
+  /**
+   * Parse header text (one "name": "value" per line) into an object for preview/save.
+   * Falls back to JSON.parse for legacy JSON input.
+   */
+  function parseHeaderTextToObject(text) {
+    const v = (text || '').trim();
+    if (!v) return null;
+    const lines = v.split('\n');
+    const obj = {};
+    let hasValidLine = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      if (line.indexOf('": "') === -1 || !line.startsWith('"')) {
+        try {
+          return JSON.parse(v);
+        } catch (e) {
+          return null;
+        }
+      }
+      const colonMatch = line.indexOf('": "');
+      const key = line.slice(1, colonMatch).trim();
+      const valuePart = line.slice(colonMatch + 4);
+      if (!valuePart.endsWith('"')) {
+        try {
+          return JSON.parse(v);
+        } catch (e) {
+          return null;
+        }
+      }
+      const value = valuePart.slice(0, -1).replace(/\\\\/g, '\\').replace(/\\"/g, '"');
+      obj[key] = value;
+      hasValidLine = true;
+    }
+    return hasValidLine ? obj : null;
+  }
+
   function collectDraft($scope, level) {
     const prefix = getFieldPrefix(level);
     const draft = {};
@@ -332,12 +369,8 @@
           } else if (param === 'follow_redirect') {
             draft[param] = v === 'True' || v === 'true' || v === '1';
           } else if (param === 'header') {
-            try {
-              const o = JSON.parse(v);
-              draft[param] = typeof o === 'object' && o !== null ? o : null;
-            } catch (e) {
-              draft[param] = null;
-            }
+            const o = parseHeaderTextToObject(v);
+            draft[param] = typeof o === 'object' && o !== null ? o : null;
           } else {
             draft[param] = v;
           }

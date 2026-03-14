@@ -253,6 +253,26 @@ class ScopeForm(forms.ModelForm):
         self.fields[
             "default_worker"
         ].help_text = "When the scope has 2 or more allowed workers, choose which one is pre-selected by default."
+        if "allowed_finding_domains" in self.fields:
+            self.fields["allowed_finding_domains"] = forms.CharField(
+                required=False,
+                initial="",
+                widget=forms.Textarea(
+                    attrs={
+                        "class": "form-control",
+                        "rows": 3,
+                        "placeholder": "easi-services.fr\nother-allowed.com",
+                    }
+                ),
+                help_text='One domain per line. Only used when "Restrict findings to target" is checked.',
+            )
+            domains = getattr(self.instance, "allowed_finding_domains", None) if self.instance else None
+            if domains and isinstance(domains, list):
+                self.initial["allowed_finding_domains"] = "\n".join(
+                    d for d in domains if isinstance(d, str) and d.strip()
+                )
+            else:
+                self.initial["allowed_finding_domains"] = ""
 
     class Meta:
         model = Scope
@@ -267,6 +287,8 @@ class ScopeForm(forms.ModelForm):
             "workers",
             "allow_local_worker",
             "default_worker",
+            "restrict_findings_to_target",
+            "allowed_finding_domains",
         ]
         widgets = {
             "organization": forms.Select(
@@ -304,7 +326,16 @@ class ScopeForm(forms.ModelForm):
                     "data-placeholder": "Local (default)",
                 }
             ),
+            "restrict_findings_to_target": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+
+    def clean_allowed_finding_domains(self):
+        value = self.cleaned_data.get("allowed_finding_domains")
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(x).strip().lower() for x in value if isinstance(x, str) and x.strip()]
+        return [line.strip().lower() for line in str(value).splitlines() if line.strip()]
 
     def clean(self):
         cleaned = super().clean()

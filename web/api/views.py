@@ -5646,6 +5646,9 @@ class SecatorFindingCreate(SecatorAPIBase):
             if not is_valid:
                 return error_response
             target_id = target.id
+            from targetApp.services.scope_params import get_finding_scope_filters_for_target
+
+            context["finding_scope_filters"] = get_finding_scope_filters_for_target(target_id)
 
             # Instantiate repository and save finding
             repository = repository_class()
@@ -5856,6 +5859,9 @@ class SecatorFindingUpdate(SecatorAPIBase):
             if not is_valid:
                 return error_response
             target_id = target.id
+            from targetApp.services.scope_params import get_finding_scope_filters_for_target
+
+            context["finding_scope_filters"] = get_finding_scope_filters_for_target(target_id)
 
             # Instantiate repository and save finding (upsert: create or update)
             repository = repository_class()

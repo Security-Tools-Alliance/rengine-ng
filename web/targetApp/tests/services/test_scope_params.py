@@ -20,6 +20,7 @@ from targetApp.services.scope_params import (
     get_workers_for_scan_dropdown,
     parse_target_scan_override_from_post,
     resolve_scan_params,
+    strip_empty_override_keys,
 )
 from utils.test_base import BaseTestCase
 
@@ -112,6 +113,38 @@ class ResolveScanParamsTest(BaseTestCase):
         )
 
         self.assertEqual(result["header"], org_headers)
+
+    def test_scope_empty_profiles_does_not_override_organization(self):
+        """When scope has profiles set to empty dict, resolved value is org profiles, not []."""
+        self.data_generator.organization.scan_config = {
+            "profiles": {"speed": "polite", "evasion": "stealth"},
+        }
+        self.data_generator.organization.save()
+        scope = self.data_generator.create_scope(default_profiles={})
+
+        result = resolve_scan_params(
+            self.data_generator.target,
+            scope=scope,
+            organization=scope.organization,
+        )
+
+        self.assertEqual(result["profiles"], ["polite", "stealth"])
+
+    def test_scope_empty_extra_config_does_not_override_organization(self):
+        """When scope has extra_config set to empty dict, resolved value is org extra_config."""
+        self.data_generator.organization.scan_config = {
+            "extra_config": {"wordlist": "/org/list.txt"},
+        }
+        self.data_generator.organization.save()
+        scope = self.data_generator.create_scope(scan_config={"extra_config": {}})
+
+        result = resolve_scan_params(
+            self.data_generator.target,
+            scope=scope,
+            organization=scope.organization,
+        )
+
+        self.assertEqual(result["extra_config"], {"wordlist": "/org/list.txt"})
 
     def test_target_header_beat_scope_header(self):
         """
@@ -755,11 +788,26 @@ class ParseTargetScanOverrideFromPostTest(BaseTestCase):
         result, errors = parse_target_scan_override_from_post(post)
         self.assertIs(result["follow_redirect"], False)
 
+    def test_header_empty_string_omits_key(self):
+        """When header field is present but empty, result must not contain 'header' (no {} stored)."""
+        post = QueryDict("", mutable=True)
+        post[f"{TARGET_OVERRIDE_PREFIX}header"] = ""
+        result, errors = parse_target_scan_override_from_post(post)
+        self.assertNotIn("header", result)
+        self.assertEqual(errors, [])
+
     def test_header_valid_json(self):
         post = QueryDict("", mutable=True)
         post[f"{TARGET_OVERRIDE_PREFIX}header"] = '{"X-Api-Key": "secret"}'
         result, errors = parse_target_scan_override_from_post(post)
         self.assertEqual(result["header"], {"X-Api-Key": "secret"})
+        self.assertEqual(errors, [])
+
+    def test_header_multiline_format(self):
+        post = QueryDict("", mutable=True)
+        post[f"{TARGET_OVERRIDE_PREFIX}header"] = '"X-Api-Key": "secret"\n"Cookie": "session=abc"'
+        result, errors = parse_target_scan_override_from_post(post)
+        self.assertEqual(result["header"], {"X-Api-Key": "secret", "Cookie": "session=abc"})
         self.assertEqual(errors, [])
 
     def test_header_invalid_json_omitted_and_error_added(self):
@@ -768,7 +816,10 @@ class ParseTargetScanOverrideFromPostTest(BaseTestCase):
         result, errors = parse_target_scan_override_from_post(post)
         self.assertNotIn("header", result)
         self.assertEqual(len(errors), 1)
-        self.assertIn("Invalid JSON", errors[0])
+        self.assertTrue(
+            "Invalid JSON" in errors[0] or "Invalid header" in errors[0],
+            "Expected invalid header or JSON message, got: %s" % (errors[0],),
+        )
 
     def test_header_non_dict_json_adds_error(self):
         post = QueryDict("", mutable=True)
@@ -779,14 +830,17 @@ class ParseTargetScanOverrideFromPostTest(BaseTestCase):
         self.assertIn("JSON object", errors[0])
 
     def test_header_invalid_json_preserves_existing_override(self):
-        """On invalid JSON, existing header are kept and an error is returned."""
+        """On invalid header input, existing header are kept and an error is returned."""
         post = QueryDict("", mutable=True)
         post[f"{TARGET_OVERRIDE_PREFIX}header"] = "not json"
         pre_existing_override = {"header": {"X-Api-Key": "secret"}}
         result, errors = parse_target_scan_override_from_post(post, existing_override=pre_existing_override)
         self.assertEqual(result.get("header"), {"X-Api-Key": "secret"})
         self.assertEqual(len(errors), 1)
-        self.assertIn("Invalid JSON", errors[0])
+        self.assertTrue(
+            "Invalid JSON" in errors[0] or "Invalid header" in errors[0],
+            "Expected invalid header or JSON message, got: %s" % (errors[0],),
+        )
 
     def test_header_non_dict_json_preserves_existing_override(self):
         """On valid JSON that is not an object, existing header are kept and an error is returned."""
@@ -817,6 +871,17 @@ class ParseTargetScanOverrideFromPostTest(BaseTestCase):
         self.assertEqual(result["profiles"], profiles)
         self.assertEqual(errors, [])
 
+    def test_profiles_empty_dict_omits_key(self):
+        """When profiles_dict is {} or all values empty, result must not contain 'profiles'."""
+        post = QueryDict("", mutable=True)
+        result, errors = parse_target_scan_override_from_post(post, profiles_dict={})
+        self.assertNotIn("profiles", result)
+        self.assertEqual(errors, [])
+
+        result2, errors2 = parse_target_scan_override_from_post(post, profiles_dict={"speed": "", "evasion": "  "})
+        self.assertNotIn("profiles", result2)
+        self.assertEqual(errors2, [])
+
     def test_empty_values_omitted(self):
         post = QueryDict("", mutable=True)
         post[f"{TARGET_OVERRIDE_PREFIX}threads"] = "  "
@@ -836,6 +901,47 @@ class ParseTargetScanOverrideFromPostTest(BaseTestCase):
         self.assertNotIn("threads", result)
         self.assertNotIn("proxy", result)
         self.assertEqual(errors, [])
+
+
+class StripEmptyOverrideKeysTest(BaseTestCase):
+    """Tests for strip_empty_override_keys."""
+
+    def test_strip_removes_empty_dict_keys_keeps_scalars(self):
+        """Empty header, profiles, extra_config are removed; threads and other scalars kept."""
+        config = {
+            "header": {},
+            "profiles": {},
+            "extra_config": {},
+            "threads": 10,
+            "proxy": "http://127.0.0.1:8080",
+        }
+        result = strip_empty_override_keys(config)
+        self.assertNotIn("header", result)
+        self.assertNotIn("profiles", result)
+        self.assertNotIn("extra_config", result)
+        self.assertEqual(result["threads"], 10)
+        self.assertEqual(result["proxy"], "http://127.0.0.1:8080")
+
+    def test_strip_profiles_all_empty_omits_key(self):
+        """Profiles dict with only empty/whitespace values is treated as empty and removed."""
+        config = {"profiles": {"speed": "", "evasion": "  "}, "threads": 5}
+        result = strip_empty_override_keys(config)
+        self.assertNotIn("profiles", result)
+        self.assertEqual(result["threads"], 5)
+
+    def test_strip_leaves_non_empty_dicts(self):
+        """Non-empty header, profiles, extra_config are left unchanged."""
+        config = {
+            "header": {"X-Api-Key": "secret"},
+            "profiles": {"speed": "aggressive"},
+            "extra_config": {"wordlist": "/path.txt"},
+            "threads": 1,
+        }
+        result = strip_empty_override_keys(config)
+        self.assertEqual(result["header"], {"X-Api-Key": "secret"})
+        self.assertEqual(result["profiles"], {"speed": "aggressive"})
+        self.assertEqual(result["extra_config"], {"wordlist": "/path.txt"})
+        self.assertEqual(result["threads"], 1)
 
 
 class GetScopeForTargetTest(BaseTestCase):

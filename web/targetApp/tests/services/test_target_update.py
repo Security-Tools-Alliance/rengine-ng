@@ -31,7 +31,10 @@ class ProcessTargetScanOverrideFromPostTest(BaseTestCase):
         post["override_threads"] = "5"
         scan_override, errors, fallback, headers_initial = process_target_scan_override_from_post(post)
         self.assertEqual(len(errors), 1)
-        self.assertIn("Invalid JSON", errors[0])
+        self.assertTrue(
+            "Invalid JSON" in errors[0] or "Invalid header" in errors[0],
+            "Expected invalid header or JSON message, got: %s" % (errors[0],),
+        )
         self.assertIsNotNone(fallback)
         self.assertEqual(fallback["threads"], "5")
         self.assertEqual(fallback["rate_limit"], "")

@@ -9,7 +9,11 @@ from django.http import QueryDict
 from reNgine.core.data import safe_bool_cast, safe_int_cast
 from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.utilities.logger import get_module_logger
-from targetApp.services.scan_param_definitions import PARAM_KEYS, cast_param_value
+from targetApp.services.scan_param_definitions import (
+    PARAM_KEYS,
+    cast_param_value,
+    parse_header_value,
+)
 from targetApp.services.scope_params import (
     apply_resolved_to_secator_config,
     get_scope_for_target,
@@ -274,16 +278,21 @@ def _parse_secator_user_override_from_post(post: QueryDict) -> dict[str, Any]:
     Build user_override dict from POST for scope param merge.
 
     Reads PARAM_KEYS from post; values are cast with cast_param_value.
-    Used by _merge_scope_params_into_config. header, if present,
-    remains as raw string (caller/resolution may parse JSON elsewhere).
+    For header, parse_header_value is used; do not add key if result is None or empty dict.
     """
     user_override: dict[str, Any] = {}
     for key in PARAM_KEYS:
         raw = post.get(key)
-        if raw is not None and raw != "":
-            val = cast_param_value(key, raw)
-            if val is not None:
-                user_override[key] = val
+        if raw is None or (isinstance(raw, str) and raw.strip() == ""):
+            continue
+        if key == "header":
+            parsed, _ = parse_header_value(raw)
+            if parsed and isinstance(parsed, dict) and len(parsed) > 0:
+                user_override[key] = parsed
+            continue
+        val = cast_param_value(key, raw)
+        if val is not None:
+            user_override[key] = val
     return user_override
 
 

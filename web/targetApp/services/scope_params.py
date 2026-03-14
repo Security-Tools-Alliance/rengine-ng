@@ -12,16 +12,21 @@ following a strict priority chain:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from django.conf import settings
 from django.http import QueryDict
 
+from reNgine.core.validators import is_valid_ip
+from reNgine.utilities.domain import normalize_domain_name
 from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.url import get_domain_from_subdomain
 from scanEngine.models import SecatorProfile, SecatorWorker
+from targetApp.models import Target
 
 from .scan_param_definitions import (
     BOOL_PARAM_KEYS,
+    DICT_PARAM_KEYS_EMPTY_IS_NO_OVERRIDE,
     FLOAT_PARAM_KEYS,
     INT_PARAM_KEYS,
     PARAM_KEYS,
@@ -74,6 +79,113 @@ def get_scope_for_target(target: Any) -> Any:
             level="warning",
         )
     return scopes[0] if scopes else None
+
+
+def _build_allowed_domains_set(scope: Any, target: Any) -> set[str]:
+    """Build the set of allowed registered domains for finding scope filter.
+
+    Used when restrict_findings_to_target is True: target's registered domain
+    plus scope.allowed_finding_domains (normalized).
+    """
+    allowed: set[str] = set()
+    if target and getattr(target, "value", None):
+        target_val = (target.value or "").strip().lower()
+        if target_val:
+            reg = get_domain_from_subdomain(target_val)
+            if reg:
+                allowed.add(reg)
+    if scope and getattr(scope, "allowed_finding_domains", None):
+        for entry in scope.allowed_finding_domains:
+            if isinstance(entry, str) and entry.strip():
+                norm = normalize_domain_name(entry.strip())
+                if norm:
+                    reg = get_domain_from_subdomain(norm) or norm
+                    allowed.add(reg)
+    return allowed
+
+
+def get_finding_scope_filter_domain(scope: Any, target: Any) -> Callable[[str], bool] | None:
+    """
+    Return a predicate for Domain creation: True if the domain name is allowed.
+
+    When restrict_findings_to_target is False or scope is None, returns None (no filter).
+    Otherwise returns a callable (domain_name: str) -> bool. IPs are rejected (False):
+    a Domain must not be created with an IP as name.
+    """
+    if scope is None or not getattr(scope, "restrict_findings_to_target", False):
+        return None
+    allowed = _build_allowed_domains_set(scope, target)
+    if not allowed:
+        return None
+
+    def _filter_domain(domain_name: str) -> bool:
+        if not domain_name or not isinstance(domain_name, str):
+            return False
+        domain = domain_name.strip()
+        if is_valid_ip(domain):
+            return False
+        norm = normalize_domain_name(domain)
+        if not norm:
+            return False
+        reg = get_domain_from_subdomain(norm) or norm
+        return reg in allowed
+
+    return _filter_domain
+
+
+def get_finding_scope_filter_host(scope: Any, target: Any) -> Callable[[str], bool] | None:
+    """
+    Return a predicate for Subdomain/host: True if the host is allowed.
+
+    When restrict_findings_to_target is False or scope is None, returns None (no filter).
+    Otherwise returns a callable (host: str) -> bool. IPs are allowed (True):
+    subdomains can be IPs with web servers.
+    """
+    if scope is None or not getattr(scope, "restrict_findings_to_target", False):
+        return None
+    allowed = _build_allowed_domains_set(scope, target)
+    if not allowed:
+        return None
+
+    def _filter_host(host: str) -> bool:
+        if not host or not isinstance(host, str):
+            return False
+        if is_valid_ip(host.strip()):
+            return True
+        norm = host.strip().lower()
+        if not norm:
+            return False
+        reg = get_domain_from_subdomain(norm) or norm
+        return reg in allowed
+
+    return _filter_host
+
+
+def get_finding_scope_filters_for_target(target_id: int) -> dict[str, Any]:
+    """
+    Return domain_filter and host_filter for the given target_id.
+
+    Loads Target and scope; returns {"domain_filter": callable or None, "host_filter": callable or None}.
+    """
+    try:
+        target = Target.objects.get(id=target_id)
+    except Target.DoesNotExist:
+        return {"domain_filter": None, "host_filter": None}
+    scope = get_scope_for_target(target)
+    return {
+        "domain_filter": get_finding_scope_filter_domain(scope, target),
+        "host_filter": get_finding_scope_filter_host(scope, target),
+    }
+
+
+def get_finding_scope_filter_domain_for_target(target_id: int) -> Callable[[str], bool] | None:
+    """Return the domain filter for the given target_id, or None."""
+    return get_finding_scope_filters_for_target(target_id).get("domain_filter")
+
+
+def get_finding_scope_filter_host_for_target(target_id: int) -> Callable[[str], bool] | None:
+    """Return the host filter for the given target_id, or None."""
+    return get_finding_scope_filters_for_target(target_id).get("host_filter")
 
 
 def _get_profile_opts(profile_name: str) -> dict[str, Any]:
@@ -165,6 +277,37 @@ def _get_default(param: str) -> Any:
 def _normalize_scan_config(raw: Any) -> dict[str, Any]:
     """Ensure scan_config is a dict; legacy or malformed JSONField values become {}."""
     return raw if isinstance(raw, dict) else {}
+
+
+def _is_profiles_dict_empty(profiles: Any) -> bool:
+    """True if profiles is a dict with no non-empty category values (treated as no override)."""
+    if not isinstance(profiles, dict):
+        return True
+    if len(profiles) == 0:
+        return True
+    return not any((v or "").strip() for v in profiles.values() if isinstance(v, str)) and not any(
+        v for v in profiles.values() if not isinstance(v, str) and v
+    )
+
+
+def strip_empty_override_keys(config: dict[str, Any]) -> dict[str, Any]:
+    """
+    Remove keys whose value is an empty dict (no override) so they are not persisted.
+
+    Used before assigning scan_config to Target, Scope, or Organization.
+    Returns a new dict; empty dict for header, profiles, extra_config is removed.
+    """
+    result = dict(config)
+    for key in DICT_PARAM_KEYS_EMPTY_IS_NO_OVERRIDE:
+        if key not in result:
+            continue
+        value = result[key]
+        if key == "profiles":
+            if _is_profiles_dict_empty(value):
+                result.pop(key, None)
+        elif isinstance(value, dict) and len(value) == 0:
+            result.pop(key, None)
+    return result
 
 
 def _profiles_to_list(profiles_data: Any) -> list[str]:
@@ -394,8 +537,14 @@ def build_effective_params_display_from_configs(
 
 
 def _is_empty_dict_no_override(param: str, value: Any) -> bool:
-    """Treat empty dict for header as 'no override' so parent config is not overwritten."""
-    return param == "header" and isinstance(value, dict) and len(value) == 0
+    """Treat empty dict for header, profiles, extra_config as 'no override' so parent is not overwritten."""
+    if param not in DICT_PARAM_KEYS_EMPTY_IS_NO_OVERRIDE:
+        return False
+    if not isinstance(value, dict):
+        return False
+    if param == "profiles":
+        return _is_profiles_dict_empty(value)
+    return len(value) == 0
 
 
 def _resolve_single_param(
@@ -719,11 +868,12 @@ def parse_scan_config_from_post(
       (when existing_config is provided); present but value == '' -> clear override
       (key removed from result).
     - header: missing POST key -> leave as-is; present but value == ''
-      -> explicitly clear (set to {}). parse_header_value returning
-      (None, None) is treated as "no override" (key removed, not set to {}).
-    - profiles: when profiles_dict is provided, result["profiles"] = profiles_dict
-      (empty dict means clear). Caller builds profiles_dict from form (e.g.
-      parse_secator_profiles_to_dict(post)).
+      -> remove key (result.pop("header")) so it is not persisted as {}.
+    - profiles: when profiles_dict is provided and non-empty, result["profiles"] = profiles_dict;
+      when empty (all categories empty), key is removed so it is not persisted.
+
+    Empty means "no override": all callers (target/scope/org form views) treat a missing
+    key as no override; none rely on {} to mean "explicitly clear".
 
     On header parse error, existing value is left unchanged and an error
     is appended. Returns the full config (result), not a delta.
@@ -751,18 +901,21 @@ def parse_scan_config_from_post(
     if headers_key in post:
         raw_headers = (post.get(headers_key) or "").strip()
         if raw_headers == "":
-            result["header"] = {}
+            result.pop("header", None)
         else:
             parsed, err = parse_header_value(raw_headers)
             if err:
                 errors.append(err)
-            elif parsed is not None:
+            elif parsed is not None and len(parsed) > 0:
                 result["header"] = parsed
             else:
                 result.pop("header", None)
 
     if profiles_dict is not None:
-        result["profiles"] = profiles_dict
+        if _is_profiles_dict_empty(profiles_dict):
+            result.pop("profiles", None)
+        else:
+            result["profiles"] = profiles_dict
 
     return result, errors
 

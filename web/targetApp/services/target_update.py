@@ -14,7 +14,11 @@ from django.http import QueryDict
 
 from startScan.secator.form import parse_secator_profiles_to_dict
 
-from .scan_param_definitions import ORDERED_PARAM_KEYS_FOR_FORM, TARGET_OVERRIDE_PREFIX
+from .scan_param_definitions import (
+    ORDERED_PARAM_KEYS_FOR_FORM,
+    TARGET_OVERRIDE_PREFIX,
+    header_dict_to_lines,
+)
 from .scan_params_context import build_scan_params_form_context
 from .scope_params import parse_target_scan_override_from_post
 
@@ -75,22 +79,24 @@ def build_update_target_context(
     if isinstance(header_val, str):
         try:
             parsed = json.loads(header_val)
-            header_val = parsed if isinstance(parsed, dict) else {}
+            header_val = parsed if isinstance(parsed, dict) else None
         except (TypeError, ValueError):
-            header_val = {}
+            header_val = None
     if not isinstance(header_val, dict):
-        header_val = {}
-    scan_params_values["header"] = header_val
+        header_val = None
+    if header_val is not None:
+        scan_params_values["header"] = header_val
     scan_params_values.setdefault("profiles", {})
 
-    try:
-        header_initial = json.dumps(header_val, indent=2, sort_keys=True)
-    except TypeError:
-        header_initial = ""
     if override_header_initial is not None:
         if isinstance(override_header_initial, dict):
-            override_header_initial = json.dumps(override_header_initial)
-        header_initial = override_header_initial
+            header_initial = json.dumps(override_header_initial)
+        else:
+            header_initial = override_header_initial
+    elif header_val is None or (isinstance(header_val, dict) and len(header_val) == 0):
+        header_initial = ""
+    else:
+        header_initial = header_dict_to_lines(header_val)
 
     form_ctx = build_scan_params_form_context(target=target, scan_params_values=scan_params_values)
     context = {

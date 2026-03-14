@@ -386,3 +386,45 @@ class TestSubdomainRepository(BaseTestCase):
             fingerprint_sha256="b" * 64,
         )
         self.assertEqual(subdomain.get_certificate_count(), 2)
+
+
+class SubdomainRepositoryFindingScopeFilterTest(BaseTestCase):
+    """Tests for SubdomainRepository with restrict_findings_to_target scope."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_organization()
+        self.data_generator.create_scope(restrict_findings_to_target=True, allowed_finding_domains=[])
+        self.scope = self.data_generator.scope
+        self.target = self.data_generator.target
+        self.scan_history = self.data_generator.create_scan_history()
+        self.subdomain_repo = SubdomainRepository()
+
+    def test_get_or_create_from_host_out_of_scope_returns_none(self):
+        """When scope restricts findings, host (domain) not in allowed list returns None."""
+        result = self.subdomain_repo.get_or_create_from_host(
+            self.scan_history.id,
+            self.target.id,
+            "out-of-scope-unrelated.com",
+        )
+        self.assertIsNone(result)
+
+    def test_get_or_create_from_host_ip_allowed_when_restrict(self):
+        """IP is allowed as subdomain when scope restricts findings (web servers on IP)."""
+        result = self.subdomain_repo.get_or_create_from_host(
+            self.scan_history.id,
+            self.target.id,
+            "192.168.1.100",
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "192.168.1.100")
+
+    def test_get_or_create_from_host_target_domain_succeeds(self):
+        """Target domain host is allowed when scope restricts findings."""
+        result = self.subdomain_repo.get_or_create_from_host(
+            self.scan_history.id,
+            self.target.id,
+            self.target.value,
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, self.target.value)
