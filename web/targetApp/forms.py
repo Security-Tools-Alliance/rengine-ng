@@ -7,6 +7,7 @@ from scanEngine.models import SecatorWorker
 from startScan.models import Domain
 
 from .models import Organization, Scope, Target
+from .services.scope_params import normalize_allowed_hosts_from_list
 
 
 class AddTargetForm(forms.Form):
@@ -216,8 +217,42 @@ class UpdateOrganizationForm(forms.ModelForm):
             self.initial["targets"] = [int(t) for t in target_list if str(t).isdigit()]
 
 
+def _scope_list_field_initial_display(instance, attr_name: str) -> str:
+    """Return a newline-joined string for a Scope list field (e.g. allowed_finding_domains) for form initial."""
+    value = getattr(instance, attr_name, None) if instance else None
+    if value and isinstance(value, list):
+        return "\n".join(x for x in value if isinstance(x, str) and x.strip())
+    return ""
+
+
 class ScopeForm(forms.ModelForm):
     """Form for creating and updating a Scope."""
+
+    allowed_finding_domains = forms.CharField(
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "easi-services.fr\nother-allowed.com",
+            }
+        ),
+        help_text='One domain per line. Only used when "Restrict findings to target" is checked.',
+    )
+    allowed_finding_hosts = forms.CharField(
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": "sub.example.com\n10.0.0.1",
+            }
+        ),
+        help_text=(
+            'When "Restrict findings to target" is checked and this list is non-empty, '
+            "only these hostnames and IPs are accepted for findings. One per line."
+        ),
+    )
 
     def __init__(self, *args, **kwargs):
         project_slug = kwargs.pop("project_slug", None)
@@ -253,26 +288,13 @@ class ScopeForm(forms.ModelForm):
         self.fields[
             "default_worker"
         ].help_text = "When the scope has 2 or more allowed workers, choose which one is pre-selected by default."
-        if "allowed_finding_domains" in self.fields:
-            self.fields["allowed_finding_domains"] = forms.CharField(
-                required=False,
-                initial="",
-                widget=forms.Textarea(
-                    attrs={
-                        "class": "form-control",
-                        "rows": 3,
-                        "placeholder": "easi-services.fr\nother-allowed.com",
-                    }
-                ),
-                help_text='One domain per line. Only used when "Restrict findings to target" is checked.',
-            )
-            domains = getattr(self.instance, "allowed_finding_domains", None) if self.instance else None
-            if domains and isinstance(domains, list):
-                self.initial["allowed_finding_domains"] = "\n".join(
-                    d for d in domains if isinstance(d, str) and d.strip()
-                )
-            else:
-                self.initial["allowed_finding_domains"] = ""
+
+        self.initial["allowed_finding_domains"] = _scope_list_field_initial_display(
+            self.instance, "allowed_finding_domains"
+        )
+        self.initial["allowed_finding_hosts"] = _scope_list_field_initial_display(
+            self.instance, "allowed_finding_hosts"
+        )
 
     class Meta:
         model = Scope
@@ -289,6 +311,7 @@ class ScopeForm(forms.ModelForm):
             "default_worker",
             "restrict_findings_to_target",
             "allowed_finding_domains",
+            "allowed_finding_hosts",
         ]
         widgets = {
             "organization": forms.Select(
@@ -336,6 +359,15 @@ class ScopeForm(forms.ModelForm):
         if isinstance(value, list):
             return [str(x).strip().lower() for x in value if isinstance(x, str) and x.strip()]
         return [line.strip().lower() for line in str(value).splitlines() if line.strip()]
+
+    def clean_allowed_finding_hosts(self):
+        value = self.cleaned_data.get("allowed_finding_hosts")
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return normalize_allowed_hosts_from_list(value)
+        lines = [line.strip() for line in str(value).splitlines() if line.strip()]
+        return normalize_allowed_hosts_from_list(lines)
 
     def clean(self):
         cleaned = super().clean()

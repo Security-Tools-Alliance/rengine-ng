@@ -9,6 +9,7 @@ from reNgine.utilities.domain import (
     get_or_create_domain_for_target,
     get_scan_display_name,
     normalize_domain_name,
+    normalize_host_string,
     resolve_domain_for_scan,
 )
 from startScan.models import Domain
@@ -44,6 +45,26 @@ class TestNormalizeDomainName(BaseTestCase):
     def test_normalize_preserves_punycode(self):
         self.assertEqual(normalize_domain_name("xn--d1acpjx3f.xn--p1ai"), "xn--d1acpjx3f.xn--p1ai")
         self.assertEqual(normalize_domain_name("  XN--D1ACPJX3F.XN--P1AI.  "), "xn--d1acpjx3f.xn--p1ai")
+
+
+class TestNormalizeHostString(BaseTestCase):
+    """Tests for normalize_host_string (strip, lower; no trailing-dot rule)."""
+
+    def test_returns_stripped_lower(self):
+        self.assertEqual(normalize_host_string("  Host.Example.COM  "), "host.example.com")
+        self.assertEqual(normalize_host_string("192.168.1.1"), "192.168.1.1")
+
+    def test_empty_returns_none(self):
+        self.assertIsNone(normalize_host_string(""))
+        self.assertIsNone(normalize_host_string("   "))
+        self.assertIsNone(normalize_host_string("\t"))
+
+    def test_returns_none_for_non_string(self):
+        self.assertIsNone(normalize_host_string(None))
+        self.assertIsNone(normalize_host_string(123))
+
+    def test_preserves_trailing_dot_unlike_domain_name(self):
+        self.assertEqual(normalize_host_string("example.com."), "example.com.")
 
 
 class TestGetDomainForScanByName(BaseTestCase):

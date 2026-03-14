@@ -8,6 +8,8 @@ Use these helpers for any Domain lookup or creation; do not inline
 Domain.objects.get_or_create or filter by scan_history_id+name elsewhere.
 """
 
+from __future__ import annotations
+
 from typing import Any, Optional
 
 from django.db.models import QuerySet
@@ -26,6 +28,40 @@ def normalize_domain_name(domain_name: str) -> Optional[str]:
     if not isinstance(domain_name, str):
         return None
     return domain_name.strip().lower().rstrip(".") or None
+
+
+def normalize_host_string(s: str) -> Optional[str]:
+    """
+    Normalize a host or IP string for comparison and storage: strip, lower.
+
+    Returns None if the result would be empty or the input is not a string.
+    Use this for scope tokens, allowed-finding hosts, and any bare hostname/IP
+    so normalization is consistent across scope_params, scope_normalizer, and forms.
+    """
+    if not isinstance(s, str):
+        return None
+    return s.strip().lower() or None
+
+
+def normalize_allowed_hosts_from_list(raw: Any) -> list[str]:
+    """Normalize a list of allowed host strings (strip, lower, dedupe).
+
+    Accepts a list of strings; returns [] for non-list or missing. Uses
+    normalize_host_string so behavior is consistent across scope_params,
+    scope_normalizer, and Scope model.
+    """
+    if not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    seen: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, str):
+            continue
+        norm = normalize_host_string(entry)
+        if norm is not None and norm not in seen:
+            seen.add(norm)
+            result.append(norm)
+    return result
 
 
 def get_domain_for_scan_by_name(scan_history_id: int, domain_name: str) -> Optional[Domain]:

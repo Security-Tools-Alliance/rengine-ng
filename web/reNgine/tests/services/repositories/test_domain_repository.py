@@ -470,7 +470,8 @@ class TestDomainRepository(BaseTestCase):
         self.assertIn("emails", result.extra_data)
 
     def test_save_from_secator_domain_name_mismatch(self):
-        """Test handling domain name mismatch."""
+        """Test handling domain name mismatch when scope restricts findings to target."""
+        self.data_generator.create_scope(restrict_findings_to_target=True)
         whois = self._build_whois_payload()
         item = {
             "_type": "domain",

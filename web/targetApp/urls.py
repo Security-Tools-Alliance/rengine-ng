@@ -21,4 +21,6 @@ urlpatterns = [
     path("<slug:slug>/scope/update/<int:id>", views.update_scope, name="update_scope"),
     path("<slug:slug>/scope/delete/<int:id>", views.delete_scope, name="delete_scope"),
     path("<slug:slug>/scope/detail/<int:id>", views.scope_detail, name="scope_detail"),
+    path("<slug:slug>/scope/normalize", views.scope_normalize, name="scope_normalize"),
+    path("<slug:slug>/scope/normalize/apply", views.scope_normalize_apply, name="scope_normalize_apply"),
 ]

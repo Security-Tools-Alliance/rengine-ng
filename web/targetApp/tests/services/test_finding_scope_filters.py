@@ -61,6 +61,16 @@ class FindingScopeFilterDomainTest(BaseTestCase):
         self.assertTrue(fn("allowed-extra.com"))
         self.assertTrue(fn("sub.allowed-extra.com"))
 
+    def test_restrict_true_allowed_finding_hosts_adds_root_domains(self) -> None:
+        self.scope.restrict_findings_to_target = True
+        self.scope.allowed_finding_domains = []
+        self.scope.allowed_finding_hosts = ["sub.example-from-hosts.com"]
+        self.scope.save()
+        fn = get_finding_scope_filter_domain(self.scope, self.target)
+        self.assertIsNotNone(fn)
+        self.assertTrue(fn("example-from-hosts.com"))
+        self.assertTrue(fn("other.example-from-hosts.com"))
+
 
 class FindingScopeFilterHostTest(BaseTestCase):
     """Tests for get_finding_scope_filter_host."""
@@ -98,6 +108,28 @@ class FindingScopeFilterHostTest(BaseTestCase):
         fn = get_finding_scope_filter_host(self.scope, self.target)
         self.assertIsNotNone(fn)
         self.assertFalse(fn("other-unrelated.com"))
+
+    def test_allowed_finding_hosts_non_empty_only_listed_hosts_accepted(self) -> None:
+        self.scope.restrict_findings_to_target = True
+        self.scope.allowed_finding_domains = []
+        self.scope.allowed_finding_hosts = ["allowed-one.example.com", "192.168.1.1"]
+        self.scope.save()
+        fn = get_finding_scope_filter_host(self.scope, self.target)
+        self.assertIsNotNone(fn)
+        self.assertTrue(fn("allowed-one.example.com"))
+        self.assertTrue(fn("192.168.1.1"))
+        self.assertFalse(fn("other.example.com"))
+        self.assertFalse(fn("10.0.0.1"))
+
+    def test_allowed_finding_hosts_empty_keeps_domain_based_behavior(self) -> None:
+        self.scope.restrict_findings_to_target = True
+        self.scope.allowed_finding_domains = []
+        self.scope.allowed_finding_hosts = []
+        self.scope.save()
+        fn = get_finding_scope_filter_host(self.scope, self.target)
+        self.assertIsNotNone(fn)
+        self.assertTrue(fn(self.target.value))
+        self.assertTrue(fn("192.168.1.1"))
 
 
 class FindingScopeFiltersForTargetTest(BaseTestCase):

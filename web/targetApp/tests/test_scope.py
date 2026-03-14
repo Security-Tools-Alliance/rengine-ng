@@ -2,12 +2,14 @@
 Tests for the Scope model and views.
 """
 
+import json
+
 from django.db import IntegrityError
 from django.urls import reverse
 from django.utils import timezone
 
 from targetApp.constants import SCOPE_TYPE_BUG_BOUNTY, SCOPE_TYPE_ENGAGEMENT_EXTERNAL
-from targetApp.models import Organization, Scope
+from targetApp.models import Organization, Scope, Target
 from utils.test_base import BaseTestCase
 
 
@@ -77,6 +79,42 @@ class ScopeModelTest(BaseTestCase):
         target.refresh_from_db()
         self.assertEqual(target.scan_config["threads"], 10)
         self.assertEqual(target.scan_config["proxy"], "socks5://10.0.0.1:1080")
+
+    def test_scope_save_normalizes_allowed_finding_hosts(self):
+        scope = Scope(
+            organization=self.data_generator.organization,
+            name="Normalize Test",
+            scope_type=SCOPE_TYPE_ENGAGEMENT_EXTERNAL,
+            allowed_finding_hosts=["  Host.Example.COM  ", "host.example.com", "192.168.1.1"],
+        )
+        scope.save()
+        scope.refresh_from_db()
+        self.assertEqual(scope.allowed_finding_hosts, ["host.example.com", "192.168.1.1"])
+
+    def test_scope_save_non_list_allowed_finding_hosts_becomes_empty_list(self):
+        scope = Scope(
+            organization=self.data_generator.organization,
+            name="Non-list Test",
+            scope_type=SCOPE_TYPE_ENGAGEMENT_EXTERNAL,
+        )
+        scope.allowed_finding_hosts = {"invalid": "dict"}
+        scope.save()
+        scope.refresh_from_db()
+        self.assertEqual(scope.allowed_finding_hosts, [])
+
+    def test_scope_save_legacy_string_allowed_finding_hosts_converted(self):
+        scope = Scope(
+            organization=self.data_generator.organization,
+            name="Legacy String Test",
+            scope_type=SCOPE_TYPE_ENGAGEMENT_EXTERNAL,
+        )
+        scope.allowed_finding_hosts = "host1.example.com, host2.example.com\n  host3.example.com  "
+        scope.save()
+        scope.refresh_from_db()
+        self.assertEqual(
+            scope.allowed_finding_hosts,
+            ["host1.example.com", "host2.example.com", "host3.example.com"],
+        )
 
 
 class ScopeViewsTest(BaseTestCase):
@@ -189,6 +227,28 @@ class ScopeViewsTest(BaseTestCase):
         self.assertEqual(scope.name, "Updated Name")
         self.assertEqual(scope.scope_type, SCOPE_TYPE_BUG_BOUNTY)
 
+    def test_scope_normalize_invalid_json_returns_400(self):
+        url = reverse("scope_normalize", kwargs={"slug": self.slug})
+        response = self.client.post(
+            url,
+            data="not valid json",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertEqual(data.get("error"), "Invalid JSON body")
+
+    def test_scope_normalize_apply_invalid_json_returns_400(self):
+        url = reverse("scope_normalize_apply", kwargs={"slug": self.slug})
+        response = self.client.post(
+            url,
+            data="not valid json",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertEqual(data.get("error"), "Invalid JSON body")
+
     def test_delete_scope_post(self):
         scope = self.data_generator.create_scope()
         scope_id = scope.pk
@@ -251,6 +311,56 @@ class ScopeViewsTest(BaseTestCase):
         self.assertEqual(response.status_code, 302)
         scope = Scope.objects.get(name="Scope With Targets")
         self.assertIn(target, scope.targets.all())
+
+    def test_add_scope_with_pending_normalizer_targets_creates_targets_on_save(self):
+        """Saving a scope with pending_normalizer_targets creates those targets and adds them to the scope."""
+        org = self.data_generator.organization
+        project = org.project
+        pending = json.dumps({
+            "domain_targets": ["pending-domain.example.com", "other-root.org"],
+            "ip_targets": ["10.9.8.7"],
+        })
+        response = self.client.post(
+            reverse("add_scope", kwargs={"slug": self.slug}),
+            {
+                "organization": org.id,
+                "name": "Scope With Pending Targets",
+                "scope_type": SCOPE_TYPE_ENGAGEMENT_EXTERNAL,
+                "pending_normalizer_targets": pending,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        scope = Scope.objects.get(name="Scope With Pending Targets")
+        scope_target_ids = list(scope.targets.values_list("id", flat=True))
+        self.assertEqual(len(scope_target_ids), 3)
+        host_targets = Target.objects.filter(project=project, target_type="host").values_list("value", flat=True)
+        self.assertIn("pending-domain.example.com", host_targets)
+        self.assertIn("other-root.org", host_targets)
+        ip_targets = Target.objects.filter(project=project, target_type="ip").values_list("value", flat=True)
+        self.assertIn("10.9.8.7", ip_targets)
+
+    def test_update_scope_with_pending_normalizer_targets_creates_targets_on_save(self):
+        """Updating a scope with pending_normalizer_targets creates those targets and adds them to the scope."""
+        scope = self.data_generator.create_scope(name="To Update")
+        org = scope.organization
+        project = org.project
+        pending = json.dumps({
+            "domain_targets": ["update-domain.example.com"],
+            "ip_targets": [],
+        })
+        response = self.client.post(
+            reverse("update_scope", kwargs={"slug": self.slug, "id": scope.id}),
+            {
+                "organization": org.id,
+                "name": scope.name,
+                "scope_type": scope.scope_type,
+                "pending_normalizer_targets": pending,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        scope.refresh_from_db()
+        self.assertEqual(scope.targets.filter(value="update-domain.example.com").count(), 1)
+        self.assertTrue(Target.objects.filter(project=project, value="update-domain.example.com").exists())
 
     def test_add_scope_with_scan_params(self):
         org = self.data_generator.organization

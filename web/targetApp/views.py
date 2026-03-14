@@ -9,12 +9,14 @@ from django import http
 from django.conf import settings
 from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Value, When
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
+from django.views.decorators.http import require_POST
 from rolepermissions.checkers import has_role
 from rolepermissions.decorators import has_permission_decorator
 import validators
@@ -31,6 +33,7 @@ from dashboard.models import Project
 from reNgine.core.data import get_ips_from_cidr_range
 from reNgine.core.path import resolve_results_dir_under_base, safe_rmtree
 from reNgine.core.validators import is_valid_cidr
+from reNgine.utilities.request import get_string_from_post_or_json
 from reNgine.definitions import (
     FOUR_OH_FOUR_URL,
     PERM_MODIFY_TARGETS,
@@ -82,6 +85,7 @@ from targetApp.forms import (
 from targetApp.models import TARGET_TYPE_CHOICES, Organization, Scope, Target
 from targetApp.services.scan_param_definitions import TARGET_OVERRIDE_PREFIX
 from targetApp.services.scan_params_context import build_scan_params_form_context
+from targetApp.services.scope_normalizer import parse_scope_raw_input
 from targetApp.services.scope_params import (
     _normalize_scan_config,
     build_effective_params_display,
@@ -241,6 +245,34 @@ def _get_or_create_target(project, value, target_type=TARGET_TYPE_HOST):
         defaults={"insert_date": timezone.now()},
     )
     return target, created
+
+
+def _apply_pending_normalizer_targets(scope, request):
+    """
+    If the request contains pending_normalizer_targets (JSON from scope normalizer Apply to form),
+    create those targets in the scope's project and add them to the scope.
+    """
+    raw = request.POST.get("pending_normalizer_targets")
+    if not raw or not raw.strip():
+        return
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return
+    domain_targets = data.get("domain_targets") or []
+    ip_targets = data.get("ip_targets") or []
+    if not domain_targets and not ip_targets:
+        return
+    project = scope.organization.project
+    with transaction.atomic():
+        for value in domain_targets:
+            if value and isinstance(value, str) and value.strip():
+                target, _ = _get_or_create_target(project, value.strip(), target_type=TARGET_TYPE_HOST)
+                scope.targets.add(target)
+        for value in ip_targets:
+            if value and isinstance(value, str) and value.strip():
+                target, _ = _get_or_create_target(project, value.strip(), target_type=TARGET_TYPE_IP)
+                scope.targets.add(target)
 
 
 def validate_dns_servers(dns_servers_string):
@@ -1414,6 +1446,7 @@ def add_scope(request, slug):
             scope.scan_config = strip_empty_override_keys(config or {}) or None
             scope.save()
             form.save_m2m()
+            _apply_pending_normalizer_targets(scope, request)
             messages.add_message(request, messages.INFO, "Scope %s added successfully" % (scope.name,))
             return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
     initial_workers = form.initial.get("workers") or []
@@ -1451,6 +1484,7 @@ def update_scope(request, slug, id):
             updated_scope.scan_config = strip_empty_override_keys(config or {}) or None
             updated_scope.save()
             form.save_m2m()
+            _apply_pending_normalizer_targets(updated_scope, request)
             messages.add_message(request, messages.INFO, "Scope %s updated successfully" % (scope.name,))
             return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
     allowed_options = get_allowed_workers_for_scope(scope)
@@ -1504,3 +1538,56 @@ def scope_detail(request, slug, id):
         "scan_params_effective": build_effective_params_display(scope=scope, organization=scope.organization),
     }
     return render(request, "scope/detail.html", context)
+
+
+@has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
+@require_POST
+def scope_normalize(request, slug):
+    """POST: normalize raw scope input; returns JSON with domain_targets, ip_targets, allowed_finding_hosts."""
+    raw, body_error = get_string_from_post_or_json(request, key="raw")
+    if body_error:
+        return JsonResponse({"error": body_error}, status=400)
+    if raw is None:
+        return JsonResponse({"error": "Missing or invalid 'raw' input"}, status=400)
+    result = parse_scope_raw_input(raw)
+    return JsonResponse(
+        {
+            "domain_targets": list(result.domain_targets),
+            "ip_targets": list(result.ip_targets),
+            "allowed_finding_hosts": list(result.allowed_finding_hosts),
+        }
+    )
+
+
+@has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
+@require_POST
+def scope_normalize_apply(request, slug):
+    """
+    POST: normalize raw input and get_or_create targets for project; returns target_ids and lists.
+    The scope add/update UI uses the preview flow (normalize + pending_normalizer_targets on save) instead.
+    This endpoint remains for API or programmatic use.
+    """
+    raw, body_error = get_string_from_post_or_json(request, key="raw")
+    if body_error:
+        return JsonResponse({"error": body_error}, status=400)
+    if raw is None:
+        return JsonResponse({"error": "Missing or invalid 'raw' input"}, status=400)
+    project = get_object_or_404(Project, slug=slug)
+    result = parse_scope_raw_input(raw)
+    with transaction.atomic():
+        target_ids = []
+        for value in result.domain_targets:
+            target, _ = _get_or_create_target(project, value, target_type=TARGET_TYPE_HOST)
+            target_ids.append(target.id)
+        for value in result.ip_targets:
+            target, _ = _get_or_create_target(project, value, target_type=TARGET_TYPE_IP)
+            target_ids.append(target.id)
+    return JsonResponse(
+        {
+            "target_ids": target_ids,
+            "domain_targets": list(result.domain_targets),
+            "ip_targets": list(result.ip_targets),
+            "allowed_finding_hosts": list(result.allowed_finding_hosts),
+            "restrict_findings_to_target": True,
+        }
+    )

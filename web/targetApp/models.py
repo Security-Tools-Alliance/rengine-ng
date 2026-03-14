@@ -1,7 +1,10 @@
 from django.db import models
 
 from dashboard.models import Project
+from reNgine.utilities.logger import get_module_logger
 from targetApp.constants import SCOPE_TYPE_CHOICES, TARGET_TYPE_CHOICES
+
+_scope_logger = get_module_logger(__name__)
 
 
 class TargetQuerySet(models.QuerySet):
@@ -161,6 +164,11 @@ class Scope(models.Model):
         blank=True,
         help_text="List of domain names (e.g. ['easi-services.fr']) allowed in addition to the target when restrict_findings_to_target is True.",
     )
+    allowed_finding_hosts = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="When restrict_findings_to_target is True and this list is non-empty, only these hostnames and IPs are accepted for Subdomain/Domain creation.",
+    )
     insert_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -174,3 +182,26 @@ class Scope(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_scope_type_display()})"
+
+    def save(self, *args, **kwargs):
+        from reNgine.utilities.domain import normalize_allowed_hosts_from_list
+
+        if isinstance(self.allowed_finding_hosts, list):
+            self.allowed_finding_hosts = normalize_allowed_hosts_from_list(self.allowed_finding_hosts)
+        elif isinstance(self.allowed_finding_hosts, str) and self.allowed_finding_hosts.strip():
+            parts = []
+            for line in self.allowed_finding_hosts.splitlines():
+                parts.extend(line.split(","))
+            items = [p.strip() for p in parts if p.strip()]
+            self.allowed_finding_hosts = normalize_allowed_hosts_from_list(items)
+        else:
+            if self.allowed_finding_hosts is not None and not isinstance(self.allowed_finding_hosts, list):
+                _scope_logger.log_line(
+                    "[SCOPE]",
+                    "SAVE",
+                    "Scope.allowed_finding_hosts was not a list or string (type=%s), reset to []"
+                    % (type(self.allowed_finding_hosts).__name__,),
+                    level="warning",
+                )
+            self.allowed_finding_hosts = []
+        super().save(*args, **kwargs)

@@ -18,7 +18,11 @@ from django.conf import settings
 from django.http import QueryDict
 
 from reNgine.core.validators import is_valid_ip
-from reNgine.utilities.domain import normalize_domain_name
+from reNgine.utilities.domain import (
+    normalize_allowed_hosts_from_list,
+    normalize_domain_name,
+    normalize_host_string,
+)
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import get_domain_from_subdomain
 from scanEngine.models import SecatorProfile, SecatorWorker
@@ -81,11 +85,23 @@ def get_scope_for_target(target: Any) -> Any:
     return scopes[0] if scopes else None
 
 
+def _build_allowed_hosts_set(scope: Any) -> set[str]:
+    """Build the set of allowed hosts (hostnames + IPs) from scope.allowed_finding_hosts.
+
+    Returns normalized (strip, lower) strings. Empty set if scope has no or non-list value.
+    """
+    if not scope:
+        return set()
+    raw = getattr(scope, "allowed_finding_hosts", None)
+    return set(normalize_allowed_hosts_from_list(raw))
+
+
 def _build_allowed_domains_set(scope: Any, target: Any) -> set[str]:
     """Build the set of allowed registered domains for finding scope filter.
 
     Used when restrict_findings_to_target is True: target's registered domain
-    plus scope.allowed_finding_domains (normalized).
+    plus scope.allowed_finding_domains (normalized), plus root domains from
+    scope.allowed_finding_hosts (non-IP entries).
     """
     allowed: set[str] = set()
     if target and getattr(target, "value", None):
@@ -100,6 +116,12 @@ def _build_allowed_domains_set(scope: Any, target: Any) -> set[str]:
                 norm = normalize_domain_name(entry.strip())
                 if norm:
                     reg = get_domain_from_subdomain(norm) or norm
+                    allowed.add(reg)
+    if scope:
+        for entry in normalize_allowed_hosts_from_list(getattr(scope, "allowed_finding_hosts", None)):
+            if not is_valid_ip(entry):
+                reg = get_domain_from_subdomain(entry) or entry
+                if reg:
                     allowed.add(reg)
     return allowed
 
@@ -138,25 +160,29 @@ def get_finding_scope_filter_host(scope: Any, target: Any) -> Callable[[str], bo
     Return a predicate for Subdomain/host: True if the host is allowed.
 
     When restrict_findings_to_target is False or scope is None, returns None (no filter).
-    Otherwise returns a callable (host: str) -> bool. IPs are allowed (True):
-    subdomains can be IPs with web servers.
+    Otherwise returns a callable (host: str) -> bool. When scope.allowed_finding_hosts
+    is non-empty, only hosts in that list are accepted (including IPs). When empty,
+    any subdomain of allowed domains is accepted and IPs are always allowed.
     """
     if scope is None or not getattr(scope, "restrict_findings_to_target", False):
         return None
-    allowed = _build_allowed_domains_set(scope, target)
-    if not allowed:
+    allowed_domains = _build_allowed_domains_set(scope, target)
+    allowed_hosts = _build_allowed_hosts_set(scope)
+    if not allowed_domains and not allowed_hosts:
         return None
 
     def _filter_host(host: str) -> bool:
         if not host or not isinstance(host, str):
             return False
-        if is_valid_ip(host.strip()):
-            return True
         norm = host.strip().lower()
         if not norm:
             return False
+        if allowed_hosts:
+            return norm in allowed_hosts
+        if is_valid_ip(norm):
+            return True
         reg = get_domain_from_subdomain(norm) or norm
-        return reg in allowed
+        return reg in allowed_domains
 
     return _filter_host
 

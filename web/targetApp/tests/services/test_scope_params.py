@@ -8,6 +8,7 @@ from scanEngine.models import SecatorProfile, SecatorWorker
 from targetApp.services.scope_params import (
     PARAM_KEYS,
     TARGET_OVERRIDE_PREFIX,
+    _build_allowed_hosts_set,
     _profiles_to_list,
     apply_resolved_to_secator_config,
     build_effective_params_display,
@@ -18,6 +19,7 @@ from targetApp.services.scope_params import (
     get_scope_worker_ids,
     get_scope_worker_validation,
     get_workers_for_scan_dropdown,
+    normalize_allowed_hosts_from_list,
     parse_target_scan_override_from_post,
     resolve_scan_params,
     strip_empty_override_keys,
@@ -942,6 +944,41 @@ class StripEmptyOverrideKeysTest(BaseTestCase):
         self.assertEqual(result["profiles"], {"speed": "aggressive"})
         self.assertEqual(result["extra_config"], {"wordlist": "/path.txt"})
         self.assertEqual(result["threads"], 1)
+
+
+class NormalizeAllowedHostsTest(BaseTestCase):
+    """Tests for normalize_allowed_hosts_from_list and _build_allowed_hosts_set."""
+
+    def test_normalize_empty_list_returns_empty(self):
+        self.assertEqual(normalize_allowed_hosts_from_list([]), [])
+
+    def test_normalize_none_returns_empty(self):
+        self.assertEqual(normalize_allowed_hosts_from_list(None), [])
+
+    def test_normalize_non_list_returns_empty(self):
+        self.assertEqual(normalize_allowed_hosts_from_list("single string"), [])
+        self.assertEqual(normalize_allowed_hosts_from_list({"key": "value"}), [])
+
+    def test_normalize_strips_lower_dedupe(self):
+        result = normalize_allowed_hosts_from_list(
+            ["  Host.Example.COM  ", "host.example.com", "other.com"]
+        )
+        self.assertEqual(result, ["host.example.com", "other.com"])
+
+    def test_normalize_skips_non_strings_and_empty(self):
+        result = normalize_allowed_hosts_from_list(
+            ["valid.com", 123, None, "", "  ", "another.com"]
+        )
+        self.assertEqual(result, ["valid.com", "another.com"])
+
+    def test_build_allowed_hosts_set_none_scope_returns_empty(self):
+        self.assertEqual(_build_allowed_hosts_set(None), set())
+
+    def test_build_allowed_hosts_set_non_list_allowed_finding_hosts_returns_empty(self):
+        scope = type("Scope", (), {"allowed_finding_hosts": "not a list"})()
+        self.assertEqual(_build_allowed_hosts_set(scope), set())
+        scope_dict = type("Scope", (), {"allowed_finding_hosts": {"a": 1}})()
+        self.assertEqual(_build_allowed_hosts_set(scope_dict), set())
 
 
 class GetScopeForTargetTest(BaseTestCase):

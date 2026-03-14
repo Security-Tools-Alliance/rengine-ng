@@ -163,9 +163,10 @@ input_types:
             out = get_test_stdout()
             call_command("load_secator_all", stdout=out)
 
-            # Check that all commands were called
-            self.assertEqual(mock_call.call_count, 3)
+            # Check that all commands were called (tasks, profiles, workflows, scans)
+            self.assertEqual(mock_call.call_count, 4)
             mock_call.assert_any_call("load_tasks")
+            mock_call.assert_any_call("load_profiles")
             mock_call.assert_any_call("load_workflows")
             mock_call.assert_any_call("load_scans")
 
