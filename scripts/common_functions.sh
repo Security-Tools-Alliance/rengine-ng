@@ -60,6 +60,66 @@ merge_env_from_dist_at_root() {
 # Default web container name for reNgine-ng (used by install.sh and update.sh).
 RENGINE_WEB_CONTAINER="rengine-web-1"
 
+# Placeholder value in .env-dist; if this is the only value in .env, the key is not really configured.
+RENGINE_SECATOR_API_KEY_PLACEHOLDER="your-generated-api-key-here"
+
+# Write a debug line to stderr and to the update log when RENGINE_UPDATE_LOG_FILE is set (by update.sh).
+# Usage: _secator_debug "msg" [log_file]. Also appends to RENGINE_UPDATE_LOG_FILE so debug always lands in the update log.
+_secator_debug() {
+  local msg="$1"
+  local log_file="${2:-}"
+  echo "[SECATOR_DEBUG] $msg" >&2
+  local target=""
+  if [[ -n "$log_file" && -w "$log_file" ]]; then
+    target="$log_file"
+  elif [[ -n "${RENGINE_UPDATE_LOG_FILE:-}" && -w "$RENGINE_UPDATE_LOG_FILE" ]]; then
+    target="$RENGINE_UPDATE_LOG_FILE"
+  fi
+  if [[ -n "$target" ]]; then
+    echo "$(date -Iseconds) [SECATOR_DEBUG] $msg" >> "$target"
+  fi
+}
+
+# Return 0 if env_file has a real Secator API key (present and not the placeholder). Return 1 otherwise.
+# Optional second arg: debug_log_file — when set, detailed diagnostic lines are appended (and printed to stderr).
+# Normalize value (strip control chars, trim) so placeholder is never mistaken for configured on any system.
+is_secator_api_key_configured() {
+  local env_file="${1:?}"
+  local debug_log="${2:-}"
+  _secator_debug "is_secator_api_key_configured: env_file=$env_file" "$debug_log"
+  if [[ ! -f "$env_file" ]]; then
+    _secator_debug "is_secator_api_key_configured: file missing, return 1 (not configured)" "$debug_log"
+    return 1
+  fi
+  local raw
+  raw=$(grep -E '^SECATOR_ADDONS_API_KEY=' "$env_file" 2>/dev/null | head -1 | cut -d= -f2-)
+  local raw_len=${#raw}
+  local raw_hex
+  raw_hex=$(printf '%s' "$raw" | od -A n -t x1 2>/dev/null | head -3 | tr -d '\n' || echo "N/A")
+  _secator_debug "is_secator_api_key_configured: raw value length=$raw_len hex_prefix=$raw_hex" "$debug_log"
+  local val
+  val=$(printf '%s' "$raw" | tr -d '\r\n' | tr -d '\000-\037\177' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  local val_len=${#val}
+  _secator_debug "is_secator_api_key_configured: after normalize length=$val_len val='$val'" "$debug_log"
+  if [[ -z "$val" ]]; then
+    _secator_debug "is_secator_api_key_configured: empty after normalize, return 1 (not configured)" "$debug_log"
+    return 1
+  fi
+  local placeholder_ref="$RENGINE_SECATOR_API_KEY_PLACEHOLDER"
+  _secator_debug "is_secator_api_key_configured: placeholder_ref='$placeholder_ref' length=${#placeholder_ref}" "$debug_log"
+  local cmp_literal=0 cmp_var=0 cmp_prefix=0
+  [[ "$val" == "your-generated-api-key-here" ]] && cmp_literal=1
+  [[ "$val" == "$placeholder_ref" ]] && cmp_var=1
+  [[ "$val" == "your-generated-api-key-here"* ]] && cmp_prefix=1
+  _secator_debug "is_secator_api_key_configured: cmp_literal=$cmp_literal cmp_var=$cmp_var cmp_prefix=$cmp_prefix" "$debug_log"
+  if [[ $cmp_literal -eq 1 || $cmp_var -eq 1 || $cmp_prefix -eq 1 ]]; then
+    _secator_debug "is_secator_api_key_configured: value is placeholder, return 1 (not configured)" "$debug_log"
+    return 1
+  fi
+  _secator_debug "is_secator_api_key_configured: value is not placeholder, return 0 (configured)" "$debug_log"
+  return 0
+}
+
 # Run a command inside the web container. Usage: run_in_web_container "cmd"
 run_in_web_container() {
   local cmd="$1"
@@ -139,6 +199,58 @@ write_secator_env_block() {
   if [[ "$EUID" -eq 0 && -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then
     chown "$SUDO_USER:$SUDO_USER" "$env_file" 2>/dev/null || chown "$SUDO_USER" "$env_file" 2>/dev/null || true
   fi
+}
+
+# Ensure .env has a real Secator API key: if not (missing or placeholder), get or create key and write block.
+# Usage: ensure_secator_api_key_in_env env_file repo_root [make_output_log_file]
+# Returns 0 on success (key configured or written or "already exists" warning). Returns 1 on hard failure.
+# Optional make_output_log_file: if set, make restart output is appended to this file.
+ensure_secator_api_key_in_env() {
+  local env_file="${1:?}"
+  local repo_root="${2:?}"
+  local make_log_file="${3:-}"
+  if is_secator_api_key_configured "$env_file" "$make_log_file"; then
+    log "Secator API key already configured in .env" $COLOR_GREEN
+    return 0
+  fi
+  log "Generating Secator API key..." $COLOR_CYAN
+  local err_file
+  err_file=$(mktemp) || return 1
+  local key
+  key=$(get_secator_api_key_from_container 2>"$err_file")
+  if [[ -n "$key" ]]; then
+    log "Secator API key generated successfully" $COLOR_GREEN
+    if write_secator_env_block "$env_file" "$key"; then
+      log "Secator API configuration written to .env" $COLOR_GREEN
+      # Container must be restarted so it reloads .env and uses the new API key (COLD=1 for full env reload).
+      log "Restarting web service (cold) to load new API key..." $COLOR_CYAN
+      if [[ -n "$make_log_file" ]]; then
+        (cd "$repo_root" && make restart web COLD=1) >> "$make_log_file" 2>&1 || log "Warning: make restart web COLD=1 failed" $COLOR_YELLOW
+      else
+        (cd "$repo_root" && make restart web COLD=1) || log "Warning: make restart web COLD=1 failed" $COLOR_YELLOW
+      fi
+    else
+      log "Warning: Could not update .env file. Manually add Secator API configuration." $COLOR_YELLOW
+    fi
+    rm -f "$err_file"
+    return 0
+  fi
+  if [[ -s "$err_file" ]] && grep -q "already exists" "$err_file" 2>/dev/null; then
+    log "Secator API key already exists in database but could not be retrieved; .env may be out of sync." $COLOR_YELLOW
+    log "To fix: make shell, then python3 manage.py generate_secator_api_key --recreate --show-key, and add SECATOR_ADDONS_API_KEY to .env" $COLOR_YELLOW
+    [[ -n "$make_log_file" ]] && echo "WARNING: Secator key exists in DB but not in .env; user should sync manually" >> "$make_log_file"
+    rm -f "$err_file"
+    return 0
+  fi
+  log "Secator API key could not be generated:" $COLOR_RED
+  if [[ -s "$err_file" ]]; then
+    while IFS= read -r line; do log "$line" $COLOR_RED; done < "$err_file"
+  else
+    log "Empty output from generate_secator_api_key --raw-key. Run the command manually for details." $COLOR_RED
+  fi
+  log "Fix the error above (e.g. database connection, PgBouncer auth). Then run: make shell, then python3 manage.py generate_secator_api_key --recreate --show-key" $COLOR_YELLOW
+  rm -f "$err_file"
+  return 1
 }
 
 # Set SCRIPT_DIR and REPO_ROOT from the path of the script that sources common_functions.

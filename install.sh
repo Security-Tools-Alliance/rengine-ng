@@ -595,27 +595,8 @@ main() {
   log "Creating an account..." $COLOR_CYAN
   make superuser_create isNonInteractive=$isNonInteractive
 
-  log "Generating Secator API key..." $COLOR_CYAN
-  SECATOR_KEY_ERR=$(mktemp)
-  SECATOR_API_KEY=$(get_secator_api_key_from_container 2>"$SECATOR_KEY_ERR")
-  if [ -n "$SECATOR_API_KEY" ]; then
-    log "Secator API key generated successfully" $COLOR_GREEN
-    if write_secator_env_block ".env" "$SECATOR_API_KEY"; then
-      log "Secator API key has been added to .env file" $COLOR_GREEN
-      log "Restarting web service (cold) to load new API key..." $COLOR_CYAN
-      make restart web COLD=1
-    fi
-  else
-    if [ -s "$SECATOR_KEY_ERR" ]; then
-      log "Secator API key could not be generated:" $COLOR_RED
-      while IFS= read -r line; do log "$line" $COLOR_RED; done < "$SECATOR_KEY_ERR"
-      log "Fix the error above (e.g. database connection, PgBouncer auth). Then run: make shell, then python3 manage.py generate_secator_api_key --recreate --show-key" $COLOR_YELLOW
-    else
-      log "Secator API key already exists (key is created only when missing)." $COLOR_GREEN
-      log "To regenerate manually: make shell, then python3 manage.py generate_secator_api_key --recreate --show-key" $COLOR_YELLOW
-    fi
-  fi
-  rm -f "$SECATOR_KEY_ERR"
+  log "Checking Secator API key..." $COLOR_CYAN
+  ensure_secator_api_key_in_env ".env" "$(pwd)"
 
   log "reNgine-ng is successfully installed and started!" $COLOR_GREEN
   log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN

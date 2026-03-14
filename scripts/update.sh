@@ -101,8 +101,9 @@ version_compare() {
   return 0
 }
 
-# Create update log file and log a line (also to stdout via log() if desired)
-LOG_FILE=""
+# Create update log file and log a line (also to stdout via log() if desired).
+# Preserve LOG_FILE from environment when re-exec'd with --post-update so we keep one log file and debug lands in it.
+LOG_FILE="${LOG_FILE:-}"
 log_to_file() {
   local msg="$1"
   if [[ -n "$LOG_FILE" && -f "$LOG_FILE" ]]; then
@@ -242,44 +243,19 @@ run_post_update_flow() {
   done
 
   log "Checking Secator API key..." $COLOR_CYAN
-  # Do not use --recreate in scripts; user may regenerate manually with --recreate.
-  # If .env already has a non-empty SECATOR_ADDONS_API_KEY, skip generation to avoid double invocation.
-  if grep -q '^SECATOR_ADDONS_API_KEY=.\+' "$REPO_ROOT/.env" 2>/dev/null; then
-    log "Secator API key already configured in .env" $COLOR_GREEN
+  export RENGINE_UPDATE_LOG_FILE="$LOG_FILE"
+  log_to_file "Secator API key check: REPO_ROOT=$REPO_ROOT env_file=$REPO_ROOT/.env"
+  if [[ -f "$REPO_ROOT/.env" ]]; then
+    log_to_file "Secator API key check: .env exists, grep SECATOR_ADDONS_API_KEY => $(grep -E '^SECATOR_ADDONS_API_KEY=' "$REPO_ROOT/.env" 2>/dev/null || echo 'no match')"
   else
-    log "Generating Secator API key..." $COLOR_CYAN
-    SECATOR_KEY_ERR=$(mktemp) || { log_to_file "ERROR: could not create temp file for Secator key stderr"; return 1; }
-    SECATOR_API_KEY=$(get_secator_api_key_from_container 2>"$SECATOR_KEY_ERR")
-    if [[ -n "$SECATOR_API_KEY" ]]; then
-      log "Secator API key generated" $COLOR_GREEN
-      if write_secator_env_block "$REPO_ROOT/.env" "$SECATOR_API_KEY"; then
-        log "Secator API configuration written to .env" $COLOR_GREEN
-        log "Restarting web service (cold) to load new API key..." $COLOR_CYAN
-        (cd "$REPO_ROOT" && make restart web COLD=1) >> "$LOG_FILE" 2>&1 || log "Warning: make restart web COLD=1 failed" $COLOR_YELLOW
-      else
-        log "Warning: Could not update .env file. Manually add Secator API configuration." $COLOR_YELLOW
-      fi
-    else
-      if [[ -s "$SECATOR_KEY_ERR" ]] && grep -q "already exists" "$SECATOR_KEY_ERR" 2>/dev/null; then
-        log "Secator API key already exists in database but could not be retrieved; .env may be out of sync." $COLOR_YELLOW
-        log "To fix: make shell, then python3 manage.py generate_secator_api_key --recreate --show-key, and add SECATOR_ADDONS_API_KEY to .env" $COLOR_YELLOW
-        log_to_file "WARNING: Secator key exists in DB but not in .env; user should sync manually"
-      else
-        log "Secator API key could not be generated:" $COLOR_RED
-        if [[ -s "$SECATOR_KEY_ERR" ]]; then
-          while IFS= read -r line; do log "$line" $COLOR_RED; done < "$SECATOR_KEY_ERR"
-          log_to_file "ERROR: generate_secator_api_key failed: $(cat "$SECATOR_KEY_ERR")"
-        else
-          log "Empty output from generate_secator_api_key --raw-key. Run the command manually for details." $COLOR_RED
-          log_to_file "ERROR: could not obtain Secator API key from generate_secator_api_key --raw-key"
-        fi
-        rm -f "$SECATOR_KEY_ERR"
-        return 1
-      fi
-    fi
-    rm -f "$SECATOR_KEY_ERR"
+    log_to_file "Secator API key check: .env not found"
   fi
-  log_to_file "Secator API key check completed"
+  if ensure_secator_api_key_in_env "$REPO_ROOT/.env" "$REPO_ROOT" "$LOG_FILE"; then
+    log_to_file "Secator API key check completed"
+  else
+    log_to_file "ERROR: Secator API key could not be generated"
+    return 1
+  fi
 
   log "Loading Secator components (tasks, workflows, scans)..." $COLOR_CYAN
   if ! docker exec "$RENGINE_WEB_CONTAINER" bash -c 'poetry run python3 manage.py load_secator_all' >> "$LOG_FILE" 2>&1; then

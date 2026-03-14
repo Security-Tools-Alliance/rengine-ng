@@ -381,6 +381,9 @@ test-verbose:		## Run all unit tests with verbose output (VERBOSITY=2).
 test-app-verbose:	## Run unit tests for specific app(s) with verbose output. Usage: make test-app-verbose APPS=app1,app2
 	$(MAKE) test-app APPS=$(APPS) VERBOSITY=2
 
+test-scripts:		## Run shell script unit tests (Secator API key / .env logic; no Docker)
+	bash scripts/tests/test_secator_env.sh
+
 logs:			## Tail all containers logs with -n 1000 (useful for debug).
 	${DOCKER_COMPOSE_FILE_CMD} logs --follow --tail=1000 ${SERVICES}
 
@@ -420,6 +423,7 @@ help:			## Show this help.
 	@echo "  make test-app APPS=app1,app2 [KEEPDB=1] [VERBOSITY=2]		Run unit tests for specific app(s)"
 	@echo "  make test-verbose                       				Run all unit tests with verbose output (VERBOSITY=2)"
 	@echo "  make test-app-verbose APPS=app1,app2    				Run unit tests for specific app(s) with verbose output"
+	@echo "  make test-scripts                       				Run shell script unit tests (Secator env; no Docker)"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make up GPU=1                          				Start all services with GPU support"
