@@ -21,7 +21,7 @@ from reNgine.secator.path_utils import strip_secator_reports_prefix
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.distributed_lock import DistributedLock
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
-from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import DirectoryFile, Domain, EndPoint, ScanHistory, Subdomain, Technology
 from targetApp.models import Target
@@ -589,10 +589,12 @@ class EndpointRepository:
             )
 
         except Exception as e:
+            reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
                 "ASSOCIATE",
-                "Error associating endpoint with subdomain: %s" % (e,),
+                "Error associating endpoint with subdomain: %s | url=%s scan_id=%s"
+                % (reason, http_url[:80] if http_url else "", scan_history_id),
                 level="error",
             )
 
@@ -777,10 +779,12 @@ class EndpointRepository:
                     )
 
         except Exception as e:
+            reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
                 "TECH",
-                "Error associating technologies with endpoint: %s" % (e,),
+                "Error associating technologies with endpoint: %s | endpoint=%s"
+                % (reason, endpoint.http_url[:80] if endpoint and endpoint.http_url else ""),
                 level="error",
             )
 

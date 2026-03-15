@@ -11,7 +11,7 @@ from django.db import IntegrityError
 from reNgine.core.validators import is_valid_ip
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
-from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import IpAddress, ScanHistory, Subdomain
 from targetApp.models import Target
@@ -428,10 +428,12 @@ class IpRepository:
                 )
 
         except Exception as e:
+            reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_IP_REPO,
                 "ASSOCIATE",
-                "Error associating IP with subdomain: %s" % (e,),
+                "Error associating IP with subdomain: %s | hostname=%s scan_id=%s"
+                % (reason, hostname, scan_history_id),
                 level="error",
             )
 

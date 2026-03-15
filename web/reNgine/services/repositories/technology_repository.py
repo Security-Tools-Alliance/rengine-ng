@@ -12,7 +12,7 @@ from django.db import DatabaseError, IntegrityError
 from reNgine.core.validators import is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
-from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import EndPoint, ScanHistory, Subdomain, Technology
 
@@ -250,10 +250,12 @@ class TechnologyRepository:
                 return False
 
         except (IntegrityError, DatabaseError) as e:
+            reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_TECH_REPO,
                 "ASSOCIATE_SUBDOMAIN",
-                "Error associating technology with subdomain: %s" % (e,),
+                "Error associating technology with subdomain: %s | subdomain=%s scan_id=%s"
+                % (reason, subdomain_name, scan_history_id),
                 level="error",
             )
             return False
@@ -314,10 +316,12 @@ class TechnologyRepository:
             )
             return False
         except (IntegrityError, DatabaseError) as e:
+            reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_TECH_REPO,
                 "ASSOCIATE_ENDPOINT",
-                "Error associating technology with endpoint: %s" % (e,),
+                "Error associating technology with endpoint: %s | endpoint=%s scan_id=%s"
+                % (reason, endpoint_url[:80] if endpoint_url else "", scan_history_id),
                 level="error",
             )
             return False
@@ -440,10 +444,12 @@ class TechnologyRepository:
                 )
 
         except DatabaseError as e:
+            reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_TECH_REPO,
                 "ASSOCIATE",
-                "Error associating technology: %s" % (e,),
+                "Error associating technology: %s | match_target=%s scan_id=%s"
+                % (reason, match_target[:80] if match_target else "", scan_history_id),
                 level="error",
             )
 
@@ -479,10 +485,12 @@ class TechnologyRepository:
                 )
 
         except Exception as e:
+            reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_TECH_REPO,
                 "ASSOCIATE_SUBDOMAIN_HOSTNAME",
-                "Error associating technology with subdomain by hostname: %s" % (e,),
+                "Error associating technology with subdomain by hostname: %s | hostname=%s scan_id=%s"
+                % (reason, hostname, scan_history_id),
                 level="error",
             )
 

@@ -13,7 +13,7 @@ from django.utils import timezone
 from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.core.validators import is_valid_domain, is_valid_ip
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
-from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import Domain, IpAddress, ScanHistory, Subdomain, Technology
 from targetApp.models import Target
@@ -450,10 +450,12 @@ class SubdomainRepository:
                         created_endpoints_cache.add(cache_key)
 
         except Exception as e:
+            reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
                 "ASSOCIATE",
-                "Error associating IP addresses with subdomain: %s" % (e,),
+                "Error associating IP addresses with subdomain: %s | subdomain=%s scan_id=%s"
+                % (reason, subdomain.name if subdomain else "", scan_history_id),
                 level="error",
             )
 
@@ -485,10 +487,12 @@ class SubdomainRepository:
                     )
 
         except Exception as e:
+            reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
                 "ASSOCIATE",
-                "Error associating technologies with subdomain: %s" % (e,),
+                "Error associating technologies with subdomain: %s | subdomain=%s scan_id=%s"
+                % (reason, subdomain.name if subdomain else "", subdomain.scan_history_id if subdomain else ""),
                 level="error",
             )
 

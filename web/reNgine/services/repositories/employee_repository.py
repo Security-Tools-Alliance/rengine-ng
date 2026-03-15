@@ -13,7 +13,7 @@ from django.utils import timezone
 from reNgine.core.validators import is_valid_email, is_valid_url
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, get_or_create_domain_for_target
-from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import Email, Employee, EndPoint, ScanHistory, Subdomain
 from targetApp.models import Target
@@ -508,10 +508,12 @@ class EmployeeRepository:
                     )
 
         except Exception as e:
+            reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_EMPLOYEE_REPO,
                 "ASSOCIATE",
-                "Error associating employee with target: %s" % (e,),
+                "Error associating employee with target: %s | url=%s scan_id=%s"
+                % (reason, url[:80] if url else "", scan_history_id),
                 level="error",
             )
 

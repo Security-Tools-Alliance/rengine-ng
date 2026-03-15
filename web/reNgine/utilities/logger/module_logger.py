@@ -35,6 +35,19 @@ from reNgine.utilities.logger.base import BaseLogger
 ALLOWED_LOG_LEVELS = frozenset({"debug", "info", "warning", "error"})
 
 
+def format_exception_for_log(exc: BaseException) -> str:
+    """
+    Format an exception for server-side log messages.
+
+    Returns a non-empty string so log lines always show at least the exception
+    type, e.g. "ValueError: invalid host" or "IntegrityError: (no message)".
+    """
+    msg = str(exc).strip()
+    if not msg:
+        msg = "(no message)"
+    return "%s: %s" % (type(exc).__name__, msg)
+
+
 class ModuleLogger(BaseLogger):
     """
     Logger for application modules with standard logging interface.
