@@ -44,7 +44,7 @@ Target Summary
 				<li class="nav-item">
 					<a class="nav-link" id="pills-endpoints-tab" data-bs-toggle="tab" aria-expanded="false" href="#endpoints-tab">URLs</a>
 				</li>
-				<li class="nav-item interesting-tab-show" style="display: none">
+				<li class="nav-item interesting-tab-show">
 					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" href="#interesting-tab">Interesting Recon</a>
 				</li>
 				<li class="nav-item">
@@ -433,7 +433,7 @@ Target Summary
 	{% include 'base/_items/endpoint_tab_content.html' with target_summary=True%}
 </div>
 
-<div class="tab-pane interesting-tab-show" style="display: none" id="interesting-tab">
+<div class="tab-pane interesting-tab-show" id="interesting-tab">
 	<div class="row">
 		<div class="col-xl-12">
 			<div class="card" id="interesting_subdomain_div">
@@ -462,9 +462,13 @@ Target Summary
 						<thead>
 							<tr>
 								<th>URL</th>
-								<th>Title</th>
+								<th>Page Title</th>
 								<th>HTTP Status</th>
+								<th>Tags</th>
+								<th>Content Type</th>
 								<th>Content Length</th>
+								<th>Response Time</th>
+								<th>Screenshot</th>
 							</tr>
 						</thead>
 					</table>
@@ -540,12 +544,16 @@ $(document).ready(function(){
 	const ps2 = new PerfectScrollbar(document.querySelector('.vulnerability-search'));
 	if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('[data-toggle="tooltip"]'));
 
-	if (typeof get_interesting_subdomains === 'function') {
-		get_interesting_subdomains('{% url "api:interesting-subdomains-list" %}', '{{ current_project.slug|escapejs }}', {{ target.id }}, null);
-	}
-	if (typeof get_interesting_endpoints === 'function') {
-		get_interesting_endpoints('{% url "api:interesting-endpoints-list" %}', '{{ current_project.slug|escapejs }}', {{ target.id }}, null);
-	}
+	$('a[href="#interesting-tab"]').on('shown.bs.tab', function () {
+		if (window._interestingTablesInitialized) return;
+		window._interestingTablesInitialized = true;
+		if (typeof get_interesting_subdomains === 'function') {
+			get_interesting_subdomains('{% url "api:interesting-subdomains-list" %}', '{{ current_project.slug|escapejs }}', {{ target.id }}, null, { querySubdomainsUrl: '{% url "api:querySubdomains" %}' });
+		}
+		if (typeof get_interesting_endpoints === 'function') {
+			get_interesting_endpoints('{% url "api:interesting-endpoints-list" %}', '{{ current_project.slug|escapejs }}', {{ target.id }}, null, { endpointSubdomainUrl: '{% url "api:querySubdomains" %}' });
+		}
+	});
 	// HTTP STATUS Breakdown chart
 	// depending on http_status_breakdown, generate color
 	var colors = [

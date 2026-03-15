@@ -1039,26 +1039,6 @@ const updateScanTimeline = function(data) {
             });
         }
         
-        // Normalize IDs to string so Map keys are consistent (avoids duplicate nodes when id is number vs string).
-        const currentRunnerIds = new Set(itemsToRender.map(function(item) { return String(item.id); }));
-        // Remove from DOM any timeline items not in the current payload so the list does not accumulate duplicates.
-        const toRemove = [];
-        timelineList.querySelectorAll('[data-runner-id]').forEach(function(node) {
-            if (!currentRunnerIds.has(String(node.getAttribute('data-runner-id')))) {
-                toRemove.push(node);
-            }
-        });
-        toRemove.forEach(function(node) { node.remove(); });
-        
-        // Reuse existing DOM nodes by runner id (string key) to preserve Logs links and Stop buttons.
-        const existingItemsMap = new Map();
-        timelineList.querySelectorAll('[data-runner-id]').forEach(function(item) {
-            const runnerId = item.getAttribute('data-runner-id');
-            if (runnerId) {
-                existingItemsMap.set(String(runnerId), item);
-            }
-        });
-        
         // Sort: running first, then error, success, aborted, skipped, other; within each group by hierarchy (scan > workflow > task) then most recent first
         const statusConst = window.RENGINE_SCAN_STATUS || {};
         const statusOrder = function(s) {
@@ -1106,21 +1086,14 @@ const updateScanTimeline = function(data) {
         };
         const dateTimeLocale = 'en-US';
         
-        // Update or add timeline items; new items are stored in map so we can reorder DOM after
-        const idStr = function(id) { return String(id); };
+        // Replace entire list content to avoid duplication on WebSocket refresh
+        timelineList.innerHTML = '';
+        
         itemsToRender.forEach(function(item) {
-            const itemIdStr = idStr(item.id);
-            let listItem = existingItemsMap.get(itemIdStr);
-            const isNew = !listItem;
-            
-            if (isNew) {
-                listItem = document.createElement('li');
-                listItem.setAttribute('data-runner-id', itemIdStr);
-                if (item.activity_id) {
-                    listItem.setAttribute('data-activity-id', item.activity_id);
-                }
-                existingItemsMap.set(itemIdStr, listItem);
-            } else if (item.activity_id) {
+            const itemIdStr = String(item.id);
+            const listItem = document.createElement('li');
+            listItem.setAttribute('data-runner-id', itemIdStr);
+            if (item.activity_id) {
                 listItem.setAttribute('data-activity-id', item.activity_id);
             }
             
@@ -1215,26 +1188,19 @@ const updateScanTimeline = function(data) {
                 errorHtml = '<p class="badge badge-soft-danger">Error: ' + escapeHtml(item.error_message) + '</p>';
             }
             
-            listItem.innerHTML = '<h5 class="mt-0 mb-1">' + 
+            listItem.innerHTML = '<h5 class="mt-0 mb-1">' +
                 escapeHtml(item.title || item.name) +
-                '<span class="float-end badge ' + statusClass + ' mt-1">' + statusText + 
+                '<span class="float-end badge ' + statusClass + ' mt-1">' + statusText +
                 (item.status === 1 ? '<span class="active-dot dot"></span>' : '') +
                 '</span></h5>' +
-                '<p class="text-muted mb-0">' + escapeHtml(timeText) + 
+                '<p class="text-muted mb-0">' + escapeHtml(timeText) +
                 (timeAbsoluteText ? '<br><small class="text-muted mb-0">' + escapeHtml(timeAbsoluteText) + '</small>' : '') +
                 '</p>' +
                 progressHtml +
                 stopButtonHtml +
                 logsLinkHtml +
                 errorHtml;
-        });
-
-        // Reorder DOM to match sorted order (running first, then by time) so "In progress" moves to top on WebSocket update
-        itemsToRender.forEach(function(item) {
-            const listItem = existingItemsMap.get(idStr(item.id));
-            if (listItem) {
-                timelineList.appendChild(listItem);
-            }
+            timelineList.appendChild(listItem);
         });
     } catch (e) {
         console.error('Error updating scan timeline:', e);

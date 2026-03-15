@@ -866,7 +866,7 @@ function report_hackerone(endpoint_url, vulnerability_id, severity) {
 	}])
 }
 
-function get_interesting_subdomains(endpoint_url, project, target_id, scan_history_id) {
+function get_interesting_subdomains(endpoint_url, project, target_id, scan_history_id, renderOptions) {
 	let url;
 	let nonOrderableTargets;
 	if (target_id) {
@@ -876,6 +876,25 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 		url = `${endpoint_url}?project=${project}&scan_id=${scan_history_id}&format=datatables`;
 		nonOrderableTargets = [];
 	}
+	const ro = renderOptions || {};
+	const querySubdomainsUrl = ro.querySubdomainsUrl || (window.RENGINE_API_URLS && window.RENGINE_API_URLS.querySubdomains) || "";
+	function interestingSubdomainsStatusBadge(d) {
+		if (d == null || d === "") return "";
+		const n = Number(d);
+		if (n === 0) return "";
+		const display = (typeof window.safeText === "function" ? window.safeText(String(d)) : String(d));
+		const cls = (n >= 200 && n < 300) ? "badge badge-soft-success" : (n >= 300 && n < 400) ? "badge badge-soft-warning" : "badge badge-soft-danger";
+		return "<span class=\"" + (typeof window.safeAttr === "function" ? window.safeAttr(cls) : cls) + "\">" + display + "</span>";
+	}
+	const getStatusBadge = (window.RengineDatatableRenderers && typeof window.RengineDatatableRenderers.getHttpStatusBadge === "function")
+		? window.RengineDatatableRenderers.getHttpStatusBadge
+		: (typeof get_http_status_badge === "function" ? get_http_status_badge : interestingSubdomainsStatusBadge);
+	const buildNameCell = (window.RengineDatatableRenderers && typeof window.RengineDatatableRenderers.buildInterestingSubdomainNameCellHtml === "function")
+		? window.RengineDatatableRenderers.buildInterestingSubdomainNameCellHtml
+		: null;
+	const buildUrlCell = (window.RengineDatatableRenderers && typeof window.RengineDatatableRenderers.buildInterestingSubdomainHttpUrlCellHtml === "function")
+		? window.RengineDatatableRenderers.buildInterestingSubdomainHttpUrlCellHtml
+		: null;
 	const scrollOpts = typeof window.getRengineDatatableScrollerOptions === 'function'
 		? window.getRengineDatatableScrollerOptions('60vh') : {};
 	const opts = {
@@ -893,25 +912,43 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 		],
 		columnDefs: [
 			{ orderable: false, targets: nonOrderableTargets },
-			{ targets: "http_url", visible: false, searchable: false },
-			{ targets: "technologies", visible: false, searchable: true },
-			{ className: "text-center", targets: "http_status" },
+			{ className: "text-center", targets: [2, "http_status"] },
 			{
-				targets: "name",
+				targets: [0, "name"],
 				render: function (data, type, row) {
-					const href = row.http_url || ("https://" + (data || ""));
+					if (!row) return (typeof window.safeText === "function" ? window.safeText(data) : data) || "";
+					if (buildNameCell) {
+						return buildNameCell(row, { querySubdomainsUrl: querySubdomainsUrl });
+					}
+					const href = (row && row.http_url) || ("https://" + (data || ""));
 					const text = (typeof window.safeText === "function" ? window.safeText(data) : data);
 					return getRengineSafeLinkFn("text-primary")(href, text || "", { target: "_blank", className: "text-primary" });
 				}
 			},
 			{
-				targets: "http_status",
-				render: function (data) {
-					if (data >= 200 && data < 300) return "<span class='badge badge-pills badge-soft-success'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
-					if (data >= 300 && data < 400) return "<span class='badge badge-pills badge-soft-warning'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
-					if (data === 0) return "";
-					return "<span class='badge badge-pills badge-soft-danger'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
+				targets: [4, "http_url"],
+				render: function (data, type, row) {
+					if (!row && buildUrlCell) return "";
+					if (buildUrlCell) return buildUrlCell(row || {});
+					const href = (data && typeof data === "string") ? data : (data ? String(data) : "");
+					const text = href.length > 80 ? href.slice(0, 77) + "..." : href;
+					return getRengineSafeLinkFn("text-primary")(href, text, { target: "_blank", className: "text-primary", title: href });
 				}
+			},
+			{
+				targets: [5, "technologies"],
+				render: function (data) {
+					if (!data || !querySubdomainsUrl || typeof window.parse_technology !== "function") return (typeof window.safeText === "function" ? window.safeText(data) : data) || "";
+					return "<div>" + window.parse_technology(querySubdomainsUrl, data, "primary", null, null, true) + "</div>";
+				}
+			},
+			{
+				targets: [2, "http_status"],
+				render: function (data) { return getStatusBadge(data); }
+			},
+			{
+				targets: [1, "page_title"],
+				render: function (data) { return (typeof window.safeText === "function" ? window.safeText(data) : data) || ""; }
 			}
 		],
 		drawCallback: function () {
@@ -922,6 +959,11 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 				$('.interesting-tab-show').removeAttr('style');
 				$('#interesting_subdomain_alert_count').html(total + ' Interesting Subdomains');
 				$('#interesting_subdomain_count_badge').empty().html('<span class="badge badge-soft-primary me-1">' + total + '</span>');
+			}
+			var tableEl = document.getElementById('interesting_subdomains');
+			if (typeof Clipboard !== "undefined" && tableEl) {
+				var clipboard = new Clipboard(tableEl, { selector: '.copyable' });
+				clipboard.on("success", function (e) { if (typeof setTooltip === "function") setTooltip(e.trigger, "Copied!"); });
 			}
 		}
 	};
@@ -939,50 +981,110 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 	}
 }
 
-function get_interesting_endpoints(endpoint_url, project, target_id, scan_history_id) {
+function get_interesting_endpoints(endpoint_url, project, target_id, scan_history_id, renderOptions) {
 	let url;
 	if (target_id) {
 		url = `${endpoint_url}/?project=${project}&target_id=${target_id}&format=datatables`;
 	} else if (scan_history_id) {
 		url = `${endpoint_url}/?project=${project}&scan_id=${scan_history_id}&format=datatables`;
 	}
+	const ro = renderOptions || {};
+	const endpointSubdomainUrl = ro.endpointSubdomainUrl || (window.RENGINE_API_URLS && window.RENGINE_API_URLS.endpointsList) || (window.RENGINE_API_URLS && window.RENGINE_API_URLS.querySubdomains) || "";
+	function interestingEndpointsStatusBadge(d) {
+		if (d == null || d === "") return "";
+		const n = Number(d);
+		if (n === 0) return "";
+		const display = (typeof window.safeText === "function" ? window.safeText(String(d)) : String(d));
+		const cls = (n >= 200 && n < 300) ? "badge badge-soft-success" : (n >= 300 && n < 400) ? "badge badge-soft-warning" : "badge badge-soft-danger";
+		return "<span class=\"" + (typeof window.safeAttr === "function" ? window.safeAttr(cls) : cls) + "\">" + display + "</span>";
+	}
+	const getStatusBadge = (window.RengineDatatableRenderers && typeof window.RengineDatatableRenderers.getHttpStatusBadge === "function")
+		? window.RengineDatatableRenderers.getHttpStatusBadge
+		: (typeof get_http_status_badge === "function" ? get_http_status_badge : interestingEndpointsStatusBadge);
+	const buildUrlCell = (window.RengineDatatableRenderers && typeof window.RengineDatatableRenderers.buildEndpointUrlCellHtml === "function")
+		? window.RengineDatatableRenderers.buildEndpointUrlCellHtml
+		: null;
 	const scrollOpts = typeof window.getRengineDatatableScrollerOptions === 'function'
 		? window.getRengineDatatableScrollerOptions('60vh') : {};
 	const opts = {
 		ajax: { url: url },
 		destroy: true,
 		info: false,
-		order: [[3, "desc"]],
+		order: [[5, "desc"]],
 		columns: [
 			{ data: "http_url", name: "http_url" },
 			{ data: "page_title", name: "page_title" },
 			{ data: "http_status", name: "http_status" },
-			{ data: "content_length", name: "content_length" }
+			{ data: "matched_gf_patterns", name: "matched_gf_patterns" },
+			{ data: "content_type", name: "content_type" },
+			{ data: "content_length", name: "content_length" },
+			{ data: "response_time", name: "response_time" },
+			{ data: "screenshot_url", name: "screenshot_url" },
+			{ data: "techs", name: "techs", visible: false },
+			{ data: "webserver", name: "webserver", visible: false }
 		],
 		columnDefs: [
-			{ className: "text-center", targets: "http_status" },
+			{ className: "text-center", targets: [2, "http_status"] },
 			{
-				targets: "http_url",
-				render: function (data) {
+				targets: [0, "http_url"],
+				render: function (data, type, row) {
+					if (!row && buildUrlCell) return "";
+					if (buildUrlCell && endpointSubdomainUrl) return buildUrlCell(row, endpointSubdomainUrl);
 					const raw = (data && typeof data === "string") ? data : (data ? String(data) : "");
 					const displayText = raw.length > 80 ? raw.slice(0, 77) + "..." : raw;
-					const linkOpts = { target: "_blank", className: "text-primary", title: raw };
-					return getRengineSafeLinkFn("text-primary")(raw, displayText, linkOpts);
+					return getRengineSafeLinkFn("text-primary")(raw, displayText, { target: "_blank", className: "text-primary", title: raw });
 				}
 			},
 			{
-				targets: "page_title",
+				targets: [1, "page_title"],
 				render: function (data) {
 					return (typeof window.safeText === "function" ? window.safeText(data) : (typeof htmlEncode === "function" ? htmlEncode(data) : data)) || "";
 				}
 			},
 			{
-				targets: "http_status",
+				targets: [2, "http_status"],
+				render: function (data) { return getStatusBadge(data); }
+			},
+			{
+				targets: [3, "matched_gf_patterns"],
 				render: function (data) {
-					if (data >= 200 && data < 300) return "<span class='badge badge-pills badge-soft-success'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
-					if (data >= 300 && data < 400) return "<span class='badge badge-pills badge-soft-warning'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
-					if (data === 0) return "";
-					return "<span class='badge badge-pills badge-soft-danger'>" + (typeof window.safeText === "function" ? window.safeText(data) : data) + "</span>";
+					return (data != null && typeof parse_comma_values_into_span === "function") ? parse_comma_values_into_span(data, "danger", true) : (typeof window.safeText === "function" ? window.safeText(data) : (data != null ? String(data) : ""));
+				}
+			},
+			{
+				targets: [4, "content_type"],
+				render: function (data) { return (typeof window.safeText === "function" ? window.safeText(data) : (data != null ? String(data) : "")) || ""; }
+			},
+			{
+				targets: [5, "content_length"],
+				render: function (data) { return (data != null && data !== "") ? (typeof window.safeText === "function" ? window.safeText(data) : String(data)) : ""; }
+			},
+			{
+				targets: [6, "response_time"],
+				render: function (data) { return (typeof get_response_time_text === "function" && data != null) ? get_response_time_text(data) : (data != null ? String(data) : ""); }
+			},
+			{
+				targets: [7, "screenshot_url"],
+				render: function (data, type, row) {
+					const screenshotUrl = (row && row.screenshot_url) || data || "";
+					if (!screenshotUrl) return "-";
+					if (typeof window.ScreenshotDisplay !== "undefined" && typeof window.ScreenshotDisplay.buildThumbnailHtml === "function") {
+						let port = 80;
+						try {
+							const url = new URL((row && row.http_url) || "http://x");
+							port = url.port || (url.protocol === "https:" ? 443 : 80);
+						} catch (_) {}
+						return window.ScreenshotDisplay.buildThumbnailHtml({
+							screenshotUrl: screenshotUrl,
+							httpUrl: (row && row.http_url) || "",
+							subdomainId: (row && row.subdomain_id) || "",
+							subdomainName: (row && row.subdomain_name) || "",
+							port: port,
+							scanId: (row && row.scan_history_id) || "",
+							domainId: (row && row.domain_id) || ""
+						}) || "-";
+					}
+					return "-";
 				}
 			}
 		],
@@ -994,6 +1096,14 @@ function get_interesting_endpoints(endpoint_url, project, target_id, scan_histor
 				$('.interesting-tab-show').removeAttr('style');
 				$('#interesting_endpoint_alert_count').html(', ' + total + ' Interesting Endpoints');
 				$('#interesting_endpoint_count_badge').empty().html('<span class="badge badge-soft-primary me-1">' + total + '</span>');
+			}
+			const tableEl = document.getElementById('interesting_endpoints');
+			if (typeof Clipboard !== "undefined" && tableEl) {
+				const clipboard = new Clipboard(tableEl, { selector: '.copyable' });
+				clipboard.on("success", function (e) { if (typeof setTooltip === "function") setTooltip(e.trigger, "Copied!"); });
+			}
+			if (typeof window.ScreenshotDisplay !== "undefined" && typeof window.ScreenshotDisplay.attachDelegation === "function") {
+				window.ScreenshotDisplay.attachDelegation("#interesting_endpoints");
 			}
 		}
 	};

@@ -59,6 +59,9 @@ function detailScanSafeBadgeWithTooltip(title, displayText, badgeClass, iconClas
 }
 
 function buildEndpointUrlCellHtml(row, endpointSubdomainUrl) {
+	if (window.RengineDatatableRenderers && typeof window.RengineDatatableRenderers.buildEndpointUrlCellHtml === "function") {
+		return window.RengineDatatableRenderers.buildEndpointUrlCellHtml(row, endpointSubdomainUrl);
+	}
 	let techBadge = "";
 	if (row["techs"]) {
 		techBadge = "</br>" + parse_technology(endpointSubdomainUrl, row["techs"], "primary", true, false, true);

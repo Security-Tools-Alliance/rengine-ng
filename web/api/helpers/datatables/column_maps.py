@@ -47,7 +47,13 @@ DATATABLE_COLUMN_MAP_INTERESTING_ENDPOINT = {
     "0": "http_url",
     "1": "page_title",
     "2": "http_status",
-    "3": "content_length",
+    "3": "matched_gf_patterns",
+    "4": "content_type",
+    "5": "content_length",
+    "6": "response_time",
+    "7": "screenshot_url",
+    "8": "techs",
+    "9": "webserver",
 }
 
 DATATABLE_COLUMN_MAP_SUBDOMAIN = {
