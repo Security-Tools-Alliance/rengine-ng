@@ -4,6 +4,7 @@ from dashboard.models import Project
 from reNgine.utilities.logger import get_module_logger
 from targetApp.constants import SCOPE_TYPE_CHOICES, TARGET_TYPE_CHOICES
 
+
 _scope_logger = get_module_logger(__name__)
 
 

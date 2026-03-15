@@ -24,9 +24,9 @@ Initiate Scan for Multiple Targets
   <div class="col-xl-12">
     <div class="card">
       <div class="card-body">
-        <h4 class="header-title">Initiating multiple scan for {{ domain_list|length }} targets: </h4>
-        {% for domain in domain_list %}
-        <span class="badge badge-soft-primary m-1">{{domain}}</span>
+        <h4 class="header-title">Initiating multiple scan for {{ target_list|length }} targets: </h4>
+        {% for target in target_list %}
+        <span class="badge badge-soft-primary m-1">{{ target }}</span>
         {% endfor %}
         <form method="POST" id="start-multi-scan-form" data-secator-id-prefix="start_multi_scan" data-scan-params-level="scan" data-scan-params-target-id="{{ first_target_id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
           {% csrf_token %}
@@ -44,7 +44,7 @@ Initiate Scan for Multiple Targets
 
           {% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_level="target" %}
 
-          <input type="hidden" name="list_of_domain_id" value="{{domain_ids}}">
+          <input type="hidden" name="list_of_target_id" value="{{ target_ids }}">
           {% include 'startScan/_items/secator_start_scan_button.html' %}
         </form>
       </div>

@@ -316,10 +316,12 @@ class ScopeViewsTest(BaseTestCase):
         """Saving a scope with pending_normalizer_targets creates those targets and adds them to the scope."""
         org = self.data_generator.organization
         project = org.project
-        pending = json.dumps({
-            "domain_targets": ["pending-domain.example.com", "other-root.org"],
-            "ip_targets": ["10.9.8.7"],
-        })
+        pending = json.dumps(
+            {
+                "domain_targets": ["pending-domain.example.com", "other-root.org"],
+                "ip_targets": ["10.9.8.7"],
+            }
+        )
         response = self.client.post(
             reverse("add_scope", kwargs={"slug": self.slug}),
             {
@@ -344,10 +346,12 @@ class ScopeViewsTest(BaseTestCase):
         scope = self.data_generator.create_scope(name="To Update")
         org = scope.organization
         project = org.project
-        pending = json.dumps({
-            "domain_targets": ["update-domain.example.com"],
-            "ip_targets": [],
-        })
+        pending = json.dumps(
+            {
+                "domain_targets": ["update-domain.example.com"],
+                "ip_targets": [],
+            }
+        )
         response = self.client.post(
             reverse("update_scope", kwargs={"slug": self.slug, "id": scope.id}),
             {

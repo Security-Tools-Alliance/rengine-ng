@@ -960,15 +960,11 @@ class NormalizeAllowedHostsTest(BaseTestCase):
         self.assertEqual(normalize_allowed_hosts_from_list({"key": "value"}), [])
 
     def test_normalize_strips_lower_dedupe(self):
-        result = normalize_allowed_hosts_from_list(
-            ["  Host.Example.COM  ", "host.example.com", "other.com"]
-        )
+        result = normalize_allowed_hosts_from_list(["  Host.Example.COM  ", "host.example.com", "other.com"])
         self.assertEqual(result, ["host.example.com", "other.com"])
 
     def test_normalize_skips_non_strings_and_empty(self):
-        result = normalize_allowed_hosts_from_list(
-            ["valid.com", 123, None, "", "  ", "another.com"]
-        )
+        result = normalize_allowed_hosts_from_list(["valid.com", 123, None, "", "  ", "another.com"])
         self.assertEqual(result, ["valid.com", "another.com"])
 
     def test_build_allowed_hosts_set_none_scope_returns_empty(self):

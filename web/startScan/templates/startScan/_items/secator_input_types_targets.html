@@ -9,18 +9,7 @@
       <div id="{{ id_prefix }}-targets-single" class="secator-targets-single {% if id_prefix == 'subscan' %}subscan-targets-single{% endif %}">
         <div id="{{ id_prefix }}-targets-toolbar" class="d-flex flex-wrap align-items-center gap-2 mb-2 small" style="display: none;">
           <input type="text" id="{{ id_prefix }}-targets-filter" class="form-control form-control-sm" placeholder="Filter targets..." style="max-width: 220px;" autocomplete="off">
-          <div id="{{ id_prefix }}-targets-quick-filters" class="d-flex flex-wrap align-items-center gap-1" title="Filter by type (toggle to filter)">
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="http" title="HTTP URLs" aria-label="Filter: HTTP URLs"><i class="fas fa-link"></i></button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="https" title="HTTPS URLs" aria-label="Filter: HTTPS URLs"><i class="fas fa-lock"></i></button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="email" title="Email" aria-label="Filter: Email"><i class="fas fa-envelope"></i></button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="url" title="URL (any scheme)" aria-label="Filter: URL"><i class="fas fa-globe"></i></button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="host" title="Host" aria-label="Filter: Host"><i class="fas fa-server"></i></button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="host:port" title="Host:port" aria-label="Filter: Host:port"><i class="fas fa-plug"></i></button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="ip" title="IP address" aria-label="Filter: IP"><i class="fas fa-network-wired"></i></button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="cidr_range" title="CIDR range" aria-label="Filter: CIDR range"><i class="fas fa-th-large"></i></button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="common_web_port" title="Common web ports" aria-label="Filter: Common web ports"><i class="fas fa-globe-americas"></i></button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="uncommon_web_port" title="Uncommon web ports" aria-label="Filter: Uncommon web ports"><i class="fas fa-code-branch"></i></button>
-          </div>
+          <div id="{{ id_prefix }}-targets-quick-filters" class="d-flex flex-wrap align-items-center gap-1" title="Filter by type (toggle to filter)"></div>
           <button type="button" class="btn btn-outline-secondary btn-sm" id="{{ id_prefix }}-targets-select-all">Select all</button>
           <button type="button" class="btn btn-outline-secondary btn-sm" id="{{ id_prefix }}-targets-deselect-all">Deselect all</button>
           <span id="{{ id_prefix }}-targets-count-text" class="text-muted"></span>

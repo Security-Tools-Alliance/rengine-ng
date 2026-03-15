@@ -980,7 +980,7 @@ def start_multiple_scan(request, slug):
     target_ids_str = ""
 
     if request.method == "POST":
-        raw_ids = request.POST.get("list_of_domain_id") or request.POST.get("list_of_target_id") or ""
+        raw_ids = request.POST.get("list_of_target_id") or ""
         if raw_ids:
             # POST from start_multiple_scan_ui: start scans for selected targets
             try:
@@ -1032,6 +1032,8 @@ def start_multiple_scan(request, slug):
     context = {
         "scan_history_active": "active",
         "engines": engines,
+        "target_list": list_of_target_name,
+        "target_ids": target_ids_str,
         "domain_list": list_of_target_name,
         "domain_ids": target_ids_str,
         "custom_engine_count": custom_engine_count,
@@ -1392,9 +1394,7 @@ def _run_quick_scan_for_targets(
         return redirect(form_redirect_view_name, **form_redirect_kwargs)
 
     if scan_count > 0:
-        messages.add_message(
-            request, messages.INFO, f"Started {scan_count} scans for {entity_name}"
-        )
+        messages.add_message(request, messages.INFO, f"Started {scan_count} scans for {entity_name}")
     if failed_count > 0:
         messages.add_message(
             request,
@@ -1463,9 +1463,7 @@ def start_organization_scan(request, id, slug):
     context["quick_scan_scan_params_organization_id"] = organization.id
     context["quick_scan_scan_params_scope_id"] = ""
     context["quick_scan_target_collapse_threshold"] = QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD
-    context["quick_scan_extra_target_count"] = max(
-        0, len(target_list) - QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD
-    )
+    context["quick_scan_extra_target_count"] = max(0, len(target_list) - QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD)
     return render(request, "organization/start_scan.html", context)
 
 
@@ -1507,9 +1505,7 @@ def start_scope_scan(request, id, slug):
     context["quick_scan_scan_params_organization_id"] = scope.organization_id
     context["quick_scan_scan_params_scope_id"] = scope.id
     context["quick_scan_target_collapse_threshold"] = QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD
-    context["quick_scan_extra_target_count"] = max(
-        0, len(target_list) - QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD
-    )
+    context["quick_scan_extra_target_count"] = max(0, len(target_list) - QUICK_SCAN_TARGET_COLLAPSE_THRESHOLD)
     return render(request, "scope/start_scan.html", context)
 
 

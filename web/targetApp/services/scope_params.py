@@ -21,7 +21,6 @@ from reNgine.core.validators import is_valid_ip
 from reNgine.utilities.domain import (
     normalize_allowed_hosts_from_list,
     normalize_domain_name,
-    normalize_host_string,
 )
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import get_domain_from_subdomain

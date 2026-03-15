@@ -1,8 +1,8 @@
 """
-Tests for reNgine.utilities.url (is_acceptable_subdomain_name and related).
+Tests for reNgine.utilities.url (is_acceptable_subdomain_name, is_apex_domain, and related).
 """
 
-from reNgine.utilities.url import is_acceptable_subdomain_name
+from reNgine.utilities.url import is_acceptable_subdomain_name, is_apex_domain
 from utils.test_base import BaseTestCase
 
 
@@ -36,3 +36,25 @@ class TestIsAcceptableSubdomainName(BaseTestCase):
         self.assertFalse(is_acceptable_subdomain_name(None))
         self.assertFalse(is_acceptable_subdomain_name("invalid..domain..name"))
         self.assertFalse(is_acceptable_subdomain_name("256.256.256.256"))
+
+
+class TestIsApexDomain(BaseTestCase):
+    """Tests for is_apex_domain (tldextract-based apex/registered domain detection)."""
+
+    def test_apex_single_label_tld(self):
+        self.assertTrue(is_apex_domain("example.com"))
+        self.assertTrue(is_apex_domain("test.org"))
+
+    def test_apex_multi_part_tld(self):
+        self.assertTrue(is_apex_domain("example.co.uk"))
+        self.assertTrue(is_apex_domain("example.com.au"))
+
+    def test_not_apex_has_subdomain(self):
+        self.assertFalse(is_apex_domain("www.example.com"))
+        self.assertFalse(is_apex_domain("mail.example.co.uk"))
+        self.assertFalse(is_apex_domain("api.test.org"))
+
+    def test_rejects_empty_or_invalid(self):
+        self.assertFalse(is_apex_domain(""))
+        self.assertFalse(is_apex_domain("   "))
+        self.assertFalse(is_apex_domain(None))

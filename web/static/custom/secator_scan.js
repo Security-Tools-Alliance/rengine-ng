@@ -354,8 +354,11 @@
           const truncatedText = window.SecatorScan.formatTruncatedCount(targets.length, totalCount, { showing: true });
           $preview.append($('<div class="small text-muted mt-1 w-100">').text(truncatedText));
         }
-        if ($toolbar && $toolbar.length && prefix && window.SecatorScan.updateQuickFiltersVisibility) {
-          window.SecatorScan.updateQuickFiltersVisibility($toolbar, prefix, types);
+        if ($toolbar && $toolbar.length && prefix && typeof window.SecatorScan.getQuickFilterButtonsHtml === 'function') {
+          const $quickFilters = $toolbar.find('#' + prefix + '-targets-quick-filters');
+          if ($quickFilters.length) {
+            $quickFilters.html(window.SecatorScan.getQuickFilterButtonsHtml(types));
+          }
         }
       }
       if (typeof onRendered === 'function') onRendered(data, options);
@@ -403,10 +406,11 @@
         return;
       }
 
-      const {getTargetId, getSubdomainIds} = context;
+      const { getTargetId, getTargetIds, getSubdomainIds } = context;
       const targetId = typeof getTargetId === 'function' ? getTargetId() : '';
+      const targetIds = typeof getTargetIds === 'function' ? getTargetIds() : null;
       const subdomainIds = typeof getSubdomainIds === 'function' ? getSubdomainIds() : [];
-      if (!targetId && (!subdomainIds || !subdomainIds.length)) {
+      if (!targetId && (!targetIds || !targetIds.length) && (!subdomainIds || !subdomainIds.length)) {
         $block.show();
         $single.show();
         $tasksContainer.hide().empty();
@@ -418,7 +422,13 @@
       }
 
       const params = {};
-      if (targetId) params.target_id = targetId;
+      if (targetIds && targetIds.length > 1) {
+        params.target_ids = targetIds.join(',');
+      } else if (targetIds && targetIds.length === 1) {
+        params.target_id = targetIds[0];
+      } else if (targetId) {
+        params.target_id = targetId;
+      }
       if (subdomainIds && subdomainIds.length) params.subdomain_ids = subdomainIds.join(',');
       if (executionMode === 'workflow') params.workflow_id = workflowId;
       if (executionMode === 'scan') params.scan_name = scanName;
@@ -443,8 +453,15 @@
             checkboxClass,
             itemWrapperClass,
             idPrefix: prefix,
-            onRendered: function() {
-              self.bindTargetsToolbar({ $root, prefix, checkboxClass, itemWrapperClass, onUpdateCount });
+            onRendered: function(data) {
+              self.bindTargetsToolbar({
+                $root,
+                prefix,
+                checkboxClass,
+                itemWrapperClass,
+                onUpdateCount,
+                apexHosts: data && data.apex_hosts
+              });
               $(document).trigger('secator:contentLoaded');
             }
           });
@@ -526,19 +543,20 @@
       const containers = this.getSecatorContainers($form);
       const $selectionContainer = containers.selectionContainer;
       let targetId = $form.find('input[name="target_id"]').val();
-      let domainId = $form.find('input[name="domain_id"]').val();
-      if (!targetId && !domainId && $form.find('input[name="list_of_domain_id"]').length) {
-        const listVal = $form.find('input[name="list_of_domain_id"]').val();
-        if (listVal) {
-          const ids = typeof listVal === 'string' ? listVal.split(',').map(s => s.trim()).filter(Boolean) : [];
-          domainId = ids[0] || '';
-        }
+      const domainId = $form.find('input[name="domain_id"]').val();
+      let targetIds = [];
+      const $listInput = $form.find('input[name="list_of_target_id"]');
+      if ($listInput.length && $listInput.val()) {
+        const listVal = $listInput.val();
+        targetIds = typeof listVal === 'string' ? listVal.split(',').map(s => s.trim()).filter(Boolean) : [];
+        if (!targetId && targetIds.length) targetId = targetIds[0] || '';
       }
       const context = {
         $root: $form,
         prefix,
         getExecutionMode: () => $form.find('input[name="execution_mode"]').val(),
         getTargetId: () => targetId || $form.find('input[name="target_id"]').val(),
+        getTargetIds: () => targetIds.length ? targetIds : null,
         getDomainId: () => domainId || $form.find('input[name="domain_id"]').val(),
         getSubdomainIds: () => [],
         getWorkflowId: () => $selectionContainer.find('input[name="workflow_id"]:checked').val(),

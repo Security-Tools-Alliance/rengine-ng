@@ -33,7 +33,6 @@ from dashboard.models import Project
 from reNgine.core.data import get_ips_from_cidr_range
 from reNgine.core.path import resolve_results_dir_under_base, safe_rmtree
 from reNgine.core.validators import is_valid_cidr
-from reNgine.utilities.request import get_string_from_post_or_json
 from reNgine.definitions import (
     FOUR_OH_FOUR_URL,
     PERM_MODIFY_TARGETS,
@@ -45,6 +44,7 @@ from reNgine.definitions import (
 )
 from reNgine.services.repositories import EndpointRepository
 from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.request import get_string_from_post_or_json
 from scanEngine.models import EngineType
 from startScan.models import (
     CountryISO,

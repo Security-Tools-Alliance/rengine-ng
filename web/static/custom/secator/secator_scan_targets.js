@@ -50,10 +50,25 @@
     return { scheme: null, targetKind: 'url' };
   }
 
-  const QUICK_FILTER_ORDER = ['http', 'https', 'email', 'url', 'host', 'host:port', 'ip', 'cidr_range', 'common_web_port', 'uncommon_web_port'];
+  /**
+   * Simple two-label domain heuristic used as a fallback when the backend
+   * does not send apex_hosts.
+   *
+   * Only checks for exactly two labels with non-empty parts. Does NOT use the
+   * Public Suffix List and does NOT handle multi-part TLDs (e.g. co.uk, com.au).
+   * Prefer apexHosts from the API (tldextract-based) when available.
+   */
+  function isSimpleTwoLabelDomain(value) {
+    const s = String(value).trim();
+    if (!s) return false;
+    const parts = s.split('.');
+    return parts.length === 2 && parts[0].length > 0 && parts[1].length > 0;
+  }
+
+  const QUICK_FILTER_ORDER = ['http', 'https', 'email', 'url', 'host', 'tld', 'host:port', 'ip', 'cidr_range', 'common_web_port', 'uncommon_web_port'];
   const INPUT_TYPES_TO_QUICK_FILTERS = {
     url: ['http', 'https', 'url'],
-    host: ['host'],
+    host: ['host', 'tld'],
     'host:port': ['host:port', 'common_web_port', 'uncommon_web_port'],
     host_port: ['host:port', 'common_web_port', 'uncommon_web_port'],
     ip: ['ip'],
@@ -66,6 +81,7 @@
     email: { icon: 'fa-envelope', title: 'Email', ariaLabel: 'Filter: Email' },
     url: { icon: 'fa-globe', title: 'URL (any scheme)', ariaLabel: 'Filter: URL' },
     host: { icon: 'fa-server', title: 'Host', ariaLabel: 'Filter: Host' },
+    tld: { icon: 'fa-flag', title: 'TLDs only (apex domains)', ariaLabel: 'Filter: TLDs only' },
     'host:port': { icon: 'fa-plug', title: 'Host:port', ariaLabel: 'Filter: Host:port' },
     ip: { icon: 'fa-network-wired', title: 'IP address', ariaLabel: 'Filter: IP' },
     cidr_range: { icon: 'fa-th-large', title: 'CIDR range', ariaLabel: 'Filter: CIDR range' },
@@ -161,7 +177,8 @@
         prefix,
         checkboxClass = 'secator-target-checkbox',
         itemWrapperClass = 'form-check',
-        onUpdateCount
+        onUpdateCount,
+        apexHosts
       } = options || {};
       if (!$root || !prefix) return;
 
@@ -195,6 +212,10 @@
               if (k === 'http' || k === 'https') return scheme === k;
               if (k === 'common_web_port') return webPortType === 'common';
               if (k === 'uncommon_web_port') return webPortType === 'uncommon';
+              if (k === 'tld') {
+                const val = $w.find(checkboxSel).val();
+                return kind === 'host' && (apexHosts && apexHosts.length ? apexHosts.indexOf(val) !== -1 : isSimpleTwoLabelDomain(val));
+              }
               return kind === k;
             });
           }
@@ -297,11 +318,16 @@
           const webPortType = $w.attr('data-web-port-type') || '';
           let kindMatch = true;
           if (activeKinds.length > 0) {
+            const apexHostsBlock = $block.data('apexHosts');
             kindMatch = activeKinds.some(function(k) {
               if (k === 'url') return kind === 'url';
               if (k === 'http' || k === 'https') return scheme === k;
               if (k === 'common_web_port') return webPortType === 'common';
               if (k === 'uncommon_web_port') return webPortType === 'uncommon';
+              if (k === 'tld') {
+                const val = $w.find(checkboxSel).val();
+                return kind === 'host' && (apexHostsBlock && apexHostsBlock.length ? apexHostsBlock.indexOf(val) !== -1 : isSimpleTwoLabelDomain(val));
+              }
               return kind === k;
             });
           }

@@ -111,6 +111,7 @@ from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, i
 # NOTE: Legacy task functions removed - functionality now in Secator
 from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
+from reNgine.secator.services.target_builder_service import TargetBuilderService
 from reNgine.settings import (
     RENGINE_GF_PATTERNS_DIR,
     RENGINE_NUCLEI_TEMPLATES_DIR,
@@ -127,6 +128,7 @@ from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.lookup import get_lookup_keywords
 from reNgine.utilities.subdomain import get_interesting_subdomains
+from reNgine.utilities.url import is_apex_domain
 from scanEngine.models import (
     EngineType,
     SecatorScan,
@@ -2337,6 +2339,23 @@ class InitiateSubTask(APIView):
         )
 
 
+def _build_secator_flat_targets_and_by_type(
+    target_id: int,
+    subdomain_ids: list,
+    input_types: list,
+) -> tuple:
+    """
+    Build flat_targets and targets_by_type for one target.
+
+    Returns:
+        (flat_targets, targets_by_type) for use by GetSecatorInputTypesAndTargets.
+    """
+    builder = TargetBuilderService(target_id=target_id, subdomain_ids=subdomain_ids)
+    flat_targets = builder.build_flat_targets(input_types)
+    targets_by_type = builder.build_targets_by_type(input_types)
+    return (flat_targets, targets_by_type)
+
+
 class GetSecatorInputTypesAndTargets(APIView):
     """
     API endpoint to get input_types and proposed targets for a Secator workflow/scan/task.
@@ -2355,6 +2374,7 @@ class GetSecatorInputTypesAndTargets(APIView):
         scan_id = request.query_params.get("scan_id")
         task_id = request.query_params.get("task_id")
         target_id_param = request.query_params.get("target_id")
+        target_ids_param = request.query_params.get("target_ids")
         domain_id_param = request.query_params.get("domain_id")
         subdomain_ids_param = request.query_params.get("subdomain_ids")
 
@@ -2368,7 +2388,23 @@ class GetSecatorInputTypesAndTargets(APIView):
                 subdomain_ids = [subdomain_ids]
 
         target_id = None
-        if target_id_param:
+        target_id_list = None
+        if target_ids_param and isinstance(target_ids_param, str) and target_ids_param.strip():
+            raw = [x.strip() for x in target_ids_param.split(",") if x.strip()]
+            try:
+                target_id_list = [int(x) for x in raw]
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "target_ids must be a comma-separated list of integers"},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+            if not target_id_list:
+                return Response(
+                    {"error": "target_ids must contain at least one valid id"},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+            target_id = target_id_list[0]
+        elif target_id_param:
             try:
                 target_id = int(target_id_param)
             except (TypeError, ValueError):
@@ -2433,7 +2469,6 @@ class GetSecatorInputTypesAndTargets(APIView):
         try:
             from reNgine.definitions import COMMON_WEB_PORTS, UNCOMMON_WEB_PORTS
             from reNgine.secator.services.input_type_service import InputTypeService
-            from reNgine.secator.services.target_builder_service import TargetBuilderService
 
             if has_workflow:
                 if workflow_id:
@@ -2451,24 +2486,44 @@ class GetSecatorInputTypesAndTargets(APIView):
                 else:
                     input_types = InputTypeService.get_input_types(task_name=task_name.strip())
 
-            builder = TargetBuilderService(target_id=target_id, subdomain_ids=subdomain_ids)
-            targets_by_type = builder.build_targets_by_type(input_types)
-            flat_targets = builder.build_flat_targets(input_types)
-            total_count = len(flat_targets)
-            proposed_targets = flat_targets[: self.TARGETS_DISPLAY_LIMIT]
-            truncated = total_count > self.TARGETS_DISPLAY_LIMIT
+            if target_id_list is not None and len(target_id_list) > 1:
+                # Deduplicate by value; flat_targets are plain strings (no type/source).
+                # Same value from different target_ids is kept once.
+                seen: set = set()
+                flat_targets = []
+                for tid in target_id_list:
+                    one_flat, _ = _build_secator_flat_targets_and_by_type(tid, [], input_types)
+                    for t in one_flat:
+                        key = t if isinstance(t, str) else str(t)
+                        if key not in seen:
+                            seen.add(key)
+                            flat_targets.append(t)
+                # For multi-target we do not compute a combined targets_by_type;
+                # return empty dict so the response shape stays consistent.
+                targets_by_type = {}
+                total_count = len(flat_targets)
+                proposed_targets = flat_targets[: self.TARGETS_DISPLAY_LIMIT]
+                truncated = total_count > self.TARGETS_DISPLAY_LIMIT
+            else:
+                flat_targets, targets_by_type = _build_secator_flat_targets_and_by_type(
+                    target_id, subdomain_ids, input_types
+                )
+                total_count = len(flat_targets)
+                proposed_targets = flat_targets[: self.TARGETS_DISPLAY_LIMIT]
+                truncated = total_count > self.TARGETS_DISPLAY_LIMIT
 
-            return Response(
-                {
-                    "input_types": input_types,
-                    "targets_by_type": targets_by_type,
-                    "proposed_targets": proposed_targets,
-                    "total_count": total_count,
-                    "truncated": truncated,
-                    "common_web_ports": list(COMMON_WEB_PORTS),
-                    "uncommon_web_ports": list(UNCOMMON_WEB_PORTS),
-                }
-            )
+            apex_hosts = [t for t in proposed_targets if is_apex_domain(t)]
+            payload = {
+                "input_types": input_types,
+                "targets_by_type": targets_by_type,
+                "proposed_targets": proposed_targets,
+                "total_count": total_count,
+                "truncated": truncated,
+                "apex_hosts": apex_hosts,
+                "common_web_ports": list(COMMON_WEB_PORTS),
+                "uncommon_web_ports": list(UNCOMMON_WEB_PORTS),
+            }
+            return Response(payload)
         except (SecatorWorkflow.DoesNotExist, SecatorScan.DoesNotExist, SecatorTask.DoesNotExist):
             return Response({"error": "Workflow, scan or task not found"}, status=404)
         except ValueError:

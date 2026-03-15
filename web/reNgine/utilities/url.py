@@ -225,6 +225,28 @@ def get_domain_from_subdomain(subdomain):
         return None
 
 
+def is_apex_domain(host: str) -> bool:
+    """True if host is an apex/registered domain (no subdomain), using public suffix list.
+
+    E.g. example.com -> True, www.example.com -> False, example.co.uk -> True.
+    Uses tldextract so multi-part TLDs (co.uk, com.au) are handled correctly.
+    """
+    if not host or not isinstance(host, str):
+        return False
+    host = host.strip().lower()
+    if not host:
+        return False
+    try:
+        extracted = tldextract.extract(host)
+        return (
+            bool(extracted.domain)
+            and bool(extracted.suffix)
+            and (not extracted.subdomain or extracted.subdomain.strip() == "")
+        )
+    except Exception:
+        return False
+
+
 def sanitize_url(http_url):
     """Removes HTTP ports 80 and 443 from HTTP URL because it's ugly.
 
