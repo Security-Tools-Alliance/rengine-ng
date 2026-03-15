@@ -146,7 +146,7 @@ def profile(request):
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def admin_interface(request):
     User = get_user_model()  # noqa: N806
-    users = User.objects.all().order_by("date_joined")
+    users = User.objects.prefetch_related("socialaccount_set").all().order_by("date_joined")
     return render(request, "dashboard/admin.html", {"users": users})
 
 
