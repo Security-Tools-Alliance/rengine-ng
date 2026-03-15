@@ -644,37 +644,7 @@ const updateScanRowInTable = function(table, data) {
         const rowNode = document.querySelector('tr[data-scan-id="' + data.scan_id + '"]');
         
         if (!rowNode) {
-            // Row not found, might be a new scan that's not yet in the table
-            // Check if table is in AJAX mode by checking if ajax.reload exists
-            if (table && typeof table.ajax === 'function' && typeof table.ajax.reload === 'function') {
-                // Use DataTables ajax.reload() method - simple and efficient
-                // Use a debounce mechanism to avoid multiple reloads
-                if (!window._scanTableReloadTimeout) {
-                    window._scanTableReloadTimeout = new Map();
-                }
-                const timeoutKey = 'table_reload';
-                if (window._scanTableReloadTimeout.get(timeoutKey)) {
-                    clearTimeout(window._scanTableReloadTimeout.get(timeoutKey));
-                }
-                window._scanTableReloadTimeout.set(timeoutKey, setTimeout(function() {
-                    table.ajax.reload(null, false); // false = don't reset paging
-                    window._scanTableReloadTimeout.delete(timeoutKey);
-                }, 500)); // Short delay to ensure scan is in DB
-            } else {
-                // For non-AJAX tables, reload the page after a short delay to show new scans
-                // Use a debounce mechanism to avoid multiple reloads
-                if (!window._scanTablePageReloadTimeout) {
-                    window._scanTablePageReloadTimeout = new Map();
-                }
-                const timeoutKey = 'page_reload';
-                if (window._scanTablePageReloadTimeout.get(timeoutKey)) {
-                    clearTimeout(window._scanTablePageReloadTimeout.get(timeoutKey));
-                }
-                window._scanTablePageReloadTimeout.set(timeoutKey, setTimeout(function() {
-                    window.location.reload();
-                    window._scanTablePageReloadTimeout.delete(timeoutKey);
-                }, 500)); // Short delay to ensure scan is in DB
-            }
+            // Row not found (e.g. new scan not yet in current table page). Do not auto-reload.
             return;
         }
         

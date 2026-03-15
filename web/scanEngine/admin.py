@@ -10,10 +10,14 @@ from reNgine.admin_common import (
 from scanEngine.models import (
     Configuration,
     EngineType,
+    Hackerone,
     InterestingLookupModel,
     Notification,
+    Proxy,
+    SecatorProfile,
     SecatorScan,
     SecatorTask,
+    SecatorWorker,
     SecatorWorkflow,
     VulnerabilityReportSetting,
     Wordlist,
@@ -48,6 +52,7 @@ class WordlistAdmin(SimpleLookupModelAdmin):
 
     fieldset_title = "Basic Information"
     list_filter = ["count"]
+    ordering = ["name"]
 
 
 @admin.register(Configuration)
@@ -58,7 +63,9 @@ class ConfigurationAdmin(admin.ModelAdmin):
         "name",
         "short_name",
     ]
+    list_display_links = ["name"]
     list_filter = []
+    ordering = ["name"]
     search_fields = [
         "name",
         "short_name",
@@ -103,6 +110,7 @@ class NotificationAdmin(admin.ModelAdmin):
         "send_scan_status_notif",
         "send_vuln_notif",
     ]
+    ordering = ["-id"]
     list_filter = [
         "send_to_slack",
         "send_to_lark",
@@ -165,6 +173,7 @@ class VulnerabilityReportSettingAdmin(admin.ModelAdmin):
         "show_executive_summary",
         "show_footer",
     ]
+    list_display_links = ["company_name"]
     list_filter = [
         "show_rengine_banner",
         "show_executive_summary",
@@ -228,12 +237,15 @@ class SecatorWorkflowAdmin(TimestampedModelAdminMixin, admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
+    list_display_links = ["name"]
     list_filter = [
         "workflow_type",
         "scan_type",
         "is_active",
         "created_at",
     ]
+    ordering = ["name"]
+    date_hierarchy = "created_at"
     search_fields = [
         "name",
         "alias",
@@ -284,11 +296,14 @@ class SecatorTaskAdmin(TimestampedModelAdminMixin, admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
+    list_display_links = ["name"]
     list_filter = [
         "task_type",
         "is_builtin",
         "created_at",
     ]
+    ordering = ["name"]
+    date_hierarchy = "created_at"
     search_fields = [
         "name",
         "task_type",
@@ -313,6 +328,7 @@ class SecatorScanAdmin(TimestampedModelAdminMixin, admin.ModelAdmin):
         "is_active",
         "created_at",
     ]
+    list_display_links = ["name"]
     list_filter = [
         "scan_type",
         "scan_config_type",
@@ -320,6 +336,8 @@ class SecatorScanAdmin(TimestampedModelAdminMixin, admin.ModelAdmin):
         "is_active",
         "created_at",
     ]
+    ordering = ["name"]
+    date_hierarchy = "created_at"
     search_fields = [
         "name",
         "description",
@@ -335,3 +353,54 @@ class SecatorScanAdmin(TimestampedModelAdminMixin, admin.ModelAdmin):
         ),
         model=SecatorScan,
     )
+
+
+@admin.register(Proxy)
+class ProxyAdmin(admin.ModelAdmin):
+    """Admin interface for Proxy model."""
+
+    list_display = ["id", "use_proxy"]
+    list_filter = ["use_proxy"]
+
+
+@admin.register(Hackerone)
+class HackeroneAdmin(admin.ModelAdmin):
+    """Admin interface for Hackerone model."""
+
+    list_display = ["id", "username", "send_critical", "send_high", "send_medium"]
+    list_display_links = ["username"]
+    list_filter = ["send_critical", "send_high", "send_medium"]
+    ordering = ["username"]
+    search_fields = ["username"]
+
+
+@admin.register(SecatorProfile)
+class SecatorProfileAdmin(admin.ModelAdmin):
+    """Admin interface for SecatorProfile model."""
+
+    list_display = ["id", "name", "category", "profile_type", "is_active", "is_default", "created_at"]
+    list_display_links = ["name"]
+    list_filter = ["category", "profile_type", "is_active", "is_default"]
+    ordering = ["name"]
+    search_fields = ["name", "description"]
+
+
+@admin.register(SecatorWorker)
+class SecatorWorkerAdmin(admin.ModelAdmin):
+    """Admin interface for SecatorWorker model."""
+
+    list_display = [
+        "id",
+        "name",
+        "ssh_host",
+        "ssh_port",
+        "is_active",
+        "ssh_ok",
+        "container_running",
+        "api_reachable",
+        "last_status_at",
+    ]
+    list_display_links = ["name"]
+    list_filter = ["is_active", "ssh_ok", "container_running", "api_reachable", "api_access_type"]
+    ordering = ["name"]
+    search_fields = ["name", "ssh_host", "ssh_user"]

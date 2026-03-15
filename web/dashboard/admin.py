@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from dashboard.models import NetlasAPIKey, OllamaSettings, OpenAiAPIKey, Project, SearchHistory
+from dashboard.models import (
+    NetlasAPIKey,
+    OllamaSettings,
+    OpenAiAPIKey,
+    Project,
+    SearchHistory,
+    UserAPIKey,
+    UserPreference,
+)
 
 
 @admin.register(SearchHistory)
@@ -11,7 +19,9 @@ class SearchHistoryAdmin(admin.ModelAdmin):
         "id",
         "query",
     ]
+    list_display_links = ["query"]
     list_filter = []
+    ordering = ["-id"]
     search_fields = [
         "query",
     ]
@@ -33,9 +43,12 @@ class ProjectAdmin(admin.ModelAdmin):
         "slug",
         "insert_date",
     ]
+    list_display_links = ["name"]
     list_filter = [
         "insert_date",
     ]
+    ordering = ["-insert_date"]
+    date_hierarchy = "insert_date"
     search_fields = [
         "name",
         "slug",
@@ -87,6 +100,7 @@ class OpenAiAPIKeyAdmin(admin.ModelAdmin):
         "id",
     ]
     list_filter = []
+    ordering = ["-id"]
     search_fields = []
     fieldsets = (
         (
@@ -104,6 +118,7 @@ class NetlasAPIKeyAdmin(admin.ModelAdmin):
         "id",
     ]
     list_filter = []
+    ordering = ["-id"]
     search_fields = []
     fieldsets = (
         (
@@ -111,3 +126,24 @@ class NetlasAPIKeyAdmin(admin.ModelAdmin):
             {"fields": ("key",)},
         ),
     )
+
+
+@admin.register(UserAPIKey)
+class UserAPIKeyAdmin(admin.ModelAdmin):
+    """Admin interface for UserAPIKey model."""
+
+    list_display = ["id", "name", "user", "created_at", "last_used", "is_active", "is_system"]
+    list_filter = ["is_active", "is_system", "created_at"]
+    search_fields = ["name", "user__username"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(UserPreference)
+class UserPreferenceAdmin(admin.ModelAdmin):
+    """Admin interface for UserPreference model."""
+
+    list_display = ["id", "user"]
+    list_display_links = ["user"]
+    list_filter = ["user"]
+    ordering = ["user__username"]
+    search_fields = ["user__username"]

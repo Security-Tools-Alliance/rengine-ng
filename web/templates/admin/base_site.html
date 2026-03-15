@@ -1,0 +1,13 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}reNgine-ng – Administration{% endblock %}
+
+{% block branding %}
+<h1 id="site-name"><a href="{% url 'admin:index' %}">reNgine-ng Administration</a></h1>
+{% endblock %}
+
+{% block blockbots %}
+<link rel="shortcut icon" href="{% static 'img/favicon.png' %}">
+{{ block.super }}
+{% endblock %}

@@ -14,11 +14,16 @@ class TargetAdmin(admin.ModelAdmin):
         "insert_date",
         "start_scan_date",
     ]
+    list_display_links = ["value"]
     list_filter = [
         "target_type",
         "insert_date",
         "start_scan_date",
     ]
+    list_per_page = 50
+    list_select_related = ["project"]
+    ordering = ["-insert_date"]
+    date_hierarchy = "insert_date"
     search_fields = [
         "value",
         "description",
@@ -53,9 +58,13 @@ class OrganizationAdmin(admin.ModelAdmin):
         "project",
         "insert_date",
     ]
+    list_display_links = ["name"]
     list_filter = [
         "insert_date",
     ]
+    list_select_related = ["project"]
+    ordering = ["-insert_date"]
+    date_hierarchy = "insert_date"
     search_fields = [
         "name",
         "description",
@@ -90,11 +99,15 @@ class ScopeAdmin(admin.ModelAdmin):
         "end_date",
         "insert_date",
     ]
+    list_display_links = ["name"]
     list_filter = [
         "scope_type",
         "organization",
         "insert_date",
     ]
+    list_select_related = ["organization"]
+    ordering = ["-insert_date"]
+    date_hierarchy = "insert_date"
     search_fields = [
         "name",
         "description",

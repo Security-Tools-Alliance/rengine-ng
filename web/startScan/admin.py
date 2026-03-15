@@ -9,28 +9,42 @@ from reNgine.admin_common import (
     build_fieldsets_with_timestamps,
 )
 from startScan.models import (
+    Certificate,
     Command,
     CountryISO,
     CveId,
     CweId,
     DirectoryFile,
     DirectoryScan,
+    DNSRecord,
     Domain,
     DomainInfo,
+    DomainInfoDnsRecordsThrough,
+    DomainInfoHistoricalIpsThrough,
+    DomainInfoNameServersThrough,
+    DomainInfoRelatedDomainsThrough,
+    DomainInfoRelatedTldsThrough,
+    DomainInfoSimilarDomainsThrough,
+    DomainInfoStatusThrough,
     DomainRegistration,
     Dork,
     Email,
     Employee,
     EndPoint,
+    Exploit,
+    HistoricalIP,
     IpAddress,
     LLMVulnerabilityReport,
     MetaFinderDocument,
+    NameServer,
     Port,
     Registrar,
     RelatedDomain,
     S3Bucket,
     ScanActivity,
+    ScanSchedule,
     ScanHistory,
+    Secret,
     SecatorRunner,
     Subdomain,
     SubScan,
@@ -38,6 +52,7 @@ from startScan.models import (
     Vulnerability,
     VulnerabilityTags,
     Waf,
+    WhoisStatus,
 )
 
 
@@ -51,10 +66,15 @@ class DomainAdmin(admin.ModelAdmin):
         "insert_date",
         "start_scan_date",
     ]
+    list_display_links = ["name"]
     list_filter = [
         "insert_date",
         "start_scan_date",
     ]
+    list_per_page = 50
+    ordering = ["-insert_date"]
+    date_hierarchy = "insert_date"
+    raw_id_fields = ["scan_history"]
     search_fields = [
         "name",
         "description",
@@ -126,7 +146,9 @@ class DomainInfoAdmin(admin.ModelAdmin):
 @admin.register(RelatedDomain)
 class RelatedDomainAdmin(admin.ModelAdmin):
     list_display = ["id", "name"]
+    list_display_links = ["name"]
     search_fields = ["name"]
+    ordering = ["name"]
 
 
 @admin.register(Registrar)
@@ -165,6 +187,7 @@ class ScanHistoryAdmin(admin.ModelAdmin):
         "stop_scan_date",
         "initiated_by",
     ]
+    list_display_links = ["target"]
     list_filter = [
         "is_legacy_scan",
         "scan_status",
@@ -172,6 +195,11 @@ class ScanHistoryAdmin(admin.ModelAdmin):
         "start_scan_date",
         "initiated_by",
     ]
+    list_per_page = 50
+    list_select_related = ["target", "scan_type", "initiated_by"]
+    ordering = ["-start_scan_date"]
+    date_hierarchy = "start_scan_date"
+    raw_id_fields = ["target"]
     search_fields = [
         "target__value",
         "scan_type__name",
@@ -232,6 +260,11 @@ class SubScanAdmin(admin.ModelAdmin):
         "status",
         "start_scan_date",
     ]
+    list_per_page = 50
+    list_select_related = ["scan_history", "subdomain"]
+    ordering = ["-start_scan_date"]
+    date_hierarchy = "start_scan_date"
+    raw_id_fields = ["scan_history", "subdomain"]
     search_fields = [
         "type",
         "error_message",
@@ -274,6 +307,7 @@ class SubdomainAdmin(admin.ModelAdmin):
         "http_status",
         "discovered_date",
     ]
+    list_display_links = ["name"]
     list_filter = [
         "is_important",
         "is_imported_subdomain",
@@ -281,6 +315,11 @@ class SubdomainAdmin(admin.ModelAdmin):
         "verified",
         "discovered_date",
     ]
+    list_per_page = 50
+    list_select_related = ["domain", "scan_history"]
+    ordering = ["-discovered_date"]
+    date_hierarchy = "discovered_date"
+    raw_id_fields = ["domain", "scan_history"]
     search_fields = [
         "name",
         "http_url",
@@ -355,6 +394,9 @@ class ScanActivityAdmin(admin.ModelAdmin):
         "status",
         "time",
     ]
+    list_select_related = ["scan_of"]
+    ordering = ["-time"]
+    date_hierarchy = "time"
     search_fields = [
         "title",
         "name",
@@ -391,12 +433,18 @@ class EndPointAdmin(admin.ModelAdmin):
         "is_default",
         "discovered_date",
     ]
+    list_display_links = ["http_url"]
     list_filter = [
         "http_status",
         "is_default",
         "is_directory",
         "discovered_date",
     ]
+    list_per_page = 50
+    list_select_related = ["subdomain", "scan_history", "domain"]
+    ordering = ["-id"]
+    date_hierarchy = "discovered_date"
+    raw_id_fields = ["scan_history", "domain", "subdomain"]
     search_fields = [
         "http_url",
         "page_title",
@@ -490,12 +538,18 @@ class VulnerabilityAdmin(admin.ModelAdmin):
         "http_url",
         "discovered_date",
     ]
+    list_display_links = ["name"]
     list_filter = [
         "severity",
         "open_status",
         "is_llm_used",
         "discovered_date",
     ]
+    list_per_page = 50
+    list_select_related = ["scan_history", "subdomain", "endpoint", "domain"]
+    ordering = ["-discovered_date"]
+    date_hierarchy = "discovered_date"
+    raw_id_fields = ["scan_history", "subdomain", "endpoint", "domain"]
     search_fields = [
         "name",
         "template",
@@ -611,6 +665,8 @@ class PortAdmin(admin.ModelAdmin):
         "is_uncommon",
         "state",
     ]
+    list_per_page = 50
+    raw_id_fields = ["ip_address"]
     search_fields = [
         "service_name",
         "description",
@@ -639,12 +695,15 @@ class IpAddressAdmin(admin.ModelAdmin):
         "is_private",
         "alive",
     ]
+    list_display_links = ["address"]
     list_filter = [
         "is_cdn",
         "is_private",
         "alive",
         "version",
     ]
+    list_per_page = 50
+    ordering = ["address"]
     search_fields = [
         "address",
         "reverse_pointer",
@@ -781,7 +840,9 @@ class EmailAdmin(admin.ModelAdmin):
         "id",
         "address",
     ]
+    list_display_links = ["address"]
     list_filter = []
+    ordering = ["address"]
     search_fields = [
         "address",
     ]
@@ -805,7 +866,11 @@ class EmployeeAdmin(admin.ModelAdmin):
         "scan_history",
         "domain",
     ]
-    list_filter = []
+    list_display_links = ["name"]
+    list_filter = ["scan_history", "domain"]
+    list_select_related = ["scan_history", "domain"]
+    ordering = ["-id"]
+    raw_id_fields = ["scan_history", "domain", "subdomain", "endpoint"]
     search_fields = [
         "name",
         "username",
@@ -888,6 +953,10 @@ class CommandAdmin(admin.ModelAdmin):
         "status",
         "return_code",
     ]
+    list_select_related = ["scan_history", "activity"]
+    ordering = ["-time"]
+    date_hierarchy = "time"
+    raw_id_fields = ["scan_history", "activity"]
     search_fields = [
         "name",
         "command",
@@ -935,7 +1004,9 @@ class LLMVulnerabilityReportAdmin(admin.ModelAdmin):
         "title",
         "url_path",
     ]
+    list_display_links = ["title"]
     list_filter = []
+    ordering = ["-id"]
     search_fields = [
         "title",
         "url_path",
@@ -1016,11 +1087,16 @@ class SecatorRunnerAdmin(TimestampedModelAdminMixin, admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
+    list_display_links = ["runner_name"]
     list_filter = [
         "runner_type",
         "status",
         "created_at",
     ]
+    list_select_related = ["scan_history", "domain"]
+    ordering = ["-created_at"]
+    date_hierarchy = "created_at"
+    raw_id_fields = ["scan_history", "domain"]
     search_fields = [
         "runner_name",
         "celery_id",
@@ -1036,3 +1112,143 @@ class SecatorRunnerAdmin(TimestampedModelAdminMixin, admin.ModelAdmin):
         ),
         model=SecatorRunner,
     )
+
+
+@admin.register(HistoricalIP)
+class HistoricalIPAdmin(admin.ModelAdmin):
+    """Admin interface for HistoricalIP model (managed=False)."""
+
+    list_display = ["id", "ip", "location", "owner", "last_seen"]
+    search_fields = ["ip", "location", "owner"]
+
+
+@admin.register(WhoisStatus)
+class WhoisStatusAdmin(admin.ModelAdmin):
+    """Admin interface for WhoisStatus model (managed=False)."""
+
+    list_display = ["id", "name"]
+    search_fields = ["name"]
+
+
+@admin.register(NameServer)
+class NameServerAdmin(admin.ModelAdmin):
+    """Admin interface for NameServer model (managed=False)."""
+
+    list_display = ["id", "name"]
+    search_fields = ["name"]
+
+
+@admin.register(DNSRecord)
+class DNSRecordAdmin(admin.ModelAdmin):
+    """Admin interface for DNSRecord model (managed=False)."""
+
+    list_display = ["id", "name", "type"]
+    list_filter = ["type"]
+    search_fields = ["name"]
+
+
+@admin.register(DomainInfoStatusThrough)
+class DomainInfoStatusThroughAdmin(admin.ModelAdmin):
+    """Admin interface for DomainInfoStatusThrough (managed=False)."""
+
+    list_display = ["id", "domaininfo", "whoisstatus"]
+
+
+@admin.register(DomainInfoNameServersThrough)
+class DomainInfoNameServersThroughAdmin(admin.ModelAdmin):
+    """Admin interface for DomainInfoNameServersThrough (managed=False)."""
+
+    list_display = ["id", "domaininfo", "nameserver"]
+
+
+@admin.register(DomainInfoDnsRecordsThrough)
+class DomainInfoDnsRecordsThroughAdmin(admin.ModelAdmin):
+    """Admin interface for DomainInfoDnsRecordsThrough (managed=False)."""
+
+    list_display = ["id", "domaininfo", "dnsrecord"]
+
+
+@admin.register(DomainInfoRelatedDomainsThrough)
+class DomainInfoRelatedDomainsThroughAdmin(admin.ModelAdmin):
+    """Admin interface for DomainInfoRelatedDomainsThrough (managed=False)."""
+
+    list_display = ["id", "domaininfo", "relateddomain"]
+
+
+@admin.register(DomainInfoRelatedTldsThrough)
+class DomainInfoRelatedTldsThroughAdmin(admin.ModelAdmin):
+    """Admin interface for DomainInfoRelatedTldsThrough (managed=False)."""
+
+    list_display = ["id", "domaininfo", "relateddomain"]
+
+
+@admin.register(DomainInfoSimilarDomainsThrough)
+class DomainInfoSimilarDomainsThroughAdmin(admin.ModelAdmin):
+    """Admin interface for DomainInfoSimilarDomainsThrough (managed=False)."""
+
+    list_display = ["id", "domaininfo", "relateddomain"]
+
+
+@admin.register(DomainInfoHistoricalIpsThrough)
+class DomainInfoHistoricalIpsThroughAdmin(admin.ModelAdmin):
+    """Admin interface for DomainInfoHistoricalIpsThrough (managed=False)."""
+
+    list_display = ["id", "domaininfo", "historicalip"]
+
+
+@admin.register(Secret)
+class SecretAdmin(admin.ModelAdmin):
+    """Admin interface for Secret model."""
+
+    list_display = ["id", "rule_name", "scan_history", "matched_at", "source", "discovered_date"]
+    list_display_links = ["rule_name"]
+    list_filter = ["source", "discovered_date"]
+    ordering = ["-discovered_date"]
+    date_hierarchy = "discovered_date"
+    raw_id_fields = ["scan_history"]
+    search_fields = ["rule_name", "matched_at", "source"]
+    readonly_fields = ["discovered_date"]
+
+
+@admin.register(Exploit)
+class ExploitAdmin(admin.ModelAdmin):
+    """Admin interface for Exploit model."""
+
+    list_display = ["id", "name", "exploit_id", "scan_history", "ip_address", "discovered_date"]
+    list_display_links = ["name"]
+    list_filter = ["provider", "discovered_date"]
+    ordering = ["-discovered_date"]
+    date_hierarchy = "discovered_date"
+    raw_id_fields = ["scan_history", "ip_address"]
+    search_fields = ["name", "exploit_id", "matched_at", "reference"]
+    filter_horizontal = ["cve_ids", "tags"]
+
+
+@admin.register(Certificate)
+class CertificateAdmin(admin.ModelAdmin):
+    """Admin interface for Certificate model."""
+
+    list_display = ["id", "host", "subject_cn", "scan_history", "not_after", "discovered_date"]
+    list_display_links = ["subject_cn"]
+    list_filter = ["self_signed", "trusted", "discovered_date"]
+    list_per_page = 50
+    ordering = ["-discovered_date"]
+    date_hierarchy = "discovered_date"
+    raw_id_fields = ["scan_history"]
+    search_fields = ["host", "fingerprint_sha256", "subject_cn", "issuer_cn"]
+    readonly_fields = ["discovered_date"]
+
+
+@admin.register(ScanSchedule)
+class ScanScheduleAdmin(admin.ModelAdmin):
+    """Admin interface for ScanSchedule model."""
+
+    list_display = ["id", "name", "target", "schedule_mode", "next_run", "enabled", "initiated_by", "created_at"]
+    list_display_links = ["name"]
+    list_filter = ["schedule_mode", "enabled", "created_at"]
+    list_select_related = ["target", "initiated_by"]
+    ordering = ["-created_at"]
+    date_hierarchy = "created_at"
+    raw_id_fields = ["target"]
+    search_fields = ["name"]
+    readonly_fields = ["created_at"]
