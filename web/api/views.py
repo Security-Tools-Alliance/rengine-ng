@@ -1420,6 +1420,7 @@ class AddTarget(APIView):
                     {"detail": "Target and organization belong to different projects."},
                     status=HTTP_400_BAD_REQUEST,
                 )
+            # Legacy: targets can be attached directly to organization; in the scope-based model, attach targets to scopes instead.
             organization_obj.targets.add(target)
 
         return Response(

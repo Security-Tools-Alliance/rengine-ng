@@ -112,7 +112,27 @@ class Organization(models.Model):
         return Domain.objects.filter(scan_history__target__organizations=self)
 
     def get_targets(self):
-        return self.targets.all()
+        """
+        Return all targets scannable for this organization.
+
+        Union of (1) targets linked directly on the organization (legacy:
+        used by older scans with is_legacy_scan) and (2) targets from all
+        scopes of this organization. In the scope-based model, targets are
+        attached to scopes; this method aggregates them for organization-level
+        scan and schedule flows. Duplicates are removed.
+        """
+        from django.db.models import Q
+
+        direct = self.targets.all()
+        via_scopes = Target.objects.filter(scopes__organization=self).distinct()
+        if not direct.exists():
+            return via_scopes
+        if not via_scopes.exists():
+            return direct
+        return Target.objects.filter(
+            Q(pk__in=direct.values_list("pk", flat=True))
+            | Q(pk__in=via_scopes.values_list("pk", flat=True))
+        ).distinct()
 
 
 class Scope(models.Model):

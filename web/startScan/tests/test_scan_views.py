@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from scanEngine.models import SecatorProfile
 from startScan.models import Command, Domain, ScanHistory, ScanSchedule, Subdomain
+from targetApp.models import Scope
 from startScan.views import (
     SCHEDULE_MODE_REQUIRED_MSG,
     _domains_for_scan_detail,
@@ -274,8 +275,11 @@ class TestSecatorProfilesContext(BaseTestCase):
         self.assertNotIn("domain_list", response.context)
 
     def test_start_organization_scan_post_empty_targets_redirects_with_warning(self):
-        """start_organization_scan POST with no targets should redirect back to form."""
+        """start_organization_scan POST with no targets should redirect back with explicit message."""
         self.data_generator.organization.targets.clear()
+        scope_qs = Scope.objects.filter(organization=self.data_generator.organization)
+        for scope in scope_qs:
+            scope.targets.clear()
         data = {
             "execution_mode": "scan",
             "secator_scan_type": "domain",
@@ -295,6 +299,12 @@ class TestSecatorProfilesContext(BaseTestCase):
                 kwargs={"slug": self.data_generator.project.slug, "id": self.data_generator.organization.id},
             ),
             fetch_redirect_response=False,
+        )
+        response_follow = self.client.get(response.url)
+        messages_list = list(response_follow.context["messages"]) if response_follow.context.get("messages") else []
+        self.assertTrue(
+            any("Add targets to one or more scopes" in str(m) for m in messages_list),
+            "Expected warning about adding targets to scopes or legacy",
         )
 
     def test_start_scope_scan_get_returns_200_and_quick_scan_context(self):

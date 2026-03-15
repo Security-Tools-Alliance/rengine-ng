@@ -1434,7 +1434,11 @@ def start_organization_scan(request, id, slug):
     if request.method == "POST":
         target_list = list(organization.get_targets())
         if not target_list:
-            messages.warning(request, "No targets to scan for this organization.")
+            messages.warning(
+                request,
+                "No targets to scan. Add targets to one or more scopes of this organization, "
+                "or attach legacy targets to the organization.",
+            )
             return redirect("start_organization_scan", slug=slug, id=id)
         try:
             return _run_quick_scan_for_targets(
@@ -1525,6 +1529,17 @@ def schedule_organization_scan(request, slug, id):
         engine_type = int(request.POST["scan_mode"])
         engine = get_object_or_404(EngineType, id=engine_type)
         targets = list(organization.get_targets())
+        if not targets:
+            messages.error(
+                request,
+                "No targets to schedule. Add targets to one or more scopes of this organization, "
+                "or attach legacy targets to the organization.",
+            )
+            return render(
+                request,
+                "organization/schedule_scan_ui.html",
+                _schedule_organization_scan_ui_context(organization),
+            )
         for target in targets:
             timestr = str(datetime.strftime(timezone.now(), "%Y_%m_%d_%H_%M_%S"))
             task_name = f"{engine.engine_name} for {target.value}: {timestr}"
