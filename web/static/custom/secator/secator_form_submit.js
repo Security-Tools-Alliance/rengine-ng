@@ -54,36 +54,40 @@
       });
     },
 
-    collectFormData: function($form) {
-      const executionMode = $form.find('input[name="execution_mode"]').val();
-      const targetId = $form.find('input[name="target_id"]').val();
-
+    /**
+     * Build secator_config (profiles, proxy, delay, scalar params) from any scope
+     * (form or modal). Shared by start scan form and subscan modal.
+     */
+    collectSecatorConfigFromScope: function($scope) {
+      if (!$scope || !$scope.length) {
+        return { proxy: '', delay: 0, profiles: [] };
+      }
       const profileKeys = ['speed', 'evasion', 'general', 'network'];
       const profiles = profileKeys
         .filter(key => {
           const sel = this.getProfileSwitchSelector(key);
-          return sel && $form.find(sel).is(':checked');
+          return sel && $scope.find(sel).is(':checked');
         })
-        .map(key => this.getProfileValue($form, key))
+        .map(key => this.getProfileValue($scope, key))
         .filter(Boolean);
 
-      const useRandomProxy = $form.find('input[name="use_random_proxy"]').is(':checked');
-      const proxyValue = useRandomProxy ? null : ($form.find('input[name="proxy"], input[name="override_proxy"]').val() || '');
+      const useRandomProxy = $scope.find('input[name="use_random_proxy"]').is(':checked');
+      const proxyValue = useRandomProxy ? null : ($scope.find('input[name="proxy"], input[name="override_proxy"]').val() || '');
 
       const scalarParamNames = ['threads', 'rate_limit', 'timeout', 'retries', 'delay', 'depth', 'follow_redirect', 'proxy', 'user_agent', 'header'];
       const secatorConfig = {
         proxy: proxyValue,
         delay: (function() {
-          const v = $form.find('input[name="delay"], input[name="override_delay"]').val();
+          const v = $scope.find('input[name="delay"], input[name="override_delay"]').val();
           const n = parseInt(v, 10);
-          return !isNaN(n) ? n : 0;
+          return isNaN(n) ? 0 : n;
         })(),
         profiles: profiles
       };
       scalarParamNames.forEach(function(param) {
         if (param === 'proxy' || param === 'delay') return;
         const prefixed = 'override_' + param;
-        const $el = $form.find('input[name="' + param + '"], select[name="' + param + '"], textarea[name="' + param + '"], input[name="' + prefixed + '"], select[name="' + prefixed + '"], textarea[name="' + prefixed + '"]');
+        const $el = $scope.find('input[name="' + param + '"], select[name="' + param + '"], textarea[name="' + param + '"], input[name="' + prefixed + '"], select[name="' + prefixed + '"], textarea[name="' + prefixed + '"]');
         if (!$el.length) return;
         const raw = $el.val();
         if (raw === undefined || raw === null || String(raw).trim() === '') return;
@@ -102,6 +106,14 @@
           secatorConfig[param] = v;
         }
       });
+      return secatorConfig;
+    },
+
+    collectFormData: function($form) {
+      const executionMode = $form.find('input[name="execution_mode"]').val();
+      const targetId = $form.find('input[name="target_id"]').val();
+
+      const secatorConfig = this.collectSecatorConfigFromScope($form);
 
       const formData = {
         execution_mode: executionMode,

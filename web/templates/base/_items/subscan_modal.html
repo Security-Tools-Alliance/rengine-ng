@@ -237,6 +237,10 @@
 		// Show the two-column layout and Scan options / Advanced config
 		$contentRow.show().css('display', '').removeAttr('aria-hidden');
 		$('#subscan-options-advanced').show();
+		// Restore profile switch state from hidden inputs so "Use X Profile" matches stored value after reopen
+		if (typeof window.ScanParams !== 'undefined' && typeof window.ScanParams.syncProfileSwitchesFromHiddenValues === 'function') {
+			window.ScanParams.syncProfileSwitchesFromHiddenValues($('#subscan-modal'));
+		}
 		// Hide view toggle until items are loaded
 		if (window.SecatorScan) window.SecatorScan.setViewToggleVisible('subscan', false);
 		// Hide previous mode's Required input types block

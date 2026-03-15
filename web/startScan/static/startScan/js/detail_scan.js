@@ -1689,12 +1689,11 @@ function initiate_subscan(subdomain_ids){
 		data['secator_scan_type'] = scanType;
 	}
 	
-	// Get secator_config (proxy, delay, profiles) - simplified for subscan
-	const secatorConfig = {
-		proxy: '',
-		delay: 0,
-		profiles: []
-	};
+	// Get secator_config (profiles, proxy, delay, scalar params) from modal, same logic as start scan
+	let secatorConfig = { proxy: '', delay: 0, profiles: [] };
+	if (window.SecatorScan && typeof window.SecatorScan.collectSecatorConfigFromScope === 'function') {
+		secatorConfig = window.SecatorScan.collectSecatorConfigFromScope($('#subscan-modal'));
+	}
 	data['secator_config'] = secatorConfig;
 
 	const $scanHistoryIdEl = $('#subscan_scan_history_id');

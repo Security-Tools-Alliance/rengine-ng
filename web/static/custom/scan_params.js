@@ -665,10 +665,35 @@
     }
   }
 
+  /**
+   * Sync profile switch checkboxes from current hidden input values.
+   * Use when showing a block (e.g. subscan modal advanced section) so the switch state
+   * matches the stored profile value (avoids "profile displayed but switch off" after reopen).
+   */
+  const syncProfileSwitchesFromHiddenValues = function ($scope) {
+    if (!$scope || !$scope.length) return;
+    $scope.find('.profile-selector').each(function () {
+      const $selector = $(this);
+      const $blockRoot = $selector.closest('[data-scan-params-block-root="true"]');
+      const $scopeForFind = $blockRoot.length ? $blockRoot : getFormScope($selector);
+      Object.keys(CATEGORY_SWITCH_MAP).forEach(function (category) {
+        const hiddenName = CATEGORY_HIDDEN_MAP[category];
+        const $hidden = $scopeForFind.find('input[name="' + hiddenName + '"]').first();
+        const hasValue = $hidden.length && String($hidden.val()).trim() !== '';
+        const $switch = $selector.find('[id$="' + CATEGORY_SWITCH_MAP[category] + '"]').first();
+        if ($switch.length) {
+          $switch.prop('checked', hasValue);
+          toggleCategory(category, hasValue, $scopeForFind, $selector);
+        }
+      });
+    });
+  };
+
   window.ScanParams = {
     schedulePreview: scheduleEffectivePreview,
     syncScopeWorkerDropdown: syncScopeWorkerDropdown,
-    initScopeWorkerSync: initScopeWorkerSync
+    initScopeWorkerSync: initScopeWorkerSync,
+    syncProfileSwitchesFromHiddenValues: syncProfileSwitchesFromHiddenValues
   };
 
   $(document).ready(function () {
