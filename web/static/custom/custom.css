@@ -209,6 +209,11 @@ div.dt-container div.dt-search input:focus {
   }
 }
 
+/* SweetAlert2 above right bar (z-index 9998-9999) so one click confirms without closing the bar */
+.swal2-container {
+  z-index: 10000 !important;
+}
+
 /* theme toggle theme-switch */
 .toggle-theme-switch {
   vertical-align: middle;

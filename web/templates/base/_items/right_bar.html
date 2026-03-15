@@ -5,12 +5,14 @@
         <ul class="nav nav-tabs nav-bordered mt-3">
           <li class="nav-item active">
             <a href="#tasks" data-bs-toggle="tab" aria-expanded="true" class="nav-link active">
-              Scan History
+              Scans
+              <span id="scans-tab-count" class="badge bg-primary rounded-pill ms-1" style="display: none;"></span>
             </a>
           </li>
           <li class="nav-item">
             <a href="#subscan" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
               Tasks
+              <span id="tasks-tab-count" class="badge bg-primary rounded-pill ms-1" style="display: none;"></span>
             </a>
           </li>
         </ul>
@@ -18,6 +20,7 @@
           <div class="tab-pane show active" id="tasks">
             <h6 class="fw-medium mt-1 text-uppercase">Currently Scanning</h6>
             <h5><span class="badge bg-primary rounded-pill" id="current_scan_count"></span></h5>
+            <button type="button" id="stop-all-scans-btn" class="btn btn-sm btn-soft-danger mt-1 mb-1" style="display: none;" onclick="stopAllScans(); return false;"><i class="fe-alert-triangle"></i> Stop all scans</button>
             <div id="currently_scanning">
             </div>
             <h6 class="fw-medium mt-1 text-uppercase">Recently Completed</h6>
@@ -38,6 +41,7 @@
           <div class="tab-pane" id="subscan">
             <h6 class="fw-medium mt-1 text-uppercase">Currently Running</h6>
             <h5><span class="badge bg-primary rounded-pill" id="current_task_count"></span></h5>
+            <button type="button" id="stop-all-tasks-btn" class="btn btn-sm btn-soft-danger mt-1 mb-1" style="display: none;" onclick="stopAllTasks(); return false;"><i class="fe-alert-triangle"></i> Stop all tasks</button>
             <div id="currently_running_tasks">
             </div>
             <h6 class="fw-medium mt-1 text-uppercase">Recently Completed</h6>

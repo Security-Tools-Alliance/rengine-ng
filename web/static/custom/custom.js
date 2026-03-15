@@ -1360,6 +1360,120 @@ function stop_activity(url, activity_id=null, reload_scan_bar=true, reload_locat
 	}])
 }
 
+function stopAllScans() {
+	const url = window.scanStatusApiUrls && window.scanStatusApiUrls.stopScanUrl;
+	if (!url) {
+		Snackbar.show({ text: 'Stop scan API URL not available.', pos: 'top-right', duration: 3000 });
+		return;
+	}
+	const container = document.querySelector('.right-bar[data-scan-sidebar="true"] #currently_scanning');
+	const cards = container ? container.querySelectorAll('.mini-card[id^="scan-card-"]') : [];
+	const scanIds = [];
+	cards.forEach(function(card) {
+		const id = card.id && card.id.replace(/^scan-card-/, '');
+		if (id) { scanIds.push(parseInt(id, 10)); }
+	});
+	if (scanIds.length === 0) {
+		Snackbar.show({ text: 'No scans currently running.', pos: 'top-right', duration: 2000 });
+		return;
+	}
+	const btn = document.getElementById('stop-all-scans-btn');
+	if (btn) { btn.disabled = true; }
+	swal.queue([{
+		title: 'Stop all ' + scanIds.length + ' scans?',
+		text: 'You won\'t be able to revert this!',
+		icon: 'warning',
+		showCancelButton: true,
+		confirmButtonText: 'Stop all',
+		padding: '2em',
+		showLoaderOnConfirm: true,
+		preConfirm: function() {
+			const promises = scanIds.map(function(scanId) {
+				return fetch(url, {
+					method: 'POST',
+					credentials: 'same-origin',
+					body: JSON.stringify({ scan_id: scanId }),
+					headers: {
+						'X-CSRFToken': getCookie('csrftoken'),
+						'Content-Type': 'application/json'
+					}
+				}).then(function(r) { return r.json(); });
+			});
+			return Promise.all(promises).then(function(results) {
+				const ok = results.filter(function(r) { return r && r.status; }).length;
+				const fail = results.length - ok;
+				if (fail > 0) {
+					Snackbar.show({ text: 'Stopped ' + ok + ', failed ' + fail + '.', pos: 'top-right', duration: 3000 });
+				} else {
+					Snackbar.show({ text: 'All scans stopped.', pos: 'top-right', duration: 1500 });
+				}
+				if (typeof getScanStatusSidebar === 'function') {
+					getScanStatusSidebar(null, null, null, null, { reload: true });
+				}
+			}).finally(function() {
+				if (btn) { btn.disabled = false; }
+			});
+		}
+	}]);
+}
+
+function stopAllTasks() {
+	const url = window.scanStatusApiUrls && window.scanStatusApiUrls.stopActivityUrl;
+	if (!url) {
+		Snackbar.show({ text: 'Stop activity API URL not available.', pos: 'top-right', duration: 3000 });
+		return;
+	}
+	const container = document.querySelector('.right-bar[data-scan-sidebar="true"] #currently_running_tasks');
+	const cards = container ? container.querySelectorAll('.mini-card[data-activity-id]') : [];
+	const activityIds = [];
+	cards.forEach(function(card) {
+		const id = card.getAttribute('data-activity-id');
+		if (id) { activityIds.push(parseInt(id, 10)); }
+	});
+	if (activityIds.length === 0) {
+		Snackbar.show({ text: 'No tasks currently running.', pos: 'top-right', duration: 2000 });
+		return;
+	}
+	const btn = document.getElementById('stop-all-tasks-btn');
+	if (btn) { btn.disabled = true; }
+	swal.queue([{
+		title: 'Stop all ' + activityIds.length + ' tasks?',
+		text: 'You won\'t be able to revert this!',
+		icon: 'warning',
+		showCancelButton: true,
+		confirmButtonText: 'Stop all',
+		padding: '2em',
+		showLoaderOnConfirm: true,
+		preConfirm: function() {
+			const promises = activityIds.map(function(activityId) {
+				return fetch(url, {
+					method: 'POST',
+					credentials: 'same-origin',
+					body: JSON.stringify({ activity_id: activityId }),
+					headers: {
+						'X-CSRFToken': getCookie('csrftoken'),
+						'Content-Type': 'application/json'
+					}
+				}).then(function(r) { return r.json(); });
+			});
+			return Promise.all(promises).then(function(results) {
+				const ok = results.filter(function(r) { return r && r.status; }).length;
+				const fail = results.length - ok;
+				if (fail > 0) {
+					Snackbar.show({ text: 'Stopped ' + ok + ', failed ' + fail + '.', pos: 'top-right', duration: 3000 });
+				} else {
+					Snackbar.show({ text: 'All tasks stopped.', pos: 'top-right', duration: 1500 });
+				}
+				if (typeof getScanStatusSidebar === 'function') {
+					getScanStatusSidebar(null, null, null, null, { reload: true });
+				}
+			}).finally(function() {
+				if (btn) { btn.disabled = false; }
+			});
+		}
+	}]);
+}
+
 function extractContent(s) {
 	const span = document.createElement('span');
 	span.innerHTML = s;

@@ -65,8 +65,16 @@ Quick Scan History
               </div>
             </div>
           </div>
-          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
-            <a class="btn btn-soft-danger float-end disabled ms-1" href="#" onclick="deleteMultipleScan('{% url 'delete_multiple_scans' current_project.slug %}')" id="delete_multiple_button">Delete Multiple Scans</a>
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
+            <span class="small text-muted me-1">Bulk actions:</span>
+            <div class="btn-group" role="group">
+              {% if user|can:'initiate_scans_subscans' %}
+              <button type="button" class="btn btn-sm btn-soft-danger disabled" id="stop_multiple_button" onclick="stopMultipleScans(); return false;" data-toggle="tooltip" title="Stop multiple scans" aria-label="Stop multiple scans"><i class="fe-alert-triangle"></i></button>
+              {% endif %}
+              {% if user|can:'modify_scan_results' %}
+              <button type="button" class="btn btn-sm btn-soft-danger disabled" id="delete_multiple_button" onclick="deleteMultipleScan('{% url 'delete_multiple_scans' current_project.slug %}'); return false;" data-toggle="tooltip" title="Delete multiple scans" aria-label="Delete multiple scans"><i class="fe-trash-2"></i></button>
+              {% endif %}
+            </div>
           </div>
         </div>
       </div>
@@ -329,7 +337,8 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
       ],
       fnCreatedRow: function(nRow, aData) {
         const idEnc = window.safeAttr(String(aData.id));
-        $(nRow).attr('id', 'scan-row-' + idEnc).attr('data-scan-id', idEnc);
+        const status = aData.scan_status != null ? String(aData.scan_status) : '';
+        $(nRow).attr('id', 'scan-row-' + idEnc).attr('data-scan-id', idEnc).attr('data-scan-status', status);
       },
       drawCallbackTooltips: true
     });
@@ -387,22 +396,48 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
   }
 
 
+  function getCheckedStoppableScanIds() {
+    const stoppable = [1, 4, -1];
+    const ids = [];
+    document.querySelectorAll('.targets_checkbox:checked').forEach(function(cb) {
+      const row = cb.closest('tr');
+      if (!row) return;
+      const status = parseInt(row.getAttribute('data-scan-status'), 10);
+      const sid = row.getAttribute('data-scan-id');
+      if (stoppable.indexOf(status) !== -1 && sid) {
+        ids.push(parseInt(sid, 10));
+      }
+    });
+    return ids;
+  }
+
   function toggleMultipleTargetButton() {
-    if (checkedCount() > 0) {
+    const n = checkedCount();
+    if (n > 0) {
       $("#delete_multiple_button").removeClass("disabled");
+      const stoppableIds = getCheckedStoppableScanIds();
+      if (window.SCAN_HISTORY_CAN_INITIATE && $("#stop_multiple_button").length) {
+        if (stoppableIds.length > 0) {
+          $("#stop_multiple_button").removeClass("disabled");
+        } else {
+          $("#stop_multiple_button").addClass("disabled");
+        }
+      }
     } else {
       $("#delete_multiple_button").addClass("disabled");
+      if ($("#stop_multiple_button").length) {
+        $("#stop_multiple_button").addClass("disabled");
+      }
     }
   }
 
   function mainCheckBoxSelected(checkbox) {
     if (checkbox.checked) {
-      $("#delete_multiple_button").removeClass("disabled");
       $(".targets_checkbox").prop('checked', true);
     } else {
-      $("#delete_multiple_button").addClass("disabled");
       $(".targets_checkbox").prop('checked', false);
     }
+    toggleMultipleTargetButton();
   }
 
   function deleteMultipleScan(url_endpoint) {
@@ -430,6 +465,56 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
         }
       }])
     }
+  }
+
+  function stopMultipleScans() {
+    if (!window.SCAN_HISTORY_CAN_INITIATE) return;
+    var scanIds = getCheckedStoppableScanIds();
+    if (scanIds.length === 0) {
+      swal({ title: '', text: 'No running scans selected. Select scans with status Pending, In Progress, or Finalizing.', type: 'info', padding: '2em' });
+      return;
+    }
+    var url = window.SCAN_HISTORY_STOP_SCAN_URL;
+    var btn = document.getElementById('stop_multiple_button');
+    if (btn) btn.disabled = true;
+    swal.queue([{
+      title: 'Stop ' + scanIds.length + ' scan(s)?',
+      text: "You won't be able to revert this!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Stop all',
+      padding: '2em',
+      showLoaderOnConfirm: true,
+      preConfirm: function() {
+        var promises = scanIds.map(function(scanId) {
+          return fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: JSON.stringify({ scan_id: scanId }),
+            headers: {
+              'X-CSRFToken': getCookie('csrftoken'),
+              'Content-Type': 'application/json'
+            }
+          }).then(function(r) { return r.json(); });
+        });
+        return Promise.all(promises).then(function(results) {
+          var ok = results.filter(function(r) { return r && r.status; }).length;
+          var fail = results.length - ok;
+          if (fail > 0) {
+            Snackbar.show({ text: 'Stopped ' + ok + ', failed ' + fail + '.', pos: 'top-right', duration: 3000 });
+          } else {
+            Snackbar.show({ text: 'Scans stopped.', pos: 'top-right', duration: 1500 });
+          }
+          var dt = $('#scan_history_table').DataTable();
+          if (dt) dt.draw(false);
+          if (typeof getScanStatusSidebar === 'function') {
+            getScanStatusSidebar(null, null, null, null, { project: window.SCAN_HISTORY_PROJECT_SLUG, reload: true });
+          }
+        }).finally(function() {
+          if (btn) btn.disabled = false;
+        });
+      }
+    }]);
   }
 
   // select option listener for report_type_select

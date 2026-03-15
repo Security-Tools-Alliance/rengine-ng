@@ -213,9 +213,7 @@ def _start_secator_scans_for_target_ids(request, target_ids: list[int], secator_
         if not target:
             continue
         kwargs_for_target = dict(secator_kwargs)
-        filtered_override = filter_targets_override_for_target(
-            target.value, kwargs_for_target.get("targets_override")
-        )
+        filtered_override = filter_targets_override_for_target(target.value, kwargs_for_target.get("targets_override"))
         if filtered_override is not None:
             kwargs_for_target["targets_override"] = filtered_override
         else:
@@ -1418,9 +1416,7 @@ def _run_quick_scan_for_targets(
     execution_mode = secator_kwargs.get("execution_mode")
     for target in target_list:
         kwargs_for_target = dict(secator_kwargs)
-        filtered_override = filter_targets_override_for_target(
-            target.value, kwargs_for_target.get("targets_override")
-        )
+        filtered_override = filter_targets_override_for_target(target.value, kwargs_for_target.get("targets_override"))
         if filtered_override is not None:
             kwargs_for_target["targets_override"] = filtered_override
         else:

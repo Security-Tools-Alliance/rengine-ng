@@ -97,13 +97,42 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
     }
 
     const scanningCount = scans.scanning.length;
+    const runningTasksCount = tasks.running.length;
     const $topCounter = $('#current_scan_counter');
+    const $topTaskCounter = $('#current_task_counter');
     const $topCountLabel = $('#current_scan_count');
     if ($topCounter.length) {
       $topCounter.text(scanningCount);
     }
+    if ($topTaskCounter.length) {
+      $topTaskCounter.text(runningTasksCount);
+    }
+    const $scanActivityBadge = $('#scan-activity-badge');
+    if ($scanActivityBadge.length) {
+      if (scanningCount + runningTasksCount > 0) {
+        $scanActivityBadge.show();
+      } else {
+        $scanActivityBadge.hide();
+      }
+    }
     if ($topCountLabel.length) {
       $topCountLabel.text(scanningCount > 0 ? scanningCount + ' Scans Currently Running' : '');
+    }
+    const $scansTabCount = $('#scans-tab-count');
+    const $tasksTabCount = $('#tasks-tab-count');
+    if ($scansTabCount.length) {
+      if (scanningCount > 0) {
+        $scansTabCount.text(scanningCount).show();
+      } else {
+        $scansTabCount.hide();
+      }
+    }
+    if ($tasksTabCount.length) {
+      if (runningTasksCount > 0) {
+        $tasksTabCount.text(runningTasksCount).show();
+      } else {
+        $tasksTabCount.hide();
+      }
     }
 
     if (scans.scanning.length > 0){
@@ -228,7 +257,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
           const engine_name = task_object.engine_name || 'Unknown';
 
           $bar.find('#currently_running_tasks').append(`
-            <div class="card border-primary border mini-card">
+            <div class="card border-primary border mini-card" data-activity-id="${task_object.id}">
             <a href="/scan/${finalProject}/${task_object.scan_id}" class="text-reset item-hovered">
             <div class="card-header bg-soft-primary text-primary mini-card-header">
             ${htmlEncode(task_name)} on <b>${htmlEncode(domain_name)}</b> using engine <b>${htmlEncode(engine_name)}</b>
@@ -254,6 +283,15 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
       else{
         $bar.find('#currently_running_tasks').html('<div class="alert alert-info" role="alert">No tasks are currently running.</div>');
       }
+
+    const $stopAllScansBtn = $('#stop-all-scans-btn');
+    const $stopAllTasksBtn = $('#stop-all-tasks-btn');
+    if ($stopAllScansBtn.length) {
+      $stopAllScansBtn.toggle(scanningCount > 0);
+    }
+    if ($stopAllTasksBtn.length) {
+      $stopAllTasksBtn.toggle(runningTasksCount > 0);
+    }
 
       if (tasks.completed.length > 0){
         for (let task in tasks.completed) {
