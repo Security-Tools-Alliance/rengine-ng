@@ -71,13 +71,14 @@ services:
     env_file:
       - ../.env
     environment:
-      - PYTHONWARNINGS=ignore::urllib3.exceptions.InsecureRequestWarning
+      - PYTHONPATH=/opt/rengine-ssl-suppress
     volumes:
       - scan_results:/home/secator/.secator/reports
       - nuclei_templates:/home/secator/nuclei-templates
       - wordlist:/home/secator/.secator/wordlists
       - gf_patterns:/home/secator/.gf
       - ./worker/entrypoint.sh:/entrypoint.sh:ro
+      - ./worker/python_ssl_suppress:/opt/rengine-ssl-suppress:ro
     depends_on:
       - redis
     networks:

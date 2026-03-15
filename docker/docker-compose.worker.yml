@@ -26,12 +26,13 @@ services:
     env_file:
       - .env
     environment:
-      # Suppress InsecureRequestWarning when reNgine uses self-signed cert (SECATOR_ADDONS_API_FORCE_SSL=false)
-      - PYTHONWARNINGS=ignore::urllib3.exceptions.InsecureRequestWarning
+      - PYTHONPATH=/opt/rengine-ssl-suppress
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./entrypoint.sh:/entrypoint.sh:ro
+      # Load sitecustomize.py to suppress urllib3 InsecureRequestWarning (copy docker/worker/python_ssl_suppress to deploy path)
+      - ./python_ssl_suppress:/opt/rengine-ssl-suppress:ro
       # Custom templates (workflows, scans, tasks, profiles) synced from reNgine-ng
       - ./templates:/home/secator/.secator/templates
       # Script and job file for Python-bridge execution

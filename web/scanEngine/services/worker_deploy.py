@@ -42,9 +42,15 @@ def _get_compose_path() -> Path:
 
 
 def _get_entrypoint_path() -> Path:
-    """Path to worker entrypoint.sh (docker/entrypoint.sh)."""
+    """Path to worker entrypoint.sh (docker/worker/entrypoint.sh)."""
     base = Path(settings.BASE_DIR)
-    return base.parent / "docker" / _ENTRYPOINT_FILENAME
+    return base.parent / "docker" / "worker" / _ENTRYPOINT_FILENAME
+
+
+def _get_python_ssl_suppress_dir() -> Path:
+    """Path to worker python_ssl_suppress (sitecustomize.py for urllib3 warning suppression)."""
+    base = Path(settings.BASE_DIR)
+    return base.parent / "docker" / "worker" / "python_ssl_suppress"
 
 
 _API_KEY_PLACEHOLDER = "your-generated-api-key-here"
@@ -109,7 +115,7 @@ def _build_worker_env_content_for_bundle(worker: SecatorWorker) -> str:
 def build_worker_bundle_zip(worker: SecatorWorker) -> bytes:
     """
     Build a ZIP archive for manual worker deployment (same content as deploy + sync config).
-    Contains: docker-compose.worker.yml, .env, entrypoint.sh (if present), templates/*, README.txt.
+    Contains: docker-compose.worker.yml, .env, entrypoint.sh (if present), python_ssl_suppress/sitecustomize.py, templates/*, README.txt.
     Raises UserSafeError if compose file is missing (safe message only).
     """
     validate_deploy_path(worker.deploy_path)
@@ -137,6 +143,10 @@ def build_worker_bundle_zip(worker: SecatorWorker) -> bytes:
         entrypoint_path = _get_entrypoint_path()
         if entrypoint_path.is_file():
             zf.writestr(_ENTRYPOINT_FILENAME, entrypoint_path.read_bytes())
+        ssl_suppress_dir = _get_python_ssl_suppress_dir()
+        sitecustomize = ssl_suppress_dir / "sitecustomize.py"
+        if sitecustomize.is_file():
+            zf.writestr("python_ssl_suppress/sitecustomize.py", sitecustomize.read_bytes())
         for name, content in _collect_custom_workflows():
             zf.writestr(f"templates/workflows/{name}.yaml", content)
         for name, content in _collect_custom_scans():
@@ -149,7 +159,9 @@ def build_worker_bundle_zip(worker: SecatorWorker) -> bytes:
             "Manual Secator worker deployment bundle.\n\n"
             "1. Extract this archive on the target server (e.g. into /opt/secator-worker).\n"
             "2. If needed, edit .env and set SECATOR_ADDONS_API_KEY to your API key.\n"
-            "3. Run: docker compose up -d\n\n"
+            "3. Run: docker compose -f docker-compose.worker.yml up -d\n\n"
+            "The python_ssl_suppress/ directory contains sitecustomize.py to suppress urllib3\n"
+            "InsecureRequestWarning when the reNgine API uses a self-signed certificate.\n\n"
             "See WORKER_DEPLOYMENT.md for full documentation.\n"
         )
         zf.writestr("README.txt", readme.encode("utf-8"))
@@ -221,6 +233,7 @@ def deploy_worker(
                     f"mkdir -p {quote_for_shell(f'{deploy_path}/templates/{sub}')}",
                 )
             run_remote_command(client, f"mkdir -p {quote_for_shell(f'{deploy_path}/scripts')}")
+            run_remote_command(client, f"mkdir -p {quote_for_shell(f'{deploy_path}/python_ssl_suppress')}")
             progress_callback("mkdir", "Deploy path and templates/scripts created.")
 
             with open(compose_path, "rb") as f:
@@ -246,6 +259,15 @@ def deploy_worker(
                     "Worker entrypoint not found at %s" % (entrypoint_path,),
                     level="warning",
                 )
+
+            ssl_suppress_dir = _get_python_ssl_suppress_dir()
+            sitecustomize_src = ssl_suppress_dir / "sitecustomize.py"
+            if sitecustomize_src.is_file():
+                remote_sitecustomize = f"{deploy_path}/python_ssl_suppress/sitecustomize.py"
+                with open(sitecustomize_src, "rb") as f:
+                    with sftp.file(remote_sitecustomize, "wb") as rf:
+                        rf.write(f.read())
+                progress_callback("copy_ssl_suppress", "python_ssl_suppress copied.")
 
             progress_callback("copy_env", "Preparing .env...")
             env_content = _build_worker_env_content(worker)
@@ -334,6 +356,14 @@ def restart_worker_container(worker: SecatorWorker) -> Tuple[bool, str]:
                     rf.write(entrypoint_content)
                 run_remote_command(client, f"chmod +x {quote_for_shell(remote_entrypoint)}")
                 log_parts.append(f"Copied {_ENTRYPOINT_FILENAME} to remote.")
+            sitecustomize_src = _get_python_ssl_suppress_dir() / "sitecustomize.py"
+            if sitecustomize_src.is_file():
+                run_remote_command(client, f"mkdir -p {quote_for_shell(f'{deploy_path}/python_ssl_suppress')}")
+                remote_sitecustomize = f"{deploy_path}/python_ssl_suppress/sitecustomize.py"
+                with open(sitecustomize_src, "rb") as f:
+                    with sftp.file(remote_sitecustomize, "wb") as rf:
+                        rf.write(f.read())
+                log_parts.append("Copied python_ssl_suppress to remote.")
         finally:
             sftp.close()
 
