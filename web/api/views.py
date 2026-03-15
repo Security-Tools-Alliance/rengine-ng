@@ -97,6 +97,7 @@ from recon_note.models import TodoNote
 # NOTE: Legacy tasks removed (query_ip_history, query_reverse_whois, query_whois,
 # run_cmseek, run_command, run_gf_list, run_wafw00f) - functionality now in Secator
 from reNgine.core.data import get_data_from_post_request, get_request_worker_id, safe_int_cast
+from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.definitions import (
     ABORTED_TASK,
     GENERIC_USER_ERROR_MESSAGE,
@@ -112,6 +113,7 @@ from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, i
 from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.secator.services.target_builder_service import TargetBuilderService
+from reNgine.secator.synthetic_id import synthetic_id_skipped_scope
 from reNgine.settings import (
     RENGINE_GF_PATTERNS_DIR,
     RENGINE_NUCLEI_TEMPLATES_DIR,
@@ -5665,6 +5667,10 @@ class SecatorFindingCreate(SecatorAPIBase):
                 )
                 if result[0] == "ignored":
                     return Response({"status": True, "id": result[1]})
+                if result[0] == "skipped":
+                    return Response(
+                        {"status": True, "skipped": True, "id": result[1]},
+                    )
                 if result[0] == "success":
                     saved_obj = result[1]
                     self.logger.log_finding_save(
@@ -5771,6 +5777,17 @@ class SecatorFindingCreate(SecatorAPIBase):
                     )
                     return Response({"status": False, "error": "Saved object has no ID attribute"}, status=500)
 
+            except FindingOutOfScopeError:
+                synthetic_id = synthetic_id_skipped_scope(finding_type)
+                self.logger.log_debug(
+                    self.logger.PREFIX_FINDING,
+                    "CREATE",
+                    "Finding skipped (out of scope) for type=%s scan_id=%s target_id=%s"
+                    % (finding_type, scan_history_id, target_id),
+                )
+                return Response(
+                    {"status": True, "skipped": True, "id": synthetic_id},
+                )
             except Exception as e:
                 return self.handle_repository_error(e, finding_type, scan_history_id, target_id)
 
@@ -5874,6 +5891,10 @@ class SecatorFindingUpdate(SecatorAPIBase):
                 )
                 if result[0] == "ignored":
                     return Response({"status": True, "id": result[1]})
+                if result[0] == "skipped":
+                    return Response(
+                        {"status": True, "skipped": True, "id": result[1]},
+                    )
                 if result[0] == "success":
                     saved_obj = result[1]
                     self.logger.log_finding_save(
@@ -5983,6 +6004,17 @@ class SecatorFindingUpdate(SecatorAPIBase):
                     )
                     return Response({"status": False, "error": "Saved object has no ID attribute"}, status=500)
 
+            except FindingOutOfScopeError:
+                synthetic_id = synthetic_id_skipped_scope(finding_type)
+                self.logger.log_debug(
+                    self.logger.PREFIX_FINDING,
+                    "UPDATE",
+                    "Finding skipped (out of scope) for type=%s finding_id=%s scan_id=%s target_id=%s"
+                    % (finding_type, finding_id, scan_history_id, target_id),
+                )
+                return Response(
+                    {"status": True, "skipped": True, "id": synthetic_id},
+                )
             except Exception as e:
                 return self.handle_repository_error(e, finding_type, scan_history_id, target_id, finding_id)
 

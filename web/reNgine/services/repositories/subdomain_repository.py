@@ -10,6 +10,7 @@ from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import IntegrityError
 from django.utils import timezone
 
+from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.core.validators import is_valid_domain, is_valid_ip
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import get_module_logger
@@ -53,6 +54,8 @@ class SubdomainRepository:
         """
         try:
             return self._process_secator_subdomain_item(item, scan_history_id, target_id, rengine_context)
+        except FindingOutOfScopeError:
+            raise
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
@@ -66,14 +69,6 @@ class SubdomainRepository:
                 PREFIX_SUBDOMAIN_REPO,
                 "SAVE",
                 "Integrity error saving subdomain: %s" % (e,),
-                level="error",
-            )
-            return None
-        except Exception as e:
-            logger.log_line(
-                PREFIX_SUBDOMAIN_REPO,
-                "SAVE",
-                "Error saving subdomain from Secator: %s" % (e,),
                 level="error",
             )
             return None
@@ -202,7 +197,7 @@ class SubdomainRepository:
                 "Host out of scope (restrict_findings_to_target)",
                 level="debug",
             )
-            return None
+            raise FindingOutOfScopeError()
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
         domain = resolve_domain_for_scan(scan_history_id, normalized, target_value, create=True)
         if not domain:

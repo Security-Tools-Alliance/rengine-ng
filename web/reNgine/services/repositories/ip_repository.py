@@ -61,14 +61,6 @@ class IpRepository:
                 level="error",
             )
             return None
-        except Exception as e:
-            logger.log_line(
-                PREFIX_IP_REPO,
-                "SAVE",
-                "Error saving IP address from Secator: %s" % (e,),
-                level="error",
-            )
-            return None
 
     def _process_secator_ip_item(
         self,

@@ -10,6 +10,9 @@ See ref-secator-tag-routing in the wiki.
 import time
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from reNgine.core.exceptions import FindingOutOfScopeError
+from reNgine.secator.synthetic_id import synthetic_id_skipped_scope
+
 
 TagHandler = Callable[[Dict[str, Any], int, int], Tuple[Optional[Any], Optional[int]]]
 
@@ -109,6 +112,7 @@ def dispatch_secator_tag(
 
     Returns:
         ("ignored", synthetic_id) - view returns 200 with id=synthetic_id.
+        ("skipped", synthetic_id) - view returns 200 with id=synthetic_id (finding out of scope).
         ("success", saved_object) - view returns 200 with id=saved_object.id.
         ("error", status_code, error_message) - view returns Response with that status.
         ("fallback",) - view continues with get_repository_for_finding_type("tag").
@@ -117,7 +121,7 @@ def dispatch_secator_tag(
     name = (finding_data.get("name") or "").strip()
 
     if is_tag_ignored(category, name):
-        synthetic_id = "tag_ignored_%s_%s" % (category, name) + "_%d" % (int(time.time() * 1000),)
+        synthetic_id = "tag_ignored_%s_%s_%d" % (category, name, int(time.time() * 1000))
         return ("ignored", synthetic_id)
 
     handler = get_tag_handler(category, name)
@@ -134,7 +138,11 @@ def dispatch_secator_tag(
         return ("error", error_response.status_code, err_msg)
 
     effective_target_id = target.id if target else target_id
-    saved_object, error_status = handler(finding_data, scan_history_id, effective_target_id)
+    try:
+        saved_object, error_status = handler(finding_data, scan_history_id, effective_target_id)
+    except FindingOutOfScopeError:
+        synthetic_id = synthetic_id_skipped_scope("tag", tag_category=category, tag_name=name)
+        return ("skipped", synthetic_id)
     if error_status is not None:
         msg = "Failed to save tag. Validation error or missing required fields."
         return ("error", 400 if is_update else 422, msg)

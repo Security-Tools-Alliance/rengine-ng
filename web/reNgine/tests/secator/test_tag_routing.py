@@ -142,3 +142,30 @@ class TestDispatchSecatorTag(BaseTestCase):
         self.assertIsInstance(result[1], Secret)
         self.assertEqual(result[1].rule_name, "aws_access_key")
         self.assertEqual(result[1].value, "AKIAIOSFODNN7EXAMPLE")
+
+    def test_dispatch_whois_out_of_scope_returns_skipped(self):
+        """Whois tag with domain out of scope (restrict_findings_to_target) returns ('skipped', synthetic_id)."""
+        self.data_generator.create_organization()
+        self.data_generator.create_scope(restrict_findings_to_target=True, allowed_finding_domains=[])
+        target = self.data_generator.target
+        scan_history = self.data_generator.create_scan_history()
+
+        def validate_ok(sh_id, t_id):
+            return (True, None, MagicMock(), target)
+
+        finding_data = {
+            "category": "info",
+            "name": "whois",
+            "match": "out-of-scope-unrelated.com",
+            "value": "raw whois text",
+        }
+        result = dispatch_secator_tag(
+            finding_data,
+            scan_history.id,
+            target.id,
+            validate_ok,
+            is_update=False,
+        )
+        self.assertEqual(result[0], "skipped")
+        self.assertIsInstance(result[1], str)
+        self.assertIn("skipped_scope", result[1])

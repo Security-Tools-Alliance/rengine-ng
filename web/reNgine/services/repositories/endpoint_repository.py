@@ -73,21 +73,6 @@ class EndpointRepository:
                 exc_info=True,
             )
             return None
-        except Exception as e:
-            logger.log_line(
-                PREFIX_ENDPOINT_REPO,
-                "SAVE",
-                "Error saving endpoint from Secator: %s" % (e,),
-                level="error",
-                exc_info=True,
-            )
-            logger.log_line(
-                PREFIX_ENDPOINT_REPO,
-                "SAVE",
-                "Endpoint item data: %s" % (item,),
-                level="error",
-            )
-            return None
 
     def _process_secator_endpoint_item(
         self,

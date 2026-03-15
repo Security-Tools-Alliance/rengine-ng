@@ -347,6 +347,101 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertIn("id", response.data)
 
+    def test_create_subdomain_out_of_scope_returns_200_skipped(self):
+        """Subdomain with host out of scope (restrict_findings_to_target) returns 200 with synthetic id (skipped)."""
+        self.data_generator.create_organization()
+        self.data_generator.create_scope(restrict_findings_to_target=True, allowed_finding_domains=[])
+        target = self.data_generator.target
+        scan_history = self.data_generator.create_scan_history()
+        finding_data = {
+            "_type": "subdomain",
+            "host": "out-of-scope-unrelated.com",
+            "_context": {
+                "scan_history_id": scan_history.id,
+                "target_id": target.id,
+            },
+        }
+        response = self.client.post(self.url, finding_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIs(response.data["status"], True)
+        self.assertIs(response.data["skipped"], True)
+        self.assertIn("id", response.data)
+        self.assertIn("skipped_scope", response.data["id"])
+
+    def test_create_tag_whois_out_of_scope_returns_200_skipped(self):
+        """Tag whois (jswhois) with domain out of scope returns 200 with synthetic id (skipped)."""
+        self.data_generator.create_organization()
+        self.data_generator.create_scope(restrict_findings_to_target=True, allowed_finding_domains=[])
+        target = self.data_generator.target
+        scan_history = self.data_generator.create_scan_history()
+        finding_data = {
+            "_type": "tag",
+            "category": "info",
+            "name": "whois",
+            "match": "out-of-scope-unrelated.com",
+            "value": "raw whois text",
+            "_context": {
+                "scan_history_id": scan_history.id,
+                "target_id": target.id,
+            },
+        }
+        response = self.client.post(self.url, finding_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIs(response.data["status"], True)
+        self.assertIs(response.data["skipped"], True)
+        self.assertIn("id", response.data)
+        self.assertIn("skipped_scope", response.data["id"])
+
+    def test_create_certificate_out_of_scope_returns_200_skipped(self):
+        """Certificate (e.g. testssl) with host out of scope returns 200 with synthetic id (skipped)."""
+        self.data_generator.create_organization()
+        self.data_generator.create_scope(restrict_findings_to_target=True, allowed_finding_domains=[])
+        target = self.data_generator.target
+        scan_history = self.data_generator.create_scan_history()
+        finding_data = {
+            "_type": "certificate",
+            "host": "out-of-scope-unrelated.com",
+            "fingerprint_sha256": "9BE1E0F269C4C029D214173FEE5E93720FA540BBCEE9427C66EE8C2DE5473E00",
+            "ip": "192.0.2.1",
+            "subject_cn": "out-of-scope-unrelated.com",
+            "not_before": "2026-01-01T00:00:00+00:00",
+            "not_after": "2026-12-31T23:59:59+00:00",
+            "issuer_cn": "Test CA",
+            "_context": {
+                "scan_history_id": scan_history.id,
+                "target_id": target.id,
+            },
+        }
+        response = self.client.post(self.url, finding_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIs(response.data["status"], True)
+        self.assertIs(response.data["skipped"], True)
+        self.assertIn("id", response.data)
+        self.assertIn("skipped_scope", response.data["id"])
+
+    def test_create_record_out_of_scope_returns_200_skipped(self):
+        """Record (e.g. dnsx) with host out of scope returns 200 with synthetic id (skipped)."""
+        self.data_generator.create_organization()
+        self.data_generator.create_scope(restrict_findings_to_target=True, allowed_finding_domains=[])
+        target = self.data_generator.target
+        scan_history = self.data_generator.create_scan_history()
+        finding_data = {
+            "_type": "record",
+            "name": "google-site-verification=out-of-scope",
+            "type": "TXT",
+            "host": "out-of-scope-unrelated.com",
+            "_context": {
+                "scan_history_id": scan_history.id,
+                "target_id": target.id,
+            },
+        }
+        response = self.client.post(self.url, finding_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIs(response.data["status"], True)
+        self.assertIs(response.data["skipped"], True)
+        self.assertIn("id", response.data)
+        self.assertIn("skipped_scope", response.data["id"])
+
     def test_create_tag_ignored_returns_200(self):
         """Ignored tag (e.g. net_interface) returns 200 with synthetic id, no DB persistence."""
         finding_data = {

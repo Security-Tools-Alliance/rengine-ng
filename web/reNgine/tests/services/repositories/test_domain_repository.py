@@ -1278,15 +1278,17 @@ class DomainRepositoryFindingScopeFilterTest(BaseTestCase):
         self.scan_history = self.data_generator.create_scan_history()
         self.domain_repo = DomainRepository()
 
-    def test_save_raw_whois_out_of_scope_domain_returns_none(self):
-        """When scope restricts findings, domain not in allowed list is not created."""
-        result = self.domain_repo.save_raw_whois_from_secator_tag(
-            self.scan_history.id,
-            self.target.id,
-            "out-of-scope-unrelated.com",
-            "raw whois text",
-        )
-        self.assertIsNone(result)
+    def test_save_raw_whois_out_of_scope_domain_raises_finding_out_of_scope_error(self):
+        """When scope restricts findings, domain not in allowed list raises FindingOutOfScopeError."""
+        from reNgine.core.exceptions import FindingOutOfScopeError
+
+        with self.assertRaises(FindingOutOfScopeError):
+            self.domain_repo.save_raw_whois_from_secator_tag(
+                self.scan_history.id,
+                self.target.id,
+                "out-of-scope-unrelated.com",
+                "raw whois text",
+            )
 
     def test_save_raw_whois_ip_as_domain_returns_none(self):
         """IP must not be created as Domain when scope restricts findings."""

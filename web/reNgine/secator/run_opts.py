@@ -9,7 +9,34 @@ from __future__ import annotations
 
 from typing import Any
 
+from reNgine.utilities.logger import get_module_logger
 from targetApp.services.scan_param_definitions import PARAM_KEYS as SCAN_PARAM_KEYS
+
+
+logger = get_module_logger(__name__)
+
+
+def _header_dict_to_secator_string(header_dict: dict[str, Any]) -> str:
+    """
+    Convert header dict (scan_config format) to Secator string format.
+
+    Secator tasks (e.g. wafw00f) expect "Name1: value1;;Name2: value2".
+    Non-string keys are skipped and a warning is logged so misconfigurations
+    are visible. Header order is preserved as in header_dict (insertion order).
+    """
+    if not header_dict or not isinstance(header_dict, dict):
+        return ""
+    parts: list[str] = []
+    for k, v in header_dict.items():
+        if not isinstance(k, str):
+            logger.warning(
+                "Header key skipped (expected str, got %s)",
+                type(k).__name__,
+            )
+            continue
+        val_str = str(v) if v is not None else ""
+        parts.append("%s: %s" % (k, val_str))
+    return ";;".join(parts)
 
 
 def build_run_opts(secator_config: dict[str, Any], profile_names: list[str]) -> dict[str, Any]:
@@ -20,7 +47,8 @@ def build_run_opts(secator_config: dict[str, Any], profile_names: list[str]) -> 
     runner, remote_runner, worker, and tasks.
 
     All keys in SCAN_PARAM_KEYS are forwarded when non-None and non-empty.
-    ``sync`` and ``profiles`` are the only keys added outside that iteration.
+    ``header``: if value is a dict, converted to Secator string format
+    ("Name1: value1;;Name2: value2") so tasks like wafw00f do not crash.
     """
     run_opts: dict[str, Any] = {
         "sync": False,
@@ -28,7 +56,14 @@ def build_run_opts(secator_config: dict[str, Any], profile_names: list[str]) -> 
     }
     for key in SCAN_PARAM_KEYS:
         value = secator_config.get(key)
-        if value is not None and value != "":
+        if value is None:
+            continue
+        if key == "header" and isinstance(value, dict):
+            if not value:
+                continue
+            run_opts[key] = _header_dict_to_secator_string(value)
+            continue
+        if value != "":
             run_opts[key] = value
     extra = secator_config.get("extra_config")
     if isinstance(extra, dict) and extra:

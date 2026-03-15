@@ -1279,6 +1279,7 @@ def target_summary(request, slug, id):
     context.update(build_secator_profiles_context())
     scope = get_scope_for_target(target)
     context["secator_workers"] = get_workers_for_scan_dropdown(scope=scope)
+    context.update(build_scan_params_form_context(target=target))
     return render(request, "target/summary.html", context)
 
 

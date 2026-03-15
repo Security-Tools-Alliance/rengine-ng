@@ -33,7 +33,7 @@
 				<!-- Scan options (Path Filters only) and Advanced Configuration (scan params + worker) -->
 				<div class="mt-3" id="subscan-options-advanced" style="display: none;">
 					{% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name='selected target(s)' id_prefix='subscan_' path_filters_only=True %}
-					{% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='subscan_' show_simple_options=False include_scan_params_section=True scan_params_section_collapse_id="subscan-params-section" scan_params_section_form_id="" scan_params_prefix="" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_collapse_expanded=scan_params_section_collapse_expanded scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=True %}
+					{% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='subscan_' show_simple_options=False include_scan_params_section=True scan_params_section_collapse_id="subscan-params-section" scan_params_section_form_id="" scan_params_prefix="override_" scan_params_level=scan_params_level|default:"target" scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_collapse_expanded=scan_params_section_collapse_expanded scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=True %}
 				</div>
 			</div>
 			<div class="modal-footer">
@@ -193,7 +193,7 @@
 			const $modal = $('#subscan-modal');
 			const blockRoot = $modal.find('[data-scan-params-block-root="true"]')[0];
 			if (blockRoot) {
-				blockRoot.setAttribute('data-scan-params-target-id', targetId);
+				if (targetId) blockRoot.setAttribute('data-scan-params-target-id', targetId);
 				if (targetId && typeof window.ScanParams !== 'undefined' && typeof window.ScanParams.schedulePreview === 'function') {
 					window.ScanParams.schedulePreview(blockRoot);
 				} else if (targetId && blockRoot.querySelector('input')) {
@@ -262,9 +262,17 @@
 				$listContainer.html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i><p class="mt-2 small">Loading...</p></div>');
 				$detailContainer.html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i><p class="mt-2 small">Loading...</p></div>');
 			},
-			success: function(data) {
+				success: function(data) {
 				if (data.html) {
 					const $html = $(data.html);
+					var $modal = $('#subscan-modal');
+					var blockRoot = $modal.find('[data-scan-params-block-root="true"]')[0];
+					if (blockRoot && typeof window.ScanParams !== 'undefined' && typeof window.ScanParams.schedulePreview === 'function') {
+						var targetIdEl = document.getElementById('context_target_id');
+						var targetId = (targetIdEl && targetIdEl.value ? targetIdEl.value.trim() : '') || '';
+						if (targetId) blockRoot.setAttribute('data-scan-params-target-id', targetId);
+						window.ScanParams.schedulePreview(blockRoot);
+					}
 					if (window.SecatorScan && typeof window.SecatorScan.buildCompactList === 'function') {
 						window.SecatorScan.buildCompactList($html, mode, {
 							listContainer: $listContainer,

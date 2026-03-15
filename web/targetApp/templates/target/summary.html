@@ -489,7 +489,7 @@ Target Summary
 
 {# for passing subdomain id and target id to subscan modal (launch uses target_id only) #}
 <input type="hidden" name="subtask_subdomain_id" id="subtask_subdomain_id" value="0">
-<input type="hidden" name="target_id" id="subscan_target_id" value="{{ target.id }}">
+<input type="hidden" name="target_id" id="context_target_id" value="{{ target.id }}">
 
 {% endblock main_content %}
 

@@ -79,14 +79,6 @@ class DnsRepository:
                 level="error",
             )
             return None
-        except Exception as e:
-            logger.log_line(
-                PREFIX_DNS_REPO,
-                "SAVE",
-                "Error saving DNS record from Secator: %s" % (e,),
-                level="error",
-            )
-            return None
 
     def _process_secator_dns_record_item(
         self, item: Dict[str, Any], scan_history_id: int, target_id: int

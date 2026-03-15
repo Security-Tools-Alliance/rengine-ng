@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
+from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.utilities.domain import (
     get_domain_for_scan_by_name,
     get_or_create_domain_for_target,
@@ -66,6 +67,8 @@ class DomainRepository:
         """
         try:
             return self._process_secator_domain_item(item, scan_history_id, target_id, rengine_context=rengine_context)
+        except FindingOutOfScopeError:
+            raise
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
@@ -121,7 +124,7 @@ class DomainRepository:
                 "raw_whois: domain out of scope (restrict_findings_to_target)",
                 level="debug",
             )
-            return None
+            raise FindingOutOfScopeError()
         domain = get_or_create_domain_for_target(scan_history_id, normalized)
         if not domain:
             return None
@@ -163,7 +166,7 @@ class DomainRepository:
                 "save_asn: domain out of scope (restrict_findings_to_target)",
                 level="debug",
             )
-            return None
+            raise FindingOutOfScopeError()
         domain = get_or_create_domain_for_target(scan_history_id, normalized)
         if not domain:
             return None
@@ -211,7 +214,7 @@ class DomainRepository:
                 "Domain item out of scope (restrict_findings_to_target)",
                 level="debug",
             )
-            return None
+            raise FindingOutOfScopeError()
 
         domain = get_domain_for_scan_by_name(scan_history_id, normalized)
         if not domain:

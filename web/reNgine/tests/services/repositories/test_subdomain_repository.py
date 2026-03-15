@@ -400,14 +400,16 @@ class SubdomainRepositoryFindingScopeFilterTest(BaseTestCase):
         self.scan_history = self.data_generator.create_scan_history()
         self.subdomain_repo = SubdomainRepository()
 
-    def test_get_or_create_from_host_out_of_scope_returns_none(self):
-        """When scope restricts findings, host (domain) not in allowed list returns None."""
-        result = self.subdomain_repo.get_or_create_from_host(
-            self.scan_history.id,
-            self.target.id,
-            "out-of-scope-unrelated.com",
-        )
-        self.assertIsNone(result)
+    def test_get_or_create_from_host_out_of_scope_raises_finding_out_of_scope_error(self):
+        """When scope restricts findings, host (domain) not in allowed list raises FindingOutOfScopeError."""
+        from reNgine.core.exceptions import FindingOutOfScopeError
+
+        with self.assertRaises(FindingOutOfScopeError):
+            self.subdomain_repo.get_or_create_from_host(
+                self.scan_history.id,
+                self.target.id,
+                "out-of-scope-unrelated.com",
+            )
 
     def test_get_or_create_from_host_ip_allowed_when_restrict(self):
         """IP is allowed as subdomain when scope restricts findings (web servers on IP)."""

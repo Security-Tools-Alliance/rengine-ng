@@ -56,3 +56,33 @@ class TestBuildRunOpts(unittest.TestCase):
         config = {"extra_config": {}}
         result = build_run_opts(config, [])
         self.assertNotIn("extra_config", result)
+
+    def test_header_dict_converted_to_secator_string(self):
+        """Header as dict (scan_config format) is converted to Secator ;; string format."""
+        config = {"header": {"User-Agent": "Mozilla/5.0", "X-Custom": "value"}}
+        result = build_run_opts(config, [])
+        self.assertIn("header", result)
+        self.assertIsInstance(result["header"], str)
+        self.assertIn(";;", result["header"])
+        self.assertIn("User-Agent: Mozilla/5.0", result["header"])
+        self.assertIn("X-Custom: value", result["header"])
+
+    def test_header_empty_dict_excluded(self):
+        """Header as empty dict is not added to run_opts."""
+        config = {"header": {}}
+        result = build_run_opts(config, [])
+        self.assertNotIn("header", result)
+
+    def test_header_string_passed_through(self):
+        """Header as string (already Secator format) is passed through unchanged."""
+        config = {"header": "User-Agent: Mozilla/5.0;;X-Foo: bar"}
+        result = build_run_opts(config, [])
+        self.assertEqual(result["header"], "User-Agent: Mozilla/5.0;;X-Foo: bar")
+
+    def test_header_dict_non_string_key_skipped(self):
+        """Header dict with non-string key skips that key; only string keys are included."""
+        config = {"header": {"X-Valid": "ok", 123: "invalid_key"}}
+        result = build_run_opts(config, [])
+        self.assertIn("header", result)
+        self.assertIn("X-Valid: ok", result["header"])
+        self.assertNotIn("123", result["header"])
