@@ -14,13 +14,13 @@ from django.utils import timezone
 
 from scanEngine.models import SecatorProfile
 from startScan.models import Command, Domain, ScanHistory, ScanSchedule, Subdomain
-from targetApp.models import Scope
 from startScan.views import (
     SCHEDULE_MODE_REQUIRED_MSG,
     _domains_for_scan_detail,
     _parse_scheduled_time_utc,
     _validate_schedule_form_post,
 )
+from targetApp.models import Scope
 from utils.test_base import BaseTestCase
 
 

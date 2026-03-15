@@ -1,0 +1,233 @@
+{% extends 'base/base.html' %}
+{% load humanize %}
+{% load static %}
+
+{% block title %}
+Organization Dashboard – {{ organization.name|escape }}
+{% endblock title %}
+
+{% block page_title %}
+Organization Dashboard
+{% endblock page_title %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'list_organization' current_project.slug %}">Organization</a></li>
+<li class="breadcrumb-item active">{{ organization.name|escape }} – Dashboard</li>
+{% endblock breadcrumb_title %}
+
+{% block main_content %}
+<div class="row mb-3">
+  <div class="col-12">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <h4 class="mb-0">{{ organization.name|escape }}</h4>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        {% if organizations_list|length > 1 %}
+        <div class="dropdown">
+          <button class="btn btn-soft-primary dropdown-toggle" type="button" id="orgSwitcherDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fe-briefcase me-1"></i> Switch organization
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="orgSwitcherDropdown">
+            {% for org in organizations_list %}
+            <li>
+              <a class="dropdown-item {% if org.id == organization.id %}active{% endif %}" href="{% url 'organization_dashboard' current_project.slug org.id %}">{{ org.name|escape }}</a>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        <a class="btn btn-soft-secondary" href="{% url 'list_organization' current_project.slug %}"><i class="fe-list me-1"></i> All organizations</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row row-cols-1 row-cols-md-2 row-cols-xl-4">
+  <div class="col mb-3">
+    <a href="{% url 'list_scope' current_project.slug %}" class="text-reset text-decoration-none h-100 d-block">
+      <div class="card card-animate h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mt-0 font-16">Scopes</h4>
+          <h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{ scope_count|intcomma }}</span></h2>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col mb-3">
+    <a href="{% url 'list_target' current_project.slug %}" class="text-reset text-decoration-none h-100 d-block">
+      <div class="card card-animate h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mt-0 font-16">Targets</h4>
+          <h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{ target_count|intcomma }}</span></h2>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col mb-3">
+    <a href="{% url 'all_subdomains' current_project.slug %}" class="text-reset text-decoration-none h-100 d-block">
+      <div class="card card-animate h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mt-0 font-16">Subdomains</h4>
+          <h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{ subdomain_count|intcomma }}</span></h2>
+          <p class="text-muted mb-0 mt-auto"><small>Alive: {{ alive_count|intcomma }}</small></p>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col mb-3">
+    <a href="{% url 'all_endpoints' current_project.slug %}" class="text-reset text-decoration-none h-100 d-block">
+      <div class="card card-animate h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mt-0 font-16">Endpoints</h4>
+          <h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{ endpoint_count|intcomma }}</span></h2>
+          <p class="text-muted mb-0 mt-auto"><small>Alive: {{ endpoint_alive_count|intcomma }}</small></p>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div class="row row-cols-1 row-cols-md-3">
+  <div class="col mb-3">
+    <a href="{% url 'all_vulns' current_project.slug %}" class="text-reset text-decoration-none h-100 d-block">
+      <div class="card card-animate h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mt-0 font-16 text-danger">Vulnerabilities</h4>
+          <h2 class="text-danger my-3 text-center"><span data-plugin="counterup">{{ total_vul_count|intcomma }}</span></h2>
+          <p class="text-danger mb-0 small"><b>{{ critical_count }} Critical, {{ high_count }} High, {{ medium_count }} Medium</b></p>
+          <p class="text-muted mb-0 mt-auto small">{{ low_count }} Low, {{ info_count }} Info, {{ unknown_count }} Unknown</p>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col mb-3">
+    <a href="{% url 'scan_history' current_project.slug %}" class="text-reset text-decoration-none h-100 d-block">
+      <div class="card card-animate h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mt-0 font-16">Scans</h4>
+          <h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{ scan_count.total|intcomma }}</span></h2>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col mb-3">
+    <a href="{% url 'subscan_history' current_project.slug %}" class="text-reset text-decoration-none h-100 d-block">
+      <div class="card card-animate h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mt-0 font-16">Subscans</h4>
+          <h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{ subscan_count.total|intcomma }}</span></h2>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-12 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title mb-3">
+          <i class="fe-crosshair me-2"></i> Scopes
+          <a href="{% url 'list_scope' current_project.slug %}" class="btn btn-sm btn-soft-primary float-end">All scopes</a>
+        </h5>
+        {% if scopes_data %}
+        <div class="table-responsive">
+          <table class="table table-hover table-centered mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Name</th>
+                <th class="text-center">Type</th>
+                <th class="text-center">Targets</th>
+                <th class="text-end">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for scope in scopes_data %}
+              <tr>
+                <td>{{ scope.name|escape }}</td>
+                <td class="text-center"><span class="badge badge-soft-info">{{ scope.scope_type_display|escape }}</span></td>
+                <td class="text-center">{{ scope.target_count|intcomma }}</td>
+                <td class="text-end">
+                  <a href="{% url 'scope_detail' current_project.slug scope.id %}" class="btn btn-sm btn-soft-primary">View</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">No scopes yet. <a href="{% url 'list_scope' current_project.slug %}">Add a scope</a>.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-xl-6 col-lg-6 col-12 mb-3">
+    <div class="card h-100 d-flex flex-column">
+      <div class="card-body d-flex flex-column flex-grow-1 overflow-hidden">
+        <h5 class="card-title mb-3"><i class="mdi mdi-trending-up me-2 font-18 text-primary"></i> Activity Feed</h5>
+        <div data-simplebar style="max-height: 400px;" class="p-2">
+          <div class="track-order-list">
+            <ul class="list-unstyled mb-0">
+              {% for item in activity_feed %}
+              <li class="d-flex align-items-start mt-3">
+                <i class="mdi mdi-checkbox-blank-circle-outline me-1 {% if item.status == 0 %}text-danger{% elif item.status == 1 %}text-info{% elif item.status == 2 %}text-success{% endif %}"></i>
+                <div class="w-100">
+                  <strong>{{ item.title|escape }}</strong>
+                  <br>
+                  <span class="text-muted">
+                    {% if item.status == 2 %}{% if item.title != 'Scan Completed' %}Completed {% endif %}{% elif item.status == 1 %}Initiated {% elif item.status == 0 %}{% if item.title != 'Scan aborted' %}Aborted {% endif %}{% endif %}
+                    for
+                    {% if item.scan_of and item.scan_of.target %}
+                    <a href="{% url 'target_summary' current_project.slug item.scan_of.target.id %}">{{ item.scan_of.target.value|escape }}</a>
+                    {% else %}
+                    <span class="badge badge-soft-info">—</span>
+                    {% endif %}
+                  </span>
+                  <br>
+                  {% if item.scan_of_id %}<a href="{% url 'detail_scan' current_project.slug item.scan_of_id %}" class="small text-muted">{% endif %}{{ item.time|naturaltime }}{% if item.scan_of_id %}</a>{% endif %}
+                </div>
+              </li>
+              {% empty %}
+              <li class="text-muted">Activity will appear when scans run.</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-6 col-lg-6 col-12 mb-3">
+    <div class="card h-100 d-flex flex-column">
+      <div class="card-body d-flex flex-column flex-grow-1 overflow-hidden">
+        <h5 class="card-title mb-3"><i class="fa fa-bug me-2 font-18 text-danger"></i> Vulnerability Feed</h5>
+        <div data-simplebar style="max-height: 400px;" class="p-2">
+          <div class="track-order-list">
+            <ul class="list-unstyled mb-0">
+              {% for item in vulnerability_feed %}
+              <li class="d-flex align-items-start mt-3">
+                <i class="mdi mdi-checkbox-blank-circle-outline me-1 {% if item.severity == 0 %}text-primary{% elif item.severity == 1 %}text-low{% elif item.severity == 2 %}text-warning{% elif item.severity == 3 %}text-danger{% elif item.severity == 4 %}text-critical{% elif item.severity == -1 %}text-info{% endif %}"></i>
+                <div class="w-100">
+                  <a href="{% url 'detail_vuln_scan' current_project.slug item.scan_history.id %}" class="text-reset">
+                    {% if item.severity == 0 %}<span class="badge badge-soft-primary">Info</span>{% elif item.severity == 1 %}<span class="badge badge-low">Low</span>{% elif item.severity == 2 %}<span class="badge badge-soft-warning">Medium</span>{% elif item.severity == 3 %}<span class="badge badge-soft-danger">High</span>{% elif item.severity == 4 %}<span class="badge badge-critical">Critical</span>{% elif item.severity == -1 %}<span class="badge badge-soft-info">Unknown</span>{% endif %}
+                    {{ item.name|escape }}
+                  </a>
+                  <br>
+                  <span class="text-muted small">on {{ item.subdomain.name|default:"—"|escape }}</span>
+                  <br>
+                  <span class="text-muted small">{{ item.discovered_date|naturaltime }}</span>
+                </div>
+              </li>
+              {% empty %}
+              <li class="text-muted">Vulnerabilities will appear after scans.</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+        <a href="{% url 'all_vulns' current_project.slug %}" class="btn btn-sm btn-soft-danger mt-2">View all vulnerabilities</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock main_content %}

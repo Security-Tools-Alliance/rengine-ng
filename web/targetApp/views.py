@@ -83,6 +83,7 @@ from targetApp.forms import (
     UpdateTargetModelForm,
 )
 from targetApp.models import TARGET_TYPE_CHOICES, Organization, Scope, Target
+from targetApp.services.organization_dashboard import get_organization_dashboard_data
 from targetApp.services.scan_param_definitions import TARGET_OVERRIDE_PREFIX
 from targetApp.services.scan_params_context import build_scan_params_form_context
 from targetApp.services.scope_normalizer import parse_scope_raw_input
@@ -1314,6 +1315,24 @@ def add_organization(request, slug):
     }
     context.update(build_scan_params_form_context())
     return render(request, "organization/add.html", context)
+
+
+def organization_dashboard(request, slug, organization_id):
+    """Dashboard view for a single organization (scopes, targets, vulns, feeds)."""
+    try:
+        project = Project.get_from_slug(slug)
+    except Project.DoesNotExist:
+        raise Http404("Project not found")
+    organization = get_object_or_404(Organization, id=organization_id, project=project)
+    dashboard_data = get_organization_dashboard_data(organization)
+    organizations_list = list(Organization.objects.for_project(project).order_by("name").values("id", "name"))
+    context = {
+        "organization_active": "active",
+        "current_project": project,
+        "organizations_list": organizations_list,
+        **dashboard_data,
+    }
+    return render(request, "organization/dashboard.html", context)
 
 
 def list_organization(request, slug):

@@ -130,8 +130,7 @@ class Organization(models.Model):
         if not via_scopes.exists():
             return direct
         return Target.objects.filter(
-            Q(pk__in=direct.values_list("pk", flat=True))
-            | Q(pk__in=via_scopes.values_list("pk", flat=True))
+            Q(pk__in=direct.values_list("pk", flat=True)) | Q(pk__in=via_scopes.values_list("pk", flat=True))
         ).distinct()
 
 

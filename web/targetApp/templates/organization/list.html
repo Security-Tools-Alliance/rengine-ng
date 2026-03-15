@@ -70,6 +70,7 @@ window.ORG_LIST_START_SCAN_BASE = "{% url 'start_organization_scan' current_proj
 window.ORG_LIST_SCHEDULE_SCAN_BASE = "{% url 'schedule_organization_scan' current_project.slug 0 %}".replace('/0', '/');
 window.ORG_LIST_UPDATE_BASE = "{% url 'update_organization' current_project.slug 0 %}".replace('/0', '/');
 window.ORG_LIST_DELETE_BASE = "{% url 'delete_organization' current_project.slug 0 %}".replace('/0', '/');
+window.ORG_LIST_DASHBOARD_BASE = "{% url 'organization_dashboard' current_project.slug 0 %}".replace('/0/dashboard/', '/');
 window.ORG_LIST_CAN_INITIATE_SCANS = {{ user|can:'initiate_scans_subscans'|yesno:"true,false" }};
 window.ORG_LIST_CAN_MODIFY_TARGETS = {{ user|can:'modify_targets'|yesno:"true,false" }};
 </script>
@@ -102,8 +103,11 @@ $(document).ready(function() {
       { orderable: false, targets: 'action:name' },
       {
         targets: 'name:name',
-        render: function(data) {
-          return window.safeBadge ? window.safeBadge((data || '').charAt(0).toUpperCase() + (data || '').slice(1), 'badge badge-soft-dark', 'fe-briefcase') : ('<span class="badge badge-soft-dark"><i class="fe-briefcase me-1"></i>' + window.safeText((data || '').charAt(0).toUpperCase() + (data || '').slice(1)) + '</span>');
+        render: function(data, type, row) {
+          const name = (data || '').charAt(0).toUpperCase() + (data || '').slice(1);
+          const dashboardUrl = window.ORG_LIST_DASHBOARD_BASE + window.safeAttr(String(row.id)) + '/dashboard/';
+          const nameEscaped = window.safeText ? window.safeText(name) : name;
+          return '<a href="' + dashboardUrl + '" class="text-reset">' + (window.safeBadge ? window.safeBadge(nameEscaped, 'badge badge-soft-dark', 'fe-briefcase') : ('<span class="badge badge-soft-dark"><i class="fe-briefcase me-1"></i>' + nameEscaped + '</span>')) + '</a>';
         }
       },
       {
@@ -143,6 +147,7 @@ $(document).ready(function() {
         render: function(data, type, row) {
           const idEnc = window.safeAttr(String(row.id));
           let html = '<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">';
+          html += '<a href="' + window.ORG_LIST_DASHBOARD_BASE + idEnc + '/dashboard/" class="btn btn-sm btn-soft-secondary" data-toggle="tooltip" data-placement="top" title="Dashboard"><i class="fe-home"></i></a>';
           if (window.ORG_LIST_CAN_INITIATE_SCANS) {
             html += '<a href="' + window.ORG_LIST_START_SCAN_BASE + idEnc + '" class="btn btn-sm btn-soft-success" data-toggle="tooltip" data-placement="top" title="Quick Scan Entire Organization"><i class="fe-zap"></i></a>';
             html += '<a href="' + window.ORG_LIST_SCHEDULE_SCAN_BASE + idEnc + '" class="btn btn-sm btn-soft-info open-domain" data-toggle="tooltip" data-placement="top" title="Schedule Scan"><i class="fe-clock"></i></a>';
