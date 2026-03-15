@@ -5,6 +5,9 @@ Unit tests for selected_targets parsing (parse_selected_targets, parse_selected_
 import json
 
 from reNgine.secator.selected_targets import (
+    filter_selected_targets_per_task_for_target,
+    filter_targets_by_target_value,
+    filter_targets_override_for_target,
     parse_selected_targets,
     parse_selected_targets_per_task,
     resolve_selected_targets,
@@ -236,3 +239,118 @@ class TestValidatePerTaskTargets(BaseTestCase):
         reasons = {e["reason"] for e in errors}
         self.assertIn("unknown_task_type", reasons)
         self.assertIn("no_targets", reasons)
+
+
+class TestFilterTargetsByTargetValue(BaseTestCase):
+    """Test cases for filter_targets_by_target_value (multi-scan deduplication)."""
+
+    def test_none_or_empty_returns_none(self):
+        """filter_targets_by_target_value with None or empty list returns None."""
+        self.assertIsNone(filter_targets_by_target_value("example.com", None))
+        self.assertIsNone(filter_targets_by_target_value("example.com", []))
+
+    def test_domain_exact_match(self):
+        """Target value equal to host is kept."""
+        result = filter_targets_by_target_value("septodont.de", ["septodont.de"])
+        self.assertEqual(result, ["septodont.de"])
+
+    def test_domain_subdomain_kept(self):
+        """Subdomain of target value is kept."""
+        result = filter_targets_by_target_value(
+            "septodont.de",
+            ["septodont.de", "www.septodont.de", "api.septodont.de", "other.com"],
+        )
+        self.assertEqual(result, ["septodont.de", "www.septodont.de", "api.septodont.de"])
+
+    def test_url_with_path_and_port_extracts_host(self):
+        """URL with path and port: host is extracted and matched."""
+        result = filter_targets_by_target_value(
+            "septodont.de",
+            ["https://www.septodont.de:443/path", "https://other.com/"],
+        )
+        self.assertEqual(result, ["https://www.septodont.de:443/path"])
+
+    def test_ip_exact_match_only(self):
+        """IP target value: only exact host match is kept (no subdomain logic)."""
+        result = filter_targets_by_target_value(
+            "192.168.1.1",
+            ["192.168.1.1", "192.168.1.2"],
+        )
+        self.assertEqual(result, ["192.168.1.1"])
+
+    def test_empty_target_value_returns_none(self):
+        """Empty or blank target_value returns None."""
+        self.assertIsNone(filter_targets_by_target_value("", ["a.com"]))
+        self.assertIsNone(filter_targets_by_target_value("   ", ["a.com"]))
+
+    def test_filtered_list_empty_returns_none(self):
+        """When no entry belongs to target value, returns None."""
+        result = filter_targets_by_target_value(
+            "septodont.de",
+            ["other.com", "example.org"],
+        )
+        self.assertIsNone(result)
+
+    def test_filter_targets_override_for_target_wrapper(self):
+        """filter_targets_override_for_target is a wrapper of filter_targets_by_target_value."""
+        result = filter_targets_override_for_target("apex.com", ["apex.com", "www.apex.com", "other.com"])
+        self.assertEqual(result, ["apex.com", "www.apex.com"])
+
+    def test_cidr_exact_match_kept(self):
+        """CIDR target value: proposed target with same CIDR is kept."""
+        result = filter_targets_by_target_value("172.16.0.0/24", ["172.16.0.0/24"])
+        self.assertEqual(result, ["172.16.0.0/24"])
+
+    def test_cidr_filters_other_types(self):
+        """CIDR target value: only same CIDR is kept; domains and other CIDRs are excluded."""
+        result = filter_targets_by_target_value(
+            "172.16.0.0/24",
+            ["172.16.0.0/24", "easi-services.fr", "10.0.0.0/8"],
+        )
+        self.assertEqual(result, ["172.16.0.0/24"])
+
+    def test_domain_target_excludes_cidr(self):
+        """Domain target value: CIDR in list does not match and is excluded."""
+        result = filter_targets_by_target_value("easi-services.fr", ["172.16.0.0/24"])
+        self.assertIsNone(result)
+
+
+class TestFilterSelectedTargetsPerTaskForTarget(BaseTestCase):
+    """Test cases for filter_selected_targets_per_task_for_target."""
+
+    def test_none_or_empty_returns_none(self):
+        """filter_selected_targets_per_task_for_target with None or empty dict returns None."""
+        self.assertIsNone(filter_selected_targets_per_task_for_target("example.com", None))
+        self.assertIsNone(filter_selected_targets_per_task_for_target("example.com", {}))
+
+    def test_task_with_filtered_targets_kept(self):
+        """Task whose list has at least one matching target is kept with filtered list."""
+        result = filter_selected_targets_per_task_for_target(
+            "apex.com",
+            {"nmap": ["apex.com", "www.apex.com", "other.com"], "httpx": ["apex.com"]},
+        )
+        self.assertEqual(result, {"nmap": ["apex.com", "www.apex.com"], "httpx": ["apex.com"]})
+
+    def test_task_with_all_filtered_out_excluded(self):
+        """Task that ends up with no targets after filtering is excluded from result."""
+        result = filter_selected_targets_per_task_for_target(
+            "apex.com",
+            {"nmap": ["apex.com"], "httpx": ["other.com"], "dns": ["other.org"]},
+        )
+        self.assertEqual(result, {"nmap": ["apex.com"]})
+
+    def test_all_tasks_filtered_out_returns_none(self):
+        """When every task has no targets belonging to target value, returns None."""
+        result = filter_selected_targets_per_task_for_target(
+            "apex.com",
+            {"nmap": ["other.com"], "httpx": ["other.org"]},
+        )
+        self.assertIsNone(result)
+
+    def test_cidr_target_keeps_only_mapcidr_with_same_cidr(self):
+        """CIDR target value: only task with matching CIDR in list is kept."""
+        result = filter_selected_targets_per_task_for_target(
+            "172.16.0.0/24",
+            {"mapcidr": ["172.16.0.0/24"], "dnsx": ["easi-services.fr"]},
+        )
+        self.assertEqual(result, {"mapcidr": ["172.16.0.0/24"]})

@@ -20,7 +20,7 @@ from startScan.views import (
     _parse_scheduled_time_utc,
     _validate_schedule_form_post,
 )
-from targetApp.models import Scope
+from targetApp.models import Scope, Target
 from utils.test_base import BaseTestCase
 
 
@@ -203,6 +203,59 @@ class TestStartMultipleScan(BaseTestCase):
         )
         self.assertEqual(response.status_code, 302)
         mock_start_scan.assert_called()
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    @patch("startScan.views.start_secator_scan")
+    def test_start_multiple_scan_filters_targets_override_per_target(self, mock_start_scan):
+        """Multiple scan must pass targets_override filtered to each target (deduplication)."""
+        mock_start_scan.return_value = {"status": True, "scan_id": self.data_generator.scan_history.id}
+
+        target_a = self.data_generator.target
+        target_b = Target.objects.create(
+            project=self.data_generator.project,
+            value="example-second.com",
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        subdomain_a = "www." + target_a.value
+        target_ids_str = "%s,%s" % (target_a.id, target_b.id)
+        selected_targets = json.dumps([target_a.value, target_b.value, subdomain_a])
+
+        data = {
+            "execution_mode": "scan",
+            "secator_scan_type": "subdomain",
+            "list_of_target_id": target_ids_str,
+            "selected_targets": selected_targets,
+        }
+        response = self.client.post(
+            reverse(
+                "start_multiple_scan",
+                kwargs={"slug": self.data_generator.project.slug},
+            ),
+            data,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(mock_start_scan.call_count, 2)
+
+        call_target_ids = [call.kwargs["target_id"] for call in mock_start_scan.call_args_list]
+        self.assertIn(target_a.id, call_target_ids)
+        self.assertIn(target_b.id, call_target_ids)
+        self.assertNotEqual(call_target_ids[0], call_target_ids[1])
+
+        for call in mock_start_scan.call_args_list:
+            tid = call.kwargs["target_id"]
+            override = call.kwargs.get("targets_override")
+            if tid == target_a.id:
+                self.assertIsNotNone(override, "target A should get filtered targets_override")
+                self.assertIn(target_a.value, override)
+                self.assertIn(subdomain_a, override)
+                self.assertNotIn(target_b.value, override)
+            else:
+                self.assertEqual(tid, target_b.id)
+                self.assertIsNotNone(override, "target B should get filtered targets_override")
+                self.assertIn(target_b.value, override)
+                self.assertNotIn(target_a.value, override)
+                self.assertNotIn(subdomain_a, override)
 
 
 class TestSecatorProfilesContext(BaseTestCase):

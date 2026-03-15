@@ -106,7 +106,8 @@
           }
         });
         $tasksContainer.hide().empty();
-        if (prefix === 'subscan') {
+        const $contentRow = $root.find('#' + prefix + '-content-row');
+        if ($contentRow.hasClass('secator-view-list')) {
           $root.find('#' + prefix + '-input-types-targets').hide();
         }
       } else {

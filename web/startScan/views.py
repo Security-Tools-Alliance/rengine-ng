@@ -44,6 +44,10 @@ from reNgine.definitions import (
     SUCCESS_TASK,
 )
 from reNgine.llm.utils import convert_markdown_to_html
+from reNgine.secator.selected_targets import (
+    filter_selected_targets_per_task_for_target,
+    filter_targets_override_for_target,
+)
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.services.repositories import EndpointRepository
 from reNgine.settings import RENGINE_RESULTS
@@ -201,10 +205,40 @@ def _run_secator_scan_or_per_task(
 def _start_secator_scans_for_target_ids(request, target_ids: list[int], secator_kwargs: dict) -> tuple[int, int]:
     scan_count = 0
     failed_count = 0
+    skipped_no_tasks: list[str] = []
+    execution_mode = secator_kwargs.get("execution_mode")
+    targets_map = {t.id: t for t in Target.objects.filter(id__in=target_ids)}
     for target_id in target_ids:
-        sc, fc = _run_secator_scan_or_per_task(request, target_id, secator_kwargs)
+        target = targets_map.get(target_id)
+        if not target:
+            continue
+        kwargs_for_target = dict(secator_kwargs)
+        filtered_override = filter_targets_override_for_target(
+            target.value, kwargs_for_target.get("targets_override")
+        )
+        if filtered_override is not None:
+            kwargs_for_target["targets_override"] = filtered_override
+        else:
+            kwargs_for_target.pop("targets_override", None)
+        filtered_per_task = filter_selected_targets_per_task_for_target(
+            target.value, kwargs_for_target.get("selected_targets_per_task")
+        )
+        if filtered_per_task is not None:
+            kwargs_for_target["selected_targets_per_task"] = filtered_per_task
+        else:
+            kwargs_for_target.pop("selected_targets_per_task", None)
+        if execution_mode == "tasks" and "selected_targets_per_task" not in kwargs_for_target:
+            skipped_no_tasks.append(target.value)
+            continue
+        sc, fc = _run_secator_scan_or_per_task(request, target_id, kwargs_for_target)
         scan_count += sc
         failed_count += fc
+    if skipped_no_tasks:
+        messages.warning(
+            request,
+            "No scan started for target(s) %s: no selected proposed targets matched these targets."
+            % (", ".join(skipped_no_tasks),),
+        )
     return scan_count, failed_count
 
 
@@ -1380,11 +1414,37 @@ def _run_quick_scan_for_targets(
     secator_kwargs = build_start_secator_scan_kwargs(request.POST, scope=scope)
     scan_count = 0
     failed_count = 0
+    skipped_no_tasks: list[str] = []
+    execution_mode = secator_kwargs.get("execution_mode")
     for target in target_list:
-        sc, fc = _run_secator_scan_or_per_task(request, target.id, secator_kwargs)
+        kwargs_for_target = dict(secator_kwargs)
+        filtered_override = filter_targets_override_for_target(
+            target.value, kwargs_for_target.get("targets_override")
+        )
+        if filtered_override is not None:
+            kwargs_for_target["targets_override"] = filtered_override
+        else:
+            kwargs_for_target.pop("targets_override", None)
+        filtered_per_task = filter_selected_targets_per_task_for_target(
+            target.value, kwargs_for_target.get("selected_targets_per_task")
+        )
+        if filtered_per_task is not None:
+            kwargs_for_target["selected_targets_per_task"] = filtered_per_task
+        else:
+            kwargs_for_target.pop("selected_targets_per_task", None)
+        if execution_mode == "tasks" and "selected_targets_per_task" not in kwargs_for_target:
+            skipped_no_tasks.append(target.value)
+            continue
+        sc, fc = _run_secator_scan_or_per_task(request, target.id, kwargs_for_target)
         scan_count += sc
         failed_count += fc
 
+    if skipped_no_tasks:
+        messages.warning(
+            request,
+            "No scan started for target(s) %s: no selected proposed targets matched these targets."
+            % (", ".join(skipped_no_tasks),),
+        )
     if scan_count == 0 and failed_count > 0:
         messages.error(
             request,
@@ -1445,7 +1505,7 @@ def start_organization_scan(request, id, slug):
                 request,
                 target_list,
                 f"organization {organization.name}",
-                "list_organization",
+                "scan_history",
                 {"slug": slug},
                 "start_organization_scan",
                 {"slug": slug, "id": id},
@@ -1488,7 +1548,7 @@ def start_scope_scan(request, id, slug):
                 request,
                 target_list,
                 f"scope {scope.name}",
-                "list_scope",
+                "scan_history",
                 {"slug": slug},
                 "start_scope_scan",
                 {"slug": slug, "id": id},

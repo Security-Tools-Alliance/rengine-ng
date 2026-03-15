@@ -172,6 +172,22 @@
               activeIds.push($(this).attr('data-item-id'));
             }
           });
+          const preservedContent = {};
+          $selectionContainer.find('.secator-task-selection-card[data-task-id]').each(function() {
+            const taskId = $(this).attr('data-task-id');
+            if (!taskId) return;
+            const $card = $(this);
+            const $badges = $card.find('.secator-task-input-types-badges');
+            const $proposed = $card.find('.secator-task-proposed-targets');
+            const hasBadges = $badges.length && $badges.contents().length;
+            const hasProposed = $proposed.length && $proposed.contents().length;
+            if (hasBadges || hasProposed) {
+              preservedContent[taskId] = {
+                badges: hasBadges ? $badges.contents().clone(true) : null,
+                proposedTargets: hasProposed ? $proposed.contents().clone(true) : null
+              };
+            }
+          });
           let combinedHtml;
           if (parts.length) {
             combinedHtml = '<div class="row secator-task-selection-row">' + parts.map(function(html, i) {
@@ -188,6 +204,17 @@
             combinedHtml = tasksPlaceholderHtml;
           }
           $selectionContainer.html(combinedHtml);
+          Object.keys(preservedContent).forEach(function(taskId) {
+            const preserved = preservedContent[taskId];
+            const $card = $selectionContainer.find('.secator-task-selection-card[data-task-id="' + taskId + '"]');
+            if (!$card.length) return;
+            if (preserved.badges && preserved.badges.length) {
+              $card.find('.secator-task-input-types-badges').empty().append(preserved.badges);
+            }
+            if (preserved.proposedTargets && preserved.proposedTargets.length) {
+              $card.find('.secator-task-proposed-targets').empty().append(preserved.proposedTargets);
+            }
+          });
           $contentRow.data('list-view-html', combinedHtml);
           $selectionContainer.find('input[name="task_ids"]').prop('checked', false);
           activeIds.forEach(function(taskId) {
@@ -407,8 +434,20 @@
       }
 
       const { getTargetId, getTargetIds, getSubdomainIds } = context;
-      const targetId = typeof getTargetId === 'function' ? getTargetId() : '';
-      const targetIds = typeof getTargetIds === 'function' ? getTargetIds() : null;
+      let targetId = typeof getTargetId === 'function' ? getTargetId() : '';
+      let targetIds = typeof getTargetIds === 'function' ? getTargetIds() : null;
+      const $listInput = $root.find && $root.is('form') ? $root.find('input[name="list_of_target_id"]') : $();
+      if ($listInput.length && $listInput.val()) {
+        const listVal = $listInput.val();
+        const parsed = typeof listVal === 'string' ? listVal.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+        if (parsed.length > 1) {
+          targetIds = parsed;
+          targetId = '';
+        } else if (parsed.length === 1 && !targetIds) {
+          targetIds = parsed;
+          if (!targetId) targetId = parsed[0];
+        }
+      }
       const subdomainIds = typeof getSubdomainIds === 'function' ? getSubdomainIds() : [];
       if (!targetId && (!targetIds || !targetIds.length) && (!subdomainIds || !subdomainIds.length)) {
         $block.show();
@@ -566,7 +605,7 @@
         renderTasksInto: 'cards'
       };
       if (context.getExecutionMode() === 'tasks') {
-        this.fetchInputTypesAndTargetsForFormTasks($form, prefix, context.getTargetId(), context.getDomainId(), $selectionContainer,
+        this.fetchInputTypesAndTargetsForFormTasks($form, prefix, context.getTargetId(), context.getTargetIds(), context.getDomainId(), $selectionContainer,
           $form.find('#' + prefix + '-input-types-targets'), $form.find('#' + prefix + '-targets-single'),
           $form.find('#' + prefix + '-tasks-targets-container'), $form.find('#' + prefix + '-input-types-badges'),
           $form.find('#' + prefix + '-targets-preview'), $form.find('#' + prefix + '-targets-toolbar'),
@@ -577,10 +616,12 @@
       this.fetchInputTypesAndTargetsWithContext(context);
     },
 
-    fetchInputTypesAndTargetsForFormTasks: function($form, prefix, targetId, domainId, $selectionContainer, $block, $single, $tasksContainer, $badges, $preview, $toolbar, $warning, $error, $loading) {
+    fetchInputTypesAndTargetsForFormTasks: function($form, prefix, targetId, targetIds, domainId, $selectionContainer, $block, $single, $tasksContainer, $badges, $preview, $toolbar, $warning, $error, $loading) {
       const checkedTasks = $selectionContainer.find('input[name="task_ids"]:checked');
       if (!checkedTasks.length) {
         $block.hide();
+        $tasksContainer.data('loaded-task-ids', []).data('compact-parts-by-task', {});
+        $form.removeData('subscan-task-targets-counts');
         return;
       }
       const taskIds = checkedTasks.map(function() { return $(this).val(); }).get();
@@ -594,32 +635,169 @@
       });
       $block.show();
       $single.hide();
-      $tasksContainer.empty();
-      $loading.show();
       $warning.add($error).hide();
-      $badges.empty();
-      $badges.prev('h6').add($badges).hide();
       $single.prev('h6').add($single).add($tasksContainer).hide();
 
       const self = this;
-      const baseParams = targetId ? { target_id: targetId } : {};
+      const ids = (targetIds && targetIds.length > 1) ? targetIds : null;
+      const baseParams = ids ? { target_ids: ids.join(',') } : (targetId ? { target_id: targetId } : {});
       if (Object.keys(baseParams).length === 0) {
         $loading.hide();
         $error.text('Set target to load proposed targets.').show();
         return;
       }
-      const context = { $root: $form, prefix, getSelectionContainer: () => $selectionContainer };
-      this.requestInputTypesTargetsForTasks(taskIds, baseParams)
-        .done(function() {
-          const results = taskIds.length === 1 ? [arguments[0]] : Array.prototype.slice.call(arguments).map(a => a[0]);
-          $loading.hide();
-          const blocksData = self.buildTaskTargetsBlocksData(results, taskIds, taskNames, taskTypes, prefix, {
-            checkboxClass: 'secator-target-checkbox',
-            itemWrapperClass: 'form-check',
-            inputNamePrefix: 'secator_target_task_',
-            includeTypesSpan: false
+
+      const alreadyLoaded = $tasksContainer.data('loaded-task-ids') || [];
+      const toAdd = taskIds.filter(function(id) { return alreadyLoaded.indexOf(id) === -1; });
+      const toRemove = alreadyLoaded.filter(function(id) { return taskIds.indexOf(id) === -1; });
+      const cardsLayout = $selectionContainer.find('.secator-task-selection-card[data-task-id]').length > 0;
+      const $contentRow = $form.find('#' + prefix + '-content-row');
+      if (cardsLayout && $contentRow.hasClass('secator-view-list')) {
+        $block.hide();
+      }
+
+      if (toRemove.length > 0) {
+        if (cardsLayout) {
+          toRemove.forEach(function(taskId) {
+            $selectionContainer.find('.secator-task-selection-card[data-task-id="' + taskId + '"]').parent().remove();
           });
-          self.injectTaskTargetsIntoDom(context, blocksData, taskIds);
+        } else {
+          toRemove.forEach(function(taskId) {
+            $tasksContainer.find('.secator-task-targets-block[data-task-id="' + taskId + '"]').parent().remove();
+          });
+        }
+        let compactByTask = $tasksContainer.data('compact-parts-by-task') || {};
+        toRemove.forEach(function(taskId) { delete compactByTask[taskId]; });
+        $tasksContainer.data('compact-parts-by-task', compactByTask);
+        $tasksContainer.data('loaded-task-ids', taskIds);
+        const badgeHtml = taskIds.map(function(id) { return compactByTask[id] || ''; }).filter(Boolean).join('');
+        $badges.html(badgeHtml);
+        if ($badges.prev('h6').length) $badges.prev('h6').add($badges).show();
+        let counts = $form.data('subscan-task-targets-counts') || {};
+        toRemove.forEach(function(taskId) { delete counts[taskId]; });
+        $form.data('subscan-task-targets-counts', counts);
+      }
+
+      if (toAdd.length === 0) {
+        $loading.hide();
+        if (taskIds.length) {
+          if (!cardsLayout) $tasksContainer.show();
+          self.bindTaskTargetsToolbarForForm($form, prefix);
+        }
+        $(document).trigger('secator:contentLoaded');
+        return;
+      }
+
+      const context = { $root: $form, prefix, getSelectionContainer: () => $selectionContainer };
+      const taskOptions = {
+        checkboxClass: 'secator-target-checkbox',
+        itemWrapperClass: 'form-check',
+        inputNamePrefix: 'secator_target_task_',
+        includeTypesSpan: false
+      };
+
+      if (alreadyLoaded.length === 0) {
+        $tasksContainer.empty();
+        $badges.empty();
+        if ($badges.prev('h6').length) $badges.prev('h6').add($badges).show();
+        $loading.show();
+        self.requestInputTypesTargetsForTasks(taskIds, baseParams)
+          .done(function() {
+            const results = taskIds.length === 1 ? [arguments[0]] : Array.prototype.slice.call(arguments).map(function(a) { return a[0]; });
+            $loading.hide();
+            const blocksData = self.buildTaskTargetsBlocksData(results, taskIds, taskNames, taskTypes, prefix, taskOptions);
+            self.injectTaskTargetsIntoDom(context, blocksData, taskIds);
+            $tasksContainer.data('loaded-task-ids', taskIds);
+            const compactByTask = {};
+            blocksData.compactParts.forEach(function(html, i) { compactByTask[taskIds[i]] = html; });
+            $tasksContainer.data('compact-parts-by-task', compactByTask);
+            self.bindTaskTargetsToolbarForForm($form, prefix);
+            $(document).trigger('secator:contentLoaded');
+          })
+          .fail(function() {
+            $loading.hide();
+            $badges.prev('h6').add($badges).show();
+            $single.prev('h6').add($single).show();
+            $error.text('Failed to load targets for one or more tasks').show();
+          });
+        return;
+      }
+
+      if (cardsLayout) {
+        $loading.show();
+        self.requestInputTypesTargetsForTasks(toAdd, baseParams)
+          .done(function() {
+            const results = toAdd.length === 1 ? [arguments[0]] : Array.prototype.slice.call(arguments).map(function(a) { return a[0]; });
+            $loading.hide();
+            const newBlocksData = self.buildTaskTargetsBlocksData(results, toAdd, taskNames, taskTypes, prefix, taskOptions);
+            toAdd.forEach(function(taskId, idx) {
+              const $card = $selectionContainer.find('.secator-task-selection-card[data-task-id="' + taskId + '"]');
+              const $badgesSpan = $card.find('.secator-task-input-types-badges');
+              if ($badgesSpan.length && newBlocksData.compactParts[idx]) {
+                $badgesSpan.html(newBlocksData.compactParts[idx]);
+              }
+              const $proposedTargets = $card.find('.secator-task-proposed-targets');
+              if ($proposedTargets.length && newBlocksData.taskBlocksHtml[idx]) {
+                $proposedTargets.html('<span class="d-block fw-bold mb-1">Proposed targets</span>' + newBlocksData.taskBlocksHtml[idx]);
+              }
+            });
+            let counts = $form.data('subscan-task-targets-counts') || {};
+            toAdd.forEach(function(taskId, idx) { counts[taskId] = newBlocksData.counts[taskId]; });
+            $form.data('subscan-task-targets-counts', counts);
+            let compactByTask = $tasksContainer.data('compact-parts-by-task') || {};
+            toAdd.forEach(function(taskId, idx) { compactByTask[taskId] = newBlocksData.compactParts[idx]; });
+            $tasksContainer.data('compact-parts-by-task', compactByTask);
+            $tasksContainer.data('loaded-task-ids', taskIds);
+            const badgeHtml = taskIds.map(function(id) { return compactByTask[id] || ''; }).filter(Boolean).join('');
+            $badges.html(badgeHtml);
+            if ($badges.prev('h6').length) $badges.prev('h6').add($badges).show();
+            self.bindTaskTargetsToolbarForForm($form, prefix);
+            $(document).trigger('secator:contentLoaded');
+          })
+          .fail(function() {
+            $loading.hide();
+            $badges.prev('h6').add($badges).show();
+            $single.prev('h6').add($single).show();
+            $error.text('Failed to load targets for one or more tasks').show();
+          });
+        return;
+      }
+
+      $loading.show();
+      $tasksContainer.show();
+      self.requestInputTypesTargetsForTasks(toAdd, baseParams)
+        .done(function() {
+          const results = toAdd.length === 1 ? [arguments[0]] : Array.prototype.slice.call(arguments).map(function(a) { return a[0]; });
+          $loading.hide();
+          const newBlocksData = self.buildTaskTargetsBlocksData(results, toAdd, taskNames, taskTypes, prefix, taskOptions);
+          const $row = $tasksContainer.find('.secator-task-selection-row');
+          const existingColsByTaskId = {};
+          $row.children().each(function() {
+            const $col = $(this);
+            const tid = $col.find('.secator-task-targets-block').attr('data-task-id');
+            if (tid) existingColsByTaskId[tid] = $col.detach();
+          });
+          $row.empty();
+          const colClass = 'col-12 col-sm-6 col-xl-4 col-xxl-3 mb-3';
+          taskIds.forEach(function(taskId) {
+            if (existingColsByTaskId[taskId]) {
+              $row.append(existingColsByTaskId[taskId]);
+            } else {
+              const idx = toAdd.indexOf(taskId);
+              const blockHtml = newBlocksData.taskBlocksHtml[idx];
+              $row.append($('<div class="' + colClass + '"></div>').html(blockHtml || ''));
+            }
+          });
+          let counts = $form.data('subscan-task-targets-counts') || {};
+          toAdd.forEach(function(taskId, idx) { counts[taskId] = newBlocksData.counts[taskId]; });
+          $form.data('subscan-task-targets-counts', counts);
+          let compactByTask = $tasksContainer.data('compact-parts-by-task') || {};
+          toAdd.forEach(function(taskId, idx) { compactByTask[taskId] = newBlocksData.compactParts[idx]; });
+          $tasksContainer.data('compact-parts-by-task', compactByTask);
+          $tasksContainer.data('loaded-task-ids', taskIds);
+          const badgeHtml = taskIds.map(function(id) { return compactByTask[id] || ''; }).filter(Boolean).join('');
+          $badges.html(badgeHtml);
+          if ($badges.prev('h6').length) $badges.prev('h6').add($badges).show();
           self.bindTaskTargetsToolbarForForm($form, prefix);
           $(document).trigger('secator:contentLoaded');
         })

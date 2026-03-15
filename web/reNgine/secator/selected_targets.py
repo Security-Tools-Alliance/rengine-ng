@@ -7,10 +7,12 @@ are consistent.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 from typing import Any, Literal, TypedDict
 
 from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.url import get_subdomain_from_url
 
 
 PREFIX_SELECTED_TARGETS = "[SECATOR_SELECTED_TARGETS]"
@@ -181,3 +183,110 @@ def validate_per_task_targets(
                 )
             )
     return errors
+
+
+def _is_cidr(s: str) -> bool:
+    """Return True if the string is a valid CIDR range (IPv4 or IPv6)."""
+    if not s or not isinstance(s, str):
+        return False
+    try:
+        ipaddress.ip_network(s.strip(), strict=False)
+        return True
+    except ValueError:
+        return False
+
+
+def _match_key_for_target_string(raw: str) -> str | None:
+    """
+    Return a normalized key for belonging comparison.
+
+    For CIDR strings, returns the string as-is (strip) so that exact match works.
+    For other strings, returns the host from get_subdomain_from_url (lowercased).
+    Returns None on parse error or empty result.
+    """
+    if raw is None or not str(raw).strip():
+        return None
+    s = str(raw).strip()
+    if _is_cidr(s):
+        return s
+    try:
+        host = get_subdomain_from_url(s).strip().lower()
+        return host if host else None
+    except Exception:
+        return None
+
+
+def _target_string_belongs_to_value(host: str, target_value_lower: str) -> bool:
+    """True if host equals target_value or is a subdomain of it (domain case)."""
+    if host == target_value_lower:
+        return True
+    if "." in target_value_lower and host.endswith("." + target_value_lower):
+        return True
+    return False
+
+
+def filter_targets_by_target_value(
+    target_value: str,
+    targets_list: list[str] | None,
+) -> list[str] | None:
+    """
+    Keep only target strings whose extracted host (or exact value for CIDR) belongs to the given target value.
+
+    Used when launching multiple scans (target list, scope, org): each scan must
+    receive only proposed targets that belong to that scan's target (same apex or
+    subdomain for domains; exact match for CIDR). Invalid or unparseable strings
+    are excluded silently.
+
+    Returns None if targets_list is None/empty or if the filtered list is empty.
+    """
+    if not targets_list:
+        return None
+    target_value_stripped = target_value.strip()
+    if not target_value_stripped:
+        return None
+    target_value_lower = target_value_stripped.lower()
+    target_is_cidr = _is_cidr(target_value_stripped)
+    result: list[str] = []
+    for raw in targets_list:
+        if raw is None or not str(raw).strip():
+            continue
+        key = _match_key_for_target_string(str(raw).strip())
+        if key is None:
+            continue
+        if target_is_cidr:
+            if key == target_value_stripped:
+                result.append(str(raw).strip())
+        else:
+            if _target_string_belongs_to_value(key, target_value_lower):
+                result.append(str(raw).strip())
+    return result if result else None
+
+
+def filter_targets_override_for_target(
+    target_value: str,
+    targets_override: list[str] | None,
+) -> list[str] | None:
+    """Filter targets_override to only entries belonging to the given target value."""
+    return filter_targets_by_target_value(target_value, targets_override)
+
+
+def filter_selected_targets_per_task_for_target(
+    target_value: str,
+    selected_targets_per_task: dict[str, list[str]] | None,
+) -> dict[str, list[str]] | None:
+    """
+    Filter each task's target list to only entries belonging to the given target value.
+
+    Task types that end up with no targets after filtering are omitted.
+    Returns None if the input is empty or the resulting dict is empty.
+    """
+    if not selected_targets_per_task:
+        return None
+    out: dict[str, list[str]] = {}
+    for task_type, list_str in selected_targets_per_task.items():
+        if not list_str:
+            continue
+        filtered = filter_targets_by_target_value(target_value, list_str)
+        if filtered:
+            out[task_type] = filtered
+    return out if out else None

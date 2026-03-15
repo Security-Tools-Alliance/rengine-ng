@@ -38,7 +38,7 @@
     </div>
   {% endif %}
 {% endwith %}
-<form method="POST" id="{{ quick_scan_id_prefix }}-form" data-secator-id-prefix="{{ quick_scan_id_prefix }}" data-scan-params-level="scan" data-scan-params-organization-id="{{ quick_scan_scan_params_organization_id|default:'' }}" data-scan-params-scope-id="{{ quick_scan_scan_params_scope_id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
+<form method="POST" id="{{ quick_scan_id_prefix }}-form" data-secator-id-prefix="{{ quick_scan_id_prefix }}" data-multi-target="true" data-scan-params-level="scan" data-scan-params-organization-id="{{ quick_scan_scan_params_organization_id|default:'' }}" data-scan-params-scope-id="{{ quick_scan_scan_params_scope_id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
   {% csrf_token %}
   {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix=quick_scan_id_prefix|add:'_' %}
   {% include 'startScan/_items/secator_profile_hidden_fields.html' with id_prefix=quick_scan_id_prefix|add:'_' %}

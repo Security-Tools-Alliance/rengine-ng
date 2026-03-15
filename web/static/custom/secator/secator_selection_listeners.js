@@ -25,7 +25,8 @@
         e.stopPropagation();
         const $tile = $(this);
         const $input = $tile.find('input[type="checkbox"]');
-        if (!$(e.target).is('input[type="checkbox"]')) {
+        const clickedCheckbox = $(e.target).is('input[type="checkbox"]');
+        if (!clickedCheckbox) {
           $input.prop('checked', !$input.prop('checked'));
         }
         if ($input.is(':checked')) {
@@ -34,6 +35,9 @@
           $tile.removeClass('selected');
         }
         window.SecatorScan.updateTaskSelection($form);
+        if (!clickedCheckbox) {
+          $input.trigger('change');
+        }
       });
 
       $container.find('.scan-type-tile').off('click').on('click', function(e) {
