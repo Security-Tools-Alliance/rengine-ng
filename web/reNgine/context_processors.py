@@ -7,13 +7,6 @@ from dashboard.utils import is_oauth_user
 
 from . import settings
 
-
-try:
-    from allauth.socialaccount.models import SocialApp
-except ImportError:  # allauth not installed
-    SocialApp = None
-
-
 logger = logging.getLogger(__name__)
 
 
