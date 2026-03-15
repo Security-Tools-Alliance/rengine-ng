@@ -7,6 +7,7 @@ from dashboard.utils import is_oauth_user
 
 from . import settings
 
+
 logger = logging.getLogger(__name__)
 
 
