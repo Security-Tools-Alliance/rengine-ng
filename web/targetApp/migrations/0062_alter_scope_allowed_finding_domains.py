@@ -4,15 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0061_scope_allowed_finding_hosts'),
+        ("targetApp", "0061_scope_allowed_finding_hosts"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='scope',
-            name='allowed_finding_domains',
-            field=models.JSONField(blank=True, default=list, help_text="List of domain names (e.g. ['example.com']) allowed in addition to the target when restrict_findings_to_target is True."),
+            model_name="scope",
+            name="allowed_finding_domains",
+            field=models.JSONField(
+                blank=True,
+                default=list,
+                help_text="List of domain names (e.g. ['example.com']) allowed in addition to the target when restrict_findings_to_target is True.",
+            ),
         ),
     ]
