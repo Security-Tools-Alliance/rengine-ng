@@ -28,6 +28,8 @@ def strip_trailing_port(host_value: str) -> str:
     if not host_value or not isinstance(host_value, str):
         return host_value or ""
     value = host_value.strip()
+    if not value:
+        return host_value
     if value.startswith("["):
         bracket_end = value.find("]:")
         if bracket_end != -1 and value[bracket_end + 2 :].strip().isdigit():

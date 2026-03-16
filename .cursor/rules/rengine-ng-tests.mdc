@@ -78,6 +78,14 @@ make test
 make test KEEPDB=1
 ```
 
+- To run only specific test(s), use `test-only` with the full dotted path(s):
+
+```bash
+make test-only TESTS="reNgine.tests.services.repositories.test_domain_repository.DomainRepositoryFindingScopeFilterTest.test_save_raw_whois_ip_as_domain_returns_none" KEEPDB=1 VERBOSITY=2
+```
+
+  Multiple tests: pass a space-separated list of dotted paths as `TESTS="path1 path2 path3"`. Same options as `make test` apply (`KEEPDB=1`, `VERBOSITY=1|2|3`).
+
 - Other useful commands:
 
 ```bash

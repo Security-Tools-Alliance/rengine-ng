@@ -7,6 +7,7 @@ API and UI layers for better reusability and testability.
 
 from __future__ import annotations
 
+import copy
 import threading
 from typing import TypedDict
 
@@ -26,6 +27,7 @@ from startScan.models import ScanHistory, Subdomain, SubScan
 from targetApp.models import Target
 from targetApp.services.scope_params import (
     apply_resolved_to_secator_config,
+    flatten_profile_opts_into_config,
     get_scope_for_target,
     resolve_scan_params,
 )
@@ -217,7 +219,9 @@ def start_secator_scan(
             create_kw = {"engine_id": 1, "initiated_by_id": user_id, "target_id": target.id}
             scan_history_id = scan_repo.create_scan(**create_kw)
             scan = ScanHistory.objects.get(pk=scan_history_id)
-            _persist_scan_config_on_history(scan, secator_config)
+            effective_snapshot = copy.deepcopy(secator_config)
+            flatten_profile_opts_into_config(effective_snapshot)
+            _persist_scan_config_on_history(scan, effective_snapshot)
 
             secator_scan_type = secator_scan.name
             initiated_by_id = user_id
@@ -313,7 +317,9 @@ def start_secator_scan(
             create_kw = {"engine_id": 1, "initiated_by_id": user_id, "target_id": target.id}
             new_scan_history_id = scan_repo.create_scan(**create_kw)
             scan = ScanHistory.objects.get(pk=new_scan_history_id)
-            _persist_scan_config_on_history(scan, secator_config)
+            effective_snapshot = copy.deepcopy(secator_config)
+            flatten_profile_opts_into_config(effective_snapshot)
+            _persist_scan_config_on_history(scan, effective_snapshot)
             initiated_by_id = user_id
 
             def launch_scan():
@@ -550,9 +556,11 @@ def run_per_task_secator_scans(
         shared_scan_id = scan_repo.create_scan(**create_kw)
         scan = ScanHistory.objects.get(pk=shared_scan_id)
         # Resolve effective params before persisting so the DB snapshot reflects the
-        # full resolved config, not just the raw user override that was passed in.
+        # full resolved config including profile opts, not just the raw user override.
         _apply_effective_scan_params(target, secator_config)
-        _persist_scan_config_on_history(scan, secator_config)
+        effective_snapshot = copy.deepcopy(secator_config)
+        flatten_profile_opts_into_config(effective_snapshot)
+        _persist_scan_config_on_history(scan, effective_snapshot)
     shared_scan_id = scan.id
     subdomains = list(Subdomain.objects.filter(id__in=subdomain_ids_for_subscan)) if subdomain_ids_for_subscan else []
     scan_for_subscans = scan if subdomains else None

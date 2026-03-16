@@ -15,6 +15,7 @@ from django.db.models import Count
 from django.utils import timezone
 import validators
 
+from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.core.secator_target import parse_secator_target_value
 from reNgine.core.validators import is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
@@ -692,6 +693,14 @@ class EndpointRepository:
         """
         try:
             return self._get_or_create_endpoint_for_ip(ip_address, scan_history_id, domain_id)
+        except FindingOutOfScopeError:
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "CREATE_IP",
+                "Skipped (out of scope): IP %s" % (ip_address,),
+                level="info",
+            )
+            return None
         except (ObjectDoesNotExist, IntegrityError) as e:
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,

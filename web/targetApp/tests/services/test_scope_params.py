@@ -13,6 +13,7 @@ from targetApp.services.scope_params import (
     apply_resolved_to_secator_config,
     build_effective_params_display,
     build_effective_params_display_from_configs,
+    flatten_profile_opts_into_config,
     get_allowed_workers_for_scope,
     get_default_worker_for_scope,
     get_scope_for_target,
@@ -549,6 +550,54 @@ class ApplyResolvedToSecatorConfigTest(BaseTestCase):
         apply_resolved_to_secator_config(secator_config, resolved)
 
         self.assertEqual(secator_config["extra_config"], {"custom": "value"})
+
+
+class FlattenProfileOptsIntoConfigTest(BaseTestCase):
+    """Tests for flatten_profile_opts_into_config."""
+
+    def test_profile_opts_merged_into_config(self):
+        """Profile opts (threads, rate_limit, etc.) are merged into config in place."""
+        name = "test-flatten-%s" % (str(uuid.uuid4())[:8],)
+        SecatorProfile.objects.create(
+            name=name,
+            category="speed",
+            description="Test",
+            opts="threads: 4\nrate_limit: 100\ndelay: 0.5\n",
+            profile_type="custom",
+            is_active=True,
+        )
+        config = {"profiles": [name], "threads": 30, "rate_limit": 150}
+        flatten_profile_opts_into_config(config)
+        self.assertEqual(config["threads"], 4)
+        self.assertEqual(config["rate_limit"], 100)
+        self.assertEqual(config["delay"], 0.5)
+        self.assertEqual(config["profiles"], [name])
+
+    def test_profiles_dict_format_supported(self):
+        """profiles as category dict is supported via _profiles_to_list."""
+        name = "test-flatten-dict-%s" % (str(uuid.uuid4())[:8],)
+        SecatorProfile.objects.create(
+            name=name,
+            category="speed",
+            description="Test",
+            opts="threads: 20\n",
+            profile_type="custom",
+            is_active=True,
+        )
+        config = {"profiles": {"speed": name}, "threads": 30}
+        flatten_profile_opts_into_config(config)
+        self.assertEqual(config["threads"], 20)
+
+    def test_empty_profiles_leaves_config_unchanged(self):
+        config = {"threads": 30, "rate_limit": 150}
+        flatten_profile_opts_into_config(config)
+        self.assertEqual(config["threads"], 30)
+        self.assertEqual(config["rate_limit"], 150)
+
+    def test_no_profiles_key_leaves_config_unchanged(self):
+        config = {"threads": 30}
+        flatten_profile_opts_into_config(config)
+        self.assertEqual(config["threads"], 30)
 
 
 class ProfilesToListTest(BaseTestCase):

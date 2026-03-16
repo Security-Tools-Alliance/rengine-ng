@@ -90,7 +90,12 @@ from startScan.secator.form import build_start_secator_scan_kwargs
 from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.constants import RENGINE_TARGET_TYPES_FOR_JS
 from targetApp.models import Organization, Scope, Target
-from targetApp.services.scan_param_definitions import PARAM_KEYS as SCAN_PARAM_KEYS
+from targetApp.services.scan_param_definitions import (
+    ORDERED_PARAM_KEYS_FOR_FORM,
+)
+from targetApp.services.scan_param_definitions import (
+    PARAM_KEYS as SCAN_PARAM_KEYS,
+)
 from targetApp.services.scan_params_context import build_scan_params_form_context
 from targetApp.services.scope_params import get_scope_for_target, get_workers_for_scan_dropdown
 
@@ -103,6 +108,8 @@ logger = get_module_logger(__name__)
 # Any internal/engine-only keys added to scan_config in the future will NOT
 # be shown unless explicitly added here.
 _SCAN_CONFIG_DISPLAY_KEYS: frozenset[str] = SCAN_PARAM_KEYS | frozenset({"profiles", "extra_config"})
+# Order for "Show scan parameters" in scan detail timeline (matches form order + profiles, extra_config).
+_SCAN_CONFIG_DISPLAY_ORDER: tuple[str, ...] = ORDERED_PARAM_KEYS_FOR_FORM + ("profiles", "extra_config")
 
 
 def _parse_domain_id_list(raw_domain_ids: str) -> tuple[list[int], list[str]]:
@@ -865,21 +872,27 @@ def detail_scan(request, id, slug):
 
     scan_config = getattr(scan, "scan_config", None)
     if isinstance(scan_config, dict) and scan_config:
-        display = {}
-        for k, v in scan_config.items():
-            if k not in _SCAN_CONFIG_DISPLAY_KEYS:
-                continue
+
+        def _format_scan_config_value(k, v):
             if k == "profiles":
                 if isinstance(v, dict):
-                    display[k] = [f"{cat}: {name}" for cat, name in v.items() if name]
-                elif isinstance(v, list):
-                    display[k] = [str(p) for p in v if p]
-                else:
-                    display[k] = []
-            elif k in ("header", "extra_config") and isinstance(v, dict):
-                display[k] = json.dumps(v, indent=2)
-            else:
-                display[k] = v
+                    return [f"{cat}: {name}" for cat, name in v.items() if name]
+                if isinstance(v, list):
+                    return [str(p) for p in v if p]
+                return []
+            if k in ("header", "extra_config") and isinstance(v, dict):
+                return json.dumps(v, indent=2)
+            return v
+
+        display = {}
+        for k in _SCAN_CONFIG_DISPLAY_ORDER:
+            if k not in scan_config or k not in _SCAN_CONFIG_DISPLAY_KEYS:
+                continue
+            display[k] = _format_scan_config_value(k, scan_config[k])
+        for k, v in scan_config.items():
+            if k in display or k not in _SCAN_CONFIG_DISPLAY_KEYS:
+                continue
+            display[k] = _format_scan_config_value(k, v)
         ctx["scan_config_display"] = display
     else:
         ctx["scan_config_display"] = None

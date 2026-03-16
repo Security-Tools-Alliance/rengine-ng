@@ -30,6 +30,7 @@ Project context and technology stack for the reNgine-ng security assessment plat
 - **API**: Django REST Framework; use User API key for automated tests (no CSRF).
 - **Datatables**: All server-side; shared helpers in `web/api/helpers/datatables.py` and `web/static/custom/datatables/`.
 - **Logging**: Use `ModuleLogger` and `logger.log_line(...)` only; no direct `logger.info`/`logger.debug` etc.
+- **Tests**: `make test` / `make test KEEPDB=1`; `make test-app APPS=reNgine`; `make test-only TESTS="app.tests.module.TestClass.test_method"` to run specific test(s). See rengine-ng-tests.mdc for full testing conventions.
 
 ## Conventions (from project rules)
 

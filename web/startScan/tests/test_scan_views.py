@@ -403,8 +403,8 @@ class TestSecatorProfilesContext(BaseTestCase):
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     @patch("startScan.views._run_secator_scan_or_per_task")
-    def test_start_scope_scan_post_with_targets_redirects_to_list_scope(self, mock_run):
-        """start_scope_scan POST with targets should run scans and redirect to list_scope."""
+    def test_start_scope_scan_post_with_targets_redirects_to_scan_history(self, mock_run):
+        """start_scope_scan POST with targets should run scans and redirect to scan_history."""
         mock_run.return_value = (1, 0)
         scope = self.data_generator.create_scope()
         data = {
@@ -421,7 +421,7 @@ class TestSecatorProfilesContext(BaseTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertRedirects(
             response,
-            reverse("list_scope", kwargs={"slug": self.data_generator.project.slug}),
+            reverse("scan_history", kwargs={"slug": self.data_generator.project.slug}),
             fetch_redirect_response=False,
         )
         self.assertEqual(mock_run.call_count, 1)

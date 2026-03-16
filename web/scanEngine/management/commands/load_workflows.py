@@ -167,6 +167,7 @@ class Command(SecatorLoaderBase):
 
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"Failed to get workflows from secator: {e}"))
+            return
 
         self._load_workflows_from_config_dir(workflow_type="builtin")
 

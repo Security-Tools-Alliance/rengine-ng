@@ -110,7 +110,7 @@ define gpu_config
 	$(eval export DOCKER_RUNTIME)
 endef
 
-.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword makemigrations migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list secator-init secator-key secator-load secator-check secator-health update-check
+.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword makemigrations migrate down stop restart remove_images test test-app test-only test-verbose test-app-verbose test-scripts ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list secator-init secator-key secator-load secator-check secator-health update-check
 
 pull:			## Pull pre-built Docker images from repository.
 	${DOCKER_COMPOSE_FILE_CMD} pull
@@ -375,6 +375,13 @@ test-app:		## Run unit tests for specific app(s). Usage: make test-app APPS=app1
 	fi
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test $(APPS) $(TEST_OPTS)
 
+test-only:		## Run specific test(s). Usage: make test-only TESTS="app.tests.module.TestClass.test_method" [KEEPDB=1] [VERBOSITY=2]
+	@if [ -z "$(TESTS)" ]; then \
+		echo "Error: TESTS parameter is required. Usage: make test-only TESTS=\"reNgine.tests... TestClass.test_method\""; \
+		exit 1; \
+	fi
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test $(TESTS) $(TEST_OPTS)
+
 test-verbose:		## Run all unit tests with verbose output (VERBOSITY=2).
 	$(MAKE) test VERBOSITY=2
 
@@ -396,60 +403,63 @@ prune:			## Remove containers, delete volume data, and prune Docker system.
 help:			## Show this help.
 	@echo "Manage Docker images, containers and Django commands using Docker Compose files."
 	@echo ""
-	@echo "Usage:"
-	@echo "  make <target> [GPU=1] (default: help)"
+	@echo "Usage: make <target> [GPU=1] (default: help)"
+	@echo "Options: GPU=1  Enable GPU support for Ollama LLM"
 	@echo ""
-	@echo "Options:"
-	@echo "  GPU=1                                    Enable GPU support for Ollama LLM"
+	@echo "Docker images and services:"
+	@echo "  make pull [GPU=1]                        Pull pre-built Docker images from repository"
+	@echo "  make images                              Show all Docker images for reNgine services"
+	@echo "  make build [GPU=1]                       Build all Docker images locally"
+	@echo "  make build-service SERVICE=name [GPU=1] [REBUILD=1]  Build one service (e.g. web, redis)"
+	@echo "  make build_up [GPU=1]                    Build and start all services"
+	@echo "  make certs                               Generate certificates"
+	@echo "  make up [GPU=1]                         Pull and start all services (production)"
+	@echo "  make dev_up [GPU=1]                      Pull and start all services (development config)"
+	@echo "  make down                               Stop and remove all containers"
+	@echo "  make stop                                Stop all services (containers kept)"
+	@echo "  make restart [service...]                Restart services (all if none given)"
+	@echo "  make restart DEV=1 [service...]          Restart in development mode"
+	@echo "  make restart COLD=1 [service...]         Cold restart (down then up)"
+	@echo "  make restart DEV=1 COLD=1 [service...]   Cold restart in development mode"
+	@echo "  make remove_images                       Remove all reNgine-ng Docker images"
+	@echo "  make logs                                Tail all containers logs (-n 1000)"
+	@echo "  make prune                               Down, remove images, delete volumes, docker system prune"
 	@echo ""
-	@echo "Targets:"
-	@echo "  make restart [service1] [service2] ...  				Restart specific services in production mode"
-	@echo "  make restart DEV=1 [service1] [service2] ...  			Restart specific services in development mode"
-	@echo "  make restart                            				Restart all services in production mode"
-	@echo "  make restart DEV=1                     				Restart all services in development mode"
-	@echo "  make restart COLD=1 [service1] [service2] ... 			Cold restart (recreate containers) specific services in production mode"
-	@echo "  make restart DEV=1 COLD=1 [service1] [service2] ...  	Cold restart (recreate containers) specific services in development mode"
-	@echo "  make restart COLD=1                     				Cold restart (recreate containers) all services in production mode"
-	@echo "  make restart DEV=1 COLD=1               				Cold restart (recreate containers) all services in development mode"
+	@echo "Superuser (run after make up):"
+	@echo "  make superuser_create                    Create superuser (username from .env)"
+	@echo "  make superuser_delete                    Delete superuser"
+	@echo "  make superuser_changepassword            Change superuser password"
 	@echo ""
-	@echo "Code Quality (Ruff):"
-	@echo "  make ruff-format                        				Format code using ruff formatter"
-	@echo "  make ruff-check                         				Check code quality using ruff linter"
-	@echo "  make ruff-fix                           				Fix code issues using ruff linter"
-	@echo "  make ruff-unsafe-fix                    				Fix code issues using ruff linter with unsafe fixes"
+	@echo "Django (direct DB, not PgBouncer):"
+	@echo "  make makemigrations                      Create Django migrations"
+	@echo "  make migrate                             Apply Django migrations"
 	@echo ""
-	@echo "Testing (default: no keepdb, VERBOSITY=1; use KEEPDB=1 to keep test DB):"
-	@echo "  make test [KEEPDB=1] [VERBOSITY=1|2|3]  				Run all unit tests for all apps"
-	@echo "  make test-app APPS=app1,app2 [KEEPDB=1] [VERBOSITY=2]		Run unit tests for specific app(s)"
-	@echo "  make test-verbose                       				Run all unit tests with verbose output (VERBOSITY=2)"
-	@echo "  make test-app-verbose APPS=app1,app2    				Run unit tests for specific app(s) with verbose output"
-	@echo "  make test-scripts                       				Run shell script unit tests (Secator env; no Docker)"
+	@echo "Code quality (Ruff):"
+	@echo "  make ruff-format                         Format code"
+	@echo "  make ruff-check                          Check code quality"
+	@echo "  make ruff-fix                            Fix autofixable issues"
+	@echo "  make ruff-unsafe-fix                     Fix including unsafe fixes"
 	@echo ""
-	@echo "Examples:"
-	@echo "  make up GPU=1                          				Start all services with GPU support"
-	@echo "  make dev_up GPU=1                      				Start development environment with GPU support"
-	@echo "  make build GPU=1                       				Build all images with GPU support"
-	@echo "  make build_up GPU=1                    				Build and start all services with GPU support"
-	@echo "  make build-service SERVICE=web         				Build only the web service without removing images"
-	@echo "  make build-service SERVICE=web GPU=1   				Build only the web service with GPU support"
-	@echo "  make build-service SERVICE=web REBUILD=1				Build web service after removing its image"
-	@echo "  make build-service SERVICE=redis REBUILD=1 GPU=1		Build redis service after removing image with GPU support"
-	@echo "  make test-app APPS=api,scanEngine      				Run tests for api and scanEngine apps"
-	@echo "  make ruff-fix                           				Fix code quality issues automatically"
+	@echo "Testing (KEEPDB=1 to keep test DB, VERBOSITY=1|2|3):"
+	@echo "  make test [KEEPDB=1] [VERBOSITY=1|2|3]   Run all unit tests"
+	@echo "  make test-app APPS=app1,app2 [KEEPDB=1] [VERBOSITY=2]  Run tests for app(s)"
+	@echo "  make test-only TESTS=\"path [path...]\" [KEEPDB=1] [VERBOSITY=2]  Run specific test(s) by dotted path"
+	@echo "  make test-verbose                        Run all tests with VERBOSITY=2"
+	@echo "  make test-app-verbose APPS=app1,app2      Run app tests with verbose output"
+	@echo "  make test-scripts                        Run shell script tests (Secator env; no Docker)"
 	@echo ""
-	@echo "Database backup/restore (backups in $(BACKUP_DIR)/, requires sudo for volume access):"
-	@echo "  make db-backup [PG_VOLUME=/path]       				Create timestamped backup"
-	@echo "  make db-list                           				List available backups"
-	@echo "  make db-restore [BACKUP=name] [PG_VOLUME=/path]			Restore; BACKUP=name without .tar.gz"
-	@echo "  make db-restore                        				Restore: choose backup by number"
+	@echo "Database backup/restore (backups in $(BACKUP_DIR)/):"
+	@echo "  make db-backup [PG_VOLUME=/path]         Create timestamped backup"
+	@echo "  make db-list                             List available backups"
+	@echo "  make db-restore [BACKUP=name] [PG_VOLUME=/path]  Restore (BACKUP=name without .tar.gz)"
 	@echo ""
-	@echo "Secator Initialization:"
-	@echo "  make secator-init                        				Initialize Secator (generate API key + load all from Secator)"
-	@echo "  make secator-key                         				Generate Secator API key only if none exists"
-	@echo "  make secator-load                        				Load Secator components (tasks, workflows, scans)"
-	@echo "  make secator-check                       				Check Secator configuration and status"
-	@echo "  make secator-health [SECATOR_HEALTH_URL=<url>]			Test Secator API health (uses SECATOR_ADDONS_API_KEY from .env)"
-	@echo "  make update-check                        				Check if a reNgine-ng update is available"
+	@echo "Secator:"
+	@echo "  make secator-init                        Generate API key + load tasks/workflows/scans"
+	@echo "  make secator-key                         Generate Secator API key if missing"
+	@echo "  make secator-load                        Load Secator components"
+	@echo "  make secator-check                       Check Secator configuration"
+	@echo "  make secator-health [SECATOR_HEALTH_URL=...]  Test Secator API health"
+	@echo "  make update-check                       Check if reNgine-ng update is available"
 
 %:
 	@:

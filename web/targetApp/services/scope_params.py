@@ -944,6 +944,30 @@ def apply_resolved_to_secator_config(
             secator_config["extra_config"] = extra
 
 
+def flatten_profile_opts_into_config(config: dict[str, Any]) -> None:
+    """
+    Merge profile opts into config in place so the dict reflects effective values.
+
+    Used when building a snapshot for ScanHistory.scan_config so the persisted
+    values match what Secator will use (config + profile opts applied). Call this
+    on a copy of the runner config, not the one passed to the runner.
+
+    For each profile name in config["profiles"] (list or category dict), loads
+    opts and sets config[key] = opts[key] for each PARAM_KEYS key present in opts.
+    Later profiles override earlier ones for overlapping keys.
+    """
+    profile_names = _profiles_to_list(config.get("profiles"))
+    if not profile_names:
+        return
+    for name in profile_names:
+        opts = _get_profile_opts(name)
+        if not opts:
+            continue
+        for key in PARAM_KEYS:
+            if key in opts and opts[key] is not None:
+                config[key] = opts[key]
+
+
 def _prefixed(key: str, prefix: str) -> str:
     return f"{prefix}{key}"
 

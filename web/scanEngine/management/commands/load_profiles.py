@@ -251,8 +251,6 @@ class Command(SecatorLoaderBase):
                         "opts": opts_yaml,
                         "profile_type": profile_type,
                     }
-                    if profile_type == "builtin":
-                        update_fields["is_default"] = should_be_default
                     SecatorProfile.objects.filter(pk=profile.pk).update(**update_fields)
                     updated_count += 1
                     self.stdout.write("Updated %s profile: %s" % (label, profile_name))

@@ -11,12 +11,13 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
 from reNgine.core.exceptions import FindingOutOfScopeError
+from reNgine.core.validators import is_valid_ip
 from reNgine.utilities.domain import (
     get_domain_for_scan_by_name,
     get_or_create_domain_for_target,
     normalize_domain_name,
 )
-from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
 from startScan.models import (
     Domain,
@@ -67,8 +68,16 @@ class DomainRepository:
         """
         try:
             return self._process_secator_domain_item(item, scan_history_id, target_id, rengine_context=rengine_context)
-        except FindingOutOfScopeError:
-            raise
+        except FindingOutOfScopeError as e:
+            reason = format_exception_for_log(e)
+            domain_name = self._domain_string_from_item(item) or "?"
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Skipped (out of scope): domain=%s | %s scan_id=%s" % (domain_name, reason, scan_history_id),
+                level="info",
+            )
+            return None
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
@@ -124,6 +133,8 @@ class DomainRepository:
                 "raw_whois: domain out of scope (restrict_findings_to_target)",
                 level="debug",
             )
+            if is_valid_ip(normalized):
+                return None
             raise FindingOutOfScopeError("Domain out of scope (restrict_findings_to_target)")
         domain = get_or_create_domain_for_target(scan_history_id, normalized)
         if not domain:
