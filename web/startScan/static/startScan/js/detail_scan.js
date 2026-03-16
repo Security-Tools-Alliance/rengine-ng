@@ -1247,11 +1247,31 @@ if (typeof window !== 'undefined') {
 
 function get_logs_modal(scan_id = null, activity_id = null, project_slug = null, runner_id = null) {
 	const slug = project_slug || (typeof current_project_slug !== 'undefined' ? current_project_slug : '');
-	const url = scan_id
-		? `/scan/${slug}/logs/?scan_id=${scan_id}`
-		: `/scan/${slug}/logs/?activity_id=${activity_id}`;
-	const title = scan_id ? `Logs for scan #${scan_id}` : `Logs for activity #${activity_id}`;
+	let contextScanId = scan_id;
+	if (contextScanId == null) {
+		const summaryInput = document.getElementById('summary_identifier_val');
+		if (summaryInput && summaryInput.value) {
+			const parsed = parseInt(summaryInput.value, 10);
+			if (!Number.isNaN(parsed)) {
+				contextScanId = parsed;
+			}
+		}
+	}
+	const hasScanContext = contextScanId != null;
 	const expandForActivity = activity_id != null || runner_id != null;
+
+	let url;
+	let title;
+	if (hasScanContext) {
+		url = `/scan/${slug}/logs/?scan_id=${encodeURIComponent(contextScanId)}`;
+		title = `Logs for scan #${contextScanId}`;
+	} else if (expandForActivity && activity_id != null) {
+		url = `/scan/${slug}/logs/?activity_id=${activity_id}`;
+		title = `Logs for activity #${activity_id}`;
+	} else {
+		url = `/scan/${slug}/logs/`;
+		title = 'Logs';
+	}
 
 	const loadingTitle = 'Fetching logs...';
 	const loadingBody = '<p class="text-muted">Loading...</p>';
@@ -1288,12 +1308,17 @@ function get_logs_modal(scan_id = null, activity_id = null, project_slug = null,
 				$('#xl-modal-content').html(bodyHtml);
 				if (window.ModalManager) ModalManager.showXlOnly();
 			}
-			if (expandForActivity) {
+			if (expandForActivity || hasScanContext) {
 				window.currentLogsModalContext = {
-					activity_id: activity_id,
-					runner_id: runner_id,
-					scan_id: scan_id,
+					isOpen: true,
+					activity_id: expandForActivity ? activity_id : null,
+					runner_id: expandForActivity ? runner_id : null,
+					scan_id: hasScanContext ? contextScanId : null,
 				};
+			} else {
+				window.currentLogsModalContext = null;
+			}
+			if (expandForActivity) {
 				const runExpandCollapses = function () {
 					const modalContent = document.getElementById('xl-modal-content');
 					if (!modalContent) return;
@@ -1324,8 +1349,6 @@ function get_logs_modal(scan_id = null, activity_id = null, project_slug = null,
 				setTimeout(function () {
 					requestAnimationFrame(runExpandCollapses);
 				}, 250);
-			} else {
-				window.currentLogsModalContext = null;
 			}
 			$("body").tooltip({ selector: '[data-toggle=tooltip]' });
 		})

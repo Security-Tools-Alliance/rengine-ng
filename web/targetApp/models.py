@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from django.db import models
+from django.db.models import OuterRef, Subquery
 
 from dashboard.models import Project
 from reNgine.utilities.logger import get_module_logger
@@ -16,6 +19,22 @@ class TargetQuerySet(models.QuerySet):
         if hasattr(project_or_slug, "pk"):
             return self.filter(project=project_or_slug)
         return self.filter(project__slug=project_or_slug)
+
+    def with_last_scan_date(self):
+        """
+        Annotate each target with the start date of its most recent scan.
+
+        The annotation is exposed via the private attribute `last_scan_start_date_annot`
+        and reused by Target.start_scan_date to avoid N+1 queries in lists.
+        """
+        from startScan.models import ScanHistory
+
+        latest_scan = (
+            ScanHistory.objects.filter(target_id=OuterRef("pk"))
+            .order_by("-start_scan_date")
+            .values("start_scan_date")[:1]
+        )
+        return self.annotate(last_scan_start_date_annot=Subquery(latest_scan))
 
 
 class TargetManager(models.Manager):
@@ -42,7 +61,6 @@ class Target(models.Model):
     description = models.TextField(blank=True, null=True)
     h1_team_handle = models.CharField(max_length=100, blank=True, null=True)
     insert_date = models.DateTimeField(null=True)
-    start_scan_date = models.DateTimeField(null=True, blank=True)
     scan_config = models.JSONField(
         null=True,
         blank=True,
@@ -66,6 +84,29 @@ class Target(models.Model):
 
     def get_organization(self):
         return self.organizations.all()
+
+    @property
+    def start_scan_date(self) -> datetime | None:
+        """
+        Return the start date of the most recent scan for this target.
+
+        The value is derived from ScanHistory and does not depend on any legacy
+        database column. When querysets are annotated with a last scan date
+        (see TargetQuerySet.with_last_scan_date), this property will reuse the
+        annotation to avoid additional queries.
+        """
+        annotated = getattr(self, "last_scan_start_date_annot", None)
+        if annotated is not None:
+            return annotated
+
+        from startScan.models import ScanHistory
+
+        last_scan = (
+            ScanHistory.objects.filter(target_id=self.id).order_by("-start_scan_date").only("start_scan_date").first()
+        )
+        if last_scan is None:
+            return None
+        return last_scan.start_scan_date
 
 
 class OrganizationQuerySet(models.QuerySet):

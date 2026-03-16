@@ -103,22 +103,22 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
             value="null-date.local",
             target_type="host",
             insert_date=timezone.now(),
-            start_scan_date=None,
         )
-        Target.objects.create(
+        t_old = Target.objects.create(
             project=project,
             value="old-scan.local",
             target_type="host",
             insert_date=timezone.now(),
-            start_scan_date=older,
         )
-        Target.objects.create(
+        t_new = Target.objects.create(
             project=project,
             value="new-scan.local",
             target_type="host",
             insert_date=timezone.now(),
-            start_scan_date=newer,
         )
+        # Attach ScanHistory rows so ordering uses real scan dates.
+        ScanHistory.objects.create(target=t_old, start_scan_date=older)
+        ScanHistory.objects.create(target=t_new, start_scan_date=newer)
         api_url = reverse("api:targets-list")
         response_asc = self.client.get(
             api_url,

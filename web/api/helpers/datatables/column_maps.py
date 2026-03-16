@@ -161,7 +161,7 @@ DATATABLE_COLUMN_MAP_SCHEDULED_SCANS = {
 
 DATATABLE_COLUMN_MAP_TARGETS = {
     "2": "value",
-    "6": "start_scan_date",
+    "6": "last_scan_start_date_annot",
     "10": "insert_date",
     "14": "scope_group_name",
 }
@@ -188,7 +188,7 @@ DATATABLE_COLUMN_MAP_SCAN_ENGINE = {
 }
 
 # Fields that should be ordered with nulls last (e.g. never-scanned targets at the end).
-DATATABLE_NULLS_LAST_FIELDS = frozenset({"start_scan_date"})
+DATATABLE_NULLS_LAST_FIELDS = frozenset({"last_scan_start_date_annot"})
 
 
 def get_datatables_order_column(

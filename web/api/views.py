@@ -879,7 +879,7 @@ class ListTargetsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, 
 
     def get_queryset(self):
         slug = self.request.GET.get("slug", None)
-        qs = Target.objects.for_project(slug) if slug else self.queryset
+        base_qs = Target.objects.for_project(slug) if slug else self.queryset
         first_scope_name = Scope.objects.filter(targets=OuterRef("pk")).order_by("name").values("name")[:1]
         domain_count_subq = (
             Domain.objects.filter(scan_history__target_id=OuterRef("pk"))
@@ -917,14 +917,18 @@ class ListTargetsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, 
             .annotate(c=Count("id"))
             .values("c")[:1]
         )
-        qs = qs.prefetch_related("scopes").annotate(
-            domain_count=Coalesce(Subquery(domain_count_subq), Value(0)),
-            subdomain_count=Coalesce(Subquery(subdomain_count_subq), Value(0)),
-            endpoint_count=Coalesce(Subquery(endpoint_count_subq), Value(0)),
-            vulnerability_count=Coalesce(Subquery(vulnerability_count_subq), Value(0)),
-            secret_count=Coalesce(Subquery(secret_count_subq), Value(0)),
-            exploit_count=Coalesce(Subquery(exploit_count_subq), Value(0)),
-            scope_group_name=Coalesce(Subquery(first_scope_name), Value("No scope")),
+        qs = (
+            base_qs.with_last_scan_date()
+            .prefetch_related("scopes")
+            .annotate(
+                domain_count=Coalesce(Subquery(domain_count_subq), Value(0)),
+                subdomain_count=Coalesce(Subquery(subdomain_count_subq), Value(0)),
+                endpoint_count=Coalesce(Subquery(endpoint_count_subq), Value(0)),
+                vulnerability_count=Coalesce(Subquery(vulnerability_count_subq), Value(0)),
+                secret_count=Coalesce(Subquery(secret_count_subq), Value(0)),
+                exploit_count=Coalesce(Subquery(exploit_count_subq), Value(0)),
+                scope_group_name=Coalesce(Subquery(first_scope_name), Value("No scope")),
+            )
         )
         return qs
 

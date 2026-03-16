@@ -318,8 +318,6 @@ class ScanRepository:
             user = User.objects.get(pk=initiated_by_id)
             scan.initiated_by = user
         scan.save()
-        target.start_scan_date = current_scan_time
-        target.save(update_fields=["start_scan_date"])
 
         logger.log_line(
             PREFIX_SCAN_REPO,

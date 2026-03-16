@@ -254,6 +254,19 @@ const updateCommandOutputs = function(data) {
         return;
     }
 
+    if (
+        window.currentLogsModalContext &&
+        window.currentLogsModalContext.isOpen === true &&
+        window.currentLogsModalContext.scan_id != null &&
+        data.scan_id != null
+    ) {
+        const contextScanIdNum = Number(window.currentLogsModalContext.scan_id);
+        const messageScanIdNum = Number(data.scan_id);
+        if (!Number.isNaN(contextScanIdNum) && !Number.isNaN(messageScanIdNum) && contextScanIdNum !== messageScanIdNum) {
+            return;
+        }
+    }
+
     const SCROLL_AT_BOTTOM_THRESHOLD = 10;
 
     /**

@@ -807,7 +807,6 @@ class Domain(models.Model):
     ip_address_cidr = models.CharField(max_length=100, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     insert_date = models.DateTimeField(null=True)
-    start_scan_date = models.DateTimeField(null=True)
     request_headers = models.JSONField(null=True, blank=True)
     domain_info = models.ForeignKey(DomainInfo, on_delete=models.CASCADE, null=True, blank=True)
     scan_history = models.ForeignKey(
@@ -823,6 +822,18 @@ class Domain(models.Model):
         managed = False
         db_table = "startScan_domain"
         unique_together = [["scan_history", "name"]]
+
+    @property
+    def start_scan_date(self):
+        """
+        Return the start date of the most recent scan for this domain.
+
+        When scan_history is set on the domain, this simply returns the
+        ScanHistory.start_scan_date; when it is null, the method returns None.
+        """
+        if self.scan_history is None:
+            return None
+        return self.scan_history.start_scan_date
 
     def get_recent_scan_id(self):
         if not self.scan_history_id:

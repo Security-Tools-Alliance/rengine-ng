@@ -69,7 +69,6 @@ class DomainAdmin(admin.ModelAdmin):
     list_display_links = ["name"]
     list_filter = [
         "insert_date",
-        "start_scan_date",
     ]
     list_per_page = 50
     ordering = ["-insert_date"]

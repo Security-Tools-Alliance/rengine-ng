@@ -18,7 +18,6 @@ class TargetAdmin(admin.ModelAdmin):
     list_filter = [
         "target_type",
         "insert_date",
-        "start_scan_date",
     ]
     list_per_page = 50
     list_select_related = ["project"]
