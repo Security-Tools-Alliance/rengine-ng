@@ -432,8 +432,7 @@ class IpRepository:
             logger.log_line(
                 PREFIX_IP_REPO,
                 "ASSOCIATE_IP_TO_SUBDOMAIN",
-                "Error linking IP to subdomain: %s | hostname=%s scan_id=%s"
-                % (reason, hostname, scan_history_id),
+                "Error linking IP to subdomain: %s | hostname=%s scan_id=%s" % (reason, hostname, scan_history_id),
                 level="error",
             )
 

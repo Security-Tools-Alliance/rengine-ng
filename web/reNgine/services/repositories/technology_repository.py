@@ -303,7 +303,8 @@ class TechnologyRepository:
             logger.log_line(
                 PREFIX_TECH_REPO,
                 "ASSOCIATE_TECH_TO_ENDPOINT",
-                "Endpoint not found in scan: url=%s scan_id=%s" % (endpoint_url[:80] if endpoint_url else "", scan_history_id),
+                "Endpoint not found in scan: url=%s scan_id=%s"
+                % (endpoint_url[:80] if endpoint_url else "", scan_history_id),
                 level="warning",
             )
             return False
@@ -411,7 +412,8 @@ class TechnologyRepository:
                         logger.log_line(
                             PREFIX_TECH_REPO,
                             "ASSOCIATE_TECH_TO_ENDPOINT",
-                            "Technology %s linked to endpoint %s" % (tech_obj.name, match_target[:80] if match_target else ""),
+                            "Technology %s linked to endpoint %s"
+                            % (tech_obj.name, match_target[:80] if match_target else ""),
                             level="debug",
                         )
                         return
@@ -419,7 +421,8 @@ class TechnologyRepository:
                         logger.log_line(
                             PREFIX_TECH_REPO,
                             "ASSOCIATE_TECH_TO_TARGET",
-                            "Endpoint not found for match_target, trying subdomain: %s" % (match_target[:80] if match_target else "",),
+                            "Endpoint not found for match_target, trying subdomain: %s"
+                            % (match_target[:80] if match_target else "",),
                             level="debug",
                         )
                     except MultipleObjectsReturned:
@@ -490,8 +493,7 @@ class TechnologyRepository:
             logger.log_line(
                 PREFIX_TECH_REPO,
                 "ASSOCIATE_TECH_TO_SUBDOMAIN",
-                "Skipped (out of scope): hostname=%s | %s scan_id=%s"
-                % (hostname, reason, scan_history_id),
+                "Skipped (out of scope): hostname=%s | %s scan_id=%s" % (hostname, reason, scan_history_id),
                 level="info",
             )
         except Exception as e:

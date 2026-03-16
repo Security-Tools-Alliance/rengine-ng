@@ -194,8 +194,7 @@ class SubdomainRepository:
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
                 "GET_OR_CREATE",
-                "Skipped (out of scope): hostname=%s | restrict_findings_to_target"
-                % (normalized,),
+                "Skipped (out of scope): hostname=%s | restrict_findings_to_target" % (normalized,),
                 level="info",
             )
             raise FindingOutOfScopeError("Host out of scope (restrict_findings_to_target)")

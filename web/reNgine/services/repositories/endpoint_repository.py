@@ -774,7 +774,8 @@ class EndpointRepository:
                     logger.log_line(
                         PREFIX_ENDPOINT_REPO,
                         "ASSOCIATE_TECH_TO_ENDPOINT",
-                        "Technology %s linked to endpoint %s" % (tech_name, endpoint.http_url[:80] if endpoint and endpoint.http_url else ""),
+                        "Technology %s linked to endpoint %s"
+                        % (tech_name, endpoint.http_url[:80] if endpoint and endpoint.http_url else ""),
                         level="debug",
                     )
 
