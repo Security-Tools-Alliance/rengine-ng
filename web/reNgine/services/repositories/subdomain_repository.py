@@ -14,7 +14,7 @@ from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.core.validators import is_valid_domain, is_valid_ip
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
-from reNgine.utilities.url import is_acceptable_subdomain_name
+from reNgine.utilities.url import is_acceptable_subdomain_name, normalize_subdomain_host
 from startScan.models import Domain, IpAddress, ScanHistory, Subdomain, Technology
 from targetApp.models import Target
 from targetApp.services.scope_params import get_finding_scope_filter_host_for_target
@@ -80,13 +80,14 @@ class SubdomainRepository:
         target_id: int,
         rengine_context: Dict[str, Any] = None,
     ) -> Optional[Subdomain]:
-        subdomain_name = item.get("host") or item.get("target") or item.get("name")
+        raw_name = item.get("host") or item.get("target") or item.get("name")
+        subdomain_name = normalize_subdomain_host(raw_name) if raw_name else ""
 
         if not subdomain_name:
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
                 "SAVE",
-                "Subdomain item missing name field",
+                "Subdomain item missing name field" if not raw_name else "Subdomain name empty after normalization",
                 level="warning",
             )
             return None

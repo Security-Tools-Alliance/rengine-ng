@@ -1,9 +1,41 @@
 """
-Tests for reNgine.utilities.url (is_acceptable_subdomain_name, is_apex_domain, and related).
+Tests for reNgine.utilities.url (is_acceptable_subdomain_name, normalize_subdomain_host, is_apex_domain, and related).
 """
 
-from reNgine.utilities.url import is_acceptable_subdomain_name, is_apex_domain
+from reNgine.utilities.url import (
+    is_acceptable_subdomain_name,
+    is_apex_domain,
+    normalize_subdomain_host,
+)
 from utils.test_base import BaseTestCase
+
+
+class TestNormalizeSubdomainHost(BaseTestCase):
+    """Tests for normalize_subdomain_host (Chaos-style leading-dot host normalization)."""
+
+    def test_strips_leading_dot(self):
+        self.assertEqual(normalize_subdomain_host(".example.com"), "example.com")
+        self.assertEqual(normalize_subdomain_host(".hackertarget.com"), "hackertarget.com")
+
+    def test_strips_multiple_leading_dots(self):
+        self.assertEqual(normalize_subdomain_host("...example.com"), "example.com")
+
+    def test_strips_whitespace_then_leading_dot(self):
+        self.assertEqual(normalize_subdomain_host("  .example.com  "), "example.com")
+
+    def test_returns_empty_for_empty_or_invalid(self):
+        self.assertEqual(normalize_subdomain_host(""), "")
+        self.assertEqual(normalize_subdomain_host("   "), "")
+        self.assertEqual(normalize_subdomain_host(None), "")
+        self.assertEqual(normalize_subdomain_host("."), "")
+
+    def test_leaves_valid_host_unchanged(self):
+        self.assertEqual(normalize_subdomain_host("example.com"), "example.com")
+        self.assertEqual(normalize_subdomain_host("sub.example.com"), "sub.example.com")
+
+    def test_normalizes_to_lowercase(self):
+        self.assertEqual(normalize_subdomain_host(".Example.COM"), "example.com")
+        self.assertEqual(normalize_subdomain_host("SUB.example.com"), "sub.example.com")
 
 
 class TestIsAcceptableSubdomainName(BaseTestCase):

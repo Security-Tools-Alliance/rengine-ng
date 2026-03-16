@@ -115,6 +115,19 @@ class TestSubdomainRepository(BaseTestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.name, "rengine.lan")
 
+    def test_save_from_secator_chaos_style_leading_dot_host(self):
+        """Test saving subdomain with Chaos-style leading-dot host is normalized (e.g. .example.com -> example.com)."""
+        item = {
+            "_type": "subdomain",
+            "host": ".example.com",
+            "input": "example.com",
+            "sources": ["chaos"],
+        }
+        result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "example.com")
+        self.assertEqual(result.sources, ["chaos"])
+
     def test_save_from_secator_with_extra_data(self):
         """Test saving subdomain with extra_data mapping."""
         item = {

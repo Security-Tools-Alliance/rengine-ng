@@ -5837,6 +5837,11 @@ class SecatorFindingCreate(SecatorAPIBase):
 
                 # Check if save was successful
                 if saved_object is None:
+                    error_detail = (
+                        "Invalid or rejected hostname for subdomain finding."
+                        if finding_type == "subdomain"
+                        else "Validation error or missing required fields."
+                    )
                     try:
                         self.logger.log_finding_save(
                             "CREATE",
@@ -5845,14 +5850,14 @@ class SecatorFindingCreate(SecatorAPIBase):
                             scan_history_id,
                             target_id,
                             success=False,
-                            error_message="Repository returned None - validation error or missing required fields",
+                            error_message="Repository returned None - %s" % (error_detail,),
                         )
                     except Exception:
                         pass
                     return Response(
                         {
                             "status": False,
-                            "error": f"Failed to save {finding_type} finding. Validation error or missing required fields.",
+                            "error": "Failed to save %s finding. %s" % (finding_type, error_detail),
                         },
                         status=422,
                     )

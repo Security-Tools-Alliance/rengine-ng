@@ -133,6 +133,19 @@ def is_valid_domain_or_subdomain(domain):
         return False
 
 
+def normalize_subdomain_host(name: str) -> str:
+    """
+    Normalize a subdomain host for validation and storage.
+
+    Strips leading dots (e.g. DNS zone format ".example.com" from Chaos)
+    and lowercases for consistent storage and comparison (hostnames are
+    case-insensitive). Returns empty string if input is invalid.
+    """
+    if not name or not isinstance(name, str):
+        return ""
+    return name.strip().lstrip(".").strip().lower()
+
+
 def is_acceptable_subdomain_name(name: str) -> bool:
     """
     Return True if the string can serve as a subdomain name (hostname or IP).

@@ -283,6 +283,7 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
         self.assertFalse(response.data["status"])
         self.assertIn("error", response.data)
+        self.assertIn("Invalid or rejected hostname for subdomain finding", response.data["error"])
         mock_save_from_secator.assert_called_once()
 
     def test_create_tag_whois_success(self):
