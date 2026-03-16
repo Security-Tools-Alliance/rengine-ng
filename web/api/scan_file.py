@@ -70,10 +70,17 @@ def get_scan_file_urls(relative_path: str | None, request: HttpRequest | None = 
     """
     Build relative and (when request is provided) absolute URLs for a scan file.
     Single entry point for all scan file URL building; keeps route name and logic in one place.
+    Normalizes stored paths (including absolute worker paths) to a relative form so the URL
+    never exposes the filesystem root.
     """
     if not relative_path:
         return ScanFileURLs(relative=None, absolute=None)
-    relative = reverse(SERVE_SCAN_FILE_URL_NAME, kwargs={"relative_path": relative_path})
+    from reNgine.secator.path_utils import to_relative_scan_path
+
+    path_for_url = to_relative_scan_path(relative_path)
+    if not path_for_url:
+        return ScanFileURLs(relative=None, absolute=None)
+    relative = reverse(SERVE_SCAN_FILE_URL_NAME, kwargs={"relative_path": path_for_url})
     absolute = request.build_absolute_uri(relative) if request else None
     return ScanFileURLs(relative=relative, absolute=absolute)
 
@@ -84,7 +91,8 @@ def get_project_for_scan_file_path(relative_path: str):
 
     Looks up EndPoint (screenshot_path / stored_response_path) or Technology
     (stored_response_path) so access control does not rely on path naming
-    conventions. Returns the Project instance or None.
+    conventions. Tries exact match first, then matches where the stored path
+    normalizes to the given path (for legacy absolute paths in DB).
 
     Traversal (see module docstring for full schema contract):
 
@@ -97,7 +105,7 @@ def get_project_for_scan_file_path(relative_path: str):
        subdomain.scan_history.target.project or
        subdomain.domain.scan_history.target.project when domain.scan_history_id.
     """
-    # 1. EndPoint path: EndPoint.scan_history -> ScanHistory.target -> Target.project
+    # 1. Exact match: EndPoint path
     endpoint = (
         EndPoint.objects.filter(Q(screenshot_path=relative_path) | Q(stored_response_path=relative_path))
         .select_related("scan_history__target__project")
@@ -105,24 +113,57 @@ def get_project_for_scan_file_path(relative_path: str):
     )
     if endpoint and endpoint.scan_history and endpoint.scan_history.target_id:
         return endpoint.scan_history.target.project
-    # 2. Technology path: Technology.stored_response_path -> Subdomain (via M2M
-    #    Subdomain.technologies) -> Subdomain.scan_history.target.project or
-    #    Subdomain.domain.scan_history.target.project
+    # 2. Fallback for legacy absolute paths: find EndPoint whose stored path normalizes to relative_path
+    if relative_path and not relative_path.startswith("/"):
+        from reNgine.secator.path_utils import to_relative_scan_path
+
+        candidates = EndPoint.objects.filter(
+            Q(screenshot_path__endswith=relative_path) | Q(stored_response_path__endswith=relative_path)
+        ).select_related("scan_history__target__project")
+        for ep in candidates:
+            if (
+                (
+                    (ep.screenshot_path and to_relative_scan_path(ep.screenshot_path) == relative_path)
+                    or (ep.stored_response_path and to_relative_scan_path(ep.stored_response_path) == relative_path)
+                )
+                and ep.scan_history
+                and ep.scan_history.target_id
+            ):
+                return ep.scan_history.target.project
+    # 3. Exact match: Technology path
     tech = Technology.objects.filter(stored_response_path=relative_path).first()
-    if not tech:
-        return None
-    if (
-        sub := Subdomain.objects.filter(technologies=tech)
-        .select_related(
-            "scan_history__target__project",
-            "domain__scan_history__target__project",
-        )
-        .first()
-    ):
-        if sub.scan_history and sub.scan_history.target_id:
-            return sub.scan_history.target.project
-        if sub.domain and sub.domain.scan_history_id:
-            return sub.domain.scan_history.target.project
+    if tech:
+        if (
+            sub := Subdomain.objects.filter(technologies=tech)
+            .select_related(
+                "scan_history__target__project",
+                "domain__scan_history__target__project",
+            )
+            .first()
+        ):
+            if sub.scan_history and sub.scan_history.target_id:
+                return sub.scan_history.target.project
+            if sub.domain and sub.domain.scan_history_id:
+                return sub.domain.scan_history.target.project
+    # 4. Fallback for legacy: Technology whose stored path normalizes to relative_path
+    if relative_path and not relative_path.startswith("/"):
+        from reNgine.secator.path_utils import to_relative_scan_path
+
+        for tech in Technology.objects.filter(stored_response_path__endswith=relative_path):
+            if to_relative_scan_path(tech.stored_response_path) == relative_path:
+                if (
+                    sub := Subdomain.objects.filter(technologies=tech)
+                    .select_related(
+                        "scan_history__target__project",
+                        "domain__scan_history__target__project",
+                    )
+                    .first()
+                ):
+                    if sub.scan_history and sub.scan_history.target_id:
+                        return sub.scan_history.target.project
+                    if sub.domain and sub.domain.scan_history_id:
+                        return sub.domain.scan_history.target.project
+                break
     return None
 
 
@@ -169,8 +210,15 @@ class ServeScanFile(APIView):
 
     def get(self, request, relative_path: str):
         global _secator_prefix_warning_count
-        normalized_path = normalize_relative_path(relative_path)
-        if normalized_path is None:
+        path_for_file = normalize_relative_path(relative_path)
+        if path_for_file is None:
+            from reNgine.secator.path_utils import to_relative_scan_path
+
+            path_for_file = to_relative_scan_path(relative_path)
+            if path_for_file is None:
+                return Response(SCAN_FILE_ERROR_INVALID_PATH, status=400)
+        path_for_file = normalize_relative_path(path_for_file)
+        if path_for_file is None:
             return Response(SCAN_FILE_ERROR_INVALID_PATH, status=400)
         path_has_prefix = SECATOR_REPORTS_PREFIX and (
             relative_path.startswith(SECATOR_REPORTS_PREFIX)
@@ -200,13 +248,15 @@ class ServeScanFile(APIView):
                     level="warning",
                 )
         base = Path(RENGINE_RESULTS).resolve()
-        full_path = (base / normalized_path).resolve()
+        full_path = (base / path_for_file).resolve()
         if not full_path.is_file():
             return Response(SCAN_FILE_ERROR_NOT_FOUND, status=404)
         if not is_safe_path(str(base), str(full_path)):
             return Response(SCAN_FILE_ERROR_FORBIDDEN, status=403)
         # Project resolution from DB (EndPoint/Technology); do not derive from path.
-        project = get_project_for_scan_file_path(relative_path)
+        project = get_project_for_scan_file_path(path_for_file)
+        if not project:
+            project = get_project_for_scan_file_path(relative_path)
         if not project or project not in get_user_projects(request.user):
             return Response(SCAN_FILE_ERROR_FORBIDDEN, status=403)
         content_type, _ = mimetypes.guess_type(str(full_path))

@@ -9,6 +9,7 @@ import tempfile
 from unittest.mock import patch
 import uuid
 
+from django.urls import reverse
 from rest_framework import status
 
 from api.scan_file import ServeScanFile, build_scan_file_url, get_project_for_scan_file_path
@@ -109,6 +110,20 @@ class GetProjectForScanFilePathTestCase(BaseTestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.id, self.data_generator.project.id)
 
+    def test_returns_project_when_path_normalizes_and_endpoint_has_absolute_path_stored(self):
+        self.data_generator.create_engine_type()
+        self.data_generator.create_project()
+        self.data_generator.create_target()
+        self.data_generator.create_domain()
+        self.data_generator.create_scan_history()
+        self.data_generator.create_subdomain()
+        rel_path = "2sec/domain/screenshot_%s.png" % uuid.uuid4().hex
+        absolute_path = "/home/secator/.secator/reports/" + rel_path
+        self.data_generator.create_endpoint(screenshot_path=absolute_path)
+        result = get_project_for_scan_file_path(rel_path)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.id, self.data_generator.project.id)
+
 
 class ServeScanFileViewTestCase(BaseTestCase):
     """Security tests for ServeScanFile API view."""
@@ -135,7 +150,8 @@ class ServeScanFileViewTestCase(BaseTestCase):
         self.assertEqual(response.data.get("error"), "Invalid path")
 
     def test_rejects_absolute_path(self):
-        response = self.client.get(self._url("/etc/passwd"))
+        url = reverse("api:serve_scan_file", kwargs={"relative_path": "/etc/passwd"})
+        response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data.get("error"), "Invalid path")
 
@@ -215,5 +231,34 @@ class ServeScanFileViewTestCase(BaseTestCase):
                 response = self.client.get(self._url(rel_path))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get("Content-Type"), "image/png")
+        content = b"".join(response.streaming_content)
+        self.assertEqual(content, b"image data")
+
+    def test_build_scan_file_url_returns_relative_url_for_absolute_stored_path(self):
+        with patch("reNgine.secator.path_utils.to_relative_scan_path") as mock_norm:
+            mock_norm.return_value = "2sec/domain/file.png"
+            url = build_scan_file_url("/home/secator/.secator/reports/2sec/domain/file.png")
+        self.assertIsNotNone(url)
+        self.assertIn("2sec/domain/file.png", url)
+        self.assertNotIn("/home/", url)
+
+    def test_returns_200_when_legacy_absolute_path_in_url_and_file_exists(self):
+        self.data_generator.create_engine_type()
+        self.data_generator.create_project()
+        self.data_generator.create_domain()
+        self.data_generator.create_scan_history()
+        self.data_generator.create_subdomain()
+        rel_path = "legacy/screenshot.png"
+        absolute_stored = "/home/secator/.secator/reports/" + rel_path
+        self.data_generator.create_endpoint(screenshot_path=absolute_stored)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            (base / "legacy").mkdir(exist_ok=True)
+            (base / "legacy" / "screenshot.png").write_text("image data")
+            with patch("api.scan_file.RENGINE_RESULTS", str(base)):
+                url = reverse("api:serve_scan_file", kwargs={"relative_path": absolute_stored})
+                response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         content = b"".join(response.streaming_content)
         self.assertEqual(content, b"image data")
