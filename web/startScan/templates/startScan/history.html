@@ -25,7 +25,8 @@ Quick Scan History
     <div class="card">
       <div class="p-2">
         <div class="row">
-          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center flex-wrap gap-1">
+            {% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='scanHistoryQuickSearch' %}
             {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scan_history.html' id_prefix='scanHistory' %}
             <div class="btn-group ms-1 dropstart">
               <button type="button" class="btn btn-soft-info dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Scan history grouping">
@@ -104,9 +105,35 @@ Quick Scan History
               <th class="d-none" aria-hidden="true">Scope</th>
             </tr>
           </thead>
+          <tfoot>
+            <tr>
+              <th></th>
+              <th></th>
+              <th>
+                <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="2" placeholder="Search target" />
+              </th>
+              <th>
+                <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="3" placeholder="Search summary" />
+              </th>
+              <th>
+                <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="4" placeholder="Search engine" />
+              </th>
+              <th class="d-none d-md-table-cell">
+                <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="5" placeholder="Search worker" />
+              </th>
+              <th></th>
+              <th>
+                <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="7" placeholder="Search user" />
+              </th>
+              <th></th>
+              <th></th>
+              <th></th>
+              <th class="d-none" aria-hidden="true"></th>
+            </tr>
+          </tfoot>
           <tbody>
           </tbody>
-        </table>
+          </table>
         </div>
       </form>
     </div>
@@ -156,7 +183,6 @@ window.SCAN_HISTORY_CAN_INITIATE = {{ user|can:'initiate_scans_subscans'|yesno:"
 window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno:"true,false" }};
 </script>
 {{ datatable_row_group_config|json_script:"datatable-row-group-config" }}
-{{ scan_status_filter_labels|json_script:"scan-status-filter-labels" }}
 {{ datatable_filter_select_to_param|json_script:"datatable-filter-params" }}
 <script>
   $(document).ready(function() {
@@ -351,7 +377,14 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
 
     if (window.attachDatatableFilters) {
       window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('scan_history', table, { onApply: function() { table.draw(); } }));
-    } else {
+    }
+    if (window.attachDatatableQuickSearch) {
+      window.attachDatatableQuickSearch(table, { inputSelector: '#scanHistoryQuickSearch' });
+    }
+    if (window.attachDatatableColumnSearch) {
+      window.attachDatatableColumnSearch(table, { tableSelector: '#scan_history_table', delayMs: 400 });
+    }
+    if (!window.attachDatatableFilters) {
       document.getElementById('filterByOrganization').addEventListener('change', function() { table.draw(); }, false);
       document.getElementById('filterByScanStatus').addEventListener('change', function() { table.draw(); }, false);
       document.getElementById('filterByScanType').addEventListener('change', function() { table.draw(); }, false);

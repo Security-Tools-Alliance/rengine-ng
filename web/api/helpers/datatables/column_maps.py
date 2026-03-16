@@ -247,3 +247,27 @@ def apply_datatables_order(
         desc = order_str.startswith("-")
         return queryset.order_by(F(field).desc(nulls_last=True) if desc else F(field).asc(nulls_last=True))
     return queryset.order_by(order_str)
+
+
+def get_datatables_column_search_value(
+    request: HttpRequest,
+    column_map: dict[str, str],
+    field_name: str,
+) -> str:
+    """
+    Return the search value for a given DataTables column (columns[i][search][value]).
+
+    field_name must match the value in the column_map (e.g. "value" for targets).
+    When multiple indices map to the same field, the first non-empty search value is returned.
+    """
+    if request is None or not isinstance(column_map, dict) or not field_name:
+        return ""
+    indices = [idx for idx, name in column_map.items() if name == field_name]
+    if not indices:
+        return ""
+    for idx in indices:
+        raw = request.GET.get(f"columns[{idx}][search][value]", "") or ""
+        value = raw.strip()
+        if value:
+            return value
+    return ""

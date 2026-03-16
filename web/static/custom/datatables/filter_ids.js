@@ -27,7 +27,7 @@
     "filterByTarget",
     "filterByScanType",
   ];
-  const TARGET_LIST = ["filterByOrganization", "filterByScope"];
+  const TARGET_LIST = ["filterByOrganization", "filterByScope", "filterByScanPresence"];
   const SCOPE_LIST = ["filterByOrganization", "filterByScopeType"];
   const ORGANIZATION_LIST = ["filterByName"];
   const WORDLIST_LIST = ["filterByName"];

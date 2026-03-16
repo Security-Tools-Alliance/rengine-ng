@@ -141,7 +141,7 @@ DATATABLE_TABLE_CONFIGS: dict[str, dict[str, Any]] = {
 EXPECTED_FILTER_SELECT_IDS: dict[str, set[str]] = {
     TABLE_ID_SCAN_HISTORY: {"filterByOrganization", "filterByScanStatus", "filterByTarget", "filterByScanType"},
     TABLE_ID_SUBSCAN_HISTORY: {"filterByOrganization", "filterByScanStatus", "filterByTarget", "filterByScanType"},
-    TABLE_ID_TARGET_LIST: {"filterByOrganization", "filterByScope"},
+    TABLE_ID_TARGET_LIST: {"filterByOrganization", "filterByScope", "filterByScanPresence"},
     TABLE_ID_SCOPE_LIST: {"filterByOrganization", "filterByScopeType"},
     TABLE_ID_ORGANIZATION_LIST: {"filterByName"},
     TABLE_ID_WORDLIST_LIST: {"filterByName"},
@@ -151,7 +151,7 @@ EXPECTED_FILTER_SELECT_IDS: dict[str, set[str]] = {
 EXPECTED_FILTER_PARAM_NAMES: dict[str, set[str]] = {
     TABLE_ID_SCAN_HISTORY: {"filter_organization", "filter_status", "filter_target", "filter_scan_engine"},
     TABLE_ID_SUBSCAN_HISTORY: {"filter_organization", "filter_status", "filter_target", "filter_scan_engine"},
-    TABLE_ID_TARGET_LIST: {"filter_organization", "filter_scope"},
+    TABLE_ID_TARGET_LIST: {"filter_organization", "filter_scope", "filter_has_scan"},
     TABLE_ID_SCOPE_LIST: {"filter_organization", "filter_scope_type"},
     TABLE_ID_ORGANIZATION_LIST: {"filter_name"},
     TABLE_ID_WORDLIST_LIST: {"filter_name"},

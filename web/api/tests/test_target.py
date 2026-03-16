@@ -147,6 +147,45 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
         self.assertLess(idx_new_d, idx_old_d, "desc: newer before older")
         self.assertLess(idx_old_d, idx_null_d, "desc: nulls last")
 
+    def test_list_targets_filter_has_scan(self):
+        """List targets with filter_has_scan returns only scanned or never-scanned targets."""
+        project = self.data_generator.create_project()
+        Target.objects.filter(project=project).delete()
+        Target.objects.create(
+            project=project,
+            value="never-scanned.local",
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        t_scanned = Target.objects.create(
+            project=project,
+            value="scanned.local",
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        ScanHistory.objects.create(
+            target=t_scanned,
+            start_scan_date=timezone.now(),
+            scan_status=3,
+        )
+        api_url = reverse("api:targets-list")
+        base = {"slug": project.slug}
+        response_all = self.client.get(api_url, base)
+        self.assertEqual(response_all.status_code, status.HTTP_200_OK)
+        names_all = [r["name"] for r in response_all.data["results"]]
+        self.assertIn("never-scanned.local", names_all)
+        self.assertIn("scanned.local", names_all)
+
+        response_scanned = self.client.get(api_url, {**base, "filter_has_scan": "scanned"})
+        self.assertEqual(response_scanned.status_code, status.HTTP_200_OK)
+        names_scanned = [r["name"] for r in response_scanned.data["results"]]
+        self.assertEqual(sorted(names_scanned), ["scanned.local"])
+
+        response_never = self.client.get(api_url, {**base, "filter_has_scan": "never"})
+        self.assertEqual(response_never.status_code, status.HTTP_200_OK)
+        names_never = [r["name"] for r in response_never.data["results"]]
+        self.assertEqual(sorted(names_never), ["never-scanned.local"])
+
     def test_list_targets_includes_scope_group(self):
         """List targets response includes scope_group (first scope name or 'No scope')."""
         self.data_generator.create_project()

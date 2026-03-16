@@ -24,17 +24,18 @@ SubScan History
     <div class="card">
       <div class="p-2">
         <div class="row">
-          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center flex-wrap gap-1">
+            {% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='subscanHistoryQuickSearch' %}
             {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scan_history.html' id_prefix='subscanHistory' %}
           </div>
-          {% if user|can:'modify_scan_results' %}
           <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
+            {% if user|can:'modify_scan_results' %}
             <span class="small text-muted me-1">Bulk actions:</span>
             <div class="btn-group" role="group">
               <button type="button" class="btn btn-sm btn-soft-danger disabled" id="delete_multiple_button" onclick="deleteMultipleSubScan(); return false;" data-toggle="tooltip" title="Delete multiple subscans" aria-label="Delete multiple subscans"><i class="fe-trash-2"></i></button>
             </div>
+            {% endif %}
           </div>
-          {% endif %}
         </div>
       </div>
     </div>
@@ -58,6 +59,25 @@ SubScan History
             <th class="text-center no-sorting">Action</th>
           </tr>
         </thead>
+        <tfoot>
+          <tr>
+            <th></th>
+            <th></th>
+            <th>
+              <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="2" placeholder="Search subdomain" />
+            </th>
+            <th>
+              <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="3" placeholder="Search engine" />
+            </th>
+            <th class="text-center d-none d-md-table-cell">
+              <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="4" placeholder="Search worker" />
+            </th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+          </tr>
+        </tfoot>
         <tbody>
         </tbody>
     </table>
@@ -210,7 +230,14 @@ $(document).ready(function() {
 
     if (window.attachDatatableFilters) {
       window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('subscan_history', table, { onApply: function() { table.draw(); } }));
-    } else {
+    }
+    if (window.attachDatatableQuickSearch) {
+      window.attachDatatableQuickSearch(table, { inputSelector: '#subscanHistoryQuickSearch' });
+    }
+    if (window.attachDatatableColumnSearch) {
+      window.attachDatatableColumnSearch(table, { tableSelector: '#subscan_history_table', delayMs: 400 });
+    }
+    if (!window.attachDatatableFilters) {
       ['filterByOrganization', 'filterByScanStatus', 'filterByScanType', 'filterByTarget'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('change', function() { table.draw(); }, false);

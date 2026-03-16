@@ -24,6 +24,9 @@ Scheduled Scans
   <div class="col-12">
     <div class="card">
       <div class="card-body">
+        <div class="d-flex justify-content-end mb-2">
+          {% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='scheduledScanQuickSearch' %}
+        </div>
         <table id="scheduled_scan_table" class="table dt-responsive w-100">
         <thead>
           <tr>
@@ -118,6 +121,9 @@ $(document).ready(function() {
     }
   });
   var scheduled_scan_table = window.initServerSideDataTable('#scheduled_scan_table', scheduledScanTableConfig);
+  if (window.attachDatatableQuickSearch) {
+    window.attachDatatableQuickSearch(scheduled_scan_table, { inputSelector: '#scheduledScanQuickSearch' });
+  }
   multiCheck(scheduled_scan_table);
 });
 </script>

@@ -175,6 +175,7 @@ class TargetSerializer(serializers.ModelSerializer):
             "vulnerability_count",
             "secret_count",
             "exploit_count",
+            "has_scan",
         ]
         datatables_always_serialize = (
             "domain_count",
@@ -184,6 +185,8 @@ class TargetSerializer(serializers.ModelSerializer):
             "secret_count",
             "exploit_count",
         )
+
+    has_scan = serializers.SerializerMethodField()
 
     def get_name(self, obj):
         return obj.value
@@ -214,6 +217,9 @@ class TargetSerializer(serializers.ModelSerializer):
 
     def get_start_scan_date_humanized(self, obj):
         return naturaltime(obj.start_scan_date).title() if obj.start_scan_date else None
+
+    def get_has_scan(self, obj):
+        return bool(obj.start_scan_date)
 
 
 class SubScanResultSerializer(serializers.ModelSerializer):

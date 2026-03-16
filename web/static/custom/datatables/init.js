@@ -246,4 +246,113 @@
   window.initRengineServerSideDataTable = initRengineServerSideDataTable;
   window.initDetailScanServerSideTable = initDetailScanServerSideTable;
   window.initClientSideDataTable = initClientSideDataTable;
+
+  /**
+   * Attach a simple global search input to a DataTable instance.
+   * opts: { inputSelector: '#input-id', delayMs?: number }
+   */
+  window.attachDatatableQuickSearch = function (table, opts) {
+    if (!table || !opts || !opts.inputSelector) {
+      return;
+    }
+    const $ = window.jQuery;
+    if (!$) {
+      return;
+    }
+    const $input = $(opts.inputSelector);
+    if (!$input.length) {
+      return;
+    }
+    const delay = typeof opts.delayMs === "number" ? opts.delayMs : 700;
+    let timeoutId = null;
+    function triggerSearch() {
+      const val = $input.val() || "";
+      if (table.search() !== val) {
+        table.search(val).draw();
+      }
+    }
+    $input.off(".rengineQuickSearch").on("keyup.rengineQuickSearch change.rengineQuickSearch", function () {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+      timeoutId = window.setTimeout(function () {
+        timeoutId = null;
+        triggerSearch();
+      }, delay);
+    });
+  };
+
+  /**
+   * Attach per-column search inputs (header and/or footer) to a DataTable instance.
+   *
+   * Inputs must live inside the table header/footer and carry a data-column-index attribute:
+   *   <input type="text" class="form-control form-control-sm datatable-column-search"
+   *          data-column-index="2" placeholder="Search target">
+   *
+   * opts: { tableSelector: '#table-id', delayMs?: number }
+   */
+  window.attachDatatableColumnSearch = function (table, opts) {
+    if (!table || !opts || !opts.tableSelector) {
+      return;
+    }
+    const $ = window.jQuery;
+    if (!$) {
+      return;
+    }
+    const delay = typeof opts.delayMs === "number" ? opts.delayMs : 700;
+    const $table = $(opts.tableSelector);
+    if (!$table.length) {
+      return;
+    }
+
+    function debounce(fn, wait) {
+      let timeoutId = null;
+      return function debounced() {
+        const ctx = this;
+        const args = arguments;
+        if (timeoutId !== null) {
+          window.clearTimeout(timeoutId);
+        }
+        timeoutId = window.setTimeout(function () {
+          timeoutId = null;
+          fn.apply(ctx, args);
+        }, wait);
+      };
+    }
+
+    function attachToInputs($container) {
+      $container
+        .find("input.datatable-column-search[data-column-index], select.datatable-column-search[data-column-index]")
+        .each(function () {
+          const idxAttr = this.getAttribute("data-column-index");
+          const colIdx = idxAttr != null ? parseInt(idxAttr, 10) : NaN;
+          if (Number.isNaN(colIdx)) {
+            return;
+          }
+          const handler = debounce(function () {
+            const val = this.value || "";
+            const current = table.column(colIdx).search();
+            if (current !== val) {
+              table.column(colIdx).search(val).draw();
+            }
+          }, delay);
+          $(this).off(".rengineColumnSearch").on("keyup.rengineColumnSearch change.rengineColumnSearch", handler);
+        });
+    }
+
+    attachToInputs($table.find("thead"));
+    attachToInputs($table.find("tfoot"));
+
+    // Optionally clone the first footer row with column search inputs to the top of the table.
+    // This provides a second set of per-column inputs "en haut" without confusing DataTables,
+    // since the cloned row lives outside of the table element.
+    const footerRow = $table.find("tfoot tr").first();
+    if (footerRow.length) {
+      const topRow = footerRow.clone(true);
+      topRow.addClass("datatable-column-search-top-row");
+      const wrapper = $("<div class=\"datatable-column-search-top mb-1\"></div>");
+      wrapper.append(topRow);
+      wrapper.insertBefore($table);
+    }
+  };
 })(window);

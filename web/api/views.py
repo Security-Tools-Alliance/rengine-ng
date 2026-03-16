@@ -57,6 +57,7 @@ from api.helpers.datatables import (
     DATATABLE_NULLS_LAST_FIELDS,
     FILTER_PARAM_BUCKET_NAME,
     FILTER_PARAM_ENGINE_NAME,
+    FILTER_PARAM_HAS_SCAN,
     FILTER_PARAM_HTTP_STATUS,
     FILTER_PARAM_NAME,
     FILTER_PARAM_ORGANIZATION,
@@ -75,6 +76,7 @@ from api.helpers.datatables import (
     apply_filter_scope_type,
     apply_filter_task_status,
     get_datatable_filter_warnings,
+    get_datatables_column_search_value,
     get_datatables_order_column,
     get_nuclei_severity_codes_for_labels,
     get_request_filter_list,
@@ -871,7 +873,7 @@ class QueryInterestingSubdomains(APIView):
 
 
 class ListTargetsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.ModelViewSet):
-    """DataTables list API for targets. Filter params: filter_organization, filter_scope. See wiki datatables-api-filters.md."""
+    """DataTables list API for targets. Filter params: filter_organization, filter_scope, filter_has_scan. See wiki datatables-api-filters.md."""
 
     queryset = Target.objects.all()
     serializer_class = TargetSerializer
@@ -941,10 +943,21 @@ class ListTargetsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, 
                 | Q(description__icontains=search_value)
                 | Q(organizations__name__icontains=search_value)
             ).distinct()
+        # Per-column search values from DataTables (individual column filters).
+        # Column map uses "value" for target name; reuse it here.
+        name_search = get_datatables_column_search_value(self.request, self.datatable_column_map, "value")
+        if name_search:
+            qs = qs.filter(value__icontains=name_search)
         qs = apply_filter_list_in_by_param(
             qs, self.request, FILTER_PARAM_ORGANIZATION, "organizations__name__in", distinct=True
         )
         qs = apply_filter_list_in_by_param(qs, self.request, FILTER_PARAM_SCOPE, "scopes__name__in", distinct=True)
+        has_scan_values = get_request_filter_list(self.request, FILTER_PARAM_HAS_SCAN)
+        has_scan_value = has_scan_values[0] if has_scan_values else None
+        if has_scan_value == "scanned":
+            qs = qs.filter(last_scan_start_date_annot__isnull=False)
+        elif has_scan_value == "never":
+            qs = qs.filter(last_scan_start_date_annot__isnull=True)
         return apply_datatables_order(
             qs,
             self.request,
@@ -978,6 +991,17 @@ class ListScopesDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, v
         search_value = self.request.GET.get("search[value]", None)
         if search_value:
             qs = qs.filter(Q(name__icontains=search_value) | Q(organization__name__icontains=search_value)).distinct()
+        name_search = get_datatables_column_search_value(self.request, self.datatable_column_map, "name")
+        if name_search:
+            qs = qs.filter(name__icontains=name_search)
+        organization_search = get_datatables_column_search_value(
+            self.request, self.datatable_column_map, "organization__name"
+        )
+        if organization_search:
+            qs = qs.filter(organization__name__icontains=organization_search)
+        scope_type_search = get_datatables_column_search_value(self.request, self.datatable_column_map, "scope_type")
+        if scope_type_search:
+            qs = qs.filter(scope_type__icontains=scope_type_search)
         qs = apply_filter_list_in_by_param(
             qs, self.request, FILTER_PARAM_ORGANIZATION, "organization__name__in", distinct=True
         )
@@ -1008,6 +1032,12 @@ class ListOrganizationsDatatableViewSet(DatatableListMixin, DatatablePaginationM
         search_value = self.request.GET.get("search[value]", None)
         if search_value:
             qs = qs.filter(Q(name__icontains=search_value) | Q(description__icontains=search_value)).distinct()
+        name_search = get_datatables_column_search_value(self.request, self.datatable_column_map, "name")
+        if name_search:
+            qs = qs.filter(name__icontains=name_search)
+        description_search = get_datatables_column_search_value(self.request, self.datatable_column_map, "description")
+        if description_search:
+            qs = qs.filter(description__icontains=description_search)
         qs = apply_filter_list_in_by_param(qs, self.request, FILTER_PARAM_NAME, "name__in", distinct=True)
         return apply_datatables_order(qs, self.request, self.datatable_column_map, default_order="-insert_date")
 
@@ -3165,6 +3195,21 @@ class ListScanHistory(APIView):
                 qs = qs.filter(
                     Q(target__value__icontains=search_value) | Q(initiated_by__username__icontains=search_value)
                 ).distinct()
+
+            # Per-column search values from DataTables (individual column filters).
+            target_search = get_datatables_column_search_value(req, DATATABLE_COLUMN_MAP_SCAN_HISTORY, "target__value")
+            if target_search:
+                qs = qs.filter(target__value__icontains=target_search)
+            engine_search = get_datatables_column_search_value(
+                req, DATATABLE_COLUMN_MAP_SCAN_HISTORY, "scan_type__engine_name"
+            )
+            if engine_search:
+                qs = qs.filter(scan_type__engine_name__icontains=engine_search)
+            initiated_by_search = get_datatables_column_search_value(
+                req, DATATABLE_COLUMN_MAP_SCAN_HISTORY, "initiated_by__username"
+            )
+            if initiated_by_search:
+                qs = qs.filter(initiated_by__username__icontains=initiated_by_search)
 
             qs = apply_filter_list_in_by_param(
                 qs, req, FILTER_PARAM_ORGANIZATION, "target__organizations__name__in", distinct=True

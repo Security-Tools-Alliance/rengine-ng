@@ -25,7 +25,8 @@ Targets
 		<div class="card">
 			<div class="p-2">
 				<div class="row">
-					<div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+					<div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center flex-wrap gap-1">
+						{% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='targetListQuickSearch' %}
 						{% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_target_list.html' id_prefix='targetList' %}
 						<div class="btn-group ms-1 dropstart">
 							<button type="button" class="btn btn-soft-info dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Target grouping">
@@ -48,7 +49,7 @@ Targets
 						</div>
 					</div>
 					<div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
-						<span class="small text-muted me-1">Bulk actions:</span>
+            <span class="small text-muted me-1">Bulk actions:</span>
 						<div class="btn-group" role="group">
 							{% if user|can:'initiate_scans_subscans' %}
 							<a class="btn btn-sm btn-soft-info disabled" href="#" id="scan_multiple_button" onclick="scanMultipleTargets('{% url 'start_multiple_scan' current_project.slug %}'); return false;" data-toggle="tooltip" title="Scan multiple targets" aria-label="Scan multiple targets"><i class="fe-zap"></i></a>
@@ -85,6 +86,22 @@ Targets
 								<th class="text-center">Action</th>
 							</tr>
 						</thead>
+						<tfoot>
+							<tr>
+								<th></th>
+								<th class="d-none" aria-hidden="true"></th>
+								<th>
+									<input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="2" placeholder="Search target" />
+								</th>
+								<th>
+									<input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="3" placeholder="Search description" />
+								</th>
+								<th></th>
+								<th></th>
+								<th></th>
+								<th></th>
+							</tr>
+						</tfoot>
 					</table>
 				</form>
 			</div>
@@ -120,6 +137,7 @@ $(document).ready(function(){
 		{'data': 'insert_date_humanized', 'name': 'insert_date_humanized'},
 		{'data': 'start_scan_date_humanized', 'name': 'start_scan_date_humanized'},
 		{'data': 'scope_group', 'name': 'scope_group'},
+		{'data': 'has_scan', 'name': 'has_scan'},
 	];
 	const targetListRowGroupBaseOpts = { dataSrc: 'scope_group', rowLabel: 'Targets', emptyGroupLabel: 'No scope' };
 	const targetListGroups = [
@@ -154,7 +172,7 @@ $(document).ready(function(){
 		rowGroup: targetRowGroupOpts,
 		columnDefs: [
 			{ orderable: false, targets: ['checkbox:name', 'description:name', 'domain_count:name', 'action:name'] },
-			{ visible: false, targets: ['id:name', 'organization:name', 'most_recent_scan:name', 'insert_date:name', 'insert_date_humanized:name', 'start_scan_date_humanized:name', 'scope_group:name'] },
+			{ visible: false, targets: ['id:name', 'organization:name', 'most_recent_scan:name', 'insert_date:name', 'insert_date_humanized:name', 'start_scan_date_humanized:name', 'scope_group:name', 'has_scan:name'] },
 			colDefs.getCheckboxColumnDef('checkbox:name', function(e, a, t, n) {
 				return '<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox[' + e + ']" class="float-start form-check-input targets_checkbox" value="' + e + '" onchange=toggleMultipleTargetButton()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>';
 			}),
@@ -232,6 +250,14 @@ $(document).ready(function(){
 		],
 		drawCallbackTooltips: { tooltipTemplate: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' }
 	});
+	if (window.attachDatatableQuickSearch) {
+		window.attachDatatableQuickSearch(table, {
+			inputSelector: '#targetListQuickSearch'
+		});
+	}
+	if (window.attachDatatableColumnSearch) {
+		window.attachDatatableColumnSearch(table, { tableSelector: '#list_target_table', delayMs: 400 });
+	}
 	multiCheck(table);
 
 	// Handle form submission event

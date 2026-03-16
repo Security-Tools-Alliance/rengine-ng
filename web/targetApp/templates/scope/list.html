@@ -21,7 +21,8 @@ Scopes
     <div class="card">
       <div class="p-2">
         <div class="row">
-          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center flex-wrap gap-1">
+            {% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='scopeListQuickSearch' %}
             {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scope_list.html' id_prefix='scopeList' %}
             <div class="btn-group ms-1 dropstart">
               <button type="button" class="btn btn-soft-info dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Scope grouping">
@@ -49,7 +50,7 @@ Scopes
               </div>
             </div>
           </div>
-          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end">
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
             {% if user|can:'modify_targets' %}
             <a class="btn btn-sm btn-soft-primary" href="{% url 'add_scope' current_project.slug %}" data-toggle="tooltip" data-placement="top" title="Add Scope" aria-label="Add scope">Add New Scope</a>
             {% endif %}
@@ -77,6 +78,25 @@ Scopes
             <th class="text-center">Action</th>
           </tr>
         </thead>
+        <tfoot>
+          <tr>
+            <th>
+              <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="0" placeholder="Search name" />
+            </th>
+            <th>
+              <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="1" placeholder="Search organization" />
+            </th>
+            <th>
+              <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="2" placeholder="Search type" />
+            </th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+          </tr>
+        </tfoot>
         <tbody>
         </tbody>
         </table>
@@ -228,6 +248,13 @@ $(document).ready(function() {
     },
     drawCallbackTooltips: true
   });
+
+  if (window.attachDatatableQuickSearch) {
+    window.attachDatatableQuickSearch(scopeTable, { inputSelector: '#scopeListQuickSearch' });
+  }
+  if (window.attachDatatableColumnSearch) {
+    window.attachDatatableColumnSearch(scopeTable, { tableSelector: '#list_scope_table', delayMs: 400 });
+  }
 
   $.getJSON("{% url 'api:listOrganizations' %}?format=json&project=" + encodeURIComponent(window.SCOPE_LIST_PROJECT_SLUG || ""), function(data) {
     var orgs = data.organizations || [];

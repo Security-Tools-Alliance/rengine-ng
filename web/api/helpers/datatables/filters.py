@@ -24,6 +24,7 @@ FILTER_PARAM_SCAN_ENGINE = "filter_scan_engine"
 FILTER_PARAM_SCOPE = "filter_scope"
 FILTER_PARAM_SCOPE_TYPE = "filter_scope_type"
 FILTER_PARAM_NAME = "filter_name"
+FILTER_PARAM_HAS_SCAN = "filter_has_scan"
 
 FILTER_PARAM_HTTP_STATUS = "filter_http_status"
 FILTER_PARAM_PAGE_TITLE = "filter_page_title"
@@ -63,6 +64,7 @@ FILTER_CONTEXT_SUBSCAN_HISTORY: dict[str, str] = {
 FILTER_CONTEXT_TARGET_LIST: dict[str, str] = {
     "filterByOrganization": FILTER_PARAM_ORGANIZATION,
     "filterByScope": FILTER_PARAM_SCOPE,
+    "filterByScanPresence": FILTER_PARAM_HAS_SCAN,
 }
 
 # Template: targetApp/scope/list.html | Filter partial: filters_scope_list.html

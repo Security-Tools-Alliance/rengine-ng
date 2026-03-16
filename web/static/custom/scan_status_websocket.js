@@ -254,6 +254,13 @@ const updateCommandOutputs = function(data) {
         return;
     }
 
+    // Ensure we only update when the XL modal is actually showing logs
+    const modalTitleEl = document.getElementById('xl-modal-title');
+    const modalTitleText = modalTitleEl && modalTitleEl.textContent ? modalTitleEl.textContent.trim() : '';
+    if (!modalTitleText || !/^Logs\b/i.test(modalTitleText)) {
+        return;
+    }
+
     if (
         window.currentLogsModalContext &&
         window.currentLogsModalContext.isOpen === true &&
