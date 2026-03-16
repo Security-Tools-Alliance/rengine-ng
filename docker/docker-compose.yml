@@ -54,6 +54,9 @@ services:
     restart: unless-stopped
     container_name: rengine-redis-1
     hostname: redis
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
       test: ["CMD", "redis-cli","ping"]
       interval: 10s
@@ -72,6 +75,7 @@ services:
       - ../.env
     environment:
       - PYTHONPATH=/opt/rengine-ssl-suppress
+      - SECATOR_CELERY_RESULT_EXPIRES=3600
     volumes:
       - scan_results:/home/secator/.secator/reports
       - nuclei_templates:/home/secator/nuclei-templates

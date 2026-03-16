@@ -4,11 +4,31 @@ WebSocket utility functions for sending scan status updates.
 
 from datetime import datetime
 import re
-from typing import Optional
+import time
+from typing import Any, Optional
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db.models import Case, Count, F, IntegerField, Prefetch, Value, When
+
+
+try:
+    from redis.exceptions import (
+        BusyLoadingError,
+    )
+    from redis.exceptions import (
+        ConnectionError as RedisConnectionError,
+    )
+    from redis.exceptions import (
+        TimeoutError as RedisTimeoutError,
+    )
+
+    _REDIS_RETRY_EXCEPTIONS = (BusyLoadingError, RedisConnectionError, RedisTimeoutError)
+except ImportError:
+    BusyLoadingError = None
+    RedisConnectionError = None
+    RedisTimeoutError = None
+    _REDIS_RETRY_EXCEPTIONS = ()
 from django.db.models.functions import Coalesce
 
 from api.serializers import CommandSerializer, ScanActivitySerializer, SecatorRunnerSerializer
@@ -64,6 +84,40 @@ except Exception:  # pragma: no cover - settings may not be available in some co
 def _clean_channel_name(name: str) -> str:
     """Sanitize name for use in channel group (alphanumeric, hyphen, period only)."""
     return _CHANNEL_NAME_PATTERN.sub("-", (name or "").strip())
+
+
+# Backoff delays (seconds) between retries when Redis is loading or connection is reset
+_CHANNEL_SEND_RETRY_DELAYS = [2, 5, 10]
+
+
+def _channel_group_send_with_retry(
+    channel_layer: Any,
+    group: str,
+    message: dict,
+) -> None:
+    """
+    Send message to channel group with retry on Redis transient errors.
+
+    On BusyLoadingError, ConnectionError, or TimeoutError: retry with backoff.
+    After retries exhausted, log at warning and return (do not raise).
+    Other exceptions propagate.
+    """
+    for attempt in range(len(_CHANNEL_SEND_RETRY_DELAYS) + 1):
+        try:
+            async_to_sync(channel_layer.group_send)(group, message)
+            return
+        except _REDIS_RETRY_EXCEPTIONS as e:
+            if attempt < len(_CHANNEL_SEND_RETRY_DELAYS):
+                time.sleep(_CHANNEL_SEND_RETRY_DELAYS[attempt])
+            else:
+                logger.log_line(
+                    PREFIX_WS,
+                    "CHANNEL_SEND",
+                    "Redis transient error after %s attempts, skipping send to group %s: %s"
+                    % (len(_CHANNEL_SEND_RETRY_DELAYS) + 1, group, e),
+                    level="warning",
+                )
+                return
 
 
 def get_runner_status_code(runner: SecatorRunner) -> int:
@@ -361,7 +415,8 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
 
     Raises:
         ScanHistory.DoesNotExist: If the scan history is not found.
-        Exception: Re-raised after logging on channel/DB/serialization failures so callers can handle.
+        Exception: Re-raised after logging on non-transient failures (e.g. serialization).
+        Redis transient errors (BusyLoadingError, ConnectionError) are retried then skipped without raising.
     """
     try:
         scan = ScanHistory.objects.select_related("target__project").get(id=scan_history_id)
@@ -410,7 +465,8 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
 
         # Send to scan-specific group
         scan_group = f"scan-status-{scan_history_id}"
-        async_to_sync(channel_layer.group_send)(
+        _channel_group_send_with_retry(
+            channel_layer,
             scan_group,
             {"type": "scan_status_update", "message": message},
         )
@@ -423,7 +479,8 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
 
         if scan.target_id and scan.target and scan.target.project_id:
             project_group = "scan-status-project-%s" % (_clean_channel_name(scan.target.project.slug),)
-            async_to_sync(channel_layer.group_send)(
+            _channel_group_send_with_retry(
+                channel_layer,
                 project_group,
                 {"type": "scan_status_update", "message": message},
             )
@@ -478,7 +535,8 @@ def send_worker_status_update(worker_id: int) -> None:
         )
         return
     try:
-        async_to_sync(channel_layer.group_send)(
+        _channel_group_send_with_retry(
+            channel_layer,
             WORKER_STATUS_GROUP,
             {"type": "worker_status_update", "payload": {"worker_id": worker_id}},
         )
@@ -521,7 +579,8 @@ def send_worker_deploy_log(
         "error": error,
     }
     try:
-        async_to_sync(channel_layer.group_send)(
+        _channel_group_send_with_retry(
+            channel_layer,
             worker_deploy_group(worker_id),
             {"type": "worker_deploy_log", "payload": payload},
         )
@@ -573,7 +632,8 @@ def send_worker_refresh_log(
     if done and api_reachable is not None:
         payload["api_reachable"] = api_reachable
     try:
-        async_to_sync(channel_layer.group_send)(
+        _channel_group_send_with_retry(
+            channel_layer,
             worker_refresh_group(worker_id),
             {"type": "worker_refresh_log", "payload": payload},
         )
