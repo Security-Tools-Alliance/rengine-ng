@@ -736,16 +736,22 @@ class EndpointRepository:
 
         http_url = f"http://[{ip_address}]" if validators.ipv6(ip_address) else f"http://{ip_address}"
 
-        endpoint, created = EndPoint.objects.get_or_create(
-            http_url=http_url,
-            scan_history=scan_history,
-            defaults={
-                "domain": domain,
-                "subdomain": None,
-                "http_status": 0,
-                "discovered_date": timezone.now(),
-            },
+        endpoint = (
+            EndPoint.objects.filter(http_url=http_url, scan_history=scan_history)
+            .order_by("id")
+            .first()
         )
+        created = False
+        if endpoint is None:
+            endpoint = EndPoint.objects.create(
+                http_url=http_url,
+                scan_history=scan_history,
+                domain=domain,
+                subdomain=None,
+                http_status=0,
+                discovered_date=timezone.now(),
+            )
+            created = True
         if created:
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,

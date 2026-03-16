@@ -559,3 +559,65 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
 
         self.subdomain.refresh_from_db()
         self.assertIn(directory_scan, self.subdomain.directories.all())
+
+
+class EndpointRepositoryIpEndpointTestCase(BaseTestCase):
+    """Tests for IP-based endpoint creation."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.repository = EndpointRepository()
+        self.scan_history = self.data_generator.create_scan_history()
+        self.domain = self.data_generator.create_domain(scan_history=self.scan_history)
+
+    def test_create_endpoint_for_ip_creates_endpoint_for_valid_ip(self) -> None:
+        """create_endpoint_for_ip creates an endpoint for a valid IP address."""
+        ip = "192.0.2.1"
+        endpoint = self.repository.create_endpoint_for_ip(ip, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(endpoint)
+        endpoint.refresh_from_db()
+        self.assertEqual(endpoint.http_url, f"http://{ip}")
+        self.assertEqual(endpoint.scan_history_id, self.scan_history.id)
+        self.assertEqual(endpoint.domain_id, self.domain.id)
+
+    def test_create_endpoint_for_ip_invalid_ip_returns_none(self) -> None:
+        """create_endpoint_for_ip returns None and does not create endpoint for invalid IP."""
+        ip = "not-an-ip"
+        result = self.repository.create_endpoint_for_ip(ip, self.scan_history.id, self.domain.id)
+
+        self.assertIsNone(result)
+        self.assertFalse(
+            EndPoint.objects.filter(scan_history=self.scan_history, http_url__contains=ip).exists()
+        )
+
+    def test_create_endpoint_for_ip_reuses_existing_when_duplicates_present(self) -> None:
+        """
+        create_endpoint_for_ip must not raise when multiple endpoints already exist
+        for the same (scan_history, http_url); it should reuse one of them.
+        """
+        ip = "198.51.100.42"
+        http_url = f"http://{ip}"
+        ep1 = EndPoint.objects.create(
+            http_url=http_url,
+            scan_history=self.scan_history,
+            domain=self.domain,
+            http_status=0,
+            discovered_date=timezone.now(),
+        )
+        EndPoint.objects.create(
+            http_url=http_url,
+            scan_history=self.scan_history,
+            domain=self.domain,
+            http_status=0,
+            discovered_date=timezone.now(),
+        )
+
+        endpoint = self.repository.create_endpoint_for_ip(ip, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(endpoint)
+        self.assertIn(endpoint.id, list(EndPoint.objects.filter(http_url=http_url).values_list("id", flat=True)))
+        self.assertEqual(
+            EndPoint.objects.filter(http_url=http_url, scan_history=self.scan_history).count(),
+            2,
+        )
