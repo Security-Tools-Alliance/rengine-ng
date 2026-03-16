@@ -561,9 +561,9 @@ class EndpointRepository:
                 if not subdomain:
                     logger.log_line(
                         PREFIX_ENDPOINT_REPO,
-                        "ASSOCIATE",
-                        "Subdomain %s not found in scan %s and auto_create_subdomain=False, "
-                        "skipping association" % (hostname, scan_history_id),
+                        "ASSOCIATE_ENDPOINT_TO_SUBDOMAIN",
+                        "Subdomain not found in scan (auto_create_subdomain=False), skipping: hostname=%s scan_id=%s"
+                        % (hostname, scan_history_id),
                         level="debug",
                     )
                     return
@@ -583,8 +583,8 @@ class EndpointRepository:
             endpoint.save(update_fields=["subdomain"])
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
-                "ASSOCIATE",
-                "Associated endpoint %s with subdomain %s" % (http_url, hostname),
+                "ASSOCIATE_ENDPOINT_TO_SUBDOMAIN",
+                "Endpoint %s linked to subdomain %s" % (http_url[:80] if http_url else "", hostname),
                 level="debug",
             )
 
@@ -592,8 +592,8 @@ class EndpointRepository:
             reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
-                "ASSOCIATE",
-                "Error associating endpoint with subdomain: %s | url=%s scan_id=%s"
+                "ASSOCIATE_ENDPOINT_TO_SUBDOMAIN",
+                "Error linking endpoint to subdomain: %s | url=%s scan_id=%s"
                 % (reason, http_url[:80] if http_url else "", scan_history_id),
                 level="error",
             )
@@ -773,8 +773,8 @@ class EndpointRepository:
                     endpoint.techs.add(tech_obj)
                     logger.log_line(
                         PREFIX_ENDPOINT_REPO,
-                        "TECH",
-                        "Associated technology %s with endpoint %s" % (tech_name, endpoint.http_url),
+                        "ASSOCIATE_TECH_TO_ENDPOINT",
+                        "Technology %s linked to endpoint %s" % (tech_name, endpoint.http_url[:80] if endpoint and endpoint.http_url else ""),
                         level="debug",
                     )
 
@@ -782,8 +782,8 @@ class EndpointRepository:
             reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
-                "TECH",
-                "Error associating technologies with endpoint: %s | endpoint=%s"
+                "ASSOCIATE_TECH_TO_ENDPOINT",
+                "Error linking technology to endpoint: %s | endpoint=%s"
                 % (reason, endpoint.http_url[:80] if endpoint and endpoint.http_url else ""),
                 level="error",
             )

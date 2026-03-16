@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import DatabaseError, IntegrityError
 
+from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.core.validators import is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
@@ -235,16 +236,16 @@ class TechnologyRepository:
                 subdomain.technologies.add(tech_obj)
                 logger.log_line(
                     PREFIX_TECH_REPO,
-                    "ASSOCIATE_SUBDOMAIN",
-                    "Associated technology %s with subdomain %s" % (tech_name, subdomain_name),
+                    "ASSOCIATE_TECH_TO_SUBDOMAIN",
+                    "Technology %s linked to subdomain %s" % (tech_name, subdomain_name),
                     level="debug",
                 )
                 return True
             else:
                 logger.log_line(
                     PREFIX_TECH_REPO,
-                    "ASSOCIATE_SUBDOMAIN",
-                    "Subdomain %s not found in scan %s" % (subdomain_name, scan_history_id),
+                    "ASSOCIATE_TECH_TO_SUBDOMAIN",
+                    "Subdomain not found in scan: subdomain=%s scan_id=%s" % (subdomain_name, scan_history_id),
                     level="warning",
                 )
                 return False
@@ -253,8 +254,8 @@ class TechnologyRepository:
             reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_TECH_REPO,
-                "ASSOCIATE_SUBDOMAIN",
-                "Error associating technology with subdomain: %s | subdomain=%s scan_id=%s"
+                "ASSOCIATE_TECH_TO_SUBDOMAIN",
+                "Error linking technology to subdomain: %s | subdomain=%s scan_id=%s"
                 % (reason, subdomain_name, scan_history_id),
                 level="error",
             )
@@ -280,8 +281,8 @@ class TechnologyRepository:
             if not normalized_name:
                 logger.log_line(
                     PREFIX_TECH_REPO,
-                    "ASSOCIATE_ENDPOINT",
-                    "Technology name is empty in associate_with_endpoint",
+                    "ASSOCIATE_TECH_TO_ENDPOINT",
+                    "Technology name empty, cannot link to endpoint",
                     level="warning",
                 )
                 return False
@@ -292,8 +293,8 @@ class TechnologyRepository:
             endpoint.techs.add(tech_obj)
             logger.log_line(
                 PREFIX_TECH_REPO,
-                "ASSOCIATE_ENDPOINT",
-                "Associated technology %s with endpoint %s" % (normalized_name, endpoint_url),
+                "ASSOCIATE_TECH_TO_ENDPOINT",
+                "Technology %s linked to endpoint %s" % (normalized_name, endpoint_url[:80] if endpoint_url else ""),
                 level="debug",
             )
             return True
@@ -301,17 +302,17 @@ class TechnologyRepository:
         except EndPoint.DoesNotExist:
             logger.log_line(
                 PREFIX_TECH_REPO,
-                "ASSOCIATE_ENDPOINT",
-                "Endpoint %s not found in scan %s" % (endpoint_url, scan_history_id),
+                "ASSOCIATE_TECH_TO_ENDPOINT",
+                "Endpoint not found in scan: url=%s scan_id=%s" % (endpoint_url[:80] if endpoint_url else "", scan_history_id),
                 level="warning",
             )
             return False
         except MultipleObjectsReturned:
             logger.log_line(
                 PREFIX_TECH_REPO,
-                "ASSOCIATE_ENDPOINT",
-                "Multiple endpoints found for (http_url=%s, scan_history_id=%s); cannot associate technology unambiguously"
-                % (repr(endpoint_url), scan_history_id),
+                "ASSOCIATE_TECH_TO_ENDPOINT",
+                "Multiple endpoints for same URL, cannot link technology: url=%s scan_id=%s"
+                % (endpoint_url[:80] if endpoint_url else "", scan_history_id),
                 level="error",
             )
             return False
@@ -319,8 +320,8 @@ class TechnologyRepository:
             reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_TECH_REPO,
-                "ASSOCIATE_ENDPOINT",
-                "Error associating technology with endpoint: %s | endpoint=%s scan_id=%s"
+                "ASSOCIATE_TECH_TO_ENDPOINT",
+                "Error linking technology to endpoint: %s | endpoint=%s scan_id=%s"
                 % (reason, endpoint_url[:80] if endpoint_url else "", scan_history_id),
                 level="error",
             )
@@ -409,24 +410,24 @@ class TechnologyRepository:
                         endpoint.techs.add(tech_obj)
                         logger.log_line(
                             PREFIX_TECH_REPO,
-                            "ASSOCIATE",
-                            "Associated technology %s with endpoint %s" % (tech_obj.name, match_target),
+                            "ASSOCIATE_TECH_TO_ENDPOINT",
+                            "Technology %s linked to endpoint %s" % (tech_obj.name, match_target[:80] if match_target else ""),
                             level="debug",
                         )
                         return
                     except EndPoint.DoesNotExist:
                         logger.log_line(
                             PREFIX_TECH_REPO,
-                            "ASSOCIATE",
-                            "Endpoint %s not found, trying subdomain association" % (match_target,),
+                            "ASSOCIATE_TECH_TO_TARGET",
+                            "Endpoint not found for match_target, trying subdomain: %s" % (match_target[:80] if match_target else "",),
                             level="debug",
                         )
                     except MultipleObjectsReturned:
                         logger.log_line(
                             PREFIX_TECH_REPO,
-                            "ASSOCIATE",
-                            "Multiple endpoints for (http_url=%s, scan_history_id=%s); skipping endpoint association"
-                            % (repr(match_target), scan_history_id),
+                            "ASSOCIATE_TECH_TO_TARGET",
+                            "Multiple endpoints for same URL, skipping: match_target=%s scan_id=%s"
+                            % (match_target[:80] if match_target else "", scan_history_id),
                             level="error",
                         )
                         return
@@ -438,8 +439,8 @@ class TechnologyRepository:
             else:
                 logger.log_line(
                     PREFIX_TECH_REPO,
-                    "ASSOCIATE",
-                    "Invalid match target for technology association: %s" % (match_target,),
+                    "ASSOCIATE_TECH_TO_TARGET",
+                    "Invalid match target, cannot link technology: %s" % (match_target[:80] if match_target else "",),
                     level="warning",
                 )
 
@@ -447,8 +448,8 @@ class TechnologyRepository:
             reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_TECH_REPO,
-                "ASSOCIATE",
-                "Error associating technology: %s | match_target=%s scan_id=%s"
+                "ASSOCIATE_TECH_TO_TARGET",
+                "Error linking technology to subdomain/endpoint: %s | match_target=%s scan_id=%s"
                 % (reason, match_target[:80] if match_target else "", scan_history_id),
                 level="error",
             )
@@ -472,24 +473,33 @@ class TechnologyRepository:
                 subdomain.technologies.add(tech_obj)
                 logger.log_line(
                     PREFIX_TECH_REPO,
-                    "ASSOCIATE_SUBDOMAIN_HOSTNAME",
-                    "Associated technology %s with subdomain %s" % (tech_obj.name, hostname),
+                    "ASSOCIATE_TECH_TO_SUBDOMAIN",
+                    "Technology %s linked to subdomain %s" % (tech_obj.name, hostname),
                     level="debug",
                 )
             else:
                 logger.log_line(
                     PREFIX_TECH_REPO,
-                    "ASSOCIATE_SUBDOMAIN_HOSTNAME",
-                    "Subdomain %s not found in scan %s" % (hostname, scan_history_id),
+                    "ASSOCIATE_TECH_TO_SUBDOMAIN",
+                    "Subdomain not found in scan: hostname=%s scan_id=%s" % (hostname, scan_history_id),
                     level="debug",
                 )
 
+        except FindingOutOfScopeError as e:
+            reason = format_exception_for_log(e)
+            logger.log_line(
+                PREFIX_TECH_REPO,
+                "ASSOCIATE_TECH_TO_SUBDOMAIN",
+                "Skipped (out of scope): hostname=%s | %s scan_id=%s"
+                % (hostname, reason, scan_history_id),
+                level="info",
+            )
         except Exception as e:
             reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_TECH_REPO,
-                "ASSOCIATE_SUBDOMAIN_HOSTNAME",
-                "Error associating technology with subdomain by hostname: %s | hostname=%s scan_id=%s"
+                "ASSOCIATE_TECH_TO_SUBDOMAIN",
+                "Error linking technology to subdomain by hostname: %s | hostname=%s scan_id=%s"
                 % (reason, hostname, scan_history_id),
                 level="error",
             )

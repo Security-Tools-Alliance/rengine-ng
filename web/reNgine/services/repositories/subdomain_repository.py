@@ -194,10 +194,11 @@ class SubdomainRepository:
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
                 "GET_OR_CREATE",
-                "Host out of scope (restrict_findings_to_target)",
-                level="debug",
+                "Skipped (out of scope): hostname=%s | restrict_findings_to_target"
+                % (normalized,),
+                level="info",
             )
-            raise FindingOutOfScopeError()
+            raise FindingOutOfScopeError("Host out of scope (restrict_findings_to_target)")
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
         domain = resolve_domain_for_scan(scan_history_id, normalized, target_value, create=True)
         if not domain:
@@ -440,8 +441,8 @@ class SubdomainRepository:
                     subdomain.ip_addresses.add(ip_obj)
                     logger.log_line(
                         PREFIX_SUBDOMAIN_REPO,
-                        "ASSOCIATE",
-                        "Associated IP %s with subdomain %s" % (ip_address, subdomain.name),
+                        "ASSOCIATE_IP_TO_SUBDOMAIN",
+                        "IP %s linked to subdomain %s" % (ip_address, subdomain.name),
                         level="debug",
                     )
                     cache_key = (ip_address, sid, did)
@@ -481,8 +482,8 @@ class SubdomainRepository:
                     subdomain.technologies.add(tech_obj)
                     logger.log_line(
                         PREFIX_SUBDOMAIN_REPO,
-                        "ASSOCIATE",
-                        "Associated technology %s with subdomain %s" % (tech_name, subdomain.name),
+                        "ASSOCIATE_TECH_TO_SUBDOMAIN",
+                        "Technology %s linked to subdomain %s" % (tech_name, subdomain.name),
                         level="debug",
                     )
 
@@ -490,8 +491,8 @@ class SubdomainRepository:
             reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
-                "ASSOCIATE",
-                "Error associating technologies with subdomain: %s | subdomain=%s scan_id=%s"
+                "ASSOCIATE_TECH_TO_SUBDOMAIN",
+                "Error linking technology to subdomain: %s | subdomain=%s scan_id=%s"
                 % (reason, subdomain.name if subdomain else "", subdomain.scan_history_id if subdomain else ""),
                 level="error",
             )

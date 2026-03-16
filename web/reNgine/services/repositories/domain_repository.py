@@ -124,7 +124,7 @@ class DomainRepository:
                 "raw_whois: domain out of scope (restrict_findings_to_target)",
                 level="debug",
             )
-            raise FindingOutOfScopeError()
+            raise FindingOutOfScopeError("Domain out of scope (restrict_findings_to_target)")
         domain = get_or_create_domain_for_target(scan_history_id, normalized)
         if not domain:
             return None
@@ -166,7 +166,7 @@ class DomainRepository:
                 "save_asn: domain out of scope (restrict_findings_to_target)",
                 level="debug",
             )
-            raise FindingOutOfScopeError()
+            raise FindingOutOfScopeError("Domain out of scope (restrict_findings_to_target)")
         domain = get_or_create_domain_for_target(scan_history_id, normalized)
         if not domain:
             return None
@@ -214,7 +214,7 @@ class DomainRepository:
                 "Domain item out of scope (restrict_findings_to_target)",
                 level="debug",
             )
-            raise FindingOutOfScopeError()
+            raise FindingOutOfScopeError("Domain out of scope (restrict_findings_to_target)")
 
         domain = get_domain_for_scan_by_name(scan_history_id, normalized)
         if not domain:

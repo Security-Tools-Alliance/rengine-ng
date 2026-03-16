@@ -415,15 +415,15 @@ class IpRepository:
                 subdomain.ip_addresses.add(ip_obj)
                 logger.log_line(
                     PREFIX_IP_REPO,
-                    "ASSOCIATE",
-                    "Associated IP %s with subdomain %s" % (ip_obj.address, hostname),
+                    "ASSOCIATE_IP_TO_SUBDOMAIN",
+                    "IP %s linked to subdomain %s" % (ip_obj.address, hostname),
                     level="debug",
                 )
             else:
                 logger.log_line(
                     PREFIX_IP_REPO,
-                    "ASSOCIATE",
-                    "No subdomain found for hostname %s in scan %s" % (hostname, scan_history_id),
+                    "ASSOCIATE_IP_TO_SUBDOMAIN",
+                    "Subdomain not found in scan: hostname=%s scan_id=%s" % (hostname, scan_history_id),
                     level="debug",
                 )
 
@@ -431,8 +431,8 @@ class IpRepository:
             reason = format_exception_for_log(e)
             logger.log_line(
                 PREFIX_IP_REPO,
-                "ASSOCIATE",
-                "Error associating IP with subdomain: %s | hostname=%s scan_id=%s"
+                "ASSOCIATE_IP_TO_SUBDOMAIN",
+                "Error linking IP to subdomain: %s | hostname=%s scan_id=%s"
                 % (reason, hostname, scan_history_id),
                 level="error",
             )
