@@ -171,18 +171,29 @@ class Command(SecatorLoaderBase):
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"Failed to get profiles from secator: {e}"))
 
-    def load_custom_profiles(self):
-        """Load custom profiles from config/profiles/ directory"""
-        self.stdout.write("Loading custom profiles...")
+        self._load_profiles_from_config_dir(profile_type="builtin")
 
+    def _load_profiles_from_config_dir(self, profile_type: str):
+        """Load profiles from config/profiles/ directory with given profile_type (builtin or custom)."""
         profiles_dir = os.path.join(settings.BASE_DIR, "config", "profiles")
 
         if not os.path.exists(profiles_dir):
-            self.stdout.write(self.style.WARNING(f"Profiles directory not found: {profiles_dir}"))
+            if profile_type == "builtin":
+                self.stdout.write(self.style.WARNING("Config profiles directory not found, skipping"))
             return
+
+        label = "built-in (config)" if profile_type == "builtin" else "custom"
+        self.stdout.write("Loading %s profiles from config/profiles/..." % (label,))
 
         created_count = 0
         updated_count = 0
+        default_profiles = {
+            "speed": "polite",
+            "evasion": "stealth",
+            "general": "full",
+            "network": "all_ports",
+        }
+
         for filename in sorted(os.listdir(profiles_dir)):
             if not filename.endswith(".yaml") and not filename.endswith(".yml"):
                 continue
@@ -190,11 +201,11 @@ class Command(SecatorLoaderBase):
             filepath = os.path.join(profiles_dir, filename)
 
             try:
-                with open(filepath, "r") as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     profile_data = yaml.safe_load(f)
 
                 if not profile_data or "name" not in profile_data:
-                    self.stdout.write(self.style.WARNING(f"Invalid profile file: {filename}"))
+                    self.stdout.write(self.style.WARNING("Invalid profile file: %s" % (filename,)))
                     continue
 
                 profile_name = profile_data["name"]
@@ -203,53 +214,65 @@ class Command(SecatorLoaderBase):
                 enforce = profile_data.get("enforce", False)
                 opts = profile_data.get("opts", {})
 
-                # Convert opts dict to YAML string
                 opts_yaml = yaml.dump(opts, default_flow_style=False) if opts else ""
+
+                should_be_default = (
+                    profile_type == "builtin"
+                    and profile_name == default_profiles.get(category)
+                    and not SecatorProfile.objects.filter(name=profile_name).exists()
+                )
 
                 profile, created = SecatorProfile.objects.get_or_create(
                     name=profile_name,
-                    profile_type="custom",
                     defaults={
                         "category": category,
                         "description": description,
                         "enforce": enforce,
                         "opts": opts_yaml,
+                        "profile_type": profile_type,
                         "is_active": True,
+                        "is_default": should_be_default if profile_type == "builtin" else False,
                     },
                 )
 
                 if created:
-                    # Custom profiles don't need bypass_builtin_constraints
-                    profile.save()
+                    if profile_type == "builtin":
+                        profile.save(bypass_builtin_constraints=True)
+                    else:
+                        profile.save()
                     created_count += 1
-                    self.stdout.write(f"Created custom profile: {profile_name}")
+                    default_msg = " (set as default)" if (profile_type == "builtin" and should_be_default) else ""
+                    self.stdout.write("Created %s profile: %s%s" % (label, profile_name, default_msg))
                 else:
-                    # Always update existing custom profiles using update()
-                    SecatorProfile.objects.filter(pk=profile.pk).update(
-                        category=category,
-                        description=description,
-                        enforce=enforce,
-                        opts=opts_yaml,
-                    )
+                    update_fields = {
+                        "category": category,
+                        "description": description,
+                        "enforce": enforce,
+                        "opts": opts_yaml,
+                        "profile_type": profile_type,
+                    }
+                    if profile_type == "builtin":
+                        update_fields["is_default"] = should_be_default
+                    SecatorProfile.objects.filter(pk=profile.pk).update(**update_fields)
                     updated_count += 1
-                    self.stdout.write(f"Updated custom profile: {profile_name}")
+                    self.stdout.write("Updated %s profile: %s" % (label, profile_name))
 
-            except FileNotFoundError:
-                self.stdout.write(self.style.ERROR(f"Profile file not found: {filename}"))
-            except PermissionError:
-                self.stdout.write(self.style.ERROR(f"Permission denied reading profile file: {filename}"))
+            except (FileNotFoundError, PermissionError) as e:
+                self.stdout.write(self.style.ERROR("Profile file %s: %s" % (filename, e)))
             except yaml.YAMLError as e:
-                self.stdout.write(self.style.ERROR(f"Invalid YAML syntax in profile file {filename}: {e}"))
+                self.stdout.write(self.style.ERROR("Invalid YAML in profile file %s: %s" % (filename, e)))
             except UnicodeDecodeError as e:
-                self.stdout.write(self.style.ERROR(f"Encoding error in profile file {filename}: {e}"))
-            except KeyError as e:
-                self.stdout.write(self.style.ERROR(f"Missing required field in profile file {filename}: {e}"))
+                self.stdout.write(self.style.ERROR("Encoding error in profile file %s: %s" % (filename, e)))
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f"Unexpected error loading profile {filename}: {e}"))
+                self.stdout.write(self.style.ERROR("Error loading profile %s: %s" % (filename, e)))
 
         self.stdout.write(
-            f"Loaded {created_count} new custom profiles, updated {updated_count} existing custom profiles"
+            "Loaded %s new %s profiles from config, updated %s existing" % (created_count, label, updated_count)
         )
+
+    def load_custom_profiles(self):
+        """Load custom profiles from config/profiles/ directory."""
+        self._load_profiles_from_config_dir(profile_type="custom")
 
     def _extract_all_opts(self):
         """

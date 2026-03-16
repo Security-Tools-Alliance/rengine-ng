@@ -28,8 +28,11 @@ SubScan History
             {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scan_history.html' id_prefix='subscanHistory' %}
           </div>
           {% if user|can:'modify_scan_results' %}
-          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
-            <a class="btn btn-soft-danger float-end disabled ms-1" href="#" onclick="deleteMultipleSubScan()" id="delete_multiple_button">Delete Multiple SubScans</a>
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
+            <span class="small text-muted me-1">Bulk actions:</span>
+            <div class="btn-group" role="group">
+              <button type="button" class="btn btn-sm btn-soft-danger disabled" id="delete_multiple_button" onclick="deleteMultipleSubScan(); return false;" data-toggle="tooltip" title="Delete multiple subscans" aria-label="Delete multiple subscans"><i class="fe-trash-2"></i></button>
+            </div>
           </div>
           {% endif %}
         </div>

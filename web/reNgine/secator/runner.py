@@ -550,7 +550,7 @@ class SecatorRunner:
         into the expanded list expected by Secator runners.
         Custom profile opts are merged into run_opts so they are forwarded to Secator.
         """
-        run_opts = build_run_opts(secator_config=config or {}, profile_names=[])
+        run_opts = build_run_opts(secator_config=config or {}, profile_items=[])
 
         if profiles:
             profile_list: List[Any] = []

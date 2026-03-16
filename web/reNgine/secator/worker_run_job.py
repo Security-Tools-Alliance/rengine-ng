@@ -46,7 +46,7 @@ if __name__ == "__main__":
     targets = job.get("targets") or []
     context = job.get("context") or {}
     run_opts_data = job.get("run_opts") or {}
-    profile_names = run_opts_data.get("profiles") or []
+    raw_profiles = run_opts_data.get("profiles") or []
 
     try:
         from secator.runners import Scan, Task, Workflow
@@ -62,7 +62,14 @@ if __name__ == "__main__":
     except ImportError:
         hooks = {}
 
-    profile_loaders = [TemplateLoader(name=f"profiles/{p}") for p in profile_names if p]
+    profile_loaders = []
+    for p in raw_profiles:
+        if not p:
+            continue
+        if isinstance(p, dict):
+            profile_loaders.append(TemplateLoader(p))
+        else:
+            profile_loaders.append(TemplateLoader(name=f"profiles/{p}"))
     run_opts = {"sync": False, **run_opts_data, "profiles": profile_loaders}
 
     def _run_success(result) -> bool:

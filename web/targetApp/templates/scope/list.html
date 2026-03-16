@@ -49,9 +49,9 @@ Scopes
               </div>
             </div>
           </div>
-          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end">
             {% if user|can:'modify_targets' %}
-            <a class="btn btn-soft-primary float-end ms-1" href="{% url 'add_scope' current_project.slug %}" data-toggle="tooltip" data-placement="top" title="Add Scope">Add New Scope</a>
+            <a class="btn btn-sm btn-soft-primary" href="{% url 'add_scope' current_project.slug %}" data-toggle="tooltip" data-placement="top" title="Add Scope" aria-label="Add scope">Add New Scope</a>
             {% endif %}
           </div>
         </div>

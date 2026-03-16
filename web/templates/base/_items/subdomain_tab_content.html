@@ -33,30 +33,24 @@
 		<div class="card">
 			<div class="card-body">
 				<div class="row">
-					<div class="col-8 float-start">
-						{% if user|can:'initiate_scans' %}
-						<a class="disabled btn btn-soft-primary ms-2" data-button="subdomain_btns" data-toggle="tooltip" data-placement="top" title="Initiate Multiple Subscans" onclick="initiateMultipleSubscan()">
-							<i class="fe-zap"></i>
-							Initiate Subscan
-						</a>
-						{% endif %}
-						<a class="disabled btn btn-soft-info" data-button="subdomain_btns" data-toggle="tooltip" data-placement="top" title="Download Selected Subdomains" onclick="downloadSelectedSubdomains('{% if target_summary %}{{ target.value|escapejs }}{% else %}{{ scan_display_name|escapejs }}{% endif %}')">
-							<i class="fe-download"></i>
-							Download Selected Subdomains
-						</a>
-						{% if user|can:'initiate_scans' %}
-						<a class="disabled btn btn-soft-danger" data-button="subdomain_btns" data-toggle="tooltip" data-placement="top" title="Delete Multiple Subdomains" onclick="deleteMultipleSubdomains()">
-							<i class="fe-trash"></i>
-							Delete Multiple Subdomains
-						</a>
-						{% endif %}
-						<div class="ms-2 mt-2">
-							<a href="#" class="badge badge-soft-primary" id="subdomain_selected_count" onclick="uncheckSubdomains()"  data-toggle="tooltip" data-placement="top" title="Clear Subdomains"></a>
+					<div class="col-8 float-start d-flex align-items-center flex-wrap gap-1">
+						<span class="small text-muted me-1">Bulk actions:</span>
+						<div class="btn-group" role="group">
+							{% if user|can:'initiate_scans' %}
+							<a class="btn btn-sm btn-soft-primary disabled" data-button="subdomain_btns" data-toggle="tooltip" title="Initiate multiple subscans" aria-label="Initiate multiple subscans" onclick="initiateMultipleSubscan(); return false;"><i class="fe-zap"></i></a>
+							{% endif %}
+							<a class="btn btn-sm btn-soft-info disabled" data-button="subdomain_btns" data-toggle="tooltip" title="Download selected subdomains" aria-label="Download selected subdomains" onclick="downloadSelectedSubdomains('{% if target_summary %}{{ target.value|escapejs }}{% else %}{{ scan_display_name|escapejs }}{% endif %}'); return false;"><i class="fe-download"></i></a>
+							{% if user|can:'initiate_scans' %}
+							<a class="btn btn-sm btn-soft-danger disabled" data-button="subdomain_btns" data-toggle="tooltip" title="Delete multiple subdomains" aria-label="Delete multiple subdomains" onclick="deleteMultipleSubdomains(); return false;"><i class="fe-trash-2"></i></a>
+							{% endif %}
+						</div>
+						<div class="ms-1">
+							<a href="#" class="badge badge-soft-primary" id="subdomain_selected_count" onclick="uncheckSubdomains(); return false;" data-toggle="tooltip" data-placement="top" title="Clear Subdomains" aria-label="Clear selection"></a>
 						</div>
 					</div>
 					<div class="col-4">
-						<div class="btn-group mb-2 float-end dropstart">
-							<button class="btn btn-soft-primary dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Filter Columns">
+						<div class="btn-group btn-group-sm mb-2 float-end dropstart">
+							<button class="btn btn-sm btn-soft-primary dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Filter Columns" aria-label="Filter columns">
 								<i class="fe-filter"></i>
 							</button>
 							<div class="dropdown-menu" style="">
@@ -99,15 +93,9 @@
 
 							</div>
 
-							<a class="btn btn-soft-danger ms-1" data-toggle="tooltip" data-placement="top" title="Important Subdomains" id="load_important_subdomain_table_btn">
-								<i class="mdi mdi-alert-rhombus-outline"></i>
-							</a>
-
-							<a class="btn btn-soft-primary ms-2 me-2" data-toggle="tooltip" data-placement="top" title="Reload Subdomains" id="reload_subdomain_table_btn">
-								<i class="fe-refresh-cw"></i>
-							</a>
-
-							<button class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Download Subdomains">
+							<a class="btn btn-sm btn-soft-danger ms-1" data-toggle="tooltip" data-placement="top" title="Important Subdomains" id="load_important_subdomain_table_btn" aria-label="Important subdomains"><i class="mdi mdi-alert-rhombus-outline"></i></a>
+							<a class="btn btn-sm btn-soft-primary ms-2 me-2" data-toggle="tooltip" data-placement="top" title="Reload Subdomains" id="reload_subdomain_table_btn" aria-label="Reload"><i class="fe-refresh-cw"></i></a>
+							<button class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Download Subdomains" aria-label="Download">
 								<i class="fe-download"></i>
 							</button>
 							<div class="dropdown-menu" style="">
@@ -115,8 +103,8 @@
 							</div>
 
 						</div>
-						<div class="btn-group mb-2 float-end dropstart">
-							<button class="btn btn-soft-info dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Vulnerability Grouping">
+						<div class="btn-group btn-group-sm mb-2 float-end dropstart">
+							<button class="btn btn-sm btn-soft-info dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Vulnerability Grouping" aria-label="Grouping">
 								<i class="fe-layout"></i>
 							</button>
 							<div class="dropdown-menu" style="">

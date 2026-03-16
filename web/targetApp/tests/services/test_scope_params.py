@@ -21,6 +21,7 @@ from targetApp.services.scope_params import (
     get_workers_for_scan_dropdown,
     normalize_allowed_hosts_from_list,
     parse_target_scan_override_from_post,
+    resolve_profiles_for_runner,
     resolve_scan_params,
     strip_empty_override_keys,
 )
@@ -455,6 +456,75 @@ class ResolveScanParamsTest(BaseTestCase):
         result = resolve_scan_params(self.data_generator.target)
         self.assertEqual(result["threads"], 42)
         self.assertEqual(result["rate_limit"], 999)
+
+
+class ResolveProfilesForRunnerTest(BaseTestCase):
+    """Tests for resolve_profiles_for_runner: built-in -> inline dict, custom -> name."""
+
+    def test_empty_returns_empty(self):
+        self.assertEqual(resolve_profiles_for_runner([]), [])
+
+    def test_unknown_profile_returns_name(self):
+        result = resolve_profiles_for_runner(["nonexistent-profile-xyz"])
+        self.assertEqual(result, ["nonexistent-profile-xyz"])
+
+    def test_custom_profile_returns_name(self):
+        name = "test-custom-runner-%s" % (str(uuid.uuid4())[:8],)
+        SecatorProfile.objects.create(
+            name=name,
+            category="speed",
+            description="Custom",
+            opts="rate_limit: 50\n",
+            profile_type="custom",
+            is_active=True,
+        )
+        result = resolve_profiles_for_runner([name])
+        self.assertEqual(result, [name])
+
+    def test_builtin_profile_returns_inline_dict(self):
+        name = "test-builtin-runner-%s" % (str(uuid.uuid4())[:8],)
+        SecatorProfile.objects.create(
+            name=name,
+            category="speed",
+            description="Built-in for test",
+            opts="rate_limit: 100\ndelay: 0\n",
+            profile_type="builtin",
+            is_active=True,
+        )
+        result = resolve_profiles_for_runner([name])
+        self.assertEqual(len(result), 1)
+        self.assertIsInstance(result[0], dict)
+        self.assertEqual(result[0]["type"], "profile")
+        self.assertEqual(result[0]["name"], name)
+        self.assertEqual(result[0]["category"], "speed")
+        self.assertEqual(result[0]["opts"]["rate_limit"], 100)
+        self.assertEqual(result[0]["opts"]["delay"], 0)
+
+    def test_mixed_builtin_and_custom_returns_mixed_list(self):
+        custom_name = "test-custom-mix-%s" % (str(uuid.uuid4())[:8],)
+        builtin_name = "test-builtin-mix-%s" % (str(uuid.uuid4())[:8],)
+        SecatorProfile.objects.create(
+            name=custom_name,
+            category="speed",
+            description="Custom",
+            opts="threads: 4\n",
+            profile_type="custom",
+            is_active=True,
+        )
+        SecatorProfile.objects.create(
+            name=builtin_name,
+            category="evasion",
+            description="Built-in",
+            opts="delay: 1\n",
+            profile_type="builtin",
+            is_active=True,
+        )
+        result = resolve_profiles_for_runner([custom_name, builtin_name])
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0], custom_name)
+        self.assertIsInstance(result[1], dict)
+        self.assertEqual(result[1]["name"], builtin_name)
+        self.assertEqual(result[1]["opts"]["delay"], 1)
 
 
 class ApplyResolvedToSecatorConfigTest(BaseTestCase):

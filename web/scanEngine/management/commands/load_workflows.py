@@ -168,18 +168,23 @@ class Command(SecatorLoaderBase):
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"Failed to get workflows from secator: {e}"))
 
-    def load_custom_workflows(self):
-        """Load custom workflows from config/workflows/ directory"""
-        self.stdout.write("Loading custom workflows...")
+        self._load_workflows_from_config_dir(workflow_type="builtin")
 
+    def _load_workflows_from_config_dir(self, workflow_type: str):
+        """Load workflows from config/workflows/ directory with given workflow_type (builtin or custom)."""
         workflows_dir = os.path.join(settings.BASE_DIR, "config", "workflows")
 
         if not os.path.exists(workflows_dir):
-            self.stdout.write(self.style.WARNING(f"Workflows directory not found: {workflows_dir}"))
+            if workflow_type == "builtin":
+                self.stdout.write(self.style.WARNING("Config workflows directory not found, skipping"))
             return
+
+        label = "built-in (config)" if workflow_type == "builtin" else "custom"
+        self.stdout.write("Loading %s workflows from config/workflows/..." % (label,))
 
         created_count = 0
         updated_count = 0
+
         for filename in sorted(os.listdir(workflows_dir)):
             if not filename.endswith(".yaml") and not filename.endswith(".yml"):
                 continue
@@ -187,59 +192,68 @@ class Command(SecatorLoaderBase):
             filepath = os.path.join(workflows_dir, filename)
 
             try:
-                with open(filepath, "r") as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     workflow_data = yaml.safe_load(f)
 
                 if not workflow_data or "name" not in workflow_data:
-                    self.stdout.write(self.style.WARNING(f"Invalid workflow file: {filename}"))
+                    self.stdout.write(self.style.WARNING("Invalid workflow file: %s" % (filename,)))
                     continue
 
                 workflow_name = workflow_data["name"]
                 raw_tags = workflow_data.get("tags") or []
                 tags = [str(t).strip() for t in (raw_tags if isinstance(raw_tags, (list, tuple)) else [raw_tags]) if t]
+                scan_type = self._determine_scan_type_from_yaml(workflow_data)
+                display_name = dict(SecatorWorkflow.WORKFLOW_NAME_CHOICES).get(workflow_name)
+
                 workflow, created = SecatorWorkflow.objects.get_or_create(
                     name=workflow_name,
                     defaults={
+                        "alias": workflow_data.get("alias"),
+                        "display_name": display_name,
                         "description": workflow_data.get("description", ""),
                         "long_description": workflow_data.get("long_description", None),
-                        "workflow_type": "custom",
+                        "workflow_type": workflow_type,
                         "yaml_configuration": yaml.dump(workflow_data),
-                        "scan_type": workflow_data.get("scan_type", "internet"),
+                        "scan_type": scan_type,
                         "is_active": True,
                         "tags": tags,
                     },
                 )
 
                 if created:
-                    # Custom workflows don't need bypass_builtin_constraints
-                    workflow.save()
+                    if workflow_type == "builtin":
+                        workflow.save(bypass_builtin_constraints=True)
+                    else:
+                        workflow.save()
                     created_count += 1
-                    self.stdout.write(f"Created custom workflow: {workflow_name}")
+                    self.stdout.write("Created %s workflow: %s" % (label, workflow.get_display_name()))
                 else:
-                    # Always update existing custom workflows using update()
                     SecatorWorkflow.objects.filter(pk=workflow.pk).update(
+                        alias=workflow_data.get("alias"),
+                        display_name=display_name,
                         description=workflow_data.get("description", ""),
                         long_description=workflow_data.get("long_description", None),
+                        workflow_type=workflow_type,
                         yaml_configuration=yaml.dump(workflow_data),
-                        scan_type=workflow_data.get("scan_type", "internet"),
+                        scan_type=scan_type,
                         tags=tags,
                     )
                     updated_count += 1
-                    self.stdout.write(f"Updated custom workflow: {workflow_name}")
+                    self.stdout.write("Updated %s workflow: %s" % (label, workflow_name))
 
-            except FileNotFoundError:
-                self.stdout.write(self.style.ERROR(f"Workflow file not found: {filename}"))
-            except PermissionError:
-                self.stdout.write(self.style.ERROR(f"Permission denied reading workflow file: {filename}"))
+            except (FileNotFoundError, PermissionError) as e:
+                self.stdout.write(self.style.ERROR("Workflow file %s: %s" % (filename, e)))
             except yaml.YAMLError as e:
-                self.stdout.write(self.style.ERROR(f"Invalid YAML syntax in workflow file {filename}: {e}"))
+                self.stdout.write(self.style.ERROR("Invalid YAML in workflow file %s: %s" % (filename, e)))
             except UnicodeDecodeError as e:
-                self.stdout.write(self.style.ERROR(f"Encoding error in workflow file {filename}: {e}"))
-            except KeyError as e:
-                self.stdout.write(self.style.ERROR(f"Missing required field in workflow file {filename}: {e}"))
+                self.stdout.write(self.style.ERROR("Encoding error in workflow file %s: %s" % (filename, e)))
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f"Unexpected error loading workflow {filename}: {e}"))
+                self.stdout.write(self.style.ERROR("Error loading workflow %s: %s" % (filename, e)))
 
         self.stdout.write(
-            f"Loaded {created_count} new custom workflows, updated {updated_count} existing custom workflows"
+            "Loaded %s new %s workflows from config, updated %s existing" % (created_count, label, updated_count)
         )
+
+    def load_custom_workflows(self):
+        """Load custom workflows from config/workflows/ directory."""
+        self._load_workflows_from_config_dir(workflow_type="custom")

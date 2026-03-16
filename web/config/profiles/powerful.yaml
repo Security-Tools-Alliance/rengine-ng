@@ -1,0 +1,10 @@
+type: profile
+name: powerful
+category: speed
+description: "High-end machine (i7+ / 24GB+ RAM)"
+opts:
+  threads: 20
+  rate_limit: 200
+  delay: 0
+  timeout: 5
+  retries: 2

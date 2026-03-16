@@ -1,0 +1,10 @@
+type: profile
+name: nuc
+category: speed
+description: "Small form factor node (e.g. Intel NUC)"
+opts:
+  threads: 6
+  rate_limit: 40
+  delay: 0.2
+  timeout: 10
+  retries: 3

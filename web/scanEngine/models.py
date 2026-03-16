@@ -774,6 +774,28 @@ class SecatorProfile(models.Model):
         """Check if this profile can be deleted"""
         return self.profile_type != "builtin"
 
+    def to_runner_dict(self):
+        """
+        Return a JSON-serializable dict suitable for Secator TemplateLoader(input=...).
+
+        Used when sending built-in profiles to the runner so the worker receives the
+        full profile definition instead of resolving by name. Dict keys match Secator
+        profile YAML: type, name, category, description, enforce, opts.
+        """
+        parsed = self._parse_opts()
+        if isinstance(parsed, dict) and "opts" in parsed and isinstance(parsed["opts"], dict):
+            opts = parsed["opts"]
+        else:
+            opts = parsed if isinstance(parsed, dict) else {}
+        return {
+            "type": "profile",
+            "name": self.name,
+            "category": self.category,
+            "description": self.description or "",
+            "enforce": bool(self.enforce),
+            "opts": opts,
+        }
+
     def save(self, *args, **kwargs):
         """Override save to prevent modification of built-in profiles"""
         bypass_builtin = kwargs.pop("bypass_builtin_constraints", False)

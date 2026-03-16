@@ -27,6 +27,7 @@ from scanEngine.services.worker_ssh import (
     validate_deploy_path,
 )
 from scanEngine.services.worker_tunnel import start_worker_tunnel, stop_worker_tunnel
+from targetApp.services.scope_params import resolve_profiles_for_runner
 
 
 PREFIX_REMOTE_RUNNER = "[REMOTE_RUNNER]"
@@ -148,6 +149,7 @@ def run_scan_on_worker(
     tunnel_handle = _start_tunnel_if_needed(worker)
     try:
         profile_names = _profile_names_from_config(secator_config)
+        profile_items = resolve_profiles_for_runner(profile_names)
         sync_configs_for_run(
             worker,
             workflow_name=workflow_name,
@@ -166,7 +168,7 @@ def run_scan_on_worker(
             scan_type,
             task_names,
             secator_config,
-            profile_names,
+            profile_items,
             subscan_id,
         )
         client = get_ssh_client(worker)
@@ -218,7 +220,7 @@ def _build_job_payload(
     scan_type: str | None,
     task_names: list[str],
     secator_config: dict,
-    profile_names: list[str],
+    profile_items: list[str] | list[dict],
     subscan_id: int | None,
 ) -> dict:
     """Build the job dict for the remote runner script."""
@@ -237,7 +239,7 @@ def _build_job_payload(
             subscan = SubScan.objects.filter(id=subscan_id).select_related("subdomain").first()
             if subscan and subscan.subdomain_id:
                 context["subdomain_id"] = subscan.subdomain_id
-    run_opts = build_run_opts(secator_config=secator_config, profile_names=profile_names)
+    run_opts = build_run_opts(secator_config=secator_config, profile_items=profile_items)
     job = {
         "execution_mode": execution_mode,
         "targets": targets,

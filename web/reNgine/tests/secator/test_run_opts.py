@@ -21,6 +21,21 @@ class TestBuildRunOpts(unittest.TestCase):
         result = build_run_opts({}, ["polite", "stealth"])
         self.assertEqual(result["profiles"], ["polite", "stealth"])
 
+    def test_profile_items_mixed_names_and_inline_dicts(self):
+        """Inline profile dicts (built-in) and names are passed through for the worker."""
+        inline = {
+            "type": "profile",
+            "name": "polite",
+            "category": "speed",
+            "description": "Avoid overloading",
+            "enforce": False,
+            "opts": {"rate_limit": 100, "delay": 0},
+        }
+        result = build_run_opts({}, [inline, "custom_profile"])
+        self.assertEqual(len(result["profiles"]), 2)
+        self.assertEqual(result["profiles"][0], inline)
+        self.assertEqual(result["profiles"][1], "custom_profile")
+
     def test_scalar_params_included_when_non_empty(self):
         config = {
             "threads": 10,

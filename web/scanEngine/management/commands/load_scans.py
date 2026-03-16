@@ -153,18 +153,23 @@ class Command(SecatorLoaderBase):
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"Failed to get scans from secator: {e}"))
 
-    def load_custom_scans(self):
-        """Load custom scans from config/scans/ directory"""
-        self.stdout.write("Loading custom scans...")
+        self._load_scans_from_config_dir(scan_config_type="builtin")
 
+    def _load_scans_from_config_dir(self, scan_config_type: str):
+        """Load scans from config/scans/ directory with given scan_config_type (builtin or custom)."""
         scans_dir = os.path.join(settings.BASE_DIR, "config", "scans")
 
         if not os.path.exists(scans_dir):
-            self.stdout.write(self.style.WARNING(f"Scans directory not found: {scans_dir}"))
+            if scan_config_type == "builtin":
+                self.stdout.write(self.style.WARNING("Config scans directory not found, skipping"))
             return
+
+        label = "built-in (config)" if scan_config_type == "builtin" else "custom"
+        self.stdout.write("Loading %s scans from config/scans/..." % (label,))
 
         created_count = 0
         updated_count = 0
+
         for filename in sorted(os.listdir(scans_dir)):
             if not filename.endswith(".yaml") and not filename.endswith(".yml"):
                 continue
@@ -172,54 +177,64 @@ class Command(SecatorLoaderBase):
             filepath = os.path.join(scans_dir, filename)
 
             try:
-                with open(filepath, "r") as f:
+                with open(filepath, "r", encoding="utf-8") as f:
                     scan_data = yaml.safe_load(f)
 
                 if not scan_data or "name" not in scan_data:
-                    self.stdout.write(self.style.WARNING(f"Invalid scan file: {filename}"))
+                    self.stdout.write(self.style.WARNING("Invalid scan file: %s" % (filename,)))
                     continue
 
                 scan_name = scan_data["name"]
+                scan_type = self._determine_scan_type_from_yaml(scan_data)
+                is_default = scan_config_type == "builtin" and scan_name == "domain"
+
                 scan, created = SecatorScan.objects.get_or_create(
                     name=scan_name,
-                    scan_config_type="custom",
                     defaults={
                         "description": scan_data.get("description", ""),
                         "long_description": scan_data.get("long_description", None),
                         "yaml_configuration": yaml.dump(scan_data),
-                        "scan_type": scan_data.get("scan_type", "internet"),
-                        "is_default": False,
+                        "scan_type": scan_type,
+                        "scan_config_type": scan_config_type,
+                        "is_default": is_default,
                         "is_active": True,
                     },
                 )
 
                 if created:
-                    # Custom scans don't need bypass_builtin_constraints
-                    scan.save()
+                    if scan_config_type == "builtin":
+                        scan.save(bypass_builtin_constraints=True)
+                    else:
+                        scan.save()
                     created_count += 1
-                    self.stdout.write(f"Created custom scan: {scan_name}")
+                    self.stdout.write("Created %s scan: %s" % (label, scan_name))
                 else:
-                    # Always update existing custom scans using update()
-                    SecatorScan.objects.filter(pk=scan.pk).update(
-                        description=scan_data.get("description", ""),
-                        long_description=scan_data.get("long_description", None),
-                        yaml_configuration=yaml.dump(scan_data),
-                        scan_type=scan_data.get("scan_type", "internet"),
-                    )
+                    update_fields = {
+                        "description": scan_data.get("description", ""),
+                        "long_description": scan_data.get("long_description", None),
+                        "yaml_configuration": yaml.dump(scan_data),
+                        "scan_type": scan_type,
+                        "scan_config_type": scan_config_type,
+                    }
+                    if scan_config_type == "builtin":
+                        update_fields["is_default"] = is_default
+                    SecatorScan.objects.filter(pk=scan.pk).update(**update_fields)
                     updated_count += 1
-                    self.stdout.write(f"Updated custom scan: {scan_name}")
+                    self.stdout.write("Updated %s scan: %s" % (label, scan_name))
 
-            except FileNotFoundError:
-                self.stdout.write(self.style.ERROR(f"Scan file not found: {filename}"))
-            except PermissionError:
-                self.stdout.write(self.style.ERROR(f"Permission denied reading scan file: {filename}"))
+            except (FileNotFoundError, PermissionError) as e:
+                self.stdout.write(self.style.ERROR("Scan file %s: %s" % (filename, e)))
             except yaml.YAMLError as e:
-                self.stdout.write(self.style.ERROR(f"Invalid YAML syntax in scan file {filename}: {e}"))
+                self.stdout.write(self.style.ERROR("Invalid YAML in scan file %s: %s" % (filename, e)))
             except UnicodeDecodeError as e:
-                self.stdout.write(self.style.ERROR(f"Encoding error in scan file {filename}: {e}"))
-            except KeyError as e:
-                self.stdout.write(self.style.ERROR(f"Missing required field in scan file {filename}: {e}"))
+                self.stdout.write(self.style.ERROR("Encoding error in scan file %s: %s" % (filename, e)))
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f"Unexpected error loading scan {filename}: {e}"))
+                self.stdout.write(self.style.ERROR("Error loading scan %s: %s" % (filename, e)))
 
-        self.stdout.write(f"Loaded {created_count} new custom scans, updated {updated_count} existing custom scans")
+        self.stdout.write(
+            "Loaded %s new %s scans from config, updated %s existing" % (created_count, label, updated_count)
+        )
+
+    def load_custom_scans(self):
+        """Load custom scans from config/scans/ directory."""
+        self._load_scans_from_config_dir(scan_config_type="custom")

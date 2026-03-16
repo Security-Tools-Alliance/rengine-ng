@@ -630,6 +630,29 @@ def _resolve_profiles(
     return []
 
 
+def resolve_profiles_for_runner(profile_names: list[str]) -> list[str | dict[str, Any]]:
+    """
+    Convert profile names to runner payload: built-in profiles as inline dicts, others as names.
+
+    Built-in profiles are sent as full TemplateLoader-compatible dicts so the worker
+    does not need to resolve them by name (avoids version/path mismatch). Custom
+    profiles are sent as names and resolved from synced templates on the worker.
+    """
+    if not profile_names:
+        return []
+    result: list[str | dict[str, Any]] = []
+    for name in profile_names:
+        if not name or not isinstance(name, str):
+            continue
+        name = name.strip()
+        profile = SecatorProfile.objects.filter(name=name, is_active=True).first()
+        if profile is not None and profile.profile_type == "builtin":
+            result.append(profile.to_runner_dict())
+        else:
+            result.append(name)
+    return result
+
+
 def _resolve_worker_ids(scope: Any | None) -> list[int]:
     """
     Return active worker IDs for the scope. Caller (e.g. _merge_scope_params_into_config)

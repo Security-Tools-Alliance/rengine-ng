@@ -39,12 +39,19 @@ def _header_dict_to_secator_string(header_dict: dict[str, Any]) -> str:
     return ";;".join(parts)
 
 
-def build_run_opts(secator_config: dict[str, Any], profile_names: list[str]) -> dict[str, Any]:
+def build_run_opts(
+    secator_config: dict[str, Any],
+    profile_items: list[str] | list[dict[str, Any]],
+) -> dict[str, Any]:
     """
     Build the run options dict for Secator runs.
 
     Centralizes option construction so semantics remain consistent across
     runner, remote_runner, worker, and tasks.
+
+    profile_items: list of profile names (str) and/or inline profile dicts (for
+    built-in profiles). The worker builds TemplateLoader from each: dict -> input,
+    str -> name="profiles/<name>".
 
     All keys in SCAN_PARAM_KEYS are forwarded when non-None and non-empty.
     ``header``: if value is a dict, converted to Secator string format
@@ -52,7 +59,7 @@ def build_run_opts(secator_config: dict[str, Any], profile_names: list[str]) -> 
     """
     run_opts: dict[str, Any] = {
         "sync": False,
-        "profiles": profile_names,
+        "profiles": list(profile_items),
     }
     for key in SCAN_PARAM_KEYS:
         value = secator_config.get(key)
