@@ -182,7 +182,7 @@ class Scope(models.Model):
     allowed_finding_domains = models.JSONField(
         default=list,
         blank=True,
-        help_text="List of domain names (e.g. ['easi-services.fr']) allowed in addition to the target when restrict_findings_to_target is True.",
+        help_text="List of domain names (e.g. ['example.com']) allowed in addition to the target when restrict_findings_to_target is True.",
     )
     allowed_finding_hosts = models.JSONField(
         default=list,

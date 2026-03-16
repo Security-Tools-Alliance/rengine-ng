@@ -50,7 +50,7 @@
       {% include 'startScan/_items/secator_selection_layout.html' with id_prefix=quick_scan_id_prefix %}
       {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=quick_scan_entity_name id_prefix=quick_scan_id_prefix|add:'_' id_suffix='_'|add:quick_scan_id_prefix %}
       {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix=quick_scan_id_prefix|add:'_' show_random_proxy=False %}
-      {% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_level=quick_scan_scan_params_level %}
+      {% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_effective_ordered=scan_params_effective_ordered scan_params_level=quick_scan_scan_params_level %}
       {% include 'startScan/_items/secator_start_scan_button.html' %}
     </div>
   </div>

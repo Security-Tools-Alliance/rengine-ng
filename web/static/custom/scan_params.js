@@ -190,6 +190,11 @@
     const $selector = $switch.closest('.profile-selector');
     toggleCategory(category, $switch.is(':checked'), $scope, $selector);
     if (!$switch.is(':checked')) {
+      const hiddenName = CATEGORY_HIDDEN_MAP[category];
+      if (hiddenName) {
+        const $hidden = $scope.find('input[name="' + hiddenName + '"]');
+        if ($hidden.length) $hidden.val('');
+      }
       const $blockRoot = $switch.closest('[data-scan-params-block-root="true"]');
       if ($blockRoot.length) scheduleEffectivePreview($blockRoot[0]);
     }
@@ -229,15 +234,14 @@
     const hiddenName = CATEGORY_HIDDEN_MAP[category];
     const $hidden = $scope.find('input[name="' + hiddenName + '"]');
 
-    const $group = $btn.closest('.btn-group');
-    if ($group.length) {
-      $group.find('button').each(function () {
+    const $section = $selector.find('.profile-category-section[data-profile-category="' + category + '"]');
+    if ($section.length) {
+      $section.find('button[data-profile-type="' + category + '"]').each(function () {
         resetBuiltinButtonClasses($(this), category);
       });
     }
     $btn.addClass(CATEGORY_BUTTON_CLASS[category] || '').addClass('active');
 
-    const $section = $selector.find('.profile-category-section[data-profile-category="' + category + '"]');
     const $customSelect = $section.find('select[id$="' + category + '_custom_profile"]');
     if ($customSelect.length) {
       $customSelect.val('');

@@ -277,7 +277,7 @@ class ResolveScanParamsTest(BaseTestCase):
         self.assertIn("stealth", result["profiles"])
 
     def test_target_scan_config_profiles_beats_scope(self):
-        """Target.scan_config["profiles"] (level 2) overrides scope defaults."""
+        """Target overrides scope only for the same category; other categories are inherited."""
         target = self.data_generator.target
         target.scan_config = {"profiles": {"speed": "aggressive"}}
         target.save()
@@ -288,7 +288,9 @@ class ResolveScanParamsTest(BaseTestCase):
 
         result = resolve_scan_params(target, scope=scope)
 
-        self.assertEqual(result["profiles"], ["aggressive"])
+        self.assertIn("aggressive", result["profiles"])
+        self.assertIn("stealth", result["profiles"])
+        self.assertEqual(len(result["profiles"]), 2)
 
     def test_user_override_profiles_beat_target_and_scope(self):
         target = self.data_generator.target
@@ -732,8 +734,8 @@ class BuildEffectiveParamsDisplayFromConfigsTest(BaseTestCase):
         self.assertIn("delay", result["profile_display_list"][0]["tooltip"])
         self.assertIn("threads", result["profile_display_list"][0]["tooltip"])
 
-    def test_profile_opts_do_not_override_explicit_config(self):
-        """Profile opts only fill params with source 'default', not org/scope/target/scan."""
+    def test_profile_opts_override_org_scope_target_when_no_scan_override(self):
+        """Profile opts override target/scope/org for params the profile defines, when not set at scan."""
         profile_name = "test-profile-no-override-%s" % (str(uuid.uuid4())[:8],)
         SecatorProfile.objects.create(
             name=profile_name,
@@ -747,8 +749,28 @@ class BuildEffectiveParamsDisplayFromConfigsTest(BaseTestCase):
             org_config={"threads": 10},
             user_override={"profiles": {"speed": profile_name}},
         )
-        self.assertEqual(result["threads"]["value"], 10)
-        self.assertEqual(result["threads"]["source"], "organization")
+        self.assertEqual(result["threads"]["value"], 99)
+        self.assertEqual(result["threads"]["source"], "profile")
+        self.assertEqual(result["delay"]["value"], 2.0)
+        self.assertEqual(result["delay"]["source"], "profile")
+
+    def test_profile_opts_do_not_override_explicit_scan_param(self):
+        """Profile opts do not override when user explicitly sets the param at scan level."""
+        profile_name = "test-profile-scan-override-%s" % (str(uuid.uuid4())[:8],)
+        SecatorProfile.objects.create(
+            name=profile_name,
+            category="speed",
+            description="Profile with opts",
+            opts="threads: 99\ndelay: 2.0\n",
+            profile_type="custom",
+            is_active=True,
+        )
+        result = build_effective_params_display_from_configs(
+            org_config={"threads": 10},
+            user_override={"profiles": {"speed": profile_name}, "threads": 5},
+        )
+        self.assertEqual(result["threads"]["value"], 5)
+        self.assertEqual(result["threads"]["source"], "scan")
         self.assertEqual(result["delay"]["value"], 2.0)
         self.assertEqual(result["delay"]["source"], "profile")
 

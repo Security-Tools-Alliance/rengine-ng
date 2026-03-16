@@ -47,6 +47,6 @@
   {% if current_project %}data-scan-params-project-slug="{{ current_project.slug }}"{% else %}data-scan-params-project-slug=""{% endif %}
 >
   <div class="collapse {% if scan_params_section_collapse_expanded %}show{% endif %}" id="{{ section_collapse_id }}">
-    {% include "shared/_scan_params_block.html" with scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_prefix=scan_params_prefix id_prefix=id_prefix default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial show_use_random_proxy=show_use_random_proxy|default:False %}
+    {% include "shared/_scan_params_block.html" with scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_effective_ordered=scan_params_effective_ordered scan_params_values=scan_params_values scan_params_prefix=scan_params_prefix id_prefix=id_prefix default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial show_use_random_proxy=show_use_random_proxy|default:False %}
   </div>
 </div>

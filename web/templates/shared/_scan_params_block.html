@@ -11,6 +11,7 @@
     - id_prefix: for unique element IDs (optional)
     - default_profiles: dict for secator_profiles.html (category -> profile name)
     - custom_profiles_by_category: dict for secator_profiles.html
+    - speed_rengine_builtin_profiles: list of dicts (name, description, icon) for hardware-tier speed profiles
 {% endcomment %}
 {% load static %}
 
@@ -25,7 +26,7 @@
        value="{{ scan_params_values.profiles.network|default:default_profiles.network|default:'' }}">
 
 {# --- 1. Effective Parameters Display (single source: shared partial) --- #}
-{% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_level=scan_params_level %}
+{% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_effective_ordered=scan_params_effective_ordered scan_params_level=scan_params_level %}
 
 {# --- 2. Profiles Selection (first, per Secator creator's recommendation) --- #}
 <h5 class="mb-1">Profiles <small class="text-muted fw-normal">
@@ -40,7 +41,7 @@
   {% if scan_params_level == "target" %}Selecting a profile here overrides the scope/organization default for this target.{% endif %}
 </p>
 
-{% include "startScan/_items/secator_profiles.html" with id_prefix=id_prefix|default:'' default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category %}
+{% include "startScan/_items/secator_profiles.html" with id_prefix=id_prefix|default:'' default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category speed_rengine_builtin_profiles=speed_rengine_builtin_profiles %}
 
 {# --- 3. Scan Parameters Form Inputs (overrides after profiles) --- #}
 <hr>

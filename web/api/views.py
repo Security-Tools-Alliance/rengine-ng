@@ -2636,7 +2636,7 @@ class PostScanParamsEffectivePreview(APIView):
             _preview_config_scope,
             _preview_config_target,
         )
-        from targetApp.services.scan_param_definitions import PARAM_KEYS
+        from targetApp.services.scan_param_definitions import ORDERED_PARAM_KEYS_FOR_FORM, PARAM_KEYS
         from targetApp.services.scope_params import (
             _normalize_scan_config,
             build_effective_params_display_from_configs,
@@ -2742,11 +2742,15 @@ class PostScanParamsEffectivePreview(APIView):
             user_override=user_override,
             scope=scope_for_worker,
         )
+        scan_params_effective_ordered = [
+            (p, scan_params_effective[p]) for p in ORDERED_PARAM_KEYS_FOR_FORM if p in scan_params_effective
+        ]
 
         html = render_to_string(
             "shared/_scan_params_effective_display.html",
             {
                 "scan_params_effective": scan_params_effective,
+                "scan_params_effective_ordered": scan_params_effective_ordered,
                 "scan_params_level": scan_params_level,
             },
             request=request,

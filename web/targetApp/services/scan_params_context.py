@@ -11,7 +11,7 @@ from typing import Any
 
 from startScan.secator.profiles import build_secator_profiles_context
 
-from .scan_param_definitions import header_dict_to_lines
+from .scan_param_definitions import ORDERED_PARAM_KEYS_FOR_FORM, header_dict_to_lines
 from .scope_params import (
     PROFILE_CATEGORIES,
     build_effective_params_display,
@@ -99,9 +99,11 @@ def build_scan_params_form_context(
             "Leave fields empty to inherit from the level above or system defaults. Filled values apply at this level."
         )
 
+    scan_params_effective_ordered = [(p, effective[p]) for p in ORDERED_PARAM_KEYS_FOR_FORM if p in effective]
     result = {
         "scan_params_level": level,
         "scan_params_effective": effective,
+        "scan_params_effective_ordered": scan_params_effective_ordered,
         "scan_params_values": values,
         "header_initial": header_initial,
         "entity_profile_categories": entity_profile_categories,

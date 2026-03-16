@@ -17,7 +17,7 @@ class ToRelativeScanPathTestCase(BaseTestCase):
         self.assertIsNone(to_relative_scan_path("   "))
 
     def test_returns_path_unchanged_when_already_relative(self):
-        path = "2sec/domain/tasks/44/screenshot.png"
+        path = "example/domain/tasks/44/screenshot.png"
         self.assertEqual(to_relative_scan_path(path), path)
         self.assertEqual(to_relative_scan_path("workspace/file.txt"), "workspace/file.txt")
 
@@ -25,10 +25,10 @@ class ToRelativeScanPathTestCase(BaseTestCase):
         with patch("reNgine.secator.path_utils.settings") as mock_settings:
             mock_settings.SECATOR_REPORTS_PREFIX = "/home/secator/.secator/reports"
             mock_settings.RENGINE_RESULTS = "/data/rengine/results"
-            path = "/home/secator/.secator/reports/2sec/domain/screenshot.png"
+            path = "/home/secator/.secator/reports/example/domain/screenshot.png"
             self.assertEqual(
                 to_relative_scan_path(path),
-                "2sec/domain/screenshot.png",
+                "example/domain/screenshot.png",
             )
 
     def test_strips_rengine_results_when_matching(self):
@@ -45,10 +45,10 @@ class ToRelativeScanPathTestCase(BaseTestCase):
         with patch("reNgine.secator.path_utils.settings") as mock_settings:
             mock_settings.SECATOR_REPORTS_PREFIX = "/home/webuser/.secator/reports"
             mock_settings.RENGINE_RESULTS = "/data/results"
-            path = "/home/secator/.secator/reports/2sec/easi-services.fr/tasks/44/file.png"
+            path = "/home/secator/.secator/reports/example/example.com/tasks/44/file.png"
             self.assertEqual(
                 to_relative_scan_path(path),
-                "2sec/easi-services.fr/tasks/44/file.png",
+                "example/example.com/tasks/44/file.png",
             )
 
     def test_returns_none_for_absolute_path_with_no_known_prefix(self):
@@ -78,10 +78,10 @@ class StripSecatorReportsPrefixTestCase(BaseTestCase):
             mock_settings.SECATOR_REPORTS_PREFIX = "/home/secator/.secator/reports"
             mock_settings.RENGINE_RESULTS = ""
             mock_settings.SECATOR_RESULTS = ""
-            path = "/home/secator/.secator/reports/2sec/domain/file.png"
+            path = "/home/secator/.secator/reports/example/domain/file.png"
             self.assertEqual(
                 strip_secator_reports_prefix(path),
-                "2sec/domain/file.png",
+                "example/domain/file.png",
             )
 
     def test_strips_via_marker_when_prefix_does_not_match(self):
@@ -89,6 +89,6 @@ class StripSecatorReportsPrefixTestCase(BaseTestCase):
             mock_settings.SECATOR_REPORTS_PREFIX = "/home/webuser/.secator/reports"
             mock_settings.RENGINE_RESULTS = ""
             mock_settings.SECATOR_RESULTS = "/home/secator/.secator/reports"
-            path = "/home/secator/.secator/reports/2sec/ws/file.png"
+            path = "/home/secator/.secator/reports/example/ws/file.png"
             result = strip_secator_reports_prefix(path)
-            self.assertEqual(result, "2sec/ws/file.png")
+            self.assertEqual(result, "example/ws/file.png")

@@ -234,7 +234,7 @@ class ScopeForm(forms.ModelForm):
             attrs={
                 "class": "form-control",
                 "rows": 3,
-                "placeholder": "easi-services.fr\nother-allowed.com",
+                "placeholder": "example.com\nother-allowed.com",
             }
         ),
         help_text='One domain per line. Only used when "Restrict findings to target" is checked.',
@@ -245,7 +245,7 @@ class ScopeForm(forms.ModelForm):
             attrs={
                 "class": "form-control",
                 "rows": 4,
-                "placeholder": "sub.example.com\n10.0.0.1",
+                "placeholder": "sub.example.com\n192.168.1.1",
             }
         ),
         help_text=(

@@ -305,13 +305,13 @@ class TestFilterTargetsByTargetValue(BaseTestCase):
         """CIDR target value: only same CIDR is kept; domains and other CIDRs are excluded."""
         result = filter_targets_by_target_value(
             "172.16.0.0/24",
-            ["172.16.0.0/24", "easi-services.fr", "10.0.0.0/8"],
+            ["172.16.0.0/24", "example.com", "10.0.0.0/8"],
         )
         self.assertEqual(result, ["172.16.0.0/24"])
 
     def test_domain_target_excludes_cidr(self):
         """Domain target value: CIDR in list does not match and is excluded."""
-        result = filter_targets_by_target_value("easi-services.fr", ["172.16.0.0/24"])
+        result = filter_targets_by_target_value("example.com", ["172.16.0.0/24"])
         self.assertIsNone(result)
 
 
@@ -351,6 +351,6 @@ class TestFilterSelectedTargetsPerTaskForTarget(BaseTestCase):
         """CIDR target value: only task with matching CIDR in list is kept."""
         result = filter_selected_targets_per_task_for_target(
             "172.16.0.0/24",
-            {"mapcidr": ["172.16.0.0/24"], "dnsx": ["easi-services.fr"]},
+            {"mapcidr": ["172.16.0.0/24"], "dnsx": ["example.com"]},
         )
         self.assertEqual(result, {"mapcidr": ["172.16.0.0/24"]})

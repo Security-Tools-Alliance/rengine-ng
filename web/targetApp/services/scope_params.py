@@ -104,23 +104,19 @@ def _build_allowed_domains_set(scope: Any, target: Any) -> set[str]:
     """
     allowed: set[str] = set()
     if target and getattr(target, "value", None):
-        target_val = (target.value or "").strip().lower()
-        if target_val:
-            reg = get_domain_from_subdomain(target_val)
-            if reg:
+        if target_val := (target.value or "").strip().lower():
+            if reg := get_domain_from_subdomain(target_val):
                 allowed.add(reg)
     if scope and getattr(scope, "allowed_finding_domains", None):
         for entry in scope.allowed_finding_domains:
             if isinstance(entry, str) and entry.strip():
-                norm = normalize_domain_name(entry.strip())
-                if norm:
+                if norm := normalize_domain_name(entry.strip()):
                     reg = get_domain_from_subdomain(norm) or norm
                     allowed.add(reg)
     if scope:
         for entry in normalize_allowed_hosts_from_list(getattr(scope, "allowed_finding_hosts", None)):
             if not is_valid_ip(entry):
-                reg = get_domain_from_subdomain(entry) or entry
-                if reg:
+                if reg := get_domain_from_subdomain(entry) or entry:
                     allowed.add(reg)
     return allowed
 
@@ -282,21 +278,14 @@ def _format_profile_opts_tooltip(opts: dict[str, Any]) -> str:
     lines = []
     for k in sorted(opts.keys()):
         v = opts[k]
-        if v is None:
-            v = ""
-        elif isinstance(v, dict):
-            v = str(v)
-        else:
-            v = str(v)
+        v = "" if v is None else str(v)
         lines.append("%s: %s" % (k, v))
     return ", ".join(lines)
 
 
 def _get_default(param: str) -> Any:
     setting_name = _SETTINGS_DEFAULTS.get(param)
-    if setting_name is None:
-        return None
-    return getattr(settings, setting_name, None)
+    return None if setting_name is None else getattr(settings, setting_name, None)
 
 
 def _normalize_scan_config(raw: Any) -> dict[str, Any]:
@@ -349,6 +338,75 @@ def _profiles_to_list(profiles_data: Any) -> list[str]:
     if isinstance(profiles_data, list):
         return [p for p in profiles_data if isinstance(p, str) and p]
     return []
+
+
+def _get_profiles_dict(config: dict[str, Any] | None) -> dict[str, str]:
+    """Return profiles as a category -> name dict from a config. Empty dict if missing or invalid."""
+    if not config:
+        return {}
+    raw = config.get("profiles")
+    if isinstance(raw, dict):
+        return {k: v for k, v in raw.items() if k in _PROFILE_CATEGORIES and isinstance(v, str) and (v or "").strip()}
+    if isinstance(raw, list):
+        names = [p for p in raw if isinstance(p, str) and p]
+        return dict(zip(_PROFILE_CATEGORIES[: len(names)], names))
+    return {}
+
+
+def _merge_profiles_by_category(
+    override_profiles: dict[str, str],
+    target_config: dict[str, Any],
+    scope_config: dict[str, Any],
+    org_config: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Merge profiles by category: for each category, use the first non-empty value
+    from override -> target -> scope -> org. Only a profile of the same category
+    replaces the parent's; other categories are inherited.
+
+    Returns:
+        (merged category -> profile_name, category -> source level for display).
+    """
+    merged: dict[str, str] = {}
+    source_per_cat: dict[str, str] = {}
+    configs: list[tuple[dict[str, str], str]] = [
+        (override_profiles, "scan"),
+        (_get_profiles_dict(target_config), "target"),
+        (_get_profiles_dict(scope_config), "scope"),
+        (_get_profiles_dict(org_config), "organization"),
+    ]
+    for cat in _PROFILE_CATEGORIES:
+        for prof_dict, level in configs:
+            if name := (prof_dict.get(cat) or "").strip():
+                merged[cat] = name
+                source_per_cat[cat] = level
+                break
+    return merged, source_per_cat
+
+
+def _profile_chain_per_category(
+    override_profiles: dict[str, str],
+    target_config: dict[str, Any],
+    scope_config: dict[str, Any],
+    org_config: dict[str, Any],
+) -> dict[str, list[tuple[str, str]]]:
+    """
+    Build per-category chain of (profile_name, source_level) from override -> target -> scope -> org.
+    Used to resolve param values from the first profile in the chain that defines them,
+    so a profile that does not define a param inherits from the parent's profile.
+    """
+    configs: list[tuple[dict[str, str], str]] = [
+        (override_profiles, "scan"),
+        (_get_profiles_dict(target_config), "target"),
+        (_get_profiles_dict(scope_config), "scope"),
+        (_get_profiles_dict(org_config), "organization"),
+    ]
+    chain: dict[str, list[tuple[str, str]]] = {cat: [] for cat in _PROFILE_CATEGORIES}
+    for cat in _PROFILE_CATEGORIES:
+        for prof_dict, level in configs:
+            if name := (prof_dict.get(cat) or "").strip():
+                chain[cat].append((name, level))
+    return chain
 
 
 def normalize_scope_default_profiles_to_dict(raw: Any) -> dict[str, str] | None:
@@ -444,19 +502,14 @@ def _build_effective_display_from_config_dicts(
         else:
             result[param] = {"value": _get_default(param), "source": "default"}
 
-    override_profiles = _profiles_to_list(user_override.get("profiles"))
-    target_profiles = _profiles_to_list(target_config.get("profiles"))
-    scope_profiles = _profiles_to_list(scope_config.get("profiles"))
-    org_profiles = _profiles_to_list(org_config.get("profiles"))
-
-    if override_profiles:
-        result["profiles"] = {"value": user_override.get("profiles"), "source": "scan"}
-    elif target_profiles:
-        result["profiles"] = {"value": target_config.get("profiles"), "source": "target"}
-    elif scope_profiles:
-        result["profiles"] = {"value": scope_config.get("profiles"), "source": "scope"}
-    elif org_profiles:
-        result["profiles"] = {"value": org_config.get("profiles"), "source": "organization"}
+    override_profiles = _get_profiles_dict(user_override)
+    merged_profiles_value, source_per_cat = _merge_profiles_by_category(
+        override_profiles, target_config, scope_config, org_config
+    )
+    if merged_profiles_value:
+        levels = set(source_per_cat.values())
+        source = levels.pop() if len(levels) == 1 else "mixed"
+        result["profiles"] = {"value": merged_profiles_value, "source": source}
     else:
         result["profiles"] = {"value": None, "source": "default"}
 
@@ -464,6 +517,7 @@ def _build_effective_display_from_config_dicts(
     if isinstance(profiles_value, dict) and profiles_value:
         merged_profile_opts: dict[str, Any] = {}
         merged_profile_name: dict[str, str] = {}
+        merged_profile_source_level: dict[str, str] = {}
         profile_opts_cache: dict[str, dict[str, Any]] = {}
 
         def _get_cached_profile_opts(profile_name: str) -> dict[str, Any]:
@@ -471,21 +525,25 @@ def _build_effective_display_from_config_dicts(
                 profile_opts_cache[profile_name] = _get_profile_opts(profile_name)
             return profile_opts_cache[profile_name]
 
-        for cat in _PROFILE_CATEGORIES:
-            name = profiles_value.get(cat)
-            if not name or not isinstance(name, str):
-                continue
-            opts = _get_cached_profile_opts(name)
-            for k, v in opts.items():
-                if k in PARAM_KEYS:
-                    merged_profile_opts[k] = v
-                    merged_profile_name[k] = name
+        chain_per_cat = _profile_chain_per_category(override_profiles, target_config, scope_config, org_config)
         for param in PARAM_KEYS:
-            if result[param]["source"] == "default" and param in merged_profile_opts:
+            for cat in _PROFILE_CATEGORIES:
+                for name, level in chain_per_cat.get(cat, []):
+                    opts = _get_cached_profile_opts(name)
+                    if param in opts and opts.get(param) is not None:
+                        merged_profile_opts[param] = opts[param]
+                        merged_profile_name[param] = name
+                        merged_profile_source_level[param] = level
+                        break
+                if param in merged_profile_opts:
+                    break
+        for param in PARAM_KEYS:
+            if result[param]["source"] != "scan" and param in merged_profile_opts:
                 result[param] = {
                     "value": merged_profile_opts[param],
                     "source": "profile",
                     "profile_name": merged_profile_name.get(param),
+                    "profile_source_level": merged_profile_source_level.get(param, "default"),
                 }
         profile_display_list: list[dict[str, Any]] = []
         for cat in _PROFILE_CATEGORIES:
@@ -497,6 +555,7 @@ def _build_effective_display_from_config_dicts(
                 {
                     "category": cat,
                     "name": name,
+                    "source_level": source_per_cat.get(cat, "default"),
                     "tooltip": _format_profile_opts_tooltip(opts),
                 }
             )
@@ -611,23 +670,15 @@ def _resolve_profiles(
     scope_config: dict[str, Any],
     org_config: dict[str, Any],
 ) -> list[str]:
-    # 1. User override (list from parse_secator_profiles at scan launch)
-    if override_profiles := _profiles_to_list(override.get("profiles")):
-        return override_profiles
+    # User override at scan launch can be a list: then it replaces all profiles.
+    raw_override = override.get("profiles")
+    if isinstance(raw_override, list) and raw_override:
+        return [p for p in raw_override if isinstance(p, str) and p]
 
-    # 2. Target.scan_config["profiles"] (dict per category)
-    if target_profiles := _profiles_to_list(target_config.get("profiles")):
-        return target_profiles
-
-    # 3. Scope.scan_config["profiles"] (dict per category)
-    if scope_profiles := _profiles_to_list(scope_config.get("profiles")):
-        return scope_profiles
-
-    # 4. Organization.scan_config["profiles"]
-    if org_profiles := _profiles_to_list(org_config.get("profiles")):
-        return org_profiles
-
-    return []
+    # Merge by category: override (dict) -> target -> scope -> org per category.
+    override_profiles = _get_profiles_dict(override) if isinstance(raw_override, dict) else {}
+    merged, _ = _merge_profiles_by_category(override_profiles, target_config, scope_config, org_config)
+    return [merged[cat] for cat in _PROFILE_CATEGORIES if merged.get(cat)]
 
 
 def resolve_profiles_for_runner(profile_names: list[str]) -> list[str | dict[str, Any]]:
@@ -692,11 +743,8 @@ def get_allowed_workers_for_scope(scope: Any | None) -> list[tuple[Any, str]]:
     options: list[tuple[Any, str]] = []
     if allow_local:
         options.append((None, "Local"))
-    for wid, wname in remote:
-        options.append((wid, wname or str(wid)))
-    if not options:
-        return [(None, "Local")]
-    return options
+    options.extend((wid, wname or str(wid)) for wid, wname in remote)
+    return options or [(None, "Local")]
 
 
 def get_default_worker_for_scope(scope: Any | None) -> int | None:
@@ -820,14 +868,12 @@ def get_effective_worker_display(
     if scope is not None:
         default_id = get_default_worker_for_scope(scope)
         if default_id is not None:
-            worker = SecatorWorker.objects.filter(id=default_id).first()
-            if worker:
+            if worker := SecatorWorker.objects.filter(id=default_id).first():
                 return {"value": worker.name, "source": "scope"}
         if not _scope_allow_local(scope):
             options = get_allowed_workers_for_scope(scope)
             if options and options[0][0] is not None:
-                first_worker = SecatorWorker.objects.filter(id=options[0][0]).first()
-                if first_worker:
+                if first_worker := SecatorWorker.objects.filter(id=options[0][0]).first():
                     return {"value": first_worker.name, "source": "scope"}
         return {"value": "Local", "source": "scope"}
     return {"value": "Local", "source": "default"}
@@ -843,7 +889,7 @@ def _resolve_extra_config(
 
     org_extra = org_config.get("extra_config")
     if isinstance(org_extra, dict):
-        base.update(org_extra)
+        base |= org_extra
 
     scope_extra = scope_config.get("extra_config")
     if isinstance(scope_extra, dict):

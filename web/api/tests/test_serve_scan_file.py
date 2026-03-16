@@ -117,7 +117,7 @@ class GetProjectForScanFilePathTestCase(BaseTestCase):
         self.data_generator.create_domain()
         self.data_generator.create_scan_history()
         self.data_generator.create_subdomain()
-        rel_path = "2sec/domain/screenshot_%s.png" % uuid.uuid4().hex
+        rel_path = "example/domain/screenshot_%s.png" % uuid.uuid4().hex
         absolute_path = "/home/secator/.secator/reports/" + rel_path
         self.data_generator.create_endpoint(screenshot_path=absolute_path)
         result = get_project_for_scan_file_path(rel_path)
@@ -236,10 +236,10 @@ class ServeScanFileViewTestCase(BaseTestCase):
 
     def test_build_scan_file_url_returns_relative_url_for_absolute_stored_path(self):
         with patch("reNgine.secator.path_utils.to_relative_scan_path") as mock_norm:
-            mock_norm.return_value = "2sec/domain/file.png"
-            url = build_scan_file_url("/home/secator/.secator/reports/2sec/domain/file.png")
+            mock_norm.return_value = "example/domain/file.png"
+            url = build_scan_file_url("/home/secator/.secator/reports/example/domain/file.png")
         self.assertIsNotNone(url)
-        self.assertIn("2sec/domain/file.png", url)
+        self.assertIn("example/domain/file.png", url)
         self.assertNotIn("/home/", url)
 
     def test_returns_200_when_legacy_absolute_path_in_url_and_file_exists(self):

@@ -10,20 +10,30 @@
     <div class="profile-category-section" data-profile-category="speed" style="display: none;">
       <h6 class="mt-2">Speed Profile</h6>
       <p class="small text-muted mb-2">Controls scan speed and intensity</p>
-      <div class="btn-group" id="{{ id_prefix|default:'' }}speed-builtin-buttons">
+      <div class="btn-group flex-wrap" id="{{ id_prefix|default:'' }}speed-builtin-buttons">
     <button type="button" class="btn btn-outline-primary{% if default_profiles.speed == 'aggressive' %} active btn-primary{% endif %}" data-profile-type="speed" data-profile-value="aggressive" data-bs-toggle="tooltip" title="Optimized for internal networks or time-sensitive scans with no rate limiting">
-      ⚡ Aggressive{% if default_profiles.speed == 'aggressive' %} <small class="ms-1">(Default)</small>{% endif %}
+      &#x26A1; Aggressive{% if default_profiles.speed == 'aggressive' %} <small class="ms-1">(Default)</small>{% endif %}
     </button>
     <button type="button" class="btn btn-outline-primary{% if default_profiles.speed == 'insane' %} active btn-primary{% endif %}" data-profile-type="speed" data-profile-value="insane" data-bs-toggle="tooltip" title="Maximum speed for local LAN scanning or stress testing">
-      🔥 Insane{% if default_profiles.speed == 'insane' %} <small class="ms-1">(Default)</small>{% endif %}
+      &#x1F525; Insane{% if default_profiles.speed == 'insane' %} <small class="ms-1">(Default)</small>{% endif %}
     </button>
     <button type="button" class="btn btn-outline-primary{% if default_profiles.speed == 'polite' %} active btn-primary{% endif %}" data-profile-type="speed" data-profile-value="polite" data-bs-toggle="tooltip" title="Balanced settings to avoid overloading the network">
-      🤝 Polite{% if default_profiles.speed == 'polite' %} <small class="ms-1">(Default)</small>{% endif %}
+      &#x1F91D; Polite{% if default_profiles.speed == 'polite' %} <small class="ms-1">(Default)</small>{% endif %}
     </button>
     <button type="button" class="btn btn-outline-primary{% if default_profiles.speed == 'paranoid' %} active btn-primary{% endif %}" data-profile-type="speed" data-profile-value="paranoid" data-bs-toggle="tooltip" title="Maximum stealth with very conservative settings">
-      🛡️ Paranoid{% if default_profiles.speed == 'paranoid' %} <small class="ms-1">(Default)</small>{% endif %}
+      &#x1F6E1; Paranoid{% if default_profiles.speed == 'paranoid' %} <small class="ms-1">(Default)</small>{% endif %}
     </button>
   </div>
+  {% if speed_rengine_builtin_profiles %}
+  <p class="small text-muted mt-2 mb-1">Hardware-tier (reNgine)</p>
+  <div class="btn-group flex-wrap" id="{{ id_prefix|default:'' }}speed-rengine-builtin-buttons">
+    {% for profile in speed_rengine_builtin_profiles %}
+    <button type="button" class="btn btn-outline-primary{% if default_profiles.speed == profile.name %} active btn-primary{% endif %}" data-profile-type="speed" data-profile-value="{{ profile.name }}" data-bs-toggle="tooltip" title="{{ profile.description }}">
+      {{ profile.icon }} {{ profile.display_name }}{% if default_profiles.speed == profile.name %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
   <div class="mt-2 mb-2">
     <select class="form-control" id="{{ id_prefix|default:'' }}speed_custom_profile" name="speed_custom_profile" style="display: none;">
       <option value="">-- Select Custom Profile --</option>

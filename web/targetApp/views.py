@@ -1457,7 +1457,7 @@ def add_scope(request, slug):
     form = ScopeForm(request.POST or None, project_slug=slug)
     if request.method == "POST" and form.is_valid():
         scope = form.save(commit=False)
-        profiles_dict = parse_secator_profiles_to_dict(request.POST) or None
+        profiles_dict = parse_secator_profiles_to_dict(request.POST)
         config, errors = parse_scan_config_from_post(request.POST, prefix="", profiles_dict=profiles_dict)
         if errors:
             for msg in errors:
@@ -1493,7 +1493,7 @@ def update_scope(request, slug, id):
     form = ScopeForm(request.POST or None, instance=scope, project_slug=slug)
     if request.method == "POST" and form.is_valid():
         updated_scope = form.save(commit=False)
-        profiles_dict = parse_secator_profiles_to_dict(request.POST) or None
+        profiles_dict = parse_secator_profiles_to_dict(request.POST)
         config, errors = parse_scan_config_from_post(
             request.POST, prefix="", profiles_dict=profiles_dict, existing_config=scope.scan_config
         )
