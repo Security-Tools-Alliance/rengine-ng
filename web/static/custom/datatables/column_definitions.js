@@ -102,6 +102,20 @@
     { data: "sources", name: "sources" },
   ];
 
+  const exploitColumns = [
+    { data: "id", name: "id" },
+    { data: "name", name: "name" },
+    { data: "exploit_id", name: "exploit_id" },
+    { data: "provider", name: "provider" },
+    { data: "discovered_date", name: "discovered_date" },
+    { data: "reference", name: "reference" },
+    { data: "matched_at", name: "matched_at" },
+    { data: "domain_name", name: "domain_name" },
+    { data: "cve_ids", name: "cve_ids" },
+    { data: "tags", name: "tags" },
+    { data: "extra_data", name: "extra_data" },
+  ];
+
   const secretColumns = [
     { data: "id", name: "id" },
     { data: "rule_name", name: "rule_name" },
@@ -114,6 +128,7 @@
 
   window.RENGINE_VULN_DATATABLE_COLUMNS = vulnColumns;
   window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS = subdomainColumns;
+  window.RENGINE_EXPLOIT_DATATABLE_COLUMNS = exploitColumns;
   window.RENGINE_SECRET_DATATABLE_COLUMNS = secretColumns;
 
   /** Default order for vulnerability tables (column name, dir). Used with getRengineDatatableOrderFromNames(columns, this). */

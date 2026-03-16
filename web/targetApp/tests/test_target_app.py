@@ -222,6 +222,29 @@ class TestTargetAppViews(BaseTestCase):
         self.assertIn("domain_info", response.context)
         self.assertIn("domains", response.context)
 
+    def test_target_summary_includes_exploit_count_and_tab_when_exploits_exist(self):
+        """
+        Target summary exposes exploit_count in context and shows Exploits tab when exploits exist.
+        """
+        self.data_generator.create_scan_history()
+        target = self.data_generator.target
+        scan_history = self.data_generator.scan_history
+        from startScan.models import Exploit
+
+        Exploit.objects.create(
+            name="Test Exploit",
+            exploit_id="CVE-2023-38408-exploit",
+            provider="test-provider",
+            scan_history=scan_history,
+        )
+        response = self.client.get(
+            reverse("target_summary", kwargs={"slug": self.data_generator.project.slug, "id": target.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(response.context["exploit_count"], 0)
+        content = response.content.decode("utf-8")
+        self.assertIn('id="pills-exploits-tab"', content)
+
     def test_target_summary_domain_info_none_when_no_whois(self):
         """
         Target summary shows domain_info None when no domain has WHOIS (domain_info).

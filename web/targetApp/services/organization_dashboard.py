@@ -17,6 +17,7 @@ from startScan.models import (
     CweId,
     Domain,
     EndPoint,
+    Exploit,
     ScanActivity,
     ScanHistory,
     Subdomain,
@@ -170,6 +171,7 @@ def get_organization_dashboard_data(organization: Organization) -> dict[str, Any
     subscan_timeline_finalizing = _subscan_timeline(target_ids, date_range, status=4)
 
     domain_total = domain_counts.get("total") or 0
+    exploit_total = Exploit.objects.filter(scan_history__target_id__in=target_ids).count()
 
     return {
         "organization": organization,
@@ -192,6 +194,7 @@ def get_organization_dashboard_data(organization: Organization) -> dict[str, Any
         "unknown_count": vuln_counts_direct.get("vuln_unknown") or 0,
         "total_vul_count": total_vul_direct,
         "total_vul_ignore_info_count": total_vul_ignore_info_direct,
+        "organization_exploit_count": exploit_total,
         "vulnerability_feed": vuln_feed,
         "activity_feed": activity_feed,
         "most_common_cve": most_common_cve,
@@ -246,6 +249,7 @@ def _empty_dashboard_context(
         "unknown_count": 0,
         "total_vul_count": 0,
         "total_vul_ignore_info_count": 0,
+        "organization_exploit_count": 0,
         "vulnerability_feed": [],
         "activity_feed": [],
         "most_common_cve": [],

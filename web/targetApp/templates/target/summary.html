@@ -50,6 +50,11 @@ Target Summary
 				<li class="nav-item">
 					<a class="nav-link" id="pills-vulnerabilities-tab" data-bs-toggle="tab" aria-expanded="false" href="#vulnerabilities-tab">Vulnerabilities</a>
 				</li>
+				{% if exploit_count %}
+				<li class="nav-item">
+					<a class="nav-link" id="pills-exploits-tab" data-bs-toggle="tab" aria-expanded="false" href="#exploits-tab">Exploits</a>
+				</li>
+				{% endif %}
 			</ul>
 		</div>
 	</div>
@@ -433,6 +438,49 @@ Target Summary
 	{% include 'base/_items/endpoint_tab_content.html' with target_summary=True%}
 </div>
 
+{% if exploit_count %}
+<div class="tab-pane" id="exploits-tab">
+	<div class="card">
+		<div class="card-body">
+			<h4 class="header-title mb-0">Exploits</h4>
+			{% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='exploitQuickSearch' %}
+			<table id="exploit_results" class="table dt-responsive w-100">
+				<thead>
+					<tr>
+						<th>ID</th>
+						<th>Name</th>
+						<th>Exploit ID</th>
+						<th>Provider</th>
+						<th>Discovered</th>
+						<th>URL</th>
+						<th>IP</th>
+						<th>Domain</th>
+						<th>CVE IDs</th>
+						<th>Tags</th>
+						<th>Extra</th>
+					</tr>
+				</thead>
+				<tfoot>
+					<tr>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="0" placeholder="ID" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="1" placeholder="Name" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="2" placeholder="Exploit ID" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="3" placeholder="Provider" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="4" placeholder="Discovered" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="5" placeholder="URL" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="6" placeholder="IP" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="7" placeholder="Domain" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="8" placeholder="CVE IDs" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="9" placeholder="Tags" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="10" placeholder="Extra" type="text"></th>
+					</tr>
+				</tfoot>
+			</table>
+		</div>
+	</div>
+</div>
+{% endif %}
+
 <div class="tab-pane interesting-tab-show" id="interesting-tab">
 	<div class="row">
 		<div class="col-xl-12">
@@ -534,6 +582,7 @@ const subdomain_datatable_columns = (window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS 
 	return col;
 });
 const vuln_datatable_columns = window.RENGINE_VULN_DATATABLE_COLUMNS || [];
+const exploit_datatable_columns = window.RENGINE_EXPLOIT_DATATABLE_COLUMNS || [];
 const subdomain_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
 const vuln_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
 
@@ -1099,6 +1148,69 @@ $(document).ready(function(){
 	$("#pills-endpoints-tab").click(function() {
 		get_endpoints('{% url "api:endpoints-list" %}', '{% url "api:subdomains-list" %}', project='{{current_project.slug}}', scan_history=null, domain_id={{target.id}}, gf_tags=null);
 	});
+
+	{% if exploit_count %}
+	$("#pills-exploits-tab").on("click", function() {
+		if ($.fn.DataTable && $.fn.DataTable.isDataTable("#exploit_results")) {
+			return;
+		}
+		var exploit_ajax_url = "{% url 'api:exploits-list' %}?target_id={{ target.id }}&format=datatables";
+		var colDefs = window.RengineDatatableColumnDefs || {};
+		var exploitTable = window.initServerSideDataTable("#exploit_results", window.getRengineDatatableConfig("#exploit_results", {
+			destroy: true,
+			ajax: { url: exploit_ajax_url },
+			scrollY: "60vh",
+			order: window.getRengineDatatableOrderFromNames(exploit_datatable_columns, [["discovered_date", "desc"]]),
+			columns: exploit_datatable_columns,
+			columnDefs: [
+				colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("name:name") : { targets: "name:name" },
+				colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("exploit_id:name") : { targets: "exploit_id:name" },
+				colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("provider:name") : { targets: "provider:name" },
+				colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("discovered_date:name") : { targets: "discovered_date:name" },
+				colDefs.getVulnHttpUrlLinkColumnDef
+					? colDefs.getVulnHttpUrlLinkColumnDef("reference:name", { maxLength: 150, className: "text-primary" })
+					: { targets: "reference:name" },
+				colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("matched_at:name") : { targets: "matched_at:name" },
+				colDefs.getSafeTextColumnDef ? colDefs.getSafeTextColumnDef("domain_name:name") : { targets: "domain_name:name" },
+				{
+					targets: "cve_ids:name",
+					render: function(data) {
+						if (!data || !data.length) return "";
+						var text = Array.isArray(data) ? data.join(", ") : String(data);
+						return window.safeText ? window.safeText(text) : text;
+					}
+				},
+				{
+					targets: "tags:name",
+					render: function(data) {
+						if (!data || !data.length) return "";
+						var text = Array.isArray(data) ? data.join(", ") : String(data);
+						return window.safeText ? window.safeText(text) : text;
+					}
+				},
+				{
+					targets: "extra_data:name",
+					render: function(data) {
+						if (data == null) return "";
+						var str;
+						if (typeof data === "object") {
+							try { str = JSON.stringify(data); } catch (e) { str = Object.keys(data).join(", "); }
+						} else {
+							str = String(data);
+						}
+						return window.safeText ? window.safeText(str) : str;
+					}
+				},
+			],
+		}));
+		if (exploitTable && window.attachDatatableQuickSearch) {
+			window.attachDatatableQuickSearch(exploitTable, { inputSelector: "#exploitQuickSearch", delayMs: 700 });
+		}
+		if (exploitTable && window.attachDatatableColumnSearch) {
+			window.attachDatatableColumnSearch(exploitTable, { tableSelector: "#exploit_results", delayMs: 700 });
+		}
+	});
+	{% endif %}
 
 	$("#pills-vulnerabilities-tab").click(function() {
 		// prevent table loading twice

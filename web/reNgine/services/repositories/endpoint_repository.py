@@ -736,11 +736,7 @@ class EndpointRepository:
 
         http_url = f"http://[{ip_address}]" if validators.ipv6(ip_address) else f"http://{ip_address}"
 
-        endpoint = (
-            EndPoint.objects.filter(http_url=http_url, scan_history=scan_history)
-            .order_by("id")
-            .first()
-        )
+        endpoint = EndPoint.objects.filter(http_url=http_url, scan_history=scan_history).order_by("id").first()
         created = False
         if endpoint is None:
             endpoint = EndPoint.objects.create(

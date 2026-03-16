@@ -587,9 +587,7 @@ class EndpointRepositoryIpEndpointTestCase(BaseTestCase):
         result = self.repository.create_endpoint_for_ip(ip, self.scan_history.id, self.domain.id)
 
         self.assertIsNone(result)
-        self.assertFalse(
-            EndPoint.objects.filter(scan_history=self.scan_history, http_url__contains=ip).exists()
-        )
+        self.assertFalse(EndPoint.objects.filter(scan_history=self.scan_history, http_url__contains=ip).exists())
 
     def test_create_endpoint_for_ip_reuses_existing_when_duplicates_present(self) -> None:
         """
@@ -598,7 +596,7 @@ class EndpointRepositoryIpEndpointTestCase(BaseTestCase):
         """
         ip = "198.51.100.42"
         http_url = f"http://{ip}"
-        ep1 = EndPoint.objects.create(
+        EndPoint.objects.create(
             http_url=http_url,
             scan_history=self.scan_history,
             domain=self.domain,

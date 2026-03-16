@@ -94,6 +94,20 @@ DATATABLE_COLUMN_MAP_SECRET = {
     "5": "discovered_date",
 }
 
+DATATABLE_COLUMN_MAP_EXPLOIT = {
+    "0": "id",
+    "1": "name",
+    "2": "exploit_id",
+    "3": "provider",
+    "4": "discovered_date",
+    "5": "reference",
+    "6": "matched_at",
+    "7": "domain__name",
+    "8": "discovered_date",
+    "9": "discovered_date",
+    "10": "id",
+}
+
 DATATABLE_COLUMN_MAP_IPS = {
     "0": "address",
     "1": "alive",

@@ -38,6 +38,7 @@ from api.helpers.datatables import (
     DATATABLE_COLUMN_MAP_DIRECTORY,
     DATATABLE_COLUMN_MAP_ENDPOINT,
     DATATABLE_COLUMN_MAP_ENDPOINT_CHANGES,
+    DATATABLE_COLUMN_MAP_EXPLOIT,
     DATATABLE_COLUMN_MAP_INTERESTING_ENDPOINT,
     DATATABLE_COLUMN_MAP_INTERESTING_SUBDOMAIN,
     DATATABLE_COLUMN_MAP_IPS,
@@ -200,6 +201,7 @@ from .serializers import (
     EndpointSerializer,
     EngineSerializer,
     EngineTypeDatatableSerializer,
+    ExploitSerializer,
     InterestingEndPointSerializer,
     InterestingSubdomainSerializer,
     IpSerializer,
@@ -4681,6 +4683,54 @@ class SecretViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.ReadO
         qs = qs.select_related("scan_history")
         self.queryset = qs
         return self.queryset
+
+
+class ExploitViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.ReadOnlyModelViewSet):
+    queryset = Exploit.objects.none()
+    serializer_class = ExploitSerializer
+    datatable_default_ordering = ("-discovered_date",)
+    datatable_column_map = DATATABLE_COLUMN_MAP_EXPLOIT
+
+    def get_queryset(self):
+        req = self.request
+        scan_id = safe_int_cast(req.query_params.get("scan_history"))
+        target_id = safe_int_cast(req.query_params.get("target_id"))
+        slug = req.query_params.get("project")
+
+        if slug:
+            qs = Exploit.objects.filter(scan_history__target__project__slug=slug)
+            if scan_id:
+                qs = qs.filter(scan_history_id=scan_id)
+            elif target_id:
+                qs = qs.filter(scan_history__target_id=target_id)
+        elif scan_id:
+            qs = Exploit.objects.filter(scan_history_id=scan_id)
+        elif target_id:
+            qs = Exploit.objects.filter(scan_history__target_id=target_id)
+        else:
+            qs = Exploit.objects.none()
+
+        qs = qs.select_related("scan_history", "ip_address", "endpoint", "domain").prefetch_related("cve_ids", "tags")
+        self.queryset = qs
+        return self.queryset
+
+    def filter_queryset(self, qs):
+        search_value = self.request.GET.get("search[value]", "") or ""
+        search_value = search_value.strip()
+        if search_value:
+            qs = qs.filter(
+                Q(name__icontains=search_value)
+                | Q(exploit_id__icontains=search_value)
+                | Q(provider__icontains=search_value)
+                | Q(matched_at__icontains=search_value)
+                | Q(reference__icontains=search_value)
+                | Q(domain__name__icontains=search_value)
+            ).distinct()
+        for field_name in ("name", "exploit_id", "provider", "matched_at", "reference", "domain__name"):
+            value = get_datatables_column_search_value(self.request, self.datatable_column_map, field_name)
+            if value:
+                qs = qs.filter(**{f"{field_name}__icontains": value})
+        return apply_datatables_order(qs, self.request, self.datatable_column_map, default_order="-discovered_date")
 
 
 class GetIpDetails(APIView):

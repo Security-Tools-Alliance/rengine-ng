@@ -86,7 +86,7 @@ Organization Dashboard
   </div>
 </div>
 
-<div class="row row-cols-1 row-cols-md-3">
+<div class="row row-cols-1 row-cols-md-4">
   <div class="col mb-3">
     <a href="{% url 'all_vulns' current_project.slug %}" class="text-reset text-decoration-none h-100 d-block">
       <div class="card card-animate h-100">
@@ -95,6 +95,16 @@ Organization Dashboard
           <h2 class="text-danger my-3 text-center"><span data-plugin="counterup">{{ total_vul_count|intcomma }}</span></h2>
           <p class="text-danger mb-0 small"><b>{{ critical_count }} Critical, {{ high_count }} High, {{ medium_count }} Medium</b></p>
           <p class="text-muted mb-0 mt-auto small">{{ low_count }} Low, {{ info_count }} Info, {{ unknown_count }} Unknown</p>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col mb-3">
+    <a href="{% url 'scan_history' current_project.slug %}" class="text-reset text-decoration-none h-100 d-block">
+      <div class="card card-animate h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mt-0 font-16 text-danger">Exploits</h4>
+          <h2 class="text-danger my-3 text-center"><span data-plugin="counterup">{{ organization_exploit_count|intcomma }}</span></h2>
         </div>
       </div>
     </a>

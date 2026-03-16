@@ -248,7 +248,8 @@
   window.initClientSideDataTable = initClientSideDataTable;
 
   /**
-   * Attach a simple global search input to a DataTable instance.
+   * Attach a simple global search input to a DataTable instance and place it to the right
+   * of the "Results" (length) dropdown in the table's control row.
    * opts: { inputSelector: '#input-id', delayMs?: number }
    */
   window.attachDatatableQuickSearch = function (table, opts) {
@@ -280,6 +281,20 @@
         triggerSearch();
       }, delay);
     });
+
+    if (table.table && typeof table.table === "function") {
+      const container = table.table().container();
+      if (container) {
+        const $container = $(container);
+        const $length = $container.find(".dt-length").first();
+        if ($length.length) {
+          const $searchBlock = $input.closest("div");
+          if ($searchBlock.length && !$searchBlock.closest(".dt-container").length) {
+            $length.after($searchBlock);
+          }
+        }
+      }
+    }
   };
 
   /**
@@ -288,6 +303,9 @@
    * Inputs must live inside the table header/footer and carry a data-column-index attribute:
    *   <input type="text" class="form-control form-control-sm datatable-column-search"
    *          data-column-index="2" placeholder="Search target">
+   *
+   * With scrollY, DataTables may move thead/tfoot into scroll containers; we resolve them
+   * from the table's container so handlers attach to the correct nodes.
    *
    * opts: { tableSelector: '#table-id', delayMs?: number }
    */
@@ -303,6 +321,23 @@
     const $table = $(opts.tableSelector);
     if (!$table.length) {
       return;
+    }
+
+    // Resolve thead/tfoot from the DataTable container so we find them even when
+    // scrollY has moved them into .dataTables_scrollHead / .dataTables_scrollFoot.
+    let $thead = $table.find("thead");
+    let $tfoot = $table.find("tfoot");
+    if (table.table && typeof table.table === "function") {
+      const container = table.table().container();
+      if (container && $(container).length) {
+        const $wrapper = $(container);
+        if (!$thead.length) {
+          $thead = $wrapper.find(".dataTables_scrollHead thead, thead");
+        }
+        if (!$tfoot.length) {
+          $tfoot = $wrapper.find(".dataTables_scrollFoot tfoot, tfoot");
+        }
+      }
     }
 
     function debounce(fn, wait) {
@@ -321,6 +356,9 @@
     }
 
     function attachToInputs($container) {
+      if (!$container || !$container.length) {
+        return;
+      }
       $container
         .find("input.datatable-column-search[data-column-index], select.datatable-column-search[data-column-index]")
         .each(function () {
@@ -340,19 +378,7 @@
         });
     }
 
-    attachToInputs($table.find("thead"));
-    attachToInputs($table.find("tfoot"));
-
-    // Optionally clone the first footer row with column search inputs to the top of the table.
-    // This provides a second set of per-column inputs "en haut" without confusing DataTables,
-    // since the cloned row lives outside of the table element.
-    const footerRow = $table.find("tfoot tr").first();
-    if (footerRow.length) {
-      const topRow = footerRow.clone(true);
-      topRow.addClass("datatable-column-search-top-row");
-      const wrapper = $("<div class=\"datatable-column-search-top mb-1\"></div>");
-      wrapper.append(topRow);
-      wrapper.insertBefore($table);
-    }
+    attachToInputs($thead);
+    attachToInputs($tfoot);
   };
 })(window);

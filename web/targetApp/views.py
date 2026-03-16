@@ -54,6 +54,7 @@ from startScan.models import (
     Email,
     Employee,
     EndPoint,
+    Exploit,
     IpAddress,
     ScanHistory,
     Subdomain,
@@ -1224,6 +1225,9 @@ def target_summary(request, slug, id):
     )
     context["vulnerability_count"] = vulnerabilities.count()
     context["vulnerability_list"] = vulnerabilities.order_by("-severity").all()[:30]
+
+    # Exploits (all scans for this target)
+    context["exploit_count"] = Exploit.objects.filter(scan_history__target_id=id).count()
 
     # Vulnerability Tags
     context["most_common_tags"] = (

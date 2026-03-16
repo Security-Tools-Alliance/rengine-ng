@@ -36,6 +36,7 @@ from startScan.models import (
     Email,
     Employee,
     EndPoint,
+    Exploit,
     IpAddress,
     MetaFinderDocument,
     Port,
@@ -2336,6 +2337,65 @@ class SecretSerializer(serializers.ModelSerializer):
             "value",
             "extra_data",
             "discovered_date",
+        ]
+
+
+class ExploitSerializer(serializers.ModelSerializer):
+    discovered_date = serializers.SerializerMethodField()
+    ip = serializers.SerializerMethodField()
+    endpoint_url = serializers.SerializerMethodField()
+    domain_name = serializers.SerializerMethodField()
+    cve_ids = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
+    tags = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
+
+    def get_discovered_date(self, obj: Exploit) -> str:
+        if obj.discovered_date:
+            return obj.discovered_date.strftime("%b %d, %Y %H:%M")
+        return ""
+
+    def get_ip(self, obj: Exploit) -> str:
+        if not obj.ip_address or not obj.ip_address.address:
+            return ""
+        ports = list(obj.ip_address.ports.all())
+        if not ports:
+            return str(obj.ip_address.address)
+        # Keep it compact but include port information as requested.
+        unique_ports = sorted({p.number for p in ports if p.number is not None})
+        if not unique_ports:
+            return str(obj.ip_address.address)
+        ports_str = ",".join(str(p) for p in unique_ports[:5])
+        suffix = f":{ports_str}"
+        if len(unique_ports) > 5:
+            suffix += ",..."
+        return f"{obj.ip_address.address}{suffix}"
+
+    def get_endpoint_url(self, obj: Exploit) -> str:
+        if obj.endpoint and getattr(obj.endpoint, "http_url", None):
+            return str(obj.endpoint.http_url)
+        return ""
+
+    def get_domain_name(self, obj: Exploit) -> str:
+        if obj.domain and getattr(obj.domain, "name", None):
+            return str(obj.domain.name)
+        return ""
+
+    class Meta:
+        model = Exploit
+        fields = [
+            "id",
+            "name",
+            "exploit_id",
+            "provider",
+            "matched_at",
+            "reference",
+            "scan_history",
+            "ip",
+            "endpoint_url",
+            "domain_name",
+            "discovered_date",
+            "extra_data",
+            "cve_ids",
+            "tags",
         ]
 
 
