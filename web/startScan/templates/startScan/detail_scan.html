@@ -2013,7 +2013,9 @@ $(document).ready(function() {
 								api_ips_url: '{% url "api:listIPs" %}',
 								api_subdomains_url: '{% url "api:querySubdomains" %}',
 								scan_id: {{scan_history_id}},
-								domain_id: null
+								domain_id: null,
+								summaryWithPopover: true,
+								rowId: row['id']
 							});
 						},
 				targets: 'ports:name',
@@ -2082,6 +2084,7 @@ $(document).ready(function() {
 						var fn = window.getRengineDatatableDrawCallbackTooltips('#subdomain_scan_results', { tooltipTemplate: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' });
 						if (typeof fn === 'function') fn.call(this, settings);
 					}
+					if (typeof initPortsPopovers === 'function') initPortsPopovers('#subdomain_scan_results');
 					$('.dtrg-group').remove();
 					setTimeout(function() { $(".dtrg-group th:contains('No group')").remove(); }, 1);
 				},

@@ -55,8 +55,56 @@ function portDisplaySubdomainLinkCell(data, type, row, urlOverride) {
     return portDisplaySafeText(data != null ? data : "-");
 }
 
+const PORT_SUMMARY_THRESHOLD = 3;
+const PORT_SUMMARY_VISIBLE = 2;
+
+function buildSinglePortBadgeHtml(element, settings) {
+    const is_ip = !element.number;
+    const badge_color = is_ip
+        ? (element.is_cdn ? "warning" : "primary")
+        : (element.is_uncommon ? "danger" : "primary");
+
+    let title = is_ip
+        ? (element.is_cdn ? "CDN IP Address" : "IP Address")
+        : "Port " + element.number;
+
+    if (is_ip && element.alive !== undefined) {
+        title += "\nAlive: " + (element.alive ? "Yes" : "No");
+    }
+    if (!is_ip) {
+        if (element.state) title += "\nState: " + element.state;
+        if (element.protocol) title += "\nProtocol: " + element.protocol;
+        if (element.host) title += "\nHost: " + element.host;
+        if (element.cpes && element.cpes.length > 0) {
+            title += "\nCPEs: " + element.cpes.join(", ");
+        }
+    }
+    if (element.description) title += " - " + element.description;
+    if (element.subdomain_count) {
+        title += "\nFound on " + element.subdomain_count + " subdomain" + (element.subdomain_count > 1 ? "s" : "");
+        if (element.subdomain_names && element.subdomain_names.length > 0) {
+            title += ":\n• " + element.subdomain_names.join("\n• ");
+        }
+    }
+
+    const display_text = is_ip ? (element.address || "") : (element.number + "/" + (element.service_name || ""));
+    const countHtml = element.subdomain_count && typeof window.safeBadge === "function"
+        ? window.safeBadge(String(element.subdomain_count), "badge bg-" + badge_color + " ms-1", "")
+        : (element.subdomain_count ? "<span class=\"badge bg-" + badge_color + " ms-1\">" + portDisplaySafeText(String(element.subdomain_count)) + "</span>" : "");
+
+    const portsUrl = portDisplaySafeAttr(settings.api_ports_url || "");
+    const subdomainsUrl = portDisplaySafeAttr(settings.api_subdomains_url || "");
+    const ipsUrl = portDisplaySafeAttr(settings.api_ips_url || "");
+    const scanId = settings.scan_id != null ? portDisplaySafeAttr(String(settings.scan_id)) : "";
+    const domainId = settings.domain_id != null ? portDisplaySafeAttr(String(settings.domain_id)) : "";
+    const address = portDisplaySafeAttr(element.address || "");
+    const port = !is_ip && element.number != null ? portDisplaySafeAttr(String(element.number)) : "";
+
+    return "<span class=\"m-1 badge badge-soft-" + badge_color + " bs-tooltip badge-link js-port-badge-trigger\" title=\"" + portDisplaySafeAttr(title) + "\" role=\"button\" tabindex=\"0\" data-api-ports-url=\"" + portsUrl + "\" data-api-subdomains-url=\"" + subdomainsUrl + "\" data-api-ips-url=\"" + ipsUrl + "\" data-scan-id=\"" + scanId + "\" data-domain-id=\"" + domainId + "\" data-address=\"" + address + "\" data-port=\"" + port + "\" data-is-ip=\"" + (is_ip ? "true" : "false") + "\">" + portDisplaySafeText(display_text) + countHtml + "</span>";
+}
+
 function renderBadge(data, settings) {
-    let badge = "";
+    const badges = [];
 
     try {
         const data_obj = typeof data === "string"
@@ -67,55 +115,76 @@ function renderBadge(data, settings) {
             const items = item.ports || [item];
 
             for (const element of items) {
-                const is_ip = !element.number;
-                const badge_color = is_ip
-                    ? (element.is_cdn ? "warning" : "primary")
-                    : (element.is_uncommon ? "danger" : "primary");
-
-                let title = is_ip
-                    ? (element.is_cdn ? "CDN IP Address" : "IP Address")
-                    : "Port " + element.number;
-
-                if (is_ip && element.alive !== undefined) {
-                    title += "\nAlive: " + (element.alive ? "Yes" : "No");
-                }
-                if (!is_ip) {
-                    if (element.state) title += "\nState: " + element.state;
-                    if (element.protocol) title += "\nProtocol: " + element.protocol;
-                    if (element.host) title += "\nHost: " + element.host;
-                    if (element.cpes && element.cpes.length > 0) {
-                        title += "\nCPEs: " + element.cpes.join(", ");
-                    }
-                }
-                if (element.description) title += " - " + element.description;
-                if (element.subdomain_count) {
-                    title += "\nFound on " + element.subdomain_count + " subdomain" + (element.subdomain_count > 1 ? "s" : "");
-                    if (element.subdomain_names && element.subdomain_names.length > 0) {
-                        title += ":\n• " + element.subdomain_names.join("\n• ");
-                    }
-                }
-
-                const display_text = is_ip ? (element.address || "") : (element.number + "/" + (element.service_name || ""));
-                const countHtml = element.subdomain_count && typeof window.safeBadge === "function"
-                    ? window.safeBadge(String(element.subdomain_count), "badge bg-" + badge_color + " ms-1", "")
-                    : (element.subdomain_count ? "<span class=\"badge bg-" + badge_color + " ms-1\">" + portDisplaySafeText(String(element.subdomain_count)) + "</span>" : "");
-
-                const portsUrl = portDisplaySafeAttr(settings.api_ports_url || "");
-                const subdomainsUrl = portDisplaySafeAttr(settings.api_subdomains_url || "");
-                const ipsUrl = portDisplaySafeAttr(settings.api_ips_url || "");
-                const scanId = settings.scan_id != null ? portDisplaySafeAttr(String(settings.scan_id)) : "";
-                const domainId = settings.domain_id != null ? portDisplaySafeAttr(String(settings.domain_id)) : "";
-                const address = portDisplaySafeAttr(element.address || "");
-                const port = !is_ip && element.number != null ? portDisplaySafeAttr(String(element.number)) : "";
-
-                badge += "<span class=\"m-1 badge badge-soft-" + badge_color + " bs-tooltip badge-link js-port-badge-trigger\" title=\"" + portDisplaySafeAttr(title) + "\" role=\"button\" tabindex=\"0\" data-api-ports-url=\"" + portsUrl + "\" data-api-subdomains-url=\"" + subdomainsUrl + "\" data-api-ips-url=\"" + ipsUrl + "\" data-scan-id=\"" + scanId + "\" data-domain-id=\"" + domainId + "\" data-address=\"" + address + "\" data-port=\"" + port + "\" data-is-ip=\"" + (is_ip ? "true" : "false") + "\">" + portDisplaySafeText(display_text) + countHtml + "</span>";
+                badges.push(buildSinglePortBadgeHtml(element, settings || {}));
             }
         }
-        return badge;
+
+        const useSummary = settings && settings.summaryWithPopover && badges.length > PORT_SUMMARY_THRESHOLD;
+
+        if (!useSummary) {
+            return badges.join("");
+        }
+
+        window._portsPopoverCounter = (window._portsPopoverCounter || 0) + 1;
+        const uniqueId = "ports-popover-" + window._portsPopoverCounter;
+
+        const visible = badges.slice(0, PORT_SUMMARY_VISIBLE).join("");
+        const moreCount = badges.length - PORT_SUMMARY_VISIBLE;
+        const fullHtml = badges.join("");
+
+        const moreLabel = portDisplaySafeText("+" + moreCount + " more");
+        const triggerHtml = "<button type=\"button\" class=\"btn btn-link btn-sm p-0 align-baseline js-ports-popover-trigger\" data-bs-toggle=\"popover\" data-popover-content-id=\"" + portDisplaySafeAttr(uniqueId) + "\" title=\"All ports and IPs\">(" + moreLabel + ")</button>";
+        const contentHtml = "<div id=\"" + portDisplaySafeAttr(uniqueId) + "\" class=\"d-none ports-popover-content\">" + fullHtml + "</div>";
+
+        return "<span class=\"ports-cell-summary\">" + visible + " <span class=\"ports-more-wrap\">" + triggerHtml + "</span>" + contentHtml + "</span>";
     } catch (e) {
         console.error("Error rendering badge:", e);
         return "";
     }
+}
+
+function initPortsPopovers(tableSelector) {
+    const $ = window.jQuery;
+    const bootstrap = window.bootstrap;
+    if (!$ || !tableSelector || !bootstrap || typeof bootstrap.Popover !== "function") return;
+
+    $(tableSelector).find(".js-ports-popover-trigger").each(function () {
+        const trigger = this;
+        const contentId = trigger.getAttribute("data-popover-content-id");
+        if (!contentId) return;
+
+        const contentEl = document.getElementById(contentId);
+        if (!contentEl) return;
+
+        const existing = bootstrap.Popover.getInstance(trigger);
+        if (existing) existing.dispose();
+
+        const popover = new bootstrap.Popover(trigger, {
+            content: contentEl.innerHTML,
+            html: true,
+            sanitize: false,
+            container: "body",
+            customClass: "ports-popover"
+        });
+
+        function closeOnClickOutside(e) {
+            const tip = popover.getTipElement && popover.getTipElement();
+            const target = e.target;
+            if (target === trigger || (trigger && trigger.contains(target))) return;
+            if (tip && tip.contains(target)) return;
+            popover.hide();
+        }
+
+        $(trigger).on("shown.bs.popover", function () {
+            setTimeout(function () {
+                $(document).on("click.portsPopoverClose", closeOnClickOutside);
+            }, 0);
+        });
+
+        $(trigger).on("hidden.bs.popover", function () {
+            $(document).off("click.portsPopoverClose");
+        });
+    });
 }
 
 function attachPortBadgeTriggerListener() {
