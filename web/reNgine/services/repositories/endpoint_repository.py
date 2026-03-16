@@ -589,6 +589,14 @@ class EndpointRepository:
                 level="debug",
             )
 
+        except FindingOutOfScopeError:
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "ASSOCIATE_ENDPOINT_TO_SUBDOMAIN",
+                "Skipped (out of scope): hostname=%s | url=%s scan_id=%s"
+                % (hostname, http_url[:80] if http_url else "", scan_history_id),
+                level="info",
+            )
         except Exception as e:
             reason = format_exception_for_log(e)
             logger.log_line(

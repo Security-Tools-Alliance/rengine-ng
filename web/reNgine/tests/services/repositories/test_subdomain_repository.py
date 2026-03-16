@@ -443,3 +443,15 @@ class SubdomainRepositoryFindingScopeFilterTest(BaseTestCase):
         )
         self.assertIsNotNone(result)
         self.assertEqual(result.name, self.target.value)
+
+    def test_get_or_create_from_host_target_succeeds_when_allowed_hosts_non_empty(self):
+        """Target host is allowed when allowed_finding_hosts is non-empty but does not list target."""
+        self.scope.allowed_finding_hosts = ["www.other-domain.com"]
+        self.scope.save()
+        result = self.subdomain_repo.get_or_create_from_host(
+            self.scan_history.id,
+            self.target.id,
+            self.target.value,
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, self.target.value)

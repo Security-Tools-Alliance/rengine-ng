@@ -156,8 +156,10 @@ def get_finding_scope_filter_host(scope: Any, target: Any) -> Callable[[str], bo
 
     When restrict_findings_to_target is False or scope is None, returns None (no filter).
     Otherwise returns a callable (host: str) -> bool. When scope.allowed_finding_hosts
-    is non-empty, only hosts in that list are accepted (including IPs). When empty,
-    any subdomain of allowed domains is accepted and IPs are always allowed.
+    is non-empty, hosts in that list are accepted; hosts whose registered domain is in
+    allowed_domains (target + allowed_finding_domains) are also accepted so the target
+    stays in scope. When allowed_finding_hosts is empty, any subdomain of allowed
+    domains is accepted and IPs are always allowed.
     """
     if scope is None or not getattr(scope, "restrict_findings_to_target", False):
         return None
@@ -173,7 +175,13 @@ def get_finding_scope_filter_host(scope: Any, target: Any) -> Callable[[str], bo
         if not norm:
             return False
         if allowed_hosts:
-            return norm in allowed_hosts
+            if norm in allowed_hosts:
+                return True
+            if not is_valid_ip(norm):
+                reg = get_domain_from_subdomain(norm) or norm
+                if reg in allowed_domains:
+                    return True
+            return False
         if is_valid_ip(norm):
             return True
         reg = get_domain_from_subdomain(norm) or norm

@@ -118,7 +118,7 @@ class FindingScopeFilterHostTest(BaseTestCase):
         self.assertIsNotNone(fn)
         self.assertTrue(fn("allowed-one.example.com"))
         self.assertTrue(fn("192.168.1.1"))
-        self.assertFalse(fn("other.example.com"))
+        self.assertFalse(fn("other-unrelated.com"))
         self.assertFalse(fn("10.0.0.1"))
 
     def test_allowed_finding_hosts_empty_keeps_domain_based_behavior(self) -> None:
@@ -130,6 +130,17 @@ class FindingScopeFilterHostTest(BaseTestCase):
         self.assertIsNotNone(fn)
         self.assertTrue(fn(self.target.value))
         self.assertTrue(fn("192.168.1.1"))
+
+    def test_allowed_finding_hosts_non_empty_target_host_still_allowed(self) -> None:
+        """Target host is allowed even when not in allowed_finding_hosts (target stays in scope)."""
+        self.scope.restrict_findings_to_target = True
+        self.scope.allowed_finding_domains = []
+        self.scope.allowed_finding_hosts = ["www.other-domain.com"]
+        self.scope.save()
+        fn = get_finding_scope_filter_host(self.scope, self.target)
+        self.assertIsNotNone(fn)
+        self.assertTrue(fn(self.target.value))
+        self.assertTrue(fn("www." + self.target.value))
 
 
 class FindingScopeFiltersForTargetTest(BaseTestCase):
