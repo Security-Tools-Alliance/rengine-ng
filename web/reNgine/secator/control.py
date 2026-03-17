@@ -434,7 +434,7 @@ class SecatorScanController:
         subscan.status = ABORTED_TASK
         subscan.stop_scan_date = timezone.now()
         subscan.save()
-        send_scan_status_update(subscan.scan_history_id)
+        send_scan_status_update(subscan.scan_history_id, force=True)
 
     def stop_activity(self, activity_id: int) -> bool:
         """

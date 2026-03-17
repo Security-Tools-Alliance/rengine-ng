@@ -1,12 +1,20 @@
 """
-Tests for WebSocket utilities, including Redis transient-error retry in channel group_send.
+Tests for WebSocket utilities, including Redis transient-error retry in channel group_send,
+throttle/force behavior, and light vs full payload shape for UI consumption.
 """
 
+import time
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from reNgine.utilities.websocket import _channel_group_send_with_retry
+from reNgine.utilities.websocket import (
+    _channel_group_send_with_retry,
+    build_light_scan_status_message,
+    build_scan_status_message,
+    send_scan_status_update,
+)
+from utils.test_base import BaseTestCase
 
 
 def _redis_exceptions():
@@ -116,3 +124,96 @@ class TestChannelGroupSendWithRetry(TestCase):
                 {"type": "test"},
             )
         self.channel_layer.group_send.assert_called_once()
+
+
+class TestSendScanStatusThrottleAndForce(BaseTestCase):
+    """Throttle skips second send; force=True bypasses throttle and sends full payload."""
+
+    def setUp(self):
+        super().setUp()
+        self.scan_history = self.data_generator.create_scan_history()
+        self.scan_id = self.scan_history.id
+
+    def test_throttle_skips_second_send(self):
+        """Two send_scan_status_update calls within throttle window: only first sends."""
+        channel_mock = MagicMock()
+        call_count = [0]
+
+        def get_last_sent_ts_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return None
+            return time.time() - 1.0
+
+        with patch("reNgine.utilities.websocket.get_channel_layer", return_value=channel_mock):
+            with patch("reNgine.utilities.websocket._get_last_sent_ts", side_effect=get_last_sent_ts_side_effect):
+                with patch("reNgine.utilities.websocket._set_last_sent_ts"):
+                    with patch("reNgine.utilities.websocket._get_last_full_ts", return_value=None):
+                        with patch("reNgine.utilities.websocket._set_last_full_ts"):
+                            with patch("reNgine.utilities.websocket._THROTTLE_SECONDS", 2):
+                                with patch(
+                                    "reNgine.utilities.websocket.async_to_sync",
+                                    side_effect=lambda f: lambda *a, **kw: f(*a, **kw),
+                                ):
+                                    send_scan_status_update(self.scan_id)
+                                    send_scan_status_update(self.scan_id)
+        self.assertEqual(channel_mock.group_send.call_count, 2)
+
+    def test_force_true_sends_immediately(self):
+        """Second call with force=True sends even within throttle window."""
+        channel_mock = MagicMock()
+        with patch("reNgine.utilities.websocket.get_channel_layer", return_value=channel_mock):
+            with patch("reNgine.utilities.websocket._get_last_sent_ts", side_effect=[None, time.time() - 0.5]):
+                with patch("reNgine.utilities.websocket._set_last_sent_ts"):
+                    with patch("reNgine.utilities.websocket._get_last_full_ts", return_value=None):
+                        with patch("reNgine.utilities.websocket._set_last_full_ts"):
+                            with patch("reNgine.utilities.websocket._THROTTLE_SECONDS", 2):
+                                with patch(
+                                    "reNgine.utilities.websocket.async_to_sync",
+                                    side_effect=lambda f: lambda *a, **kw: f(*a, **kw),
+                                ):
+                                    send_scan_status_update(self.scan_id)
+                                    send_scan_status_update(self.scan_id, force=True)
+        self.assertEqual(channel_mock.group_send.call_count, 4)
+
+
+class TestScanStatusPayloadShape(BaseTestCase):
+    """Light and full payloads have keys expected by the UI (table, detail, sidebar, commands, timeline, subscans)."""
+
+    def setUp(self):
+        super().setUp()
+        self.scan_history = self.data_generator.create_scan_history()
+        self.scan_id = self.scan_history.id
+
+    def test_light_payload_has_required_ui_fields_and_no_heavy_fields(self):
+        """Light payload has scan_id, status, progress, current_task, counts; no commands, timeline, runners, subscans."""
+        result = build_light_scan_status_message(self.scan_id)
+        self.assertIsInstance(result, dict)
+        self.assertIn("scan_id", result)
+        self.assertIn("status", result)
+        self.assertIn("progress", result)
+        self.assertIn("current_task", result)
+        self.assertIn("scan_type", result)
+        self.assertIn("scan_name", result)
+        self.assertIn("domain_count", result)
+        self.assertIn("subdomain_count", result)
+        self.assertIn("endpoint_count", result)
+        self.assertIn("vulnerability_count", result)
+        self.assertNotIn("commands", result)
+        self.assertNotIn("timeline", result)
+        self.assertNotIn("runners", result)
+        self.assertNotIn("subscans", result)
+
+    def test_full_payload_has_heavy_fields_for_ui(self):
+        """Full payload includes commands, timeline or runners, and subscans for logs/detail/sidebar."""
+        result = build_scan_status_message(self.scan_id)
+        self.assertIsInstance(result, dict)
+        self.assertIn("scan_id", result)
+        self.assertIn("status", result)
+        self.assertIn("progress", result)
+        self.assertIn("current_task", result)
+        self.assertIn("commands", result)
+        self.assertIsInstance(result["commands"], list)
+        self.assertIn("subscans", result)
+        self.assertIsInstance(result["subscans"], list)
+        self.assertTrue("timeline" in result or "runners" in result)

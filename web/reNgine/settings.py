@@ -465,9 +465,13 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [("redis", 6379)],
+            "capacity": 1500,
+            "expiry": 10,
         },
     },
 }
 
 # WebSocket settings
 WEBSOCKET_ACCEPT_ALL = True  # For development, change in production
+WEBSOCKET_SCAN_STATUS_THROTTLE_SECONDS = 2
+WEBSOCKET_SCAN_STATUS_FULL_INTERVAL_SECONDS = 15

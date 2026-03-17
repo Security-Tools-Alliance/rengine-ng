@@ -81,10 +81,11 @@ class ScanRepository:
             "Updated scan %s status to %s" % (scan_history_id, status),
             level="info",
         )
-        # Send WebSocket update
+        # Send WebSocket update (force full payload on terminal status)
+        from reNgine.definitions import ABORTED_TASK, FAILED_TASK, SUCCESS_TASK
         from reNgine.utilities.websocket import send_scan_status_update
 
-        send_scan_status_update(scan_history_id)
+        send_scan_status_update(scan_history_id, force=(status in (FAILED_TASK, SUCCESS_TASK, ABORTED_TASK)))
         return True
 
     def update_progress(self, scan_history_id, progress):
@@ -255,10 +256,10 @@ class ScanRepository:
                 "Marked scan %s as complete" % (scan_history_id,),
                 level="info",
             )
-            # Send WebSocket update
+            # Send WebSocket update (terminal state: full payload)
             from reNgine.utilities.websocket import send_scan_status_update
 
-            send_scan_status_update(scan_history_id)
+            send_scan_status_update(scan_history_id, force=True)
             return True
         except Exception as e:
             logger.log_line(
@@ -421,10 +422,10 @@ class ScanRepository:
             "Marked scan %s as failed" % (scan_history_id,),
             level="info",
         )
-        # Send WebSocket update
+        # Send WebSocket update (terminal state: full payload)
         from reNgine.utilities.websocket import send_scan_status_update
 
-        send_scan_status_update(scan_history_id)
+        send_scan_status_update(scan_history_id, force=True)
         return True
 
     def mark_subscans_finished_for_runner(self, runner_id: int, status: int) -> None:

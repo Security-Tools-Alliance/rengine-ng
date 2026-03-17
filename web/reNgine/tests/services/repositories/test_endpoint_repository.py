@@ -636,7 +636,6 @@ class EndpointRepositoryScopeEnforcementTest(BaseTestCase):
     def test_save_from_secator_out_of_scope_raises_and_creates_no_endpoint(self):
         """save_from_secator with URL host out of scope raises FindingOutOfScopeError and creates no endpoint."""
         from reNgine.core.exceptions import FindingOutOfScopeError
-
         from targetApp.services.scope_params import get_finding_scope_filters_for_target
 
         url = "http://out-of-scope-unrelated.com/"

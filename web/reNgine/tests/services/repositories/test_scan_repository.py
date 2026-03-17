@@ -216,7 +216,7 @@ class TestScanRepository(BaseTestCase):
             self.assertTrue(result)
             self.scan_history.refresh_from_db()
             self.assertEqual(self.scan_history.scan_status, SUCCESS_TASK)
-            mock_notify.assert_called_once_with(self.scan_history.id)
+            mock_notify.assert_called_once_with(self.scan_history.id, force=True)
 
     def test_create_scan_activity_entry(self):
         """Test _create_scan_activity_entry method."""
@@ -297,7 +297,7 @@ class TestScanRepository(BaseTestCase):
             self.assertEqual(self.scan_history.scan_status, FAILED_TASK)
             self.assertEqual(self.scan_history.error_message, error_message)
             self.assertIsNotNone(self.scan_history.stop_scan_date)
-            mock_notify.assert_called_once_with(self.scan_history.id)
+            mock_notify.assert_called_once_with(self.scan_history.id, force=True)
 
     def test_mark_scan_failed_and_notify_no_error_message(self):
         """Test _mark_scan_failed_and_notify without error message."""
@@ -311,7 +311,7 @@ class TestScanRepository(BaseTestCase):
             self.assertTrue(result)
             self.scan_history.refresh_from_db()
             self.assertEqual(self.scan_history.scan_status, FAILED_TASK)
-            mock_notify.assert_called_once_with(self.scan_history.id)
+            mock_notify.assert_called_once_with(self.scan_history.id, force=True)
 
     # Note: The following methods are not implemented in the current ScanRepository:
     # - delete_scan

@@ -9,6 +9,9 @@ from typing import Any, Optional
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.conf import settings
+from django.core.cache import cache
+from django.core.exceptions import ImproperlyConfigured
 from django.db.models import Case, Count, F, IntegerField, Prefetch, Value, When
 
 
@@ -74,16 +77,48 @@ _MAX_RUNNING_COMMANDS = 30
 _MAX_SUBSCANS = 30
 
 try:
-    from django.conf import settings
-
     _MAX_COMMANDS_LOGS = getattr(settings, "WEBSOCKET_MAX_COMMANDS_LOGS", 100)
-except Exception:  # pragma: no cover - settings may not be available in some contexts
+    _THROTTLE_SECONDS = getattr(settings, "WEBSOCKET_SCAN_STATUS_THROTTLE_SECONDS", 2)
+    _FULL_INTERVAL_SECONDS = getattr(settings, "WEBSOCKET_SCAN_STATUS_FULL_INTERVAL_SECONDS", 15)
+except ImproperlyConfigured:  # pragma: no cover - Django settings not ready in some contexts
     _MAX_COMMANDS_LOGS = 100
+    _THROTTLE_SECONDS = 2
+    _FULL_INTERVAL_SECONDS = 15
 
 
 def _clean_channel_name(name: str) -> str:
     """Sanitize name for use in channel group (alphanumeric, hyphen, period only)."""
     return _CHANNEL_NAME_PATTERN.sub("-", (name or "").strip())
+
+
+def _scan_ws_last_sent_key(scan_id: int) -> str:
+    """Cache key for last WebSocket send timestamp per scan (throttle)."""
+    return "scan_status_ws_last_%s" % (scan_id,)
+
+
+def _scan_ws_last_full_key(scan_id: int) -> str:
+    """Cache key for last full payload send timestamp per scan."""
+    return "scan_status_ws_last_full_%s" % (scan_id,)
+
+
+def _get_last_sent_ts(scan_id: int) -> Optional[float]:
+    """Return last send timestamp for scan from cache, or None."""
+    return cache.get(_scan_ws_last_sent_key(scan_id))
+
+
+def _set_last_sent_ts(scan_id: int, ts: float) -> None:
+    """Store last send timestamp for scan in cache."""
+    cache.set(_scan_ws_last_sent_key(scan_id), ts, timeout=_THROTTLE_SECONDS * 2)
+
+
+def _get_last_full_ts(scan_id: int) -> Optional[float]:
+    """Return last full payload send timestamp for scan from cache, or None."""
+    return cache.get(_scan_ws_last_full_key(scan_id))
+
+
+def _set_last_full_ts(scan_id: int, ts: float) -> None:
+    """Store last full payload send timestamp for scan in cache."""
+    cache.set(_scan_ws_last_full_key(scan_id), ts, timeout=_FULL_INTERVAL_SECONDS * 2)
 
 
 # Backoff delays (seconds) between retries when Redis is loading or connection is reset
@@ -158,6 +193,38 @@ def build_scan_status_message(scan_history_id: int) -> dict:
             level="error",
         )
         return {}
+
+
+def build_light_scan_status_message(
+    scan_history_id: int,
+    scan: Optional[ScanHistory] = None,
+) -> dict:
+    """
+    Build light scan status message for WebSocket (no runners, commands, subscans, timeline).
+
+    Contains base status, progress, current_task and counts so table/detail/sidebar can update.
+
+    Args:
+        scan_history_id: ID of the scan history.
+        scan: Optional existing ScanHistory instance to avoid an extra query when already loaded
+            (e.g. from send_scan_status_update). If None, the scan is fetched.
+    """
+    if scan is None:
+        try:
+            scan = ScanHistory.objects.get(id=scan_history_id)
+        except ScanHistory.DoesNotExist:
+            logger.log_line(
+                PREFIX_WS,
+                "BUILD_STATUS_LIGHT",
+                "ScanHistory %s not found" % (scan_history_id,),
+                level="error",
+            )
+            return {}
+    else:
+        scan_history_id = scan.id
+    counts = _get_scan_counts(scan_history_id)
+    severity_counts = _get_severity_counts(scan_history_id)
+    return _build_base_status_message(scan, scan_history_id, counts, severity_counts)
 
 
 def _build_scan_status_payload(scan_history_id: int) -> dict:
@@ -403,15 +470,25 @@ def _build_subscans_payload(
     return [_build_subscan_item(subscan, runner_id_to_status, runner_id_to_progress) for subscan in subscans_qs]
 
 
-def send_scan_status_update(scan_history_id: int, scan_status=None, progress=None, current_task=None):
+def send_scan_status_update(
+    scan_history_id: int,
+    scan_status=None,
+    progress=None,
+    current_task=None,
+    force: bool = False,
+) -> None:
     """
-    Send detailed scan status update via WebSocket.
+    Send scan status update via WebSocket (light or full payload).
+
+    Throttles sends per scan unless force=True. When not forced, sends light payload
+    for intermediate updates and full payload periodically (WEBSOCKET_SCAN_STATUS_FULL_INTERVAL_SECONDS).
 
     Args:
         scan_history_id: ID of the scan history
         scan_status: Optional status to override
         progress: Optional progress to override
         current_task: Optional current task to override
+        force: If True, bypass throttle and always send full payload (e.g. terminal state).
 
     Raises:
         ScanHistory.DoesNotExist: If the scan history is not found.
@@ -419,6 +496,19 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
         Redis transient errors (BusyLoadingError, ConnectionError) are retried then skipped without raising.
     """
     try:
+        now = time.time()
+
+        if not force and _THROTTLE_SECONDS > 0:
+            last_ts = _get_last_sent_ts(scan_history_id)
+            if last_ts is not None and (now - last_ts) < _THROTTLE_SECONDS:
+                logger.log_line(
+                    PREFIX_WS,
+                    "SEND_STATUS",
+                    "Throttled WebSocket update for scan %s (last sent %.1fs ago)" % (scan_history_id, now - last_ts),
+                    level="debug",
+                )
+                return
+
         scan = ScanHistory.objects.select_related("target__project").get(id=scan_history_id)
         channel_layer = get_channel_layer()
         if not channel_layer:
@@ -430,7 +520,16 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
             )
             return
 
-        message = build_scan_status_message(scan_history_id)
+        use_full = force
+        if not use_full and _FULL_INTERVAL_SECONDS > 0:
+            last_full_ts = _get_last_full_ts(scan_history_id)
+            if last_full_ts is None or (now - last_full_ts) >= _FULL_INTERVAL_SECONDS:
+                use_full = True
+
+        if use_full:
+            message = build_scan_status_message(scan_history_id)
+        else:
+            message = build_light_scan_status_message(scan_history_id, scan=scan)
 
         if not message:
             logger.log_line(
@@ -441,7 +540,6 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
             )
             return
 
-        # Override with provided values if any
         if scan_status is not None:
             message["status"] = scan_status
         if progress is not None:
@@ -452,8 +550,8 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
         logger.log_line(
             PREFIX_WS,
             "SEND_STATUS",
-            "Sending WebSocket update for scan %s - status: %s, progress: %s, current_task: %s"
-            % (scan_history_id, message.get("status"), message.get("progress"), message.get("current_task")),
+            "Sending WebSocket update for scan %s - status: %s, progress: %s, current_task: %s (full=%s)"
+            % (scan_history_id, message.get("status"), message.get("progress"), message.get("current_task"), use_full),
             level="debug",
         )
         logger.log_line(
@@ -463,8 +561,7 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
             level="info",
         )
 
-        # Send to scan-specific group
-        scan_group = f"scan-status-{scan_history_id}"
+        scan_group = "scan-status-%s" % (scan_history_id,)
         _channel_group_send_with_retry(
             channel_layer,
             scan_group,
@@ -490,6 +587,10 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
                 "Sent WebSocket update to project-level group: %s" % (project_group,),
                 level="debug",
             )
+
+        _set_last_sent_ts(scan_history_id, now)
+        if use_full:
+            _set_last_full_ts(scan_history_id, now)
 
         logger.log_line(
             PREFIX_WS,
