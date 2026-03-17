@@ -318,6 +318,42 @@ function safeHtmlEncode(s) {
 		.replace(/'/g, '&#39;');
 }
 
+/** CVE ID format: CVE-YYYY-NNNNN... (case-insensitive). */
+const CVE_ID_PATTERN = /^CVE-\d{4}-\d+$/i;
+
+/**
+ * Returns a trimmed, uppercase CVE id string for display/URLs, or "" if null/undefined.
+ * Single place for CVE normalization so callers can pass raw values.
+ * @param {*} id - Value to normalize (stringified).
+ * @returns {string}
+ */
+function getNormalizedCveId(id) {
+	if (id == null) return "";
+	return String(id).trim().toUpperCase();
+}
+
+/**
+ * Returns true if the value matches a valid CVE ID pattern.
+ * @param {*} id - Value to check (stringified).
+ * @returns {boolean}
+ */
+function isValidCveId(id) {
+	if (id == null) return false;
+	return CVE_ID_PATTERN.test(String(id).trim());
+}
+
+/**
+ * Returns the NVD URL for a valid CVE ID, or null if invalid.
+ * Normalizes input internally; use this helper so base URL and encoding stay consistent.
+ * @param {*} cveId - CVE identifier (e.g. "CVE-2024-1234"), any case.
+ * @returns {string|null} NVD detail URL or null.
+ */
+function getNvdCveUrl(cveId) {
+	const normalizedId = getNormalizedCveId(cveId);
+	if (!normalizedId || !isValidCveId(normalizedId)) return null;
+	return "https://nvd.nist.gov/vuln/detail/" + encodeURIComponent(normalizedId);
+}
+
 // Source: https://portswigger.net/web-security/cross-site-scripting/preventing#encode-data-on-output
 function jsEscape(str) {
 	return String(str).replace(/[^\w. ]/gi, function(c) {
@@ -2008,478 +2044,6 @@ function get_and_render_subscan_history(endpoint, subdomain_id, subdomain_name) 
 	});
 }
 
-function fetch_whois(endpoint_url, domain_name, force_reload_whois=false) {
-	// this function will fetch WHOIS record for any subdomain and also display
-	// snackbar once whois is fetched
-	let url = `${endpoint_url}?format=json&ip_domain=${domain_name}`;
-	if (force_reload_whois) {
-		url += '&is_reload=true';
-	}
-	$('[data-toggle="tooltip"]').tooltip('hide');
-	Snackbar.show({
-		text: 'Fetching WHOIS...',
-		pos: 'top-right',
-		duration: 1500,
-	});
-	$("#whois_not_fetched_alert").hide();
-	$("#whois_fetching_alert").show();
-	fetch(url, {}).then(res => res.json())
-		.then(function(response) {
-			$("#whois_fetching_alert").hide();
-			document.getElementById('domain_age').innerHTML = response['domain']['domain_age'] + ' ' + response['domain']['date_created'];
-			document.getElementById('ip_address').innerHTML = response['domain']['ip_address'];
-			document.getElementById('ip_geolocation').innerHTML = response['domain']['geolocation'];
-
-			document.getElementById('registrant_name').innerHTML = response['registrant']['name'];
-			document.getElementById('registrant_organization').innerHTML = response['registrant']['organization'] || ' ';
-			document.getElementById('registrant_address').innerHTML = response['registrant']['address'] + ' ' + response['registrant']['city'] + ' ' + response['registrant']['state'] + ' ' + response['registrant']['country'];
-			document.getElementById('registrant_phone_numbers').innerHTML = response['registrant']['tel'];
-			document.getElementById('registrant_fax').innerHTML = response['registrant']['fax'];
-
-			Snackbar.show({
-				text: 'Whois Fetched...',
-				pos: 'top-right',
-				duration: 3000
-			});
-
-			$("#whois_fetched_alert").show();
-
-			$("#whois_fetched_alert").fadeTo(2000, 500).slideUp(1500, function() {
-				$("#whois_fetched_alert").slideUp(500);
-			});
-
-		}).catch(function(error) {
-			console.log(error);
-		});
-}
-
-function get_target_whois(endpoint_url, domain_name) {
-	const url = `${endpoint_url}?format=json&ip_domain=${domain_name}`
-	Swal.fire({
-		title: `Fetching WHOIS details for ${domain_name}...`
-	});
-	swal.showLoading();
-	fetch(url, {
-		method: 'GET',
-		credentials: "same-origin",
-		headers: {
-			"X-CSRFToken": getCookie("csrftoken"),
-			'Content-Type': 'application/json'
-		},
-	}).then(response => response.json()).then(function(response) {
-		if (response.status) {
-			swal.close();
-			display_whois_on_modal(response);
-		} else {
-			fetch(`${endpoint_url}?format=json&ip_domain=${domain_name}`, {
-				method: 'GET',
-				credentials: "same-origin",
-				headers: {
-					"X-CSRFToken": getCookie("csrftoken"),
-					'Content-Type': 'application/json'
-				},
-			}).then(response => response.json()).then(function(response) {
-				if (response.status) {
-					swal.close();
-					display_whois_on_modal(response);
-				} else {
-					Swal.fire({
-						title: 'Oops!',
-						text: `reNgine could not fetch WHOIS records for ${domain_name}!`,
-						icon: 'error'
-					});
-				}
-			});
-		}
-	});
-}
-
-function get_domain_whois(whoisLookupUrl, domain_name, addTargetUrl, project_slug, show_add_target_btn=false) {
-	// this function will get whois for domains that are not targets, this will
-	// not store whois into db nor create target
-	const url = `${whoisLookupUrl}?format=json&ip_domain=${domain_name}`
-	Swal.fire({
-		title: `Fetching WHOIS details for ${domain_name}...`
-	});
-	ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
-	swal.showLoading();
-	fetch(url, {
-		method: 'GET',
-		credentials: "same-origin",
-		headers: {
-			"X-CSRFToken": getCookie("csrftoken"),
-			'Content-Type': 'application/json'
-		},
-	}).then(response => response.json()).then(function(response) {
-		swal.close();
-		if (response.status) {
-			display_whois_on_modal(response, addTargetUrl, project_slug, show_add_target_btn);
-		} else {
-			Swal.fire({
-				title: 'Oops!',
-				text: `reNgine could not fetch WHOIS records for ${domain_name}! ${response['message']}`,
-				icon: 'error'
-			});
-		}
-	});
-}
-
-function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_target_btn=false) {
-	// this function will display whois data on modal, should be followed after get_domain_whois()
-	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.WHOIS_LOOKUP_RESULT);
-	$('#whoisLookupResultModal .modal-body').empty();
-	$("#whoisLookupResultModal .modal-footer").empty();
-
-	let content = `
-	<div class="row mt-3">
-		<div class="col-sm-3">
-			<div class="nav flex-column nav-pills nav-pills-tab" id="v-pills-tab" role="tablist" aria-orientation="vertical">
-				<a class="nav-link active show mb-1" id="v-pills-domain-tab" data-bs-toggle="pill" href="#v-pills-domain" role="tab" aria-controls="v-pills-domain-tab" aria-selected="true">Domain info</a>
-				<a class="nav-link mb-1" id="v-pills-whois-tab" data-bs-toggle="pill" href="#v-pills-whois" role="tab" aria-controls="v-pills-whois" aria-selected="false">Whois</a>
-				<a class="nav-link mb-1" id="v-pills-nameserver-tab" data-bs-toggle="pill" href="#v-pills-nameserver" role="tab" aria-controls="v-pills-nameserver" aria-selected="false">Nameservers</a>
-				<a class="nav-link mb-1" id="v-pills-dns-tab" data-bs-toggle="pill" href="#v-pills-dns" role="tab" aria-controls="v-pills-dns" aria-selected="false">DNS Records</a>
-				<a class="nav-link mb-1" id="v-pills-history-tab" data-bs-toggle="pill" href="#v-pills-history" role="tab" aria-controls="v-pills-history"aria-selected="false">Historical Ips</a>
-				<a class="nav-link mb-1" id="v-pills-related-tab" data-bs-toggle="pill" href="#v-pills-related" role="tab" aria-controls="v-pills-related" aria-selected="false">Related Domains</a>
-				<a class="nav-link mb-1" id="v-pills-similar-tab" data-bs-toggle="pill" href="#v-pills-similar" role="tab" aria-controls="v-pills-similar-tld" aria-selected="false">Related TLDs</a>
-			</div>
-		</div>
-		<div class="col-sm-9">
-			<div class="tab-content pt-0">
-			<div class="tab-pane fade active show tab-pane-300" id="v-pills-domain" role="tabpanel" aria-labelledby="v-pills-domain-tab" data-simplebar>
-				<div class="row">
-					<div class="col-4">
-						<small class="sub-header">Domain</small>
-						<h5>${response.ip_domain}</h5>
-					</div>
-					<div class="col-4">
-						<small class="sub-header">Dnssec</small>
-						<h5>${response.dnssec}</h5>
-					</div>
-					<div class="col-4">
-						<small class="sub-header">Geolocation</small>
-						<h5>${response.geolocation_iso}
-						<span class="ms-2 fi fi-${response.geolocation_iso}"></span></h5>
-					</div>
-				</div>
-				<div class="row">
-					<div class="col-4">
-						<small class="sub-header">Created</small>
-						<h5>${response.created}</h5>
-					</div>
-					<div class="col-4">
-						<small class="sub-header">Updated</small>
-						<h5>${response.updated}</h5>
-					</div>
-					<div class="col-4">
-						<small class="sub-header">Expires</small>
-						<h5>${response.expires}</h5>
-					</div>
-				</div>
-				<div class="row">
-					<div class="col-6">
-						<small class="sub-header">Whois Server</small>
-						<h5>${response.whois_server}</h5>
-					</div>
-				</div>
-				<div class="row">
-					<div class="col-4">
-						<small class="sub-header">Registrar Name</small>
-						<h5>${response.registrar.name}</h5>
-					</div>
-					<div class="col-4">
-						<smal class="sub-header"l>Registrar Phone</small>
-						<h5>${response.registrar.phone}</h5>
-					</div>
-					<div class="col-4">
-						<small class="sub-header">Registrar Email</small>
-						<h5>${response.registrar.email}</h5>
-					</div>
-				</div>`;
-
-				for (let status in response.status) {
-					const status_object = response.status[status];
-					if (status_object.includes('prohibited')) {
-						content += `<span class="badge badge-soft-danger me-1 mt-1">${status_object}</span>`;
-					}
-					else {
-						content += `<span class="badge badge-soft-info mt-1 me-1">${status_object}</span>`;
-					}
-				}
-				content += `
-				</div>
-				<div class="tab-pane fade" id="v-pills-whois" role="tabpanel" aria-labelledby="v-pills-whois-tab">
-					<ul class="nav nav-tabs nav-bordered nav-justified">
-						<li class="nav-item">
-							<a href="#registrant-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link active">
-								Registrant
-							</a>
-						</li>
-						<li class="nav-item">
-							<a href="#admin-tab" data-bs-toggle="tab" aria-expanded="true" class="nav-link">
-								Administrative
-							</a>
-						</li>
-						<li class="nav-item">
-							<a href="#technical-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-								Technical
-							</a>
-						</li>
-					</ul>
-					<div class="tab-content">
-						<div class="tab-pane active" id="registrant-tab">
-							<div class="table-responsive">
-								<table class="table mb-0">
-									<tbody>
-										<tr class="table-info">
-											<td><b>ID</b></td>
-											<td><span class="fe-user"></span>&nbsp;${response.registrant.id}</td>
-										</tr>
-										<tr class="">
-											<td><b>Name</b></td>
-											<td><span class="fe-user"></span>&nbsp;${response.registrant.name}</td>
-										</tr>
-										<tr class="table-primary">
-											<td><b>Organization</b></td>
-											<td><span class="fe-briefcase"></span>&nbsp;${response.registrant.organization}</td>
-										</tr>
-										<tr class="">
-											<td><b>Email</b></td>
-											<td><span class="fe-mail"></span>&nbsp;${response.registrant.email}</td>
-										</tr>
-										<tr class="table-info">
-											<td><b>Phone/Fax</b></td>
-											<td>
-												<span class="fe-phone"></span>&nbsp;${response.registrant.phone}
-												<span class="fe-printer"></span>&nbsp;${response.registrant.fax}
-											</td>
-										</tr>
-										<tr class="">
-											<td><b>Address</b></td>
-											<td><span class="fe-home"></span>&nbsp;${response.registrant.address}</td>
-										</tr>
-										<tr class="table-danger">
-											<td><b>Address</b></td>
-											<td><b>City: </b>${response.registrant.city} <b>State: </b>${response.registrant.state} <b>Zip Code: </b>${response.registrant.zipcode} <b>Country:
-											</b>${response.registrant.country} </td>
-										</tr>
-									</tbody>
-								</table>
-							</div>
-						</div>
-						<div class="tab-pane" id="admin-tab">
-							<div class="table-responsive">
-								<table class="table mb-0">
-									<tbody>
-										<tr class="table-info">
-											<td><b>ID</b></td>
-											<td><span class="fe-user"></span>&nbsp;${response.admin.id}</td>
-										</tr>
-										<tr class="">
-											<td><b>Name</b></td>
-											<td><span class="fe-user"></span>&nbsp;${response.admin.name}</td>
-										</tr>
-										<tr class="table-primary">
-											<td><b>Organization</b></td>
-											<td><span class="fe-briefcase"></span>&nbsp;${response.admin.organization}</td>
-										</tr>
-										<tr class="">
-											<td><b>Email</b></td>
-											<td><span class="fe-mail"></span>&nbsp;${response.admin.email}</td>
-										</tr>
-										<tr class="table-info">
-											<td><b>Phone/Fax</b></td>
-											<td>
-												<span class="fe-phone"></span>&nbsp;${response.admin.phone}
-												<span class="fe-printer"></span>&nbsp;${response.admin.fax}
-											</td>
-										</tr>
-										<tr class="">
-											<td><b>Address</b></td>
-											<td><span class="fe-home"></span>&nbsp;${response.admin.address}</td>
-										</tr>
-										<tr class="table-danger">
-											<td><b>Address</b></td>
-											<td><b>City: </b>${response.admin.city} <b>State: </b>${response.admin.state} <b>Zip Code: </b>${response.admin.zipcode} <b>Country:
-											</b>${response.admin.country} </td>
-										</tr>
-									</tbody>
-								</table>
-							</div>
-						</div>
-						<div class="tab-pane" id="technical-tab">
-							<div class="table-responsive">
-								<table class="table mb-0">
-									<tbody>
-										<tr class="table-info">
-											<td><b>ID</b></td>
-											<td><span class="fe-user"></span>&nbsp;${response.technical_contact.id}</td>
-										</tr>
-										<tr class="">
-											<td><b>Name</b></td>
-											<td><span class="fe-user"></span>&nbsp;${response.technical_contact.name}</td>
-										</tr>
-										<tr class="table-primary">
-											<td><b>Organization</b></td>
-											<td><span class="fe-briefcase"></span>&nbsp;${response.technical_contact.organization}</td>
-										</tr>
-										<tr class="">
-											<td><b>Email</b></td>
-											<td><span class="fe-mail"></span>&nbsp;${response.technical_contact.email}</td>
-										</tr>
-										<tr class="table-info">
-											<td><b>Phone/Fax</b></td>
-											<td>
-												<span class="fe-phone"></span>&nbsp;${response.technical_contact.phone}
-												<span class="fe-printer"></span>&nbsp;${response.technical_contact.fax}
-											</td>
-										</tr>
-										<tr class="">
-											<td><b>Address</b></td>
-											<td><span class="fe-home"></span>&nbsp;${response.technical_contact.address}</td>
-										</tr>
-										<tr class="table-danger">
-											<td><b>Address</b></td>
-											<td><b>City: </b>${response.technical_contact.city} <b>State: </b>${response.technical_contact.state} <b>Zip Code: </b>${response.technical_contact.zipcode} <b>Country:
-											</b>${response.technical_contact.country} </td>
-										</tr>
-									</tbody>
-								</table>
-							</div>
-						</div>
-					</div>
-				</div>`;
-
-				content += `
-				<div class="tab-pane fade tab-pane-300" id="v-pills-dns" role="tabpanel" aria-labelledby="v-pills-dns-tab" data-simplebar>
-					<h4>A Records</h4>`;
-					for (let a in response.dns.a) {
-						const a_object = response.dns.a[a];
-						content += `<span class="badge badge-soft-primary me-1 mt-1">${a_object}</span>`;
-					}
-					content += `<h4>MX Records</h4>`;
-
-					for (let mx in response.dns.mx) {
-						const mx_object = response.dns.mx[mx];
-						content += `<span class="badge badge-soft-primary me-1 mt-1">${mx_object}</span>`;
-					}
-					content += `<h4>TXT Records</h4>`;
-					for (let txt in response.dns.txt) {
-						const txt_object = response.dns.txt[txt];
-						content += `<span class="badge badge-soft-secondary me-1 mt-1">${txt_object}</span>`;
-					}
-					content += `</div>`;
-
-					content += `<div class="tab-pane fade tab-pane-300-scroll" id="v-pills-history" role="tabpanel" aria-labelledby="v-pills-history-tab" data-simplebar>
-						<div class="alert alert-success">${response.historical_ips.length} Historical Ips</div>
-						<table id="basic-datatable" class="table dt-responsive w-100">
-							<thead>
-									<tr>
-											<th>IP</th>
-											<th>Location</th>
-											<th>Owner</th>
-											<th>Last Seen</th>
-									</tr>
-							</thead>
-							<tbody>`;
-
-							for (let ip in response.historical_ips) {
-								const ip_object = response.historical_ips[ip];
-								content += `<tr>
-									<td><b>${ip_object.ip}</b></td>
-									<td>${ip_object.location}</td>
-									<td>${ip_object.owner}</td>
-									<td>${ip_object.last_seen}</td>
-								</tr>`;
-							}
-
-							content +=`
-							</tbody>
-						</table>
-					</div>`;
-
-					content += `<div class="tab-pane fade tab-pane-300-scroll" id="v-pills-nameserver" role="tabpanel" aria-labelledby="v-pills-nameserver-tab" data-simplebar>`;
-
-					if (response.nameservers && response.nameservers.length > 0) {
-						content += `<div class="alert alert-success">${response.nameservers.length} NameServers identified</div>`;
-					
-						for (let ns in response.nameservers) {
-							const ns_object = response.nameservers[ns];
-							content += `<span class="badge badge-soft-primary me-1 mt-1">${ns_object}</span>`;
-						}
-					} else {
-						content += `<div class="alert alert-info">No NameServer identified</div>`;
-					}
-					
-					content += `</div><div class="tab-pane fade tab-pane-300-scroll" id="v-pills-similar" role="tabpanel" aria-labelledby="v-pills-similar-tab" data-simplebar>`;
-
-					if (response.related_tlds.length > 0) {
-						for (let domain in response.related_tlds) {
-							const dom_object = response.related_tlds[domain];
-							// Generate unique ID for secure event handling
-							const badgeId = `tld-badge-${Math.random().toString(36).substr(2, 9)}`;
-							content += `<span id="${badgeId}" class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${escapeHtml(dom_object)} as target." data-add-url="${escapeHtml(addTargetUrl)}" data-project="${escapeHtml(project_slug)}" data-domain="${escapeHtml(dom_object)}">${escapeHtml(dom_object)}</span>`;
-							
-							// Add secure event listener after DOM insertion
-							setTimeout(function() {
-								const badgeElement = document.getElementById(badgeId);
-								if (badgeElement) {
-									badgeElement.addEventListener('click', function() {
-										add_target(this.dataset.addUrl, this.dataset.project, this.dataset.domain);
-									});
-								}
-							}, 0);
-						}
-					}
-					else{
-						content += `<div class="alert alert-info">No Related TLDs identified</div>`
-					}
-					content += `</div>`
-
-
-					content += `<div class="tab-pane fade tab-pane-300-scroll" id="v-pills-related" role="tabpanel" aria-labelledby="v-pills-related-tab" data-simplebar>`;
-
-					if (response.related_domains.length > 0) {
-						for (let domain in response.related_domains) {
-							const dom_object = response.related_domains[domain];
-							// Generate unique ID for secure event handling
-							const relatedBadgeId = `related-badge-${Math.random().toString(36).substr(2, 9)}`;
-							content += `<span id="${relatedBadgeId}" class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${escapeHtml(dom_object)} as target." data-add-url="${escapeHtml(addTargetUrl)}" data-project="${escapeHtml(project_slug)}" data-domain="${escapeHtml(dom_object)}">${escapeHtml(dom_object)}</span>`;
-							
-							// Add secure event listener after DOM insertion
-							setTimeout(function() {
-								const relatedBadgeElement = document.getElementById(relatedBadgeId);
-								if (relatedBadgeElement) {
-									relatedBadgeElement.addEventListener('click', function() {
-										add_target(this.dataset.addUrl, this.dataset.project, this.dataset.domain);
-									});
-								}
-							}, 0);
-						}
-					}
-					else{
-						content += `<div class="alert alert-info">No Related Domains identified</div>`
-					}
-					content += `</div>`
-
-		content += `
-			</div>
-		</div>
-	</div>`;
-
-	if (show_add_target_btn) {
-		content += `<div class="text-center">
-			<button class="btn btn-primary float-end mt-4" type="submit" onclick="add_target('${addTargetUrl}', '${project_slug}', '${response['ip_domain']}')">Add ${response['ip_domain']} as target</button>
-		</div>`
-	}
-
-	// Sanitize with DOMPurify before inserting into the DOM
-	$('#whoisLookupResultModal .modal-body').append(
-		DOMPurify.sanitize(content)
-	);
-	$('[data-toggle="tooltip"]').tooltip();
-
-}
-
 function show_quick_add_target_modal() {
 	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_TARGET);
 }
@@ -2788,184 +2352,6 @@ function get_http_badge(http_status){
 	}
 }
 
-
-function get_and_render_cve_details(endpoint_url, cve_id){
-	const api_url = `${endpoint_url}?cve_id=${cve_id}&format=json`;
-	Swal.fire({
-		title: 'Fetching CVE Details...'
-	});
-	swal.showLoading();
-	fetch(api_url, {
-		method: 'GET',
-		credentials: "same-origin",
-		headers: {
-			"X-CSRFToken": getCookie("csrftoken"),
-			"Content-Type": "application/json"
-		},
-	}).then(response => response.json()).then(function(response) {
-		swal.close();
-		if (response.status) {
-			$('#xl-modal-title').empty();
-			$('#xl-modal-content').empty();
-			$('#xl-modal-footer').empty();
-			$('#xl-modal-title').text(`CVE Details of ${cve_id}`);
-
-			let cvss_score_badge = 'danger';
-
-			if (response.result.cvss > 0.1 && response.result.cvss <= 3.9) {
-				cvss_score_badge = 'info';
-			}
-			else if (response.result.cvss > 3.9 && response.result.cvss <= 6.9) {
-				cvss_score_badge = 'warning';
-			}
-
-			let content = `<div class="row mt-3">
-				<div class="col-sm-3">
-				<div class="nav flex-column nav-pills nav-pills-tab" id="v-pills-tab" role="tablist" aria-orientation="vertical">
-				<a class="nav-link active show mb-1" id="v-pills-cve-details-tab" data-bs-toggle="pill" href="#v-pills-cve-details" role="tab" aria-controls="v-pills-cve-details-tab" aria-selected="true">CVE Details</a>
-				<a class="nav-link mb-1" id="v-pills-affected-products-tab" data-bs-toggle="pill" href="#v-pills-affected-products" role="tab" aria-controls="v-pills-affected-products-tab" aria-selected="true">Affected Products</a>
-				<a class="nav-link mb-1" id="v-pills-affected-versions-tab" data-bs-toggle="pill" href="#v-pills-affected-versions" role="tab" aria-controls="v-pills-affected-versions-tab" aria-selected="true">Affected Versions</a>
-				<a class="nav-link mb-1" id="v-pills-cve-references-tab" data-bs-toggle="pill" href="#v-pills-cve-references" role="tab" aria-controls="v-pills-cve-references-tab" aria-selected="true">References</a>
-				</div>
-				</div>
-				<div class="col-sm-9">
-				<div class="tab-content pt-0">`;
-
-				const esc = (v) => {
-				if (v === null || v === undefined) return '';
-				if (typeof v === 'string') return htmlEncode(v);
-				return v;
-			};
-			const r = response.result;
-			content += `
-				<div class="tab-pane fade active show tab-pane-600-scroll" id="v-pills-cve-details" role="tabpanel" aria-labelledby="v-pills-cve-details-tab" data-simplebar>
-					<h4 class="header-title">${esc(cve_id)}</h4>
-					<div class="alert alert-warning" role="alert">
-						${esc(r.summary)}
-					</div>
-					<span class="badge badge-soft-primary">Assigner: ${esc(r.assigner)}</span>
-					<span class="badge badge-outline-primary">CVSS Vector: ${esc(r['cvss-vector'])}</span>
-					<table class="domain_details_table table table-hover table-borderless">
-						<tr style="display: none">
-							<th>&nbsp;</th>
-							<th>&nbsp;</th>
-						</tr>
-						<tr>
-							<td>CVSS Score</td>
-							<td><span class="badge badge-soft-${cvss_score_badge}">${esc(r.cvss || "-")}</span></td>
-						</tr>
-						<tr>
-							<td>Confidentiality Impact</td>
-							<td>${(r.impact && r.impact.confidentiality) != null ? esc(r.impact.confidentiality) : "N/A"}</td>
-						</tr>
-						<tr>
-							<td>Integrity Impact</td>
-							<td>${(r.impact && r.impact.integrity) != null ? esc(r.impact.integrity) : "N/A"}</td>
-						</tr>
-						<tr>
-							<td>Availability Impact</td>
-							<td>${(r.impact && r.impact.availability) != null ? esc(r.impact.availability) : "N/A"}</td>
-						</tr>
-						<tr>
-							<td>Access Complexity</td>
-							<td>${(r.access && r.access.complexity) != null ? esc(r.access.complexity) : "N/A"}</td>
-						</tr>
-						<tr>
-							<td>Authentication</td>
-							<td>${(r.access && r.access.authentication) != null ? esc(r.access.authentication) : "N/A"}</td>
-						</tr>
-						<tr>
-							<td>CWE ID</td>
-							<td><span class="badge badge-outline-danger">${(r.cwe != null && r.cwe !== '') ? esc(r.cwe) : "N/A"}</span></td>
-						</tr>
-					</table>
-				</div>
-				`;
-
-				let { references } = response.result;
-
-				// Check if references is a string representation of an array
-				if (typeof references === 'string' && references.startsWith('[') && references.endsWith(']')) {
-					// Remove the brackets and split by comma; strip leading/trailing single quotes from each ref
-					references = references.slice(1, -1).split(',').map(ref => {
-						let t = ref.trim();
-						while (t.startsWith("'")) t = t.slice(1);
-						while (t.endsWith("'")) t = t.slice(0, -1);
-						return t;
-					});
-				}
-				
-				// Generate HTML content (escape all API data for safe insertion)
-				let referencesContent = '';
-				const safeUrl = (url) => {
-					const s = String(url == null ? '' : url).trim();
-					if (/^https?:\/\//i.test(s)) return htmlEncode(s);
-					return '#';
-				};
-				if (Array.isArray(references)) {
-					referencesContent = '<ul>';
-					references.forEach(ref => {
-						const safeRef = esc(ref);
-						referencesContent += '<li><a href="' + safeUrl(ref) + '" target="_blank" rel="noopener noreferrer">' + safeRef + '</a></li>';
-					});
-					referencesContent += '</ul>';
-				} else {
-					referencesContent = '<p>' + esc(references) + '</p>';
-				}
-				
-				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-cve-references" role="tabpanel" aria-labelledby="v-pills-cve-references-tab" data-simplebar>
-					${referencesContent}
-				</div>`;
-				
-				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-affected-products" role="tabpanel" aria-labelledby="v-pills-affected-products-tab" data-simplebar>
-				<ul>`;
-
-				if (response.result.vulnerable_product) {
-					for (let prod in response.result.vulnerable_product) {
-						content += '<li>' + esc(response.result.vulnerable_product[prod]) + '</li>';
-					}
-				}
-
-				content += `</ul></div>`;
-
-				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-affected-versions" role="tabpanel" aria-labelledby="v-pills-affected-versions-tab" data-simplebar>
-				<ul>`;
-
-				if (response.result.vulnerable_configuration) {
-					for (let conf in response.result.vulnerable_configuration) {
-						const cfg = response.result.vulnerable_configuration[conf];
-						const cfgId = cfg && (cfg.id != null ? cfg.id : cfg['id']);
-						content += '<li>' + esc(cfgId) + '</li>';
-					}
-				}
-
-				content += `</ul></div>`;
-
-				content += `</div></div></div>`;
-
-			$('#xl-modal-content').append(content);
-
-			if (window.ModalManager) ModalManager.showXlOnly();
-			$("body").tooltip({
-				selector: '[data-toggle=tooltip]'
-			});
-		}
-		else{
-			swal.fire("Error!", response.message, "error", {
-				button: "Okay",
-			});
-		}
-	});
-}
-
-$(document).on("click", "a[data-cve-details-url][data-cve-id]", function (e) {
-	e.preventDefault();
-	const url = $(this).attr("data-cve-details-url");
-	const id = $(this).attr("data-cve-id");
-	if (url && id && typeof get_and_render_cve_details === "function") {
-		get_and_render_cve_details(url, id);
-	}
-});
 
 function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, scan_id=null, target_id=null, ignore_info=false, limit=50){
 	$('#most_vulnerable_target_div').empty();
@@ -3329,19 +2715,28 @@ function render_vuln_offcanvas(vuln){
 	<div id="classification" class="collapse show mt-2">
 	<table>`;
 
-	if (vuln.cve_ids.length) {
+	const cveIds = Array.isArray(vuln.cve_ids) ? vuln.cve_ids : [];
+	if (cveIds.length) {
 		body += `<tr>
 		<td class="col-width-30">
 		<b>CVE IDs</b>
 		</td>
 		<td>`;
 
-		vuln.cve_ids.forEach(cve => {
-			body += `<a href="#" onclick="get_and_render_cve_details('${cve.name.toUpperCase()}')" class="badge badge-outline-primary me-1 mt-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${cve.name.toUpperCase()}</a>`;
+		cveIds.forEach(cve => {
+			const rawName = cve && cve.name ? String(cve.name) : "";
+			const normalizedId = typeof getNormalizedCveId === "function" ? getNormalizedCveId(rawName) : (rawName ? rawName.trim().toUpperCase() : "");
+			const cveHref = typeof getNvdCveUrl === "function" ? getNvdCveUrl(rawName) : null;
+			const safeText = typeof htmlEncode === "function" ? htmlEncode(normalizedId) : normalizedId;
+			if (cveHref) {
+				body += `<a href="${cveHref}" target="_blank" rel="noopener noreferrer" class="badge badge-outline-primary me-1 mt-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${safeText}</a>`;
+			} else {
+				body += `<span class="badge badge-outline-primary me-1 mt-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${safeText}</span>`;
+			}
 		});
 
-	body += `</td>
-		</tr>`
+		body += `</td>
+		</tr>`;
 	}
 
 	if (vuln.cwe_ids != null && vuln.cwe_ids.length) {

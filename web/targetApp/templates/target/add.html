@@ -1239,11 +1239,9 @@ Add or Import Targets
     $('#domainName').on('change keyup',function(){
       if ($('#domainName').val().length) {
         $("#add-single-target").removeAttr("disabled");
-        $("#btn_view_whois").removeClass("btn disabled");
       }
       else{
         $("#add-single-target").prop("disabled", true);
-        $("#btn_view_whois").addClass("btn disabled");
       }
     });
   });
@@ -1251,14 +1249,6 @@ Add or Import Targets
   function showname (file, id) {
     $(id).html('Selected file: ' + htmlEncode(file.files.item(0).name));
   };
-
-  function show_whois(){
-    // check if target exists or not
-    var domain = document.getElementById("domainName").value;
-    if (domain) {
-      get_domain_whois('{% url "api:whois" %}', domain, '{% url "api:addTarget" %}', '{{current_project.slug}}', true);
-    }
-  }
 
 </script>
 {% endblock page_level_script %}

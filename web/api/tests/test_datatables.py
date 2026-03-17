@@ -77,7 +77,6 @@ class TestGetDatatableActionUrls(BaseTestCase):
         sub = urls["subdomain"]
         self.assertIn("attackSurface", sub)
         self.assertIn("toggleSubdomain", sub)
-        self.assertIn("cmsDetector", sub)
         for key, path in sub.items():
             self.assertTrue(path.startswith("/"), msg=f"subdomain.{key} should be absolute path")
 

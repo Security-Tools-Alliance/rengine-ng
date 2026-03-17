@@ -79,7 +79,6 @@ from .test_tools import (
     TestRengineUpdateCheck,
 )
 from .test_vulnerability import (
-    TestCVEDetails,
     TestDeleteVulnerability,
     TestFetchMostCommonVulnerability,
     TestFetchMostVulnerable,
@@ -161,7 +160,6 @@ __all__ = [
     "TestOllamaManager",
     "TestRengineUpdateCheck",
     # test_vulnerability
-    "TestCVEDetails",
     "TestDeleteVulnerability",
     "TestFetchMostCommonVulnerability",
     "TestFetchMostVulnerable",

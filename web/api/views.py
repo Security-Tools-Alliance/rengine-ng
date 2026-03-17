@@ -1065,42 +1065,6 @@ class ListScheduledScansDatatableViewSet(DatatableListMixin, DatatablePagination
         )
 
 
-class WafDetector(APIView):
-    def get(self, request):
-        req = self.request
-        url = req.query_params.get("url")
-        response = {"status": False, "message": "", "results": None}
-
-        if not url:
-            response["message"] = "URL parameter is missing"
-            return Response(response)
-
-        try:
-            logger.log_line(
-                PREFIX_API,
-                "WAF",
-                "WAF detection for URL: %s - Legacy function disabled, use Secator instead" % (url,),
-                level="debug",
-            )
-            response["message"] = "WAF detection is now handled by Secator. Please use the Secator scan interface."
-            logger.log_line(
-                PREFIX_API,
-                "WAF",
-                "WAF detection result: %s" % (response,),
-                level="debug",
-            )
-        except Exception as e:
-            logger.log_line(
-                PREFIX_API,
-                "WAF",
-                "Error during WAF detection: %s" % (e,),
-                level="error",
-            )
-            response["message"] = "An unexpected error occurred. Please try again later."
-
-        return Response(response)
-
-
 class SearchHistoryView(APIView):
     def get(self, request):
         response = {"status": False}
@@ -1318,26 +1282,6 @@ class FetchMostVulnerable(APIView):
                 response["result"] = DomainSerializer(most_vulnerable_targets, many=True).data
 
         return Response(response)
-
-
-class CVEDetails(APIView):
-    def get(self, request):
-        req = self.request
-
-        cve_id = req.query_params.get("cve_id")
-
-        if not cve_id:
-            return Response({"status": False, "message": "CVE ID not provided"})
-
-        response = requests.get("https://cve.circl.lu/api/cve/" + cve_id)
-
-        if response.status_code != 200:
-            return Response({"status": False, "message": "Unknown Error Occured!"})
-
-        if not response.json():
-            return Response({"status": False, "message": "CVE ID does not exists."})
-
-        return Response({"status": True, "result": response.json()})
 
 
 class AddReconNote(APIView):
@@ -2908,48 +2852,10 @@ class ScanStatus(APIView):
         return Response(response)
 
 
-class Whois(APIView):
-    def get(self, request):
-        req = self.request
-        ip_domain = req.query_params.get("ip_domain")
-        if not (validators.domain(ip_domain) or validators.ipv4(ip_domain) or validators.ipv6(ip_domain)):
-            print(f'Ip address or domain "{ip_domain}" did not pass validator.')
-            return Response({"status": False, "message": "Invalid domain or IP"})
-        is_force_update = req.query_params.get("is_reload")
-        is_force_update = True if is_force_update and "true" == is_force_update.lower() else False
-        # NOTE: WHOIS functionality moved to Secator
-        return Response({"status": False, "message": "WHOIS functionality moved to Secator"})
-
-
-class ReverseWhois(APIView):
-    def get(self, request):
-        # NOTE: Reverse WHOIS functionality moved to Secator
-        return Response({"status": False, "message": "Reverse WHOIS functionality moved to Secator"})
-
-
 class DomainIPHistory(APIView):
     def get(self, request):
         # NOTE: IP history functionality moved to Secator
         return Response({"status": False, "message": "IP history functionality moved to Secator"})
-
-
-class CMSDetector(APIView):
-    def get(self, request):
-        url = request.query_params.get("url")
-        if not url:
-            return Response({"status": False, "message": "URL parameter is missing"})
-
-        try:
-            # NOTE: CMS detection functionality moved to Secator
-            return Response({"status": False, "message": "CMS detection functionality moved to Secator"})
-        except Exception as e:
-            logger.log_line(
-                PREFIX_API,
-                "CMS_DETECTOR",
-                "Error in CMSDetector: %s" % (e,),
-                level="error",
-            )
-            return Response({"status": False, "message": "An unexpected error occurred."}, status=500)
 
 
 class VulnerabilityReport(APIView):

@@ -395,11 +395,9 @@
 
   /**
    * Rich vulnerability name column: name (bold + severity color) + tags + cvss_metrics + cve_ids + cwe_ids + hackerone_report_id.
-   * All output uses safeText/safeAttr/safeLink. Options: cveDetailsUrl (string) for CVE onclick.
+   * All output uses safeText/safeAttr/safeLink. CVE IDs link to NVD.
    */
   const getVulnNameRichColumnDef = function (targetName, options) {
-    const opts = options || {};
-    const cveDetailsUrl = opts.cveDetailsUrl || "";
     const safeTextFn = window.safeText;
     const safeAttrFn = window.safeAttr;
     return {
@@ -426,11 +424,15 @@
           cveCwe = "<br>";
           if (Array.isArray(row.cve_ids)) {
             row.cve_ids.forEach(function (cve) {
-              const rawName = cve && cve.name ? String(cve.name).toUpperCase() : "";
-              const cveText = typeof safeTextFn === "function" ? safeTextFn(rawName) : rawName;
-              const safeUrl = typeof safeAttrFn === "function" ? safeAttrFn(cveDetailsUrl) : cveDetailsUrl;
-              const safeId = typeof safeAttrFn === "function" ? safeAttrFn(rawName) : rawName;
-              cveCwe += '<a href="#" class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CVE ID" data-cve-details-url="' + safeUrl + '" data-cve-id="' + safeId + '">' + cveText + "</a>";
+              const rawName = cve && cve.name ? String(cve.name) : "";
+              const displayId = typeof getNormalizedCveId === "function" ? getNormalizedCveId(rawName) : rawName;
+              const cveText = typeof safeTextFn === "function" ? safeTextFn(displayId) : displayId;
+              const nvdUrl = typeof getNvdCveUrl === "function" ? getNvdCveUrl(rawName) : null;
+              if (nvdUrl) {
+                cveCwe += '<a href="' + (typeof safeAttrFn === "function" ? safeAttrFn(nvdUrl) : nvdUrl) + '" target="_blank" rel="noopener noreferrer" class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CVE ID">' + cveText + "</a>";
+              } else {
+                cveCwe += '<span class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CVE ID">' + cveText + "</span>";
+              }
             });
           }
         }

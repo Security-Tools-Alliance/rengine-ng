@@ -1956,35 +1956,6 @@ function initiateMultipleSubscan(){
 }
 
 
-$(document).on('click', '.detect_subdomain_cms_link', function(){
-	const url = $(this).data('cms-url');
-	const http_status = $(this).data('http-status');
-	const cmsDetectorUrl = $(this).data('url');
-	let message;
-	if (http_status == 0) {
-		message = `reNgine has earlier identified that this subdomain did not return any HTTP status and likely the subdomain is not alive. reNgine may not be able to detect any CMS, would you still like to continue?`;
-	}
-	else if (http_status != 200) {
-		message = `reNgine has earlier identified that this subdomain has HTTP status as ${http_status} and likely that reNgine will not detect any CMS, would you still like to continue?`;
-	}
-	if (http_status != 200 || http_status == 0) {
-		Swal.fire({
-			showCancelButton: true,
-			title: 'Detect CMS',
-			text: message,
-			icon: 'warning',
-			confirmButtonText: 'Detect CMS',
-		}).then((result) => {
-			if (result.isConfirmed) {
-				cms_detector_api_call(cmsDetectorUrl, url);
-			}
-		});
-	}
-	else{
-		cms_detector_api_call(cmsDetectorUrl,url);
-	}
-});
-
 function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, domain_id = null, clicked_screenshot_url = '', clicked_http_url = '') {
 	// When user clicked a specific thumbnail, show only that screenshot (no API call).
 	if (clicked_screenshot_url) {

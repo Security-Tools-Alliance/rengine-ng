@@ -26,7 +26,6 @@ def get_datatable_action_urls(project_slug: str) -> dict:
         "subdomain": {
             "attackSurface": reverse("api:llm_get_possible_attacks"),
             "toggleSubdomain": reverse("api:toggle_subdomain"),
-            "cmsDetector": reverse("api:cms_detector"),
         },
         "vulnerability": {
             "llmReport": reverse("api:llm_vulnerability_report_generator"),

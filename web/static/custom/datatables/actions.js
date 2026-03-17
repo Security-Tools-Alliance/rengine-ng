@@ -86,7 +86,6 @@
     const urls = options && options.urls ? options.urls : {};
     const projectSlug = (options && options.projectSlug) || "";
     const useInlineNote = options && options.useInlineNote;
-    const cmsDetectorHttpUrl = row.http_url || "https://" + (row.name || "");
     const safeName = safeAttr(row.name || "");
     const id = row.id;
     const addNoteHtml = useInlineNote
@@ -98,7 +97,6 @@
       `<button type="button" class="btn btn-sm btn-soft-primary btn-scan-subdomain bs-tooltip" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" id="${id}"><i class="fe-zap"></i></button>` +
       addNoteHtml +
       `<a href="javascript:;" class="btn btn-sm btn-soft-warning bs-tooltip" data-toggle="tooltip" data-placement="top" title="Mark Important Subdomain" onclick="mark_important_subdomain('${safeAttr(urls.toggleSubdomain || "")}', this, ${id})" id="${id}"><i class="mdi mdi-alert-rhombus-outline"></i></a>` +
-      `<a href="javascript:;" class="btn btn-sm btn-soft-info detect_subdomain_cms_link bs-tooltip" data-toggle="tooltip" data-placement="top" title="Detect CMS" data-http-status="${safeAttr(row.http_status)}" data-cms-url="${safeAttr(cmsDetectorHttpUrl)}" data-url="${safeAttr(urls.cmsDetector || "")}"><i class="fe-grid"></i></a>` +
       `<a href="javascript:;" class="btn btn-sm btn-soft-danger btn-delete-subdomain bs-tooltip" data-toggle="tooltip" data-placement="top" title="Delete Subdomain" id="${id}"><i class="fe-trash-2"></i></a>` +
       "</div>"
     );

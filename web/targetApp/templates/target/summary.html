@@ -1252,7 +1252,7 @@ $(document).ready(function(){
 			},
 			window.RengineDatatableColumnDefs.getBadgeColumnDef('source:name', { badgeClass: 'badge badge-outline-primary', displayFn: function(d) { return d ? String(d).toUpperCase() : ''; } }),
 			window.RengineDatatableColumnDefs.getBadgeColumnDef('type:name', { badgeClass: 'badge badge-soft-primary', displayFn: function(d) { return d ? String(d).toUpperCase() : ''; } }),
-			window.RengineDatatableColumnDefs.getVulnNameRichColumnDef('name:name', { cveDetailsUrl: '{% url "api:cve_details" %}' }),
+			window.RengineDatatableColumnDefs.getVulnNameRichColumnDef('name:name', {}),
 			window.RengineDatatableColumnDefs.getVulnSeverityBadgeColumnDef('severity:name'),
 			window.RengineDatatableColumnDefs.getVulnCvssScoreBadgeColumnDef('cvss_score:name'),
 			window.RengineDatatableColumnDefs.getVulnHttpUrlLinkColumnDef('http_url:name', { maxLength: 150, className: 'text-danger' }),

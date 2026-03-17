@@ -6,12 +6,10 @@ from .views import (
     AddReconNote,
     AddTarget,
     AvailableOllamaModels,
-    CMSDetector,
     CreateProjectApi,
     CreateSecatorScan,
     CreateSecatorTask,
     CreateSecatorWorkflow,
-    CVEDetails,
     DatatableFilterHealth,
     DeleteMultipleRows,
     DeleteSecatorScan,
@@ -90,7 +88,6 @@ from .views import (
     PostScanParamsEffectivePreview,
     QueryInterestingSubdomains,
     RengineUpdateCheck,
-    ReverseWhois,
     ScanHistoryFilterChoices,
     ScanStatus,
     SearchHistoryView,
@@ -117,8 +114,6 @@ from .views import (
     VisualiseData,
     VulnerabilityReport,
     VulnerabilityViewSet,
-    WafDetector,
-    Whois,
 )
 
 
@@ -203,12 +198,7 @@ urlpatterns = [
     path("getFileContents/", GetFileContents.as_view(), name="getFileContents"),
     path("vulnerability/report/", VulnerabilityReport.as_view(), name="vulnerability_report"),
     path("tools/csrf_token/", GetCSRFToken.as_view(), name="csrf_token"),
-    path("tools/whois/", Whois.as_view(), name="whois"),
-    path("tools/reverse/whois/", ReverseWhois.as_view(), name="reverse_whois"),
     path("tools/domain_ip_history", DomainIPHistory.as_view(), name="domain_ip_history"),
-    path("tools/cms_detector/", CMSDetector.as_view(), name="cms_detector"),
-    path("tools/cve_details/", CVEDetails.as_view(), name="cve_details"),
-    path("tools/waf_detector/", WafDetector.as_view(), name="waf_detector"),
     path("tools/gf_list/", GfList.as_view(), name="gf_list"),
     path(
         "tools/llm_vulnerability_report/",
