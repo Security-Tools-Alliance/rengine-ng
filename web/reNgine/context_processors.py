@@ -182,6 +182,13 @@ def user_preferences(request):
     }
 
 
+def dompurify_sanitize_config(request):
+    """Expose HTML sanitization allowlist for frontend DOMPurify (single source of truth from core.html_sanitization)."""
+    from reNgine.core.html_sanitization import get_dompurify_config_for_frontend
+
+    return {"dompurify_sanitize_config": get_dompurify_config_for_frontend()}
+
+
 def misc(request):
     # Scan status constants from definitions (single source of truth for timeline sort in JS)
     scan_status = {

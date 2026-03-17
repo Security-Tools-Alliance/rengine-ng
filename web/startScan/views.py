@@ -11,7 +11,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import mark_safe
 import markdown
 from rolepermissions.decorators import has_permission_decorator
 from weasyprint import CSS, HTML
@@ -43,7 +42,6 @@ from reNgine.definitions import (
     SKIPPED_TASK,
     SUCCESS_TASK,
 )
-from reNgine.llm.utils import convert_markdown_to_html
 from reNgine.secator.selected_targets import (
     filter_selected_targets_per_task_for_target,
     filter_targets_override_for_target,
@@ -1882,20 +1880,6 @@ def create_report(request, slug, id):
         }
     """
     )
-
-    # Convert markdown to HTML for PDF rendering (AI reports store content as markdown)
-    for vuln in data["all_vulnerabilities"]:
-        if vuln.description:
-            vuln.description = mark_safe(convert_markdown_to_html(vuln.description))
-        if vuln.impact:
-            vuln.impact = mark_safe(convert_markdown_to_html(vuln.impact))
-        if vuln.remediation:
-            vuln.remediation = mark_safe(convert_markdown_to_html(vuln.remediation))
-        if vuln.references:
-            vuln.references_display = mark_safe(convert_markdown_to_html(vuln.references))
-        else:
-            vuln.references_display = ""
-        # Note: parse_references in template uses raw vuln.references for URL list; references_display for fallback text
 
     template = get_template("report/template.html")
     html = template.render(data)

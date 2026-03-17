@@ -1603,22 +1603,30 @@ class LLMVulnerabilityReport(models.Model):
 
     @property
     def formatted_description(self):
-        """Format description as HTML with proper styling"""
+        """Format description as HTML with proper styling. Returns None when description is None."""
+        if self.description is None:
+            return None
         return convert_markdown_to_html(self.description)
 
     @property
     def formatted_impact(self):
-        """Format impact as HTML with proper styling"""
+        """Format impact as HTML with proper styling. Returns None when impact is None."""
+        if self.impact is None:
+            return None
         return convert_markdown_to_html(self.impact)
 
     @property
     def formatted_remediation(self):
-        """Format remediation as HTML with proper styling"""
+        """Format remediation as HTML with proper styling. Returns None when remediation is None."""
+        if self.remediation is None:
+            return None
         return convert_markdown_to_html(self.remediation)
 
     @property
     def formatted_references(self):
-        """Format references as HTML with proper styling"""
+        """Format references as HTML with proper styling. Returns None when references is None."""
+        if self.references is None:
+            return None
         return convert_markdown_to_html(self.references)
 
 
@@ -1748,22 +1756,30 @@ class Vulnerability(models.Model):
 
     @property
     def formatted_description(self):
-        """Format description as HTML with proper styling"""
+        """Format description as HTML with proper styling. Returns None when description is None."""
+        if self.description is None:
+            return None
         return convert_markdown_to_html(self.description)
 
     @property
     def formatted_impact(self):
-        """Format impact as HTML with proper styling"""
+        """Format impact as HTML with proper styling. Returns None when impact is None."""
+        if self.impact is None:
+            return None
         return convert_markdown_to_html(self.impact)
 
     @property
     def formatted_remediation(self):
-        """Format remediation as HTML with proper styling"""
+        """Format remediation as HTML with proper styling. Returns None when remediation is None."""
+        if self.remediation is None:
+            return None
         return convert_markdown_to_html(self.remediation)
 
     @property
     def formatted_references(self):
-        """Format references as HTML with proper styling"""
+        """Format references as HTML with proper styling. Returns None when references is None."""
+        if self.references is None:
+            return None
         return convert_markdown_to_html(self.references)
 
     class Meta:

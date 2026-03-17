@@ -2243,6 +2243,10 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
     cve_ids = serializers.SerializerMethodField()
     cwe_ids = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
+    description_display = serializers.SerializerMethodField()
+    impact_display = serializers.SerializerMethodField()
+    remediation_display = serializers.SerializerMethodField()
+    references_display = serializers.SerializerMethodField()
 
     def get_discovered_date(self, Vulnerability):
         return Vulnerability.discovered_date.strftime("%b %d, %Y %H:%M")
@@ -2273,6 +2277,18 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
         # Use prefetched data to avoid additional queries
         return [{"name": tag.name} for tag in obj.tags.all()]
 
+    def get_description_display(self, obj):
+        return obj.formatted_description
+
+    def get_impact_display(self, obj):
+        return obj.formatted_impact
+
+    def get_remediation_display(self, obj):
+        return obj.formatted_remediation
+
+    def get_references_display(self, obj):
+        return obj.formatted_references
+
     class Meta:
         model = Vulnerability
         fields = [
@@ -2289,11 +2305,15 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
             "name",
             "severity",
             "description",
+            "description_display",
             "impact",
+            "impact_display",
             "remediation",
+            "remediation_display",
+            "references",
+            "references_display",
             "extracted_results",
             "tags",
-            "references",
             "cve_ids",
             "cwe_ids",
             "cvss_metrics",

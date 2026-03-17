@@ -102,6 +102,10 @@
     <script src="{% static 'plugins/dompurify/purify.min.js' %}"></script>
     <script src="{% static 'assets/js/app.min.js' %}"></script>
     <script src="{% static 'custom/modal_manager.js' %}"></script>
+    {{ dompurify_sanitize_config|json_script:"rengine-dompurify-sanitize-config" }}
+    <script>
+      (function(){ var el = document.getElementById('rengine-dompurify-sanitize-config'); window.VULN_DOMPURIFY_CONFIG = el ? JSON.parse(el.textContent) : {}; })();
+    </script>
     <script src="{% static 'custom/custom.js' %}"></script>
     <script src="{% static 'custom/scan_params.js' %}"></script>
     {{ RENGINE_SCAN_STATUS|json_script:"rengine-scan-status" }}

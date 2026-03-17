@@ -177,6 +177,7 @@ TEMPLATES = [
                 "reNgine.context_processors.version",
                 "reNgine.context_processors.misc",
                 "reNgine.context_processors.user_preferences",
+                "reNgine.context_processors.dompurify_sanitize_config",
                 "dashboard.context_processors.project_context",
             ],
             # Disable template caching in development

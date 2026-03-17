@@ -989,17 +989,29 @@
                 {% if vulnerability.description %}
                   <br>
                   <span class="mini-heading">Description</span><br>
-                  {{ vulnerability.description|safe }}
+                  {% if vulnerability.formatted_description %}
+                    {{ vulnerability.formatted_description|safe }}
+                  {% else %}
+                    {{ vulnerability.description|escape }}
+                  {% endif %}
                 {% endif %}
                 {% if vulnerability.impact %}
                   <br>
                   <span class="mini-heading">Impact</span><br>
-                  {{ vulnerability.impact|safe }}
+                  {% if vulnerability.formatted_impact %}
+                    {{ vulnerability.formatted_impact|safe }}
+                  {% else %}
+                    {{ vulnerability.impact|escape }}
+                  {% endif %}
                 {% endif %}
                 {% if vulnerability.remediation %}
                   <br>
                   <span class="mini-heading">Remediation</span><br>
-                  {{ vulnerability.remediation|safe }}
+                  {% if vulnerability.formatted_remediation %}
+                    {{ vulnerability.formatted_remediation|safe }}
+                  {% else %}
+                    {{ vulnerability.remediation|escape }}
+                  {% endif %}
                 {% endif %}
                 <br>
                 <span class="mini-heading">Vulnerable URL(s)</span><br>
@@ -1036,7 +1048,7 @@
                               {% endfor %}
                           </ul>
                       {% else %}
-                          <div>{{ vulnerability.references_display|safe }}</div>
+                          <div>{{ vulnerability.formatted_references|safe }}</div>
                       {% endif %}
                   {% endwith %}
                 {% endif %}

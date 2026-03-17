@@ -218,8 +218,8 @@ $(document).ready(function() {
 			return;
 		}
 		const rowData = $('#vulnerability_results').DataTable().row(this).data();
-		if (rowData) {
-			render_vuln_offcanvas(rowData);
+		if (rowData && window.reNgineVuln && typeof window.reNgineVuln.openVulnOffcanvas === "function") {
+			window.reNgineVuln.openVulnOffcanvas(rowData);
 		}
 	});
 
@@ -2600,8 +2600,223 @@ function reloadPage(){
 	location.reload();
 }
 
+var reNgineVuln = (window.reNgineVuln = window.reNgineVuln || {});
 
-function render_vuln_offcanvas(vuln){
+/**
+ * Returns a safe href for vulnerability reference links. Aligns with backend; only http, https, or path-only allowed.
+ * @param {string} ref - Raw reference URL
+ * @returns {string} Same string if safe, otherwise "#"
+ */
+reNgineVuln.sanitizeHrefForVulnReference = function (ref) {
+	if (ref == null || typeof ref !== "string") return "#";
+	const s = ref.trim();
+	if (!s) return "#";
+	const lower = s.toLowerCase();
+	if (lower.startsWith("javascript:") || lower.startsWith("data:") || lower.startsWith("vbscript:") || s.startsWith("//")) {
+		return "#";
+	}
+	if (lower.startsWith("http://") || lower.startsWith("https://")) {
+		try {
+			new URL(s);
+			return s;
+		} catch (e) {
+			return "#";
+		}
+	}
+	if (s.startsWith("/")) {
+		return s;
+	}
+	return "#";
+};
+
+/**
+ * Returns the base URL for the vulnerability list API (no cache; recomputed each call so it stays
+ * correct after table reload or context change). Used by getVulnerabilityDetailUrl.
+ * @returns {string|null} Base URL with trailing slash, or null if not determinable
+ */
+reNgineVuln.getVulnerabilityListBaseUrl = function () {
+	const listBase = window.DETAIL_SCAN_API_VULNERABILITIES_LIST || null;
+	let listUrl = listBase;
+	if (!listUrl && typeof window.jQuery === "function") {
+		const hasTable = window.jQuery("#vulnerability_results").length;
+		const hasDataTable = hasTable && window.jQuery("#vulnerability_results").DataTable;
+		const dt = hasDataTable ? window.jQuery("#vulnerability_results").DataTable() : null;
+		if (dt && dt.settings && dt.settings()[0]) {
+			const ajaxCfg = dt.settings()[0].ajax;
+			listUrl = typeof ajaxCfg === "string" ? ajaxCfg : (ajaxCfg && ajaxCfg.url);
+		}
+	}
+	if (!listUrl || typeof listUrl !== "string") {
+		return null;
+	}
+	return listUrl.split("?")[0].replace(/\/+$/, "") + "/";
+};
+
+/**
+ * Returns the API URL to fetch a single vulnerability by id (full serializer including *_display).
+ * @param {number|string} vulnId - Vulnerability id
+ * @returns {string|null} Detail URL or null if base URL cannot be determined
+ */
+reNgineVuln.getVulnerabilityDetailUrl = function (vulnId) {
+	const base = reNgineVuln.getVulnerabilityListBaseUrl();
+	if (!base || vulnId == null) return null;
+	return base + encodeURIComponent(String(vulnId)) + "/";
+};
+
+/**
+ * Returns true if the row has markdown content but is missing pre-rendered HTML (_display).
+ */
+reNgineVuln.vulnRowNeedsDisplayFetch = function (row) {
+	function hasDisplay(val) {
+		return val != null && String(val).trim().length > 0;
+	}
+	return (
+		(row.description && !hasDisplay(row.description_display)) ||
+		(row.impact && !hasDisplay(row.impact_display)) ||
+		(row.remediation && !hasDisplay(row.remediation_display)) ||
+		(row.references && !hasDisplay(row.references_display))
+	);
+};
+
+/**
+ * Fetches a single vulnerability by detail API URL. Returns a Promise that resolves to the
+ * full vulnerability object on success, or the fallback rowData on failure.
+ * @param {string} detailUrl - Full URL for GET /api/.../listVulnerability/{id}/
+ * @param {Object} rowData - Fallback object when the request fails
+ * @returns {Promise<Object>} Resolves to API response or rowData
+ */
+reNgineVuln.fetchVulnerabilityByDetailUrl = function (detailUrl, rowData) {
+	const getCookie = typeof window.getCookie === "function" ? window.getCookie : function () { return ""; };
+	const csrfToken = getCookie("csrftoken") || "";
+	return window
+		.fetch(detailUrl, {
+			method: "GET",
+			headers: { "X-CSRFToken": csrfToken, Accept: "application/json" },
+			credentials: "same-origin",
+		})
+		.then(function (response) {
+			if (!response.ok) {
+				if (window.console && typeof window.console.warn === "function") {
+					window.console.warn("fetchVulnerabilityByDetailUrl: non-OK response", {
+						url: detailUrl,
+						status: response.status,
+						statusText: response.statusText,
+						rowId: rowData && rowData.id,
+					});
+				}
+				return rowData;
+			}
+			return response.json();
+		})
+		.then(function (data) {
+			return data != null ? data : rowData;
+		})
+		.catch(function (error) {
+			if (window.console && typeof window.console.warn === "function") {
+				window.console.warn("fetchVulnerabilityByDetailUrl: request failed", {
+					url: detailUrl,
+					error: error,
+					rowId: rowData && rowData.id,
+				});
+			}
+			return rowData;
+		});
+}
+
+/**
+ * Opens the vulnerability off-canvas. If the row lacks *_display fields, fetches the full
+ * vulnerability from the detail API then renders; otherwise renders immediately.
+ * @param {Object} rowData - Row object from DataTable (may lack description_display, etc.)
+ */
+reNgineVuln.openVulnOffcanvas = function (rowData) {
+	if (!rowData || rowData.id == null) {
+		reNgineVuln.renderVulnOffcanvas(rowData);
+		return;
+	}
+	if (!reNgineVuln.vulnRowNeedsDisplayFetch(rowData)) {
+		reNgineVuln.renderVulnOffcanvas(rowData);
+		return;
+	}
+	if (typeof window.fetch !== "function" || typeof window.DOMPurify === "undefined" || typeof window.DOMPurify.sanitize !== "function") {
+		reNgineVuln.renderVulnOffcanvas(rowData);
+		return;
+	}
+	const detailUrl = reNgineVuln.getVulnerabilityDetailUrl(rowData.id);
+	if (!detailUrl) {
+		if (window.console && typeof window.console.warn === "function") {
+			window.console.warn("openVulnOffcanvas: missing detail URL for vulnerability", { rowId: rowData.id });
+		}
+		reNgineVuln.renderVulnOffcanvas(rowData);
+		return;
+	}
+	reNgineVuln.fetchVulnerabilityByDetailUrl(detailUrl, rowData).then(function (vuln) {
+		reNgineVuln.renderVulnOffcanvas(vuln);
+	});
+};
+
+/**
+ * DOMPurify config for vulnerability markdown: from backend (window.VULN_DOMPURIFY_CONFIG) or fallback.
+ */
+reNgineVuln.getVulnDompurifyConfig = function () {
+	const fromBackend = window.VULN_DOMPURIFY_CONFIG;
+	if (fromBackend && Array.isArray(fromBackend.ALLOWED_TAGS) && Array.isArray(fromBackend.ALLOWED_ATTR)) {
+		return fromBackend;
+	}
+	return {
+		ALLOWED_TAGS: [
+			"p", "div", "span", "br", "ul", "ol", "li", "strong", "em", "b", "i", "code", "pre", "a",
+			"table", "thead", "tbody", "tr", "th", "td", "h1", "h2", "h3", "h4", "h5", "h6", "dl", "dt", "dd"
+		],
+		ALLOWED_ATTR: ["href", "title", "id", "class", "aria-label", "aria-expanded", "role", "aria-hidden"]
+	};
+};
+
+/**
+ * Replaces plain http(s) URLs in HTML text nodes with <a href="..." target="_blank" rel="noopener noreferrer">.
+ * Only runs in text content (between tags) to avoid altering existing href values.
+ * @param {string} html - HTML string (e.g. from renderMarkdownBody)
+ * @returns {string} HTML with bare URLs turned into links
+ */
+reNgineVuln.linkifyUrlsInHtml = function (html) {
+	if (typeof html !== "string" || !html) return html;
+	const sanitize = reNgineVuln.sanitizeHrefForVulnReference;
+	const encode = typeof htmlEncode === "function" ? htmlEncode : function (s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); };
+	const urlRegex = /(https?:\/\/[^\s<>"')\]]+)/g;
+	return html.replace(/(>)([^<]*?)(<)/g, function (_, open, text, close) {
+		return open + text.replace(urlRegex, function (url) {
+			const safeHref = sanitize(url);
+			return '<a href="' + safeHref + '" target="_blank" rel="noopener noreferrer">' + encode(url) + "</a>";
+		}) + close;
+	});
+};
+
+/**
+ * Sanitizes raw or pre-rendered HTML and wraps it in vuln-markdown-body. Use for description, impact,
+ * remediation, and references. See reNgine.core.html_sanitization for backend config alignment.
+ * @param {string} raw - Raw text (used when display is absent; newlines become <br />)
+ * @param {string|undefined} display - Pre-rendered HTML from API, or undefined
+ * @returns {string} Wrapped, sanitized HTML
+ */
+reNgineVuln.renderMarkdownBody = function (raw, display) {
+	const html = display
+		? display
+		: (raw || "").replace(new RegExp("\r?\n", "g"), "<br />");
+	if (typeof window.DOMPurify !== "undefined" && typeof window.DOMPurify.sanitize === "function") {
+		return `<div class="vuln-markdown-body">${window.DOMPurify.sanitize(html, reNgineVuln.getVulnDompurifyConfig())}</div>`;
+	}
+	const escaped =
+		typeof safeText === "function"
+			? safeText(html)
+			: String(html)
+					.replace(/&/g, "&amp;")
+					.replace(/</g, "&lt;")
+					.replace(/>/g, "&gt;")
+					.replace(/"/g, "&quot;")
+					.replace(/'/g, "&#39;");
+	return `<div class="vuln-markdown-body">${escaped}</div>`;
+};
+
+reNgineVuln.renderVulnOffcanvas = function (vuln) {
 	$('#offcanvas').addClass('offcanvas-size-lg');
 	let default_color = 'primary';
 	let default_badge_color = 'soft-primary';
@@ -2651,57 +2866,6 @@ function render_vuln_offcanvas(vuln){
 	const type_display = vuln.type ? vuln.type.toUpperCase() : 'N/A';
 	const source_display = vuln.source ? vuln.source.toUpperCase() : 'N/A';
 	body += `<p><b>Severity: </b>${vuln.severity}<br><b>Type: </b>${type_display}<br><b>Source: </b> ${source_display}</p>`;
-
-	if (vuln.description) {
-		// Sanitize with DOMPurify before inserting into the DOM
-		body += `<div class="accordion custom-accordion mt-2">
-		<h5 class="m-0 position-relative">
-		<a class="custom-accordion-title text-reset d-block"
-		data-bs-toggle="collapse" href="#description"
-		aria-expanded="true" aria-controls="collapseNine">
-		Vulnerability Description <i
-		class="mdi mdi-chevron-down accordion-arrow"></i>
-		</a>
-		</h5>
-		<div id="description" class="collapse show mt-2">
-		<p>${DOMPurify.sanitize(vuln.description.replace(new RegExp('\r?\n','g'), '<br />'))}</p>
-		</div>
-		</div>`;
-	}
-
-	if (vuln.impact) {
-		const impact = vuln.impact.replace(new RegExp('\r?\n','g'), '<br />');
-		body += `<div class="accordion custom-accordion mt-2">
-		<h5 class="m-0 position-relative">
-		<a class="custom-accordion-title text-reset d-block"
-		data-bs-toggle="collapse" href="#impact"
-		aria-expanded="true" aria-controls="collapseNine">
-		Vulnerability Impact <i
-		class="mdi mdi-chevron-down accordion-arrow"></i>
-		</a>
-		</h5>
-		<div id="impact" class="collapse show mt-2">
-		<p>${DOMPurify.sanitize(impact)}</p>
-		</div>
-		</div>`;
-	}
-
-	if (vuln.remediation) {
-		const remediation = vuln.remediation.replace(new RegExp('\r?\n','g'), '<br />');
-		body += `<div class="accordion custom-accordion mt-2">
-		<h5 class="m-0 position-relative">
-		<a class="custom-accordion-title text-reset d-block"
-		data-bs-toggle="collapse" href="#remediation"
-		aria-expanded="true" aria-controls="collapseNine">
-		Remediation <i
-		class="mdi mdi-chevron-down accordion-arrow"></i>
-		</a>
-		</h5>
-		<div id="remediation" class="collapse show mt-2">
-		<p>${DOMPurify.sanitize(remediation)}</p>
-		</div>
-		</div>`;
-	}
 
 	body += `<div class="accordion custom-accordion mt-2">
 	<h5 class="m-0 position-relative">
@@ -2764,7 +2928,7 @@ function render_vuln_offcanvas(vuln){
 		}
 
 		body += `<tr>
-		<td class="col-width-30">
+		<td class="col-width-40">
 		<b>CVSS Score</b>
 		</td>
 		<td>
@@ -2787,6 +2951,53 @@ function render_vuln_offcanvas(vuln){
 	</div>
 	</div>`;
 
+	if (vuln.description) {
+		body += `<div class="accordion custom-accordion mt-2">
+		<h5 class="m-0 position-relative">
+		<a class="custom-accordion-title text-reset d-block"
+		data-bs-toggle="collapse" href="#description"
+		aria-expanded="true" aria-controls="collapseNine">
+		Vulnerability Description <i
+		class="mdi mdi-chevron-down accordion-arrow"></i>
+		</a>
+		</h5>
+		<div id="description" class="collapse show mt-2">
+		${reNgineVuln.renderMarkdownBody(vuln.description, vuln.description_display)}
+		</div>
+		</div>`;
+	}
+
+	if (vuln.impact) {
+		body += `<div class="accordion custom-accordion mt-2">
+		<h5 class="m-0 position-relative">
+		<a class="custom-accordion-title text-reset d-block"
+		data-bs-toggle="collapse" href="#impact"
+		aria-expanded="true" aria-controls="collapseNine">
+		Vulnerability Impact <i
+		class="mdi mdi-chevron-down accordion-arrow"></i>
+		</a>
+		</h5>
+		<div id="impact" class="collapse show mt-2">
+		${reNgineVuln.renderMarkdownBody(vuln.impact, vuln.impact_display)}
+		</div>
+		</div>`;
+	}
+
+	if (vuln.remediation) {
+		body += `<div class="accordion custom-accordion mt-2">
+		<h5 class="m-0 position-relative">
+		<a class="custom-accordion-title text-reset d-block"
+		data-bs-toggle="collapse" href="#remediation"
+		aria-expanded="true" aria-controls="collapseNine">
+		Remediation <i
+		class="mdi mdi-chevron-down accordion-arrow"></i>
+		</a>
+		</h5>
+		<div id="remediation" class="collapse show mt-2">
+		${reNgineVuln.renderMarkdownBody(vuln.remediation, vuln.remediation_display)}
+		</div>
+		</div>`;
+	}
 
 	if (vuln.source == 'nuclei') {
 		body += `<div class="accordion custom-accordion mt-2">
@@ -2899,17 +3110,19 @@ function render_vuln_offcanvas(vuln){
 		references = references.slice(1, -1).split(',').map(ref => ref.trim().replace(/^'|'$/g, ''));
 	}
 
-	// Generate HTML content
-	let referencesContent = '';
+	let referencesContent = "";
 	if (Array.isArray(references)) {
-		referencesContent = '<ul>';
+		referencesContent = "<ul>";
 		references.forEach(ref => {
-			referencesContent += `<li><a href="${ref}" target="_blank" rel="noopener noreferrer">${ref}</a></li>`;
+			const safeHref = reNgineVuln.sanitizeHrefForVulnReference(ref);
+			const safeText = typeof htmlEncode === "function" ? htmlEncode(safeHref) : safeHref;
+			referencesContent += `<li><a href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeText}</a></li>`;
 		});
-		referencesContent += '</ul>';
+		referencesContent += "</ul>";
 	} else {
-		const referenceText = references || 'N/A';
-		referencesContent = `<p>${referenceText}</p>`;
+		referencesContent = reNgineVuln.linkifyUrlsInHtml(
+			reNgineVuln.renderMarkdownBody(vuln.references, vuln.references_display)
+		);
 	}
 
 	body += `<div class="accordion custom-accordion mt-2">
