@@ -49,9 +49,11 @@ from startScan.models import (
     Command,
     Domain,
     EndPoint,
+    Exploit,
     ScanActivity,
     ScanHistory,
     SecatorRunner,
+    Secret,
     Subdomain,
     SubScan,
     Vulnerability,
@@ -342,13 +344,15 @@ def _add_secator_runners_to_message(scan: ScanHistory, message: dict) -> None:
 
 
 def _get_scan_counts(scan_history_id: int) -> dict:
-    """Return domain, subdomain, endpoint and vulnerability counts for a scan in one pass."""
+    """Return domain, subdomain, endpoint, vulnerability, secret and exploit counts for a scan in one pass."""
     domain_count = Domain.objects.filter(scan_history_id=scan_history_id).count()
     subdomain_count = Subdomain.objects.filter(scan_history__id=scan_history_id).count()
     alive_count = Subdomain.objects.filter(scan_history__id=scan_history_id, http_status__gt=0).count()
     endpoint_count = EndPoint.objects.filter(scan_history__id=scan_history_id).count()
     endpoint_alive_count = EndPoint.objects.filter(scan_history__id=scan_history_id, http_status__gt=0).count()
     vulnerability_count = Vulnerability.objects.filter(scan_history__id=scan_history_id).count()
+    secret_count = Secret.objects.filter(scan_history__id=scan_history_id).count()
+    exploit_count = Exploit.objects.filter(scan_history__id=scan_history_id).count()
     return {
         "domain_count": domain_count,
         "subdomain_count": subdomain_count,
@@ -356,6 +360,8 @@ def _get_scan_counts(scan_history_id: int) -> dict:
         "endpoint_count": endpoint_count,
         "endpoint_alive_count": endpoint_alive_count,
         "vulnerability_count": vulnerability_count,
+        "secret_count": secret_count,
+        "exploit_count": exploit_count,
     }
 
 
@@ -394,6 +400,8 @@ def _build_base_status_message(
         "subdomain_count": counts["subdomain_count"],
         "endpoint_count": counts["endpoint_count"],
         "vulnerability_count": counts["vulnerability_count"],
+        "secret_count": counts["secret_count"],
+        "exploit_count": counts["exploit_count"],
         "alive_count": counts["alive_count"],
         "endpoint_alive_count": counts["endpoint_alive_count"],
         **severity_counts,
