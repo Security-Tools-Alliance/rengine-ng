@@ -232,10 +232,10 @@ $(document).ready(function() {
       window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('subscan_history', table, { onApply: function() { table.draw(); } }));
     }
     if (window.attachDatatableQuickSearch) {
-      window.attachDatatableQuickSearch(table, { inputSelector: '#subscanHistoryQuickSearch' });
+      window.attachDatatableQuickSearch(table, { inputSelector: '#subscanHistoryQuickSearch', tableId: 'subscan_history' });
     }
     if (window.attachDatatableColumnSearch) {
-      window.attachDatatableColumnSearch(table, { tableSelector: '#subscan_history_table', delayMs: 400 });
+      window.attachDatatableColumnSearch(table, { tableSelector: '#subscan_history_table', delayMs: 400, tableId: 'subscan_history' });
     }
     if (!window.attachDatatableFilters) {
       ['filterByOrganization', 'filterByScanStatus', 'filterByScanType', 'filterByTarget'].forEach(function(id) {

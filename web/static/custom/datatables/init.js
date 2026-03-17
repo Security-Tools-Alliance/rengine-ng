@@ -108,7 +108,7 @@
    *   - filterSelectToParam: optional object (select id -> param name); merged into ajax.data via buildDatatableFilterPayload.
    *   - filterParamsElId: optional; if set and filterSelectToParam not set, filterSelectToParam = getRengineDatatableFilterParams(filterParamsElId).
    *   - drawCallbackTooltips: optional true or { tooltipTemplate: '...' }; sets drawCallback to getRengineDatatableDrawCallbackTooltips.
-   *   - rowGroup: optional { selector, groups, columns, defaultOrderWhenDisabled, snackbarMessage, cookieKey, initialGroupFromCookie } or with rowGroupBaseOpts to auto-compute initial state from cookie.
+   *   - rowGroup: optional { selector, groups, columns, defaultOrderWhenDisabled, snackbarMessage, storageKey, cookieKey, initialGroupFromStorage } or with rowGroupBaseOpts to auto-compute initial state from storage.
    *   - orderFromColumns: optional [columns, defaultOrder] for getRengineDatatableOrderFromNames; used when order not set.
    * @returns {DataTable.Api} The DataTable API instance.
    */
@@ -165,7 +165,10 @@
       );
       opts.order = state.order;
       opts.rowGroup = state.rowGroup;
-      rowGroupAttachOpts = Object.assign({}, rowGroup, { initialGroupFromCookie: state.appliedFromCookie });
+      rowGroupAttachOpts = Object.assign({}, rowGroup, {
+        storageKey: rowGroup.cookieKey,
+        initialGroupFromStorage: state.appliedFromStorage
+      });
     } else if (orderFromColumns && opts.order === undefined) {
       const cols = orderFromColumns[0];
       const defaultOrder = orderFromColumns[1] || [["id", "desc"]];
@@ -250,7 +253,7 @@
   /**
    * Attach a simple global search input to a DataTable instance and place it to the right
    * of the "Results" (length) dropdown in the table's control row.
-   * opts: { inputSelector: '#input-id', delayMs?: number }
+   * opts: { inputSelector: '#input-id', delayMs?: number, tableId?: string }
    */
   window.attachDatatableQuickSearch = function (table, opts) {
     if (!table || !opts || !opts.inputSelector) {
@@ -265,11 +268,34 @@
       return;
     }
     const delay = typeof opts.delayMs === "number" ? opts.delayMs : 700;
+    const storage = window.rengineStorage;
+    const dtTable = typeof table.table === "function" ? table.table() : null;
+    const derivedId =
+      dtTable && typeof dtTable.node === "function" ? dtTable.node().id : null;
+    const tableId = opts.tableId || derivedId;
+    const storageKey = tableId ? "rengine-datatable-search-" + tableId : null;
+
+    if (storage && typeof storage.getJson === "function" && storageKey) {
+      try {
+        const persistedSearch = storage.getJson(storageKey);
+        if (typeof persistedSearch === "string" && persistedSearch.length > 0) {
+          $input.val(persistedSearch);
+          if (table.search() !== persistedSearch) {
+            table.search(persistedSearch).draw();
+          }
+        }
+      } catch (e) {
+        // ignore storage errors
+      }
+    }
     let timeoutId = null;
     function triggerSearch() {
       const val = $input.val() || "";
       if (table.search() !== val) {
         table.search(val).draw();
+        if (storageKey && storage && typeof storage.setJson === "function") {
+          storage.setJson(storageKey, val);
+        }
       }
     }
     $input.off(".rengineQuickSearch").on("keyup.rengineQuickSearch change.rengineQuickSearch", function () {
@@ -295,6 +321,8 @@
         }
       }
     }
+
+    // restored above via storage.getJson when available
   };
 
   /**
@@ -307,7 +335,7 @@
    * With scrollY, DataTables may move thead/tfoot into scroll containers; we resolve them
    * from the table's container so handlers attach to the correct nodes.
    *
-   * opts: { tableSelector: '#table-id', delayMs?: number }
+   * opts: { tableSelector: '#table-id', delayMs?: number, tableId?: string }
    */
   window.attachDatatableColumnSearch = function (table, opts) {
     if (!table || !opts || !opts.tableSelector) {
@@ -318,6 +346,14 @@
       return;
     }
     const delay = typeof opts.delayMs === "number" ? opts.delayMs : 700;
+    const storage = window.rengineStorage;
+    const explicitTableId = opts.tableId;
+    const derivedTableId =
+      table.table && typeof table.table === "function" && table.table().node && table.table().node().id
+        ? table.table().node().id
+        : null;
+    const tableId = explicitTableId || derivedTableId;
+    const storageKey = tableId ? "rengine-datatable-columnSearch-" + tableId : null;
     const $table = $(opts.tableSelector);
     if (!$table.length) {
       return;
@@ -355,7 +391,7 @@
       };
     }
 
-    function attachToInputs($container) {
+    function attachToInputs($container, baseState) {
       if (!$container || !$container.length) {
         return;
       }
@@ -372,13 +408,49 @@
             const current = table.column(colIdx).search();
             if (current !== val) {
               table.column(colIdx).search(val).draw();
+              if (storageKey && storage && typeof storage.setJson === "function") {
+                const nextState = Object.assign({}, baseState || {});
+                if (val) {
+                  nextState[colIdx] = val;
+                } else {
+                  delete nextState[colIdx];
+                }
+                storage.setJson(storageKey, nextState);
+              }
             }
           }, delay);
           $(this).off(".rengineColumnSearch").on("keyup.rengineColumnSearch change.rengineColumnSearch", handler);
+
+          if (baseState && Object.prototype.hasOwnProperty.call(baseState, colIdx)) {
+            const savedVal = baseState[colIdx];
+            if (savedVal != null && savedVal !== "") {
+              this.value = savedVal;
+              const current = table.column(colIdx).search();
+              if (current !== savedVal) {
+                table.column(colIdx).search(savedVal);
+              }
+            }
+          }
         });
     }
 
-    attachToInputs($thead);
-    attachToInputs($tfoot);
+    let initialState = null;
+    if (storageKey && storage && typeof storage.getJson === "function") {
+      try {
+        const stored = storage.getJson(storageKey);
+        if (stored && typeof stored === "object") {
+          initialState = stored;
+        }
+      } catch (e) {
+        initialState = null;
+      }
+    }
+
+    attachToInputs($thead, initialState);
+    attachToInputs($tfoot, initialState);
+
+    if (initialState && Object.keys(initialState).length > 0) {
+      table.draw();
+    }
   };
 })(window);

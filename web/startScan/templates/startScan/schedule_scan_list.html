@@ -122,7 +122,7 @@ $(document).ready(function() {
   });
   var scheduled_scan_table = window.initServerSideDataTable('#scheduled_scan_table', scheduledScanTableConfig);
   if (window.attachDatatableQuickSearch) {
-    window.attachDatatableQuickSearch(scheduled_scan_table, { inputSelector: '#scheduledScanQuickSearch' });
+    window.attachDatatableQuickSearch(scheduled_scan_table, { inputSelector: '#scheduledScanQuickSearch', tableId: 'scheduled_scans' });
   }
   multiCheck(scheduled_scan_table);
 });

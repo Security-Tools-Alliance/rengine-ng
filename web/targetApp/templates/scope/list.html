@@ -250,10 +250,10 @@ $(document).ready(function() {
   });
 
   if (window.attachDatatableQuickSearch) {
-    window.attachDatatableQuickSearch(scopeTable, { inputSelector: '#scopeListQuickSearch' });
+    window.attachDatatableQuickSearch(scopeTable, { inputSelector: '#scopeListQuickSearch', tableId: 'scope_list' });
   }
   if (window.attachDatatableColumnSearch) {
-    window.attachDatatableColumnSearch(scopeTable, { tableSelector: '#list_scope_table', delayMs: 400 });
+    window.attachDatatableColumnSearch(scopeTable, { tableSelector: '#list_scope_table', delayMs: 400, tableId: 'scope_list' });
   }
 
   $.getJSON("{% url 'api:listOrganizations' %}?format=json&project=" + encodeURIComponent(window.SCOPE_LIST_PROJECT_SLUG || ""), function(data) {

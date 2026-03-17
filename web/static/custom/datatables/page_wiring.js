@@ -115,6 +115,7 @@
       buildBadgeHtml: buildBadgeHtml,
       onApply: onApply,
     };
+    opts.tableId = tableId;
     if (overrides && overrides.rowGroup != null) opts.rowGroup = overrides.rowGroup;
     return opts;
   };

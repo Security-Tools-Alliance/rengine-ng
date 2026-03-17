@@ -167,8 +167,8 @@ $(document).ready(function() {
 			defaultOrderWhenDisabled: vuln_default_order,
 			columns: vuln_datatable_columns,
 			snackbarMessage: window.getRengineRowGroupSnackbarMessage('Grouping cleared', 'Vulnerabilities grouped by {label}'),
-			cookieKey: vuln_rowgroup_cookie_key || undefined,
-			initialGroupFromCookie: vuln_initial_state.appliedFromCookie
+			storageKey: vuln_rowgroup_cookie_key || undefined,
+			initialGroupFromStorage: vuln_initial_state.appliedFromStorage
 		});
 	}
 	$('#reload_vulnerabilities_table_btn').click(function () {

@@ -379,10 +379,10 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
       window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('scan_history', table, { onApply: function() { table.draw(); } }));
     }
     if (window.attachDatatableQuickSearch) {
-      window.attachDatatableQuickSearch(table, { inputSelector: '#scanHistoryQuickSearch' });
+      window.attachDatatableQuickSearch(table, { inputSelector: '#scanHistoryQuickSearch', tableId: 'scan_history' });
     }
     if (window.attachDatatableColumnSearch) {
-      window.attachDatatableColumnSearch(table, { tableSelector: '#scan_history_table', delayMs: 400 });
+      window.attachDatatableColumnSearch(table, { tableSelector: '#scan_history_table', delayMs: 400, tableId: 'scan_history' });
     }
     if (!window.attachDatatableFilters) {
       document.getElementById('filterByOrganization').addEventListener('change', function() { table.draw(); }, false);

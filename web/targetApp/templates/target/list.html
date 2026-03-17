@@ -252,11 +252,12 @@ $(document).ready(function(){
 	});
 	if (window.attachDatatableQuickSearch) {
 		window.attachDatatableQuickSearch(table, {
-			inputSelector: '#targetListQuickSearch'
+			inputSelector: '#targetListQuickSearch',
+      tableId: 'target_list'
 		});
 	}
 	if (window.attachDatatableColumnSearch) {
-		window.attachDatatableColumnSearch(table, { tableSelector: '#list_target_table', delayMs: 400 });
+		window.attachDatatableColumnSearch(table, { tableSelector: '#list_target_table', delayMs: 400, tableId: 'target_list' });
 	}
 	multiCheck(table);
 

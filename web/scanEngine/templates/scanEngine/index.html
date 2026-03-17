@@ -206,7 +206,15 @@ Scan Engines <small class="text-muted">(Legacy)</small>
       $('.scan-type-filter').removeClass('active');
       $('.scan-type-filter[data-filter="' + filter + '"]').addClass('active');
       scanEngineFilter = filter;
-      document.cookie = "scan_engine_filter=" + filter + "; path=/; max-age=31536000";
+      try {
+        if (window.rengineStorage && typeof window.rengineStorage.set === 'function') {
+          window.rengineStorage.set('scan_engine_filter', filter);
+        }
+      } catch (e) {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn('Failed to persist scan_engine_filter', e);
+        }
+      }
       scan_engine_table.ajax.reload();
     }
 
@@ -214,12 +222,14 @@ Scan Engines <small class="text-muted">(Legacy)</small>
       applyFilter($(this).data('filter'));
     });
 
-    function getCookie(name) {
-      var value = "; " + document.cookie;
-      var parts = value.split("; " + name + "=");
-      return parts.length === 2 ? parts.pop().split(";").shift() : null;
+    var savedFilter = null;
+    try {
+      if (window.rengineStorage && typeof window.rengineStorage.get === 'function') {
+        savedFilter = window.rengineStorage.get('scan_engine_filter');
+      }
+    } catch (e) {
+      savedFilter = null;
     }
-    var savedFilter = getCookie('scan_engine_filter');
     if (savedFilter && ['all', 'internet', 'internal_network'].indexOf(savedFilter) !== -1) {
       applyFilter(savedFilter);
     } else {

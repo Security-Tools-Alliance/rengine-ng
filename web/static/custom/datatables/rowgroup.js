@@ -1,7 +1,7 @@
 /**
- * DataTables RowGroup: order-by-name, row group options, attach grouping selector, cookie-backed initial state.
+ * DataTables RowGroup: order-by-name, row group options, attach grouping selector, storage-backed initial state.
  *
- * Depends on: layout.js (indirect), cookies.js (getRengineCookie, setRengineCookie), columns.js (getColumnIndexByName).
+ * Depends on: layout.js (indirect), columns.js (getColumnIndexByName), rengine_storage.js (rengineStorage).
  * Consumed by init.js (getRengineRowGroupInitialState, attachRengineDatatableRowGroupSelector). Backend passes
  * row-group config (selector, cookie_key) via config.js getRengineRowGroupConfigFromScript; TABLE_ID is from table_config.py.
  */
@@ -9,8 +9,17 @@
   "use strict";
 
   const getColumnIndexByName = window.getColumnIndexByName;
-  const getRengineCookie = window.getRengineCookie;
-  const setRengineCookie = window.setRengineCookie;
+  const storage = window.rengineStorage;
+
+  const getRowGroupStoredValue = function (key) {
+    if (!key || !storage || typeof storage.get !== "function") return null;
+    return storage.get(key);
+  };
+
+  const setRowGroupStoredValue = function (key, value) {
+    if (!key || !storage || typeof storage.set !== "function") return;
+    storage.set(key, value == null ? "" : value);
+  };
 
   const normalizeRowGroupLabel = function (group) {
     if (group == null) return "";
@@ -163,26 +172,26 @@
   };
 
   /**
-   * Returns initial order and rowGroup config from cookie so the first DataTable request
+   * Returns initial order and rowGroup config from storage so the first DataTable request
    * uses the correct order/grouping and only one API call is made.
    *
-   * @param {string} cookieKey - Cookie key for persisted group value.
+   * @param {string} storageKey - Storage key for persisted group value.
    * @param {Array} groups - Same groups array as for attachRengineDatatableRowGroupSelector (with value, label, orderWhenActive).
    * @param {Array} defaultOrderWhenDisabled - Name-based default order when no group (e.g. [['id', 'desc']]).
    * @param {Array} columns - Column definitions (for resolveOrderToIndices).
    * @param {Object} rowGroupBaseOpts - Options for getRengineDatatableRowGroupOptions (dataSrc, rowLabel, emptyGroupLabel).
-   * @returns {{ order: Array, rowGroup: Object, appliedFromCookie: boolean }}
+   * @returns {{ order: Array, rowGroup: Object, appliedFromStorage: boolean }}
    */
-  const getInitialRowGroupStateFromCookie = function (cookieKey, groups, defaultOrderWhenDisabled, columns, rowGroupBaseOpts) {
+  const getInitialRowGroupStateFromStorage = function (storageKey, groups, defaultOrderWhenDisabled, columns, rowGroupBaseOpts) {
     const orderToApply = resolveOrderToIndices(defaultOrderWhenDisabled, columns);
     const defaultRowGroup = getRengineDatatableRowGroupOptions(rowGroupBaseOpts || {}).rowGroup;
-    if (!cookieKey || typeof getRengineCookie !== "function") {
-      return { order: orderToApply, rowGroup: defaultRowGroup, appliedFromCookie: false };
+    if (!storageKey || !storage || typeof storage.get !== "function") {
+      return { order: orderToApply, rowGroup: defaultRowGroup, appliedFromStorage: false };
     }
-    const saved = getRengineCookie(cookieKey);
+    const saved = getRowGroupStoredValue(storageKey);
     const hasMatch = saved != null && saved !== "" && groups.some(function (g) { return groupValueMatches(g, saved); });
     if (!hasMatch) {
-      return { order: orderToApply, rowGroup: defaultRowGroup, appliedFromCookie: false };
+      return { order: orderToApply, rowGroup: defaultRowGroup, appliedFromStorage: false };
     }
     const option = groups.find(function (g) { return String(g.value) === String(saved); });
     const orderWhenActive = option && option.orderWhenActive ? option.orderWhenActive : [[saved, "asc"], [1, "desc"]];
@@ -190,31 +199,31 @@
     const rowGroupOpts = getRengineDatatableRowGroupOptions(
       Object.assign({}, rowGroupBaseOpts, { dataSrc: saved })
     ).rowGroup;
-    return { order: order, rowGroup: rowGroupOpts, appliedFromCookie: true };
+    return { order: order, rowGroup: rowGroupOpts, appliedFromStorage: true };
   };
 
   /**
-   * Get initial order and rowGroup for first draw (from cookie if present, else defaults).
-   * Use in list templates to avoid repeating the getInitialRowGroupStateFromCookie ternary.
+   * Get initial order and rowGroup for first draw (from storage if present, else defaults).
+   * Use in list templates to avoid repeating the getInitialRowGroupStateFromStorage ternary.
    *
-   * @param {string} cookieKey - Cookie key for saved group (empty skips cookie).
+   * @param {string} storageKey - Storage key for saved group (empty skips persistence).
    * @param {Array} groups - Same groups array as for attachRengineDatatableRowGroupSelector.
    * @param {Array} defaultOrder - Name-based default order when no group (e.g. [['id', 'desc']]).
    * @param {Array} columns - Column definitions (for resolveOrderToIndices).
    * @param {Object} rowGroupBaseOpts - Options for getRengineDatatableRowGroupOptions (dataSrc, rowLabel, emptyGroupLabel).
-   * @returns {{ order: Array, rowGroup: Object, appliedFromCookie: boolean }}
+   * @returns {{ order: Array, rowGroup: Object, appliedFromStorage: boolean }}
    */
-  const getRengineRowGroupInitialState = function (cookieKey, groups, defaultOrder, columns, rowGroupBaseOpts) {
-    const getInitial = window.getInitialRowGroupStateFromCookie;
-    if (cookieKey && typeof getInitial === "function") {
-      return getInitial(cookieKey, groups, defaultOrder, columns, rowGroupBaseOpts || {});
+  const getRengineRowGroupInitialState = function (storageKey, groups, defaultOrder, columns, rowGroupBaseOpts) {
+    const getInitial = window.getInitialRowGroupStateFromStorage;
+    if (storageKey && typeof getInitial === "function") {
+      return getInitial(storageKey, groups, defaultOrder, columns, rowGroupBaseOpts || {});
     }
     const order =
       typeof window.getRengineDatatableOrderFromNames === "function"
         ? window.getRengineDatatableOrderFromNames(columns, defaultOrder)
         : resolveOrderToIndices(defaultOrder, columns);
     const rowGroup = getRengineDatatableRowGroupOptions(rowGroupBaseOpts || {}).rowGroup;
-    return { order: order, rowGroup: rowGroup, appliedFromCookie: false };
+    return { order: order, rowGroup: rowGroup, appliedFromStorage: false };
   };
 
   /**
@@ -222,6 +231,18 @@
    *
    * opts.applyDefaultOrderWhenClearing: when true (default), clearing grouping (value === "") applies
    * defaultOrderWhenDisabled; when false, only disables rowGroup and redraws, preserving current user sort.
+   *
+   * @param {Object} opts
+   * @param {string} opts.selector - jQuery selector for the inputs controlling grouping.
+   * @param {Array} opts.groups - Group definitions: [{ value, label, orderWhenActive }].
+   * @param {Array} opts.defaultOrderWhenDisabled - Name-based default order when no group.
+   * @param {Array} opts.columns - Column definitions for resolveOrderToIndices.
+   * @param {Array} [opts.columnNames] - Alternate column names array for resolveOrderToIndices.
+   * @param {Function} [opts.snackbarMessage] - Optional snackbar message factory.
+   * @param {string} [opts.storageKey] - Storage key for persisted group value.
+   * @param {string} [opts.cookieKey] - Deprecated alias for storageKey (backwards compatibility).
+   * @param {boolean} [opts.applyDefaultOrderWhenClearing] - Whether to apply default order when clearing grouping.
+   * @param {boolean} [opts.initialGroupFromCookie] - Whether initial grouping/order was applied from persisted state.
    */
   const attachRengineDatatableRowGroupSelector = function (tableApi, opts) {
     const api = tableApi && tableApi.api ? tableApi.api() : tableApi;
@@ -229,7 +250,7 @@
     const groups = opts.groups || [];
     const defaultOrderWhenDisabled = opts.defaultOrderWhenDisabled || [[1, "desc"]];
     const snackbarMessage = opts.snackbarMessage;
-    const cookieKey = opts.cookieKey;
+    const storageKey = opts.storageKey || opts.cookieKey;
     const columnNamesOrColumns = opts.columns || opts.columnNames;
     const applyDefaultOrderWhenClearing = opts.applyDefaultOrderWhenClearing !== false;
     if (!selector || !api || typeof api.rowGroup !== "function") return;
@@ -240,12 +261,12 @@
     };
     $(selector).on("change", function () {
       const value = this.value;
-      if (cookieKey && typeof setRengineCookie === "function") setRengineCookie(cookieKey, value === "" || value == null ? "" : value);
+      if (storageKey) setRowGroupStoredValue(storageKey, value === "" || value == null ? "" : value);
       apply(value);
     });
     const orderToApply = resolveOrderToIndices(defaultOrderWhenDisabled, columnNamesOrColumns);
-    if (cookieKey && typeof getRengineCookie === "function" && typeof setRengineCookie === "function") {
-      const saved = getRengineCookie(cookieKey);
+    if (storageKey && storage && typeof storage.get === "function" && typeof storage.set === "function") {
+      const saved = getRowGroupStoredValue(storageKey);
       const hasMatch = saved != null && saved !== "" && groups.some(function (g) { return groupValueMatches(g, saved); });
       if (hasMatch) {
         $(selector).filter(function () { return $(this).val() === saved; }).first().prop("checked", true);
@@ -254,7 +275,7 @@
         }
       } else {
         if (saved != null && saved !== "") {
-          setRengineCookie(cookieKey, "");
+          setRowGroupStoredValue(storageKey, "");
         }
         $(selector).filter('[value=""]').first().prop("checked", true);
         api.rowGroup().disable();
@@ -270,7 +291,7 @@
   window.getRengineDatatableOrderFromNames = getRengineDatatableOrderFromNames;
   window.getRengineRowGroupInitialState = getRengineRowGroupInitialState;
   window.getRengineDatatableRowGroupOptions = getRengineDatatableRowGroupOptions;
-  window.getInitialRowGroupStateFromCookie = getInitialRowGroupStateFromCookie;
+  window.getInitialRowGroupStateFromStorage = getInitialRowGroupStateFromStorage;
   window.getRengineRowGroupSnackbarMessage = getRengineRowGroupSnackbarMessage;
   window.attachRengineDatatableRowGroupSelector = attachRengineDatatableRowGroupSelector;
 })(window);

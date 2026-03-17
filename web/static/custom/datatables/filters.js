@@ -9,6 +9,8 @@
 (function (window) {
   "use strict";
 
+  const storage = window.rengineStorage;
+
   const getMultiSelectValues = function (selectId) {
     const sel = typeof document !== "undefined" ? document.getElementById(selectId) : null;
     if (!sel || !sel.options) return [];
@@ -19,6 +21,68 @@
     return out;
   };
 
+  const getFilterStorageKey = function (tableId) {
+    if (!tableId || typeof tableId !== "string") return null;
+    return "datatable-filters-" + tableId;
+  };
+
+  const saveDatatableFilterState = function (tableId, filterSelectIds) {
+    const key = getFilterStorageKey(tableId);
+    if (!key || !Array.isArray(filterSelectIds) || !filterSelectIds.length) return;
+    if (!storage || typeof storage.setJson !== "function") return;
+    const state = {};
+    filterSelectIds.forEach(function (id) {
+      const el = typeof document !== "undefined" ? document.getElementById(id) : null;
+      if (!el || !el.options) return;
+      if (el.multiple) {
+        const values = getMultiSelectValues(id);
+        if (Array.isArray(values) && values.length) {
+          state[id] = values;
+        }
+      } else {
+        const value = el.value || "";
+        if (value !== "") {
+          state[id] = value;
+        }
+      }
+    });
+    if (Object.keys(state).length === 0) {
+      if (typeof storage.remove === "function") {
+        storage.remove(key);
+      }
+      return;
+    }
+    storage.setJson(key, state);
+  };
+
+  const restoreDatatableFilterState = function (tableId, filterSelectIds) {
+    const key = getFilterStorageKey(tableId);
+    if (!key || !Array.isArray(filterSelectIds) || !filterSelectIds.length) return;
+    if (!storage || typeof storage.getJson !== "function") return;
+    let state;
+    try {
+      state = storage.getJson(key);
+    } catch (e) {
+      return;
+    }
+    if (!state || Array.isArray(state) || typeof state !== "object") return;
+    filterSelectIds.forEach(function (id) {
+      const el = typeof document !== "undefined" ? document.getElementById(id) : null;
+      if (!el || !el.options) return;
+      const stored = state[id];
+      if (stored == null) return;
+      const values = Array.isArray(stored) ? stored.slice() : [stored];
+      if (el.multiple) {
+        for (let i = 0; i < el.options.length; i++) {
+          const opt = el.options[i];
+          opt.selected = values.indexOf(opt.value) !== -1;
+        }
+      } else if (values.length > 0) {
+        el.value = values[0];
+      }
+    });
+  };
+
   const attachDatatableFilters = function (config) {
     const tableApi = config.tableApi;
     const filterSelectIds = config.filterSelectIds || [];
@@ -26,12 +90,16 @@
     const resetFiltersId = config.resetFiltersId || "resetFilters";
     const buildBadgeHtml = config.buildBadgeHtml;
     const onApply = config.onApply || function () { if (tableApi) tableApi.draw(); };
+    const tableId = config.tableId;
 
     const applyFilters = function () {
       const selected = {};
       filterSelectIds.forEach(function (id) { selected[id] = getMultiSelectValues(id); });
       const container = document.getElementById(filteringTextId);
       if (container && typeof buildBadgeHtml === "function") container.innerHTML = buildBadgeHtml(selected);
+      if (tableId) {
+        saveDatatableFilterState(tableId, filterSelectIds);
+      }
       onApply();
     };
 
@@ -52,11 +120,26 @@
         });
         const container = document.getElementById(filteringTextId);
         if (container) container.innerHTML = "";
+        if (tableId && storage && typeof storage.remove === "function") {
+          const key = getFilterStorageKey(tableId);
+          if (key) storage.remove(key);
+        }
         onApply();
         if (window.Snackbar && typeof window.Snackbar.show === "function") {
           window.Snackbar.show({ text: "Filters Reset", pos: "top-center" });
         }
       }, false);
+    }
+
+    if (tableId) {
+      restoreDatatableFilterState(tableId, filterSelectIds);
+      if (typeof buildBadgeHtml === "function") {
+        const selected = {};
+        filterSelectIds.forEach(function (id) { selected[id] = getMultiSelectValues(id); });
+        const container = document.getElementById(filteringTextId);
+        if (container) container.innerHTML = buildBadgeHtml(selected);
+      }
+      onApply();
     }
   };
 
@@ -302,6 +385,7 @@
       resetFiltersId: options.resetFiltersId || "resetFilters",
       buildBadgeHtml: options.buildBadgeHtml,
       onApply: options.onApply,
+      tableId: options.tableId,
     });
     const rowGroup = options.rowGroup;
     if (rowGroup && typeof window.attachRengineDatatableRowGroupSelector === "function") {

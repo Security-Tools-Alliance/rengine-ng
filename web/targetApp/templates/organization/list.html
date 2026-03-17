@@ -193,11 +193,11 @@ $(document).ready(function() {
     window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('organization_list', list_organization_table, { onApply: function() { list_organization_table.draw(); } }));
   }
   if (window.attachDatatableQuickSearch) {
-    window.attachDatatableQuickSearch(list_organization_table, { inputSelector: '#organizationListQuickSearch' });
+    window.attachDatatableQuickSearch(list_organization_table, { inputSelector: '#organizationListQuickSearch', tableId: 'organization_list' });
   }
 
   if (window.attachDatatableColumnSearch) {
-    window.attachDatatableColumnSearch(list_organization_table, { tableSelector: '#list_organization_table', delayMs: 400 });
+    window.attachDatatableColumnSearch(list_organization_table, { tableSelector: '#list_organization_table', delayMs: 400, tableId: 'organization_list' });
   }
 
   multiCheck(list_organization_table);
