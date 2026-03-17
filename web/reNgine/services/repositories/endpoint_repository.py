@@ -26,6 +26,7 @@ from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import DirectoryFile, Domain, EndPoint, ScanHistory, Subdomain, Technology
 from targetApp.models import Target
+from targetApp.services.scope_params import get_finding_scope_filter_host_for_target
 
 
 PREFIX_ENDPOINT_REPO = "[ENDPOINT_REPO]"
@@ -56,6 +57,18 @@ class EndpointRepository:
         """
         try:
             return self._process_secator_endpoint_item(item, scan_history_id, target_id, rengine_context or {})
+        except FindingOutOfScopeError as e:
+            reason = format_exception_for_log(e)
+            url = (item.get("url") or item.get("host") or "?").strip()
+            if len(url) > 80:
+                url = url[:80] + "..."
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "Skipped (out of scope): url=%s | %s scan_id=%s" % (url, reason, scan_history_id),
+                level="info",
+            )
+            raise
         except ObjectDoesNotExist as e:
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
@@ -107,7 +120,20 @@ class EndpointRepository:
         if parsed.is_valid and parsed.kind == "url" and parsed.url_normalized:
             http_url = parsed.url_normalized
 
-        host = urlparse(http_url).hostname or ""
+        parsed_url = urlparse(http_url)
+        hostname_raw = (parsed_url.hostname or "").strip() or (item.get("host") or "").strip() or ""
+        normalized_hostname = hostname_raw.lower() if hostname_raw else ""
+        if normalized_hostname and is_acceptable_subdomain_name(normalized_hostname):
+            scope_filter = None
+            filters = ctx.get("finding_scope_filters") or {}
+            if isinstance(filters, dict):
+                scope_filter = filters.get("host_filter")
+            if scope_filter is None or not callable(scope_filter):
+                scope_filter = get_finding_scope_filter_host_for_target(target_id)
+            if scope_filter is not None and not scope_filter(normalized_hostname):
+                raise FindingOutOfScopeError("Host out of scope (restrict_findings_to_target)")
+
+        host = parsed_url.hostname or ""
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
         domain = resolve_domain_for_scan(
             scan_history_id,
@@ -210,7 +236,15 @@ class EndpointRepository:
         if parsed.is_valid and parsed.kind == "url" and parsed.url_normalized:
             http_url = parsed.url_normalized
 
-        host = urlparse(http_url).hostname or ""
+        parsed_url = urlparse(http_url)
+        hostname_raw = (parsed_url.hostname or "").strip() or ""
+        normalized_hostname = hostname_raw.lower() if hostname_raw else ""
+        if normalized_hostname and is_acceptable_subdomain_name(normalized_hostname):
+            scope_filter = get_finding_scope_filter_host_for_target(target_id)
+            if scope_filter is not None and not scope_filter(normalized_hostname):
+                raise FindingOutOfScopeError("Host out of scope (restrict_findings_to_target)")
+
+        host = parsed_url.hostname or ""
         target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
         domain = resolve_domain_for_scan(
             scan_history_id,

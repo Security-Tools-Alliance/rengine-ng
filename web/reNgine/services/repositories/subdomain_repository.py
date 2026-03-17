@@ -54,7 +54,15 @@ class SubdomainRepository:
         """
         try:
             return self._process_secator_subdomain_item(item, scan_history_id, target_id, rengine_context)
-        except FindingOutOfScopeError:
+        except FindingOutOfScopeError as e:
+            reason = format_exception_for_log(e)
+            host = (item.get("host") or item.get("target") or item.get("name") or "?").strip()
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "SAVE",
+                "Skipped (out of scope): host=%s | %s scan_id=%s" % (host, reason, scan_history_id),
+                level="info",
+            )
             raise
         except ObjectDoesNotExist as e:
             logger.log_line(

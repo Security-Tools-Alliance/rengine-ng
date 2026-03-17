@@ -619,3 +619,96 @@ class EndpointRepositoryIpEndpointTestCase(BaseTestCase):
             EndPoint.objects.filter(http_url=http_url, scan_history=self.scan_history).count(),
             2,
         )
+
+
+class EndpointRepositoryScopeEnforcementTest(BaseTestCase):
+    """Tests for scope enforcement: no endpoint created when host is out of scope."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_organization()
+        self.data_generator.create_scope(restrict_findings_to_target=True, allowed_finding_domains=[])
+        self.scope = self.data_generator.scope
+        self.target = self.data_generator.target
+        self.scan_history = self.data_generator.create_scan_history()
+        self.repository = EndpointRepository()
+
+    def test_save_from_secator_out_of_scope_raises_and_creates_no_endpoint(self):
+        """save_from_secator with URL host out of scope raises FindingOutOfScopeError and creates no endpoint."""
+        from reNgine.core.exceptions import FindingOutOfScopeError
+
+        from targetApp.services.scope_params import get_finding_scope_filters_for_target
+
+        url = "http://out-of-scope-unrelated.com/"
+        rengine_context = {"finding_scope_filters": get_finding_scope_filters_for_target(self.target.id)}
+        initial_count = EndPoint.objects.filter(scan_history=self.scan_history).count()
+
+        with self.assertRaises(FindingOutOfScopeError):
+            self.repository.save_from_secator(
+                {"url": url},
+                self.scan_history.id,
+                self.target.id,
+                rengine_context=rengine_context,
+            )
+
+        self.assertEqual(
+            EndPoint.objects.filter(scan_history=self.scan_history).count(),
+            initial_count,
+            "No endpoint should be created when host is out of scope",
+        )
+
+    def test_save_from_secator_in_scope_creates_endpoint(self):
+        """save_from_secator with URL host in scope (target domain) creates endpoint and associates subdomain."""
+        from targetApp.services.scope_params import get_finding_scope_filters_for_target
+
+        url = "http://%s/" % (self.target.value,)
+        rengine_context = {"finding_scope_filters": get_finding_scope_filters_for_target(self.target.id)}
+
+        result = self.repository.save_from_secator(
+            {"url": url},
+            self.scan_history.id,
+            self.target.id,
+            rengine_context=rengine_context,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.http_url, url)
+        self.assertIsNotNone(result.subdomain_id)
+        self.assertEqual(result.subdomain.name, self.target.value)
+
+    def test_add_gf_pattern_from_secator_tag_out_of_scope_raises_and_creates_no_endpoint(self):
+        """add_gf_pattern_from_secator_tag with URL host out of scope raises FindingOutOfScopeError and creates no endpoint."""
+        from reNgine.core.exceptions import FindingOutOfScopeError
+
+        url = "http://out-of-scope-unrelated.com/path"
+        initial_count = EndPoint.objects.filter(scan_history=self.scan_history).count()
+
+        with self.assertRaises(FindingOutOfScopeError):
+            self.repository.add_gf_pattern_from_secator_tag(
+                self.scan_history.id,
+                self.target.id,
+                url,
+                "some-pattern",
+            )
+
+        self.assertEqual(
+            EndPoint.objects.filter(scan_history=self.scan_history).count(),
+            initial_count,
+            "No endpoint should be created when host is out of scope",
+        )
+
+    def test_add_gf_pattern_from_secator_tag_in_scope_creates_or_updates_endpoint(self):
+        """add_gf_pattern_from_secator_tag with URL host in scope creates or updates endpoint and adds pattern."""
+        url = "http://%s/page" % (self.target.value,)
+        pattern_name = "test-gf-pattern"
+
+        result = self.repository.add_gf_pattern_from_secator_tag(
+            self.scan_history.id,
+            self.target.id,
+            url,
+            pattern_name,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.http_url, url)
+        self.assertIn(pattern_name, (result.matched_gf_patterns or "").split(","))
