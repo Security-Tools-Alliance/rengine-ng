@@ -234,8 +234,7 @@ $(document).ready(function() {
       window.attachDatatableFilters(
         window.getRengineDatatableFilterAttachOpts('subscan_history', table, {
           onApply: function() { table.draw(); },
-          initialApplyPolicy: 'never',
-          skipPendingRestoreApply: true
+          initialApplyPolicy: 'if-filters-active'
         })
       );
     }

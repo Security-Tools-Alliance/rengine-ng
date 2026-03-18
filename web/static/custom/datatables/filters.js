@@ -228,9 +228,9 @@
     const onApply = config.onApply || function () { if (tableApi) tableApi.draw(); };
     const tableId = config.tableId;
     const initialApplyPolicy = config.initialApplyPolicy || "always";
-    const initialStateAlreadyApplied = !!(tableApi && tableApi._rengineInitialStateApplied === true);
-    const effectiveInitialApplyPolicy = initialStateAlreadyApplied ? "never" : initialApplyPolicy;
-    const skipPendingRestoreApply = config.skipPendingRestoreApply === true || initialStateAlreadyApplied;
+    const initialFilterPayloadApplied = !!(tableApi && tableApi._rengineInitialFilterPayloadApplied === true);
+    const effectiveInitialApplyPolicy = initialFilterPayloadApplied ? "never" : initialApplyPolicy;
+    const skipPendingRestoreApply = config.skipPendingRestoreApply === true || initialFilterPayloadApplied;
 
     const applyFilters = function (event) {
       const selected = {};

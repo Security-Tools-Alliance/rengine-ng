@@ -389,8 +389,7 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
       window.attachDatatableFilters(
         window.getRengineDatatableFilterAttachOpts('scan_history', table, {
           onApply: function() { table.draw(); },
-          initialApplyPolicy: 'never',
-          skipPendingRestoreApply: true
+          initialApplyPolicy: 'if-filters-active'
         })
       );
     }

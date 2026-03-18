@@ -216,9 +216,15 @@
       });
     }
 
+    let initialFilterPayloadApplied = false;
     if (opts.ajax && filterSelectToParam && typeof window.buildDatatableFilterPayload === "function") {
       const baseData = opts.ajax.data;
       let firstRequest = true;
+      const initialFilterPayload =
+        singleDrawInitialState && initialState && initialState.filters
+          ? buildFilterPayloadFromState(filterSelectToParam, initialState.filters)
+          : {};
+      initialFilterPayloadApplied = Object.keys(initialFilterPayload).length > 0;
       opts.ajax = Object.assign({}, opts.ajax, {
         data: function (d) {
           if (typeof baseData === "function") {
@@ -229,8 +235,8 @@
           } else if (baseData) {
             Object.assign(d, baseData);
           }
-          if (singleDrawInitialState && firstRequest && initialState && initialState.filters) {
-            Object.assign(d, buildFilterPayloadFromState(filterSelectToParam, initialState.filters));
+          if (singleDrawInitialState && firstRequest && initialFilterPayloadApplied) {
+            Object.assign(d, initialFilterPayload);
             firstRequest = false;
             return;
           }
@@ -279,6 +285,7 @@
     if (table && singleDrawInitialState) {
       table._rengineInitialStateApplied = true;
       table._rengineInitialState = initialState || {};
+      table._rengineInitialFilterPayloadApplied = initialFilterPayloadApplied;
     }
 
     if (rowGroupAttachOpts && typeof window.attachRengineDatatableRowGroupSelector === "function") {
