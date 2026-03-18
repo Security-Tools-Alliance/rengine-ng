@@ -27,7 +27,7 @@ Quick Scan History
         <div class="row">
           <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center flex-wrap gap-1">
             {% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='scanHistoryQuickSearch' %}
-            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scan_history.html' id_prefix='scanHistory' %}
+            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scan_history.html' id_prefix='scanHistory' filtering_text_id='scanHistoryFilteringTextHidden' %}
             <div class="btn-group ms-1 dropstart">
               <button type="button" class="btn btn-soft-info dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Scan history grouping">
                 <i class="fe-layout"></i>
@@ -65,6 +65,7 @@ Quick Scan History
                 </div>
               </div>
             </div>
+            <div id="scanHistoryFilteringText" class="w-100 d-flex flex-wrap gap-1 mt-2"></div>
           </div>
           <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
             <span class="small text-muted me-1">Bulk actions:</span>
@@ -221,6 +222,7 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
     const colDefs = window.RengineDatatableColumnDefs;
     var table = window.initRengineServerSideDataTable('#scan_history_table', {
       filterParamsElId: 'datatable-filter-params',
+      singleDrawInitialState: true,
       ajax: {
         url: window.SCAN_HISTORY_DATATABLE_URL,
         data: function(d) { d.project = window.SCAN_HISTORY_PROJECT_SLUG; }
@@ -243,13 +245,21 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
           targets: 'target_value:name',
           render: function(data, type, row) {
             let html = window.safeText(data || '');
+            const badges = [];
             if (row.organizations && row.organizations.length) {
               row.organizations.forEach(function(org) {
-                html += '<br><span class="badge badge-soft-dark mt-1 me-1"><i class="fe-briefcase me-1"></i>' + window.safeText(org) + '</span>';
+                badges.push(
+                  '<span class="badge badge-soft-dark"><i class="fe-briefcase me-1"></i>' + window.safeText(org) + '</span>'
+                );
               });
             }
             if (row.scope_name) {
-              html += '<br><span class="badge badge-soft-info mt-1 me-1"><i class="fe-crosshair me-1"></i>' + window.safeText(row.scope_name) + '</span>';
+              badges.push(
+                '<span class="badge badge-soft-info"><i class="fe-crosshair me-1"></i>' + window.safeText(row.scope_name) + '</span>'
+              );
+            }
+            if (badges.length) {
+              html += '<div class="d-flex flex-wrap gap-1 mt-1">' + badges.join('') + '</div>';
             }
             if (row.most_recent_scan) {
               html += '<br><a href="' + window.SCAN_HISTORY_DETAIL_SCAN_BASE + window.safeAttr(String(row.most_recent_scan)) + '" class="text-primary">Recent Scan&nbsp;<i class="fe-external-link"></i></a>';
@@ -376,13 +386,19 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
     }
 
     if (window.attachDatatableFilters) {
-      window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('scan_history', table, { onApply: function() { table.draw(); } }));
+      window.attachDatatableFilters(
+        window.getRengineDatatableFilterAttachOpts('scan_history', table, {
+          onApply: function() { table.draw(); },
+          initialApplyPolicy: 'never',
+          skipPendingRestoreApply: true
+        })
+      );
     }
     if (window.attachDatatableQuickSearch) {
-      window.attachDatatableQuickSearch(table, { inputSelector: '#scanHistoryQuickSearch', tableId: 'scan_history' });
+      window.attachDatatableQuickSearch(table, { inputSelector: '#scanHistoryQuickSearch', tableId: 'scan_history', restoreOnInit: true });
     }
     if (window.attachDatatableColumnSearch) {
-      window.attachDatatableColumnSearch(table, { tableSelector: '#scan_history_table', delayMs: 400, tableId: 'scan_history' });
+      window.attachDatatableColumnSearch(table, { tableSelector: '#scan_history_table', delayMs: 400, tableId: 'scan_history', restoreOnInit: true });
     }
     if (!window.attachDatatableFilters) {
       document.getElementById('filterByOrganization').addEventListener('change', function() { table.draw(); }, false);

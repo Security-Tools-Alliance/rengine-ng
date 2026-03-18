@@ -50,9 +50,9 @@ $(document).ready(function() {
 		var vuln_ajax_url = '{% url "api:vulnerabilities-list" %}?project={{current_project.slug}}&format=datatables';
 	{% endif %}
 	var vuln_rowgroup_cookie_key = window.VULN_ROW_GROUP_COOKIE_KEY || '';
-	var vuln_initial_state = window.getInitialRowGroupStateFromCookie && vuln_rowgroup_cookie_key
-		? window.getInitialRowGroupStateFromCookie(vuln_rowgroup_cookie_key, vuln_groups, vuln_default_order, vuln_datatable_columns, vuln_rowgroup_base)
-		: { order: window.getRengineDatatableOrderFromNames(vuln_datatable_columns, vuln_default_order), rowGroup: window.getRengineDatatableRowGroupOptions(vuln_rowgroup_base).rowGroup, appliedFromCookie: false };
+	var vuln_initial_state = window.getInitialRowGroupStateFromStorage && vuln_rowgroup_cookie_key
+		? window.getInitialRowGroupStateFromStorage(vuln_rowgroup_cookie_key, vuln_groups, vuln_default_order, vuln_datatable_columns, vuln_rowgroup_base)
+		: { order: window.getRengineDatatableOrderFromNames(vuln_datatable_columns, vuln_default_order), rowGroup: window.getRengineDatatableRowGroupOptions(vuln_rowgroup_base).rowGroup, appliedFromStorage: false };
 	var vulnerability_table = window.initServerSideDataTable('#vulnerability_results', window.getRengineDatatableConfig('#vulnerability_results', {
 		"destroy": true,
 		"stripeClasses": [],
@@ -168,7 +168,7 @@ $(document).ready(function() {
 			columns: vuln_datatable_columns,
 			snackbarMessage: window.getRengineRowGroupSnackbarMessage('Grouping cleared', 'Vulnerabilities grouped by {label}'),
 			storageKey: vuln_rowgroup_cookie_key || undefined,
-			initialGroupFromStorage: vuln_initial_state.appliedFromStorage
+			initialGroupFromCookie: vuln_initial_state.appliedFromStorage
 		});
 	}
 	$('#reload_vulnerabilities_table_btn').click(function () {

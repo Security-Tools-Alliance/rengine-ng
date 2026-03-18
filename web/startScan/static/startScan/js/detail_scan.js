@@ -341,6 +341,17 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
         ? window.getRengineRowGroupSnackbarMessage('Grouping cleared', 'Endpoints grouped by {label}')
         : null;
     const endpointExpandPageLengthWhenGrouping = true;
+    const endpointOrdersEqual = function(left, right) {
+        if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+        for (let i = 0; i < left.length; i++) {
+            const l = left[i];
+            const r = right[i];
+            if (!Array.isArray(l) || !Array.isArray(r) || l.length < 2 || r.length < 2) return false;
+            if (Number(l[0]) !== Number(r[0])) return false;
+            if (String(l[1]).toLowerCase() !== String(r[1]).toLowerCase()) return false;
+        }
+        return true;
+    };
     const applyEndpointGrouping = function (value, showSnackbar) {
         const api = $('#endpoint_results').DataTable();
         if (value === '' || value == null) {
@@ -348,7 +359,10 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
             const contentLengthIdx = getColIdx(endpoint_datatable_columns, 'content_length');
             const responseTimeIdx = getColIdx(endpoint_datatable_columns, 'response_time');
             const defaultIdx = contentLengthIdx >= 0 ? contentLengthIdx : (responseTimeIdx >= 0 ? responseTimeIdx : 0);
-            api.order([[defaultIdx, 'desc']]).draw();
+            const defaultOrder = [[defaultIdx, 'desc']];
+            if (!endpointOrdersEqual(api.order(), defaultOrder)) {
+                api.order(defaultOrder).draw();
+            }
             if (showSnackbar !== false && typeof Snackbar !== 'undefined' && Snackbar.show) {
                 let msg = endpointSnackbarMsg ? endpointSnackbarMsg({ value: '', label: 'None' }) : 'Grouping cleared';
                 if (typeof window.htmlEncode === 'function') msg = window.htmlEncode(msg);

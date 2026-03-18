@@ -38,6 +38,7 @@
       filterBadgeSpec: [
         { selectId: "filterByOrganization", label: "Organization", badgeClass: "badge-soft-primary" },
         { selectId: "filterByScope", label: "Scope", badgeClass: "badge-soft-info" },
+        { selectId: "filterByScanPresence", label: "Scan Status", badgeClass: "badge-soft-warning" },
       ],
       clearChipId: "clearFilterChip",
     },
@@ -114,6 +115,8 @@
       resetFiltersId: resetFiltersId,
       buildBadgeHtml: buildBadgeHtml,
       onApply: onApply,
+      initialApplyPolicy: overrides && overrides.initialApplyPolicy ? overrides.initialApplyPolicy : "if-filters-active",
+      skipPendingRestoreApply: overrides && overrides.skipPendingRestoreApply === true,
     };
     opts.tableId = tableId;
     if (overrides && overrides.rowGroup != null) opts.rowGroup = overrides.rowGroup;

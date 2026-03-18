@@ -485,12 +485,19 @@ def edit_project(request, slug):
 def set_current_project(request, slug):
     if request.method == "GET":
         project = get_object_or_404(Project, slug=slug)
-        response = HttpResponseRedirect(reverse("dashboardIndex", kwargs={"slug": slug}))
-        response.set_cookie(
-            "currentProjectId", project.id, path="/", samesite="Strict", httponly=True, secure=request.is_secure()
-        )
+        if not get_user_projects(request.user).filter(pk=project.pk).exists():
+            return HttpResponseRedirect(reverse("page_not_found"))
         messages.success(request, f"Project {project.name} set as current project.")
-        return response
+        dashboard_url = reverse("dashboardIndex", kwargs={"slug": slug})
+        return render(
+            request,
+            "dashboard/set_current_project_bridge.html",
+            {
+                "project_slug_json": json.dumps(slug),
+                "dashboard_url_json": json.dumps(dashboard_url),
+                "dashboard_url_escaped": dashboard_url,
+            },
+        )
     return HttpResponseBadRequest("Invalid request method. Only GET is allowed.", status=400)
 
 

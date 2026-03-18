@@ -3025,6 +3025,57 @@ class ListTodoNotes(APIView):
         )
 
 
+def _build_scan_engine_filter_label(scan_obj: ScanHistory) -> str:
+    runner_type = (getattr(scan_obj, "display_runner_type", "") or "").strip()
+    scan_name = (getattr(scan_obj, "display_scan_name", "") or "").strip()
+    if runner_type and scan_name:
+        return f"{runner_type}: {scan_name}"
+    if runner_type:
+        return runner_type
+    if scan_name:
+        return scan_name
+    if scan_obj.is_legacy_scan and getattr(scan_obj, "scan_type", None):
+        return f"Legacy: {scan_obj.scan_type.engine_name}"
+    if not scan_obj.is_legacy_scan:
+        return "Task"
+    return ""
+
+
+def _get_scan_runner_metadata(scan_obj: ScanHistory) -> tuple[str, str, list[str]]:
+    try:
+        runners = list(scan_obj.secatorrunner_set.all())
+    except Exception:
+        runners = []
+    main_runner = next((runner for runner in runners if runner.runner_type in ("workflow", "scan")), None)
+    main_runner_type = (getattr(main_runner, "runner_type", "") or "").strip().lower()
+    main_runner_name = (getattr(main_runner, "runner_name", "") or "").strip().lower()
+    task_names = sorted(
+        {
+            (getattr(runner, "runner_name", "") or "").strip().lower()
+            for runner in runners
+            if (getattr(runner, "runner_type", "") or "").strip().lower() == "task"
+            and (getattr(runner, "runner_name", "") or "").strip()
+        }
+    )
+    return main_runner_type, main_runner_name, task_names
+
+
+def _build_scan_engine_filter_key(scan_obj: ScanHistory) -> str:
+    if scan_obj.is_legacy_scan:
+        if getattr(scan_obj, "scan_type_id", None):
+            return f"legacy_id:{scan_obj.scan_type_id}"
+        return "legacy"
+    main_runner_type, main_runner_name, task_names = _get_scan_runner_metadata(scan_obj)
+    if main_runner_type and main_runner_name:
+        return f"runner:{main_runner_type}:{main_runner_name}"
+    if task_names:
+        return f"task_names:{','.join(task_names)}"
+    return "task"
+
+
+MAX_SCAN_ENGINE_PYTHON_FILTER_CANDIDATES = 5000
+
+
 class ScanHistoryFilterChoices(APIView):
     """
     GET ?project=<slug> - Return filter dropdown choices for scan-history and subscan-history pages.
@@ -3045,14 +3096,30 @@ class ScanHistoryFilterChoices(APIView):
                 {"detail": "Query param 'project' (project slug) is required."},
                 status=HTTP_400_BAD_REQUEST,
             )
-        qs = (
+        scan_qs = (
             ScanHistory.objects.filter(target__project__slug=project_slug)
             .filter(target__isnull=False)
-            .values_list("target__value", "scan_type__engine_name")
-            .distinct()
+            .select_related("scan_type")
+            # display_runner_type/display_scan_name may read SecatorRunner relations for non-legacy scans.
+            .prefetch_related("secatorrunner_set")
         )
-        targets = sorted({v[0] for v in qs if v[0]}, key=str.lower)
-        engines = sorted({v[1] for v in qs if v[1]}, key=str.lower)
+        targets = sorted(
+            set(
+                scan_qs.values_list("target__value", flat=True),
+            ),
+            key=str.lower,
+        )
+        engine_options = []
+        seen_engine_keys = set()
+        for scan in scan_qs:
+            label = _build_scan_engine_filter_label(scan)
+            key = _build_scan_engine_filter_key(scan)
+            if not label or not key or key in seen_engine_keys:
+                continue
+            seen_engine_keys.add(key)
+            engine_options.append({"value": key, "label": label})
+        engine_options.sort(key=lambda item: item["label"].lower())
+        engines = [item["label"] for item in engine_options]
         orgs = list(
             Organization.objects.for_project(project_slug).order_by("name").values_list("name", flat=True).distinct()
         )
@@ -3063,6 +3130,7 @@ class ScanHistoryFilterChoices(APIView):
                 "task_status_labels": get_task_status_filter_labels(),
                 "targets": targets,
                 "scan_engines": engines,
+                "scan_engine_options": engine_options,
             }
         )
 
@@ -3083,6 +3151,153 @@ class ListScanHistory(APIView):
     Filter query params: filter_organization, filter_status, filter_target, filter_scan_engine.
     See wiki datatables-api-filters.md and api.helpers.datatables FILTER_PARAM_*.
     """
+
+    @classmethod
+    def _apply_scan_engine_filter(cls, qs, req):
+        selected = {
+            value.strip() for value in get_request_filter_list(req, FILTER_PARAM_SCAN_ENGINE) if value and value.strip()
+        }
+        if not selected:
+            return qs
+        selected_keys = {
+            value
+            for value in selected
+            if ":" in value and value.split(":", 1)[0] in {"legacy_id", "runner", "task_names"}
+        }
+        selected_labels = selected.difference(selected_keys)
+        include_task = False
+        legacy_engine_names = set()
+        typed_labels = []
+        unresolved_labels = set()
+        selected_legacy_ids = set()
+        selected_runner_keys = set()
+        selected_task_name_keys = set()
+
+        for key in selected_keys:
+            if key.startswith("legacy_id:"):
+                legacy_id = key[len("legacy_id:") :].strip()
+                if legacy_id.isdigit():
+                    selected_legacy_ids.add(int(legacy_id))
+                continue
+            if key.startswith("runner:"):
+                parts = key.split(":", 2)
+                if len(parts) == 3 and parts[1] and parts[2]:
+                    selected_runner_keys.add((parts[1].strip().lower(), parts[2].strip().lower()))
+                continue
+            if key.startswith("task_names:"):
+                names_raw = key[len("task_names:") :].strip()
+                names = sorted(name.strip().lower() for name in names_raw.split(",") if name and name.strip())
+                if names:
+                    selected_task_name_keys.add(",".join(names))
+
+        for label in selected_labels:
+            if label == "Task":
+                include_task = True
+                continue
+            if label.startswith("Legacy:"):
+                engine_name = label[len("Legacy:") :].strip()
+                if engine_name:
+                    legacy_engine_names.add(engine_name)
+                continue
+            if ": " in label:
+                runner_type, runner_name = label.split(": ", 1)
+                runner_type = runner_type.strip()
+                runner_name = runner_name.strip()
+                if runner_type and runner_name:
+                    typed_labels.append((label, runner_type, runner_name))
+                    continue
+            unresolved_labels.add(label)
+
+        db_conditions = Q(pk__in=[])
+        if include_task:
+            db_conditions |= Q(is_legacy_scan=False)
+        if legacy_engine_names:
+            db_conditions |= Q(is_legacy_scan=True, scan_type__engine_name__in=legacy_engine_names)
+        if selected_legacy_ids:
+            db_conditions |= Q(is_legacy_scan=True, scan_type_id__in=selected_legacy_ids)
+        matched_ids = set(qs.filter(db_conditions).distinct().values_list("id", flat=True))
+        if not typed_labels and not unresolved_labels and not selected_task_name_keys and not selected_runner_keys:
+            if not matched_ids:
+                return qs.none()
+            return qs.filter(id__in=matched_ids)
+
+        typed_label_set = {label for label, _runner_type, _runner_name in typed_labels}
+        if typed_label_set or unresolved_labels or selected_task_name_keys or selected_runner_keys:
+            typed_runner_types = set()
+            task_runner_names = set()
+            has_task_typed_label = False
+            for _raw_label, runner_type, runner_name in typed_labels:
+                lowered_type = runner_type.lower()
+                if lowered_type == "task":
+                    has_task_typed_label = True
+                    task_runner_names.update(name.strip() for name in runner_name.split(",") if name and name.strip())
+                else:
+                    typed_runner_types.add(lowered_type)
+
+            python_candidate_qs = qs.filter(is_legacy_scan=False)
+            if not unresolved_labels:
+                typed_candidate_conditions = Q(pk__in=[])
+                if typed_runner_types:
+                    typed_candidate_conditions |= Q(secatorrunner__runner_type__in=typed_runner_types)
+                if selected_runner_keys:
+                    selected_runner_types = {runner_type for runner_type, _runner_name in selected_runner_keys}
+                    selected_runner_names = {runner_name for _runner_type, runner_name in selected_runner_keys}
+                    typed_candidate_conditions |= Q(
+                        secatorrunner__runner_type__in=selected_runner_types,
+                        secatorrunner__runner_name__in=selected_runner_names,
+                    )
+                if has_task_typed_label:
+                    if task_runner_names:
+                        typed_candidate_conditions |= Q(
+                            secatorrunner__runner_type="task",
+                            secatorrunner__runner_name__in=task_runner_names,
+                        )
+                    else:
+                        typed_candidate_conditions |= Q(secatorrunner__runner_type="task")
+                if selected_task_name_keys:
+                    selected_task_names = set()
+                    for key in selected_task_name_keys:
+                        selected_task_names.update(name.strip() for name in key.split(",") if name and name.strip())
+                    if selected_task_names:
+                        typed_candidate_conditions |= Q(
+                            secatorrunner__runner_type="task",
+                            secatorrunner__runner_name__in=selected_task_names,
+                        )
+                    else:
+                        typed_candidate_conditions |= Q(secatorrunner__runner_type="task")
+                python_candidate_qs = python_candidate_qs.filter(typed_candidate_conditions)
+
+            python_candidate_qs = python_candidate_qs.distinct()
+            candidate_count = python_candidate_qs.count()
+            if candidate_count > MAX_SCAN_ENGINE_PYTHON_FILTER_CANDIDATES:
+                logger.log_line(
+                    PREFIX_API,
+                    "LIST_SCAN_HISTORY",
+                    "Scan engine python filter candidates=%s (cap=%s) project may be large"
+                    % (candidate_count, MAX_SCAN_ENGINE_PYTHON_FILTER_CANDIDATES),
+                    level="warning",
+                )
+            scans = (
+                python_candidate_qs[:MAX_SCAN_ENGINE_PYTHON_FILTER_CANDIDATES]
+                .select_related("scan_type")
+                .prefetch_related("secatorrunner_set")
+            )
+            typed_and_unresolved_labels = typed_label_set.union(unresolved_labels)
+            for scan in scans:
+                label = _build_scan_engine_filter_label(scan)
+                key = _build_scan_engine_filter_key(scan)
+                if label in typed_and_unresolved_labels:
+                    matched_ids.add(scan.id)
+                    continue
+                if key in selected_keys:
+                    matched_ids.add(scan.id)
+                    continue
+                if key.startswith("task_names:") and key[len("task_names:") :] in selected_task_name_keys:
+                    matched_ids.add(scan.id)
+
+        if not matched_ids:
+            return qs.none()
+        return qs.filter(id__in=matched_ids)
 
     def get(self, request, format=None):
         req = self.request
@@ -3124,7 +3339,7 @@ class ListScanHistory(APIView):
             )
             qs = apply_filter_scan_status(qs, req)
             qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_TARGET, "target__value__in")
-            qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_SCAN_ENGINE, "scan_type__engine_name__in")
+            qs = self._apply_scan_engine_filter(qs, req)
             qs = apply_datatables_order(
                 qs,
                 req,
@@ -3187,7 +3402,14 @@ class ListScopes(APIView):
     def get(self, request, format=None):
         project_slug = request.query_params.get("project")
         if project_slug:
-            scopes = Scope.objects.filter(organization__project__slug=project_slug).order_by("name").values("name")
+            scopes = (
+                Scope.objects.filter(
+                    Q(organization__project__slug=project_slug) | Q(targets__project__slug=project_slug)
+                )
+                .order_by("name")
+                .values("name")
+                .distinct()
+            )
         else:
             scopes = Scope.objects.all().order_by("name").values("name")
         scopes_list = [{"name": s["name"]} for s in scopes]

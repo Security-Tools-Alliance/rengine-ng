@@ -1378,18 +1378,25 @@ $(document).ready(function() {
 			var is_grouping = false;
 			var grouping_col = 3;
 			var vuln_ajax_url = '{% url "api:vulnerabilities-list" %}?scan_history={{scan_history_id}}&format=datatables';
+			var detail_vuln_rowgroup_cookie_key = window.DETAIL_SCAN_VULN_ROW_GROUP_COOKIE_KEY || '';
+			var detail_vuln_groups = window.RENGINE_DATATABLE_VULN_ROW_GROUP_GROUPS || [];
+			var detail_vuln_default_order = window.RENGINE_DATATABLE_VULN_DEFAULT_ORDER || [['cvss_score', 'desc']];
+			var detail_vuln_rowgroup_base = window.RENGINE_DATATABLE_VULN_ROW_GROUP_BASE || { dataSrc: 'severity', rowLabel: 'Vulnerabilities', emptyGroupLabel: '' };
+			var detail_vuln_initial_state = window.getInitialRowGroupStateFromStorage && detail_vuln_rowgroup_cookie_key
+				? window.getInitialRowGroupStateFromStorage(detail_vuln_rowgroup_cookie_key, detail_vuln_groups, detail_vuln_default_order, vuln_datatable_columns, detail_vuln_rowgroup_base)
+				: {
+					order: window.getRengineDatatableOrderFromNames(vuln_datatable_columns, detail_vuln_default_order),
+					rowGroup: window.getRengineDatatableRowGroupOptions(detail_vuln_rowgroup_base).rowGroup,
+					appliedFromStorage: false
+				};
 			var vulnerability_table = window.initServerSideDataTable('#vulnerability_results', window.getRengineDatatableConfig('#vulnerability_results', {
 				destroy: true,
 				ajax: {
 					url: vuln_ajax_url
 				},
 				"scrollY": "60vh",
-				"rowGroup": {
-					"startRender": function(rows, group) {
-						return window.safeText(group) + ' (' + rows.count() + ' Vulnerabilities)';
-					}
-				},
-				"order": window.getRengineDatatableOrderFromNames(vuln_datatable_columns, (window.RENGINE_DATATABLE_VULN_DEFAULT_ORDER || [['cvss_score', 'desc']])),
+				"rowGroup": detail_vuln_initial_state.rowGroup,
+				"order": detail_vuln_initial_state.order,
 				"columns": vuln_datatable_columns,
 				"columnDefs": [
 			{ orderable: false, targets: 'action:name' },
@@ -1466,10 +1473,11 @@ $(document).ready(function() {
 			if (window.DETAIL_SCAN_VULN_ROW_GROUP_SELECTOR && window.attachRengineDatatableRowGroupSelector) {
 				window.attachRengineDatatableRowGroupSelector(vulnerability_table, {
 					selector: window.DETAIL_SCAN_VULN_ROW_GROUP_SELECTOR,
-					groups: window.RENGINE_DATATABLE_VULN_ROW_GROUP_GROUPS || [],
-					defaultOrderWhenDisabled: window.RENGINE_DATATABLE_VULN_DEFAULT_ORDER || [['cvss_score', 'desc']],
+					groups: detail_vuln_groups,
+					defaultOrderWhenDisabled: detail_vuln_default_order,
 					columns: vuln_datatable_columns,
-					cookieKey: window.DETAIL_SCAN_VULN_ROW_GROUP_COOKIE_KEY || undefined,
+					cookieKey: detail_vuln_rowgroup_cookie_key || undefined,
+					initialGroupFromCookie: detail_vuln_initial_state.appliedFromStorage,
 					snackbarMessage: window.getRengineRowGroupSnackbarMessage('Grouping cleared', 'Vulnerabilities grouped by {label}')
 				});
 			}

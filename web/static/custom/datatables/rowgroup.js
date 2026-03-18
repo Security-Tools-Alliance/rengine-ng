@@ -102,6 +102,18 @@
     return resolved.length > 0 ? resolved : (safeColumnIndex >= 0 ? [[safeColumnIndex, "desc"]] : [[0, "desc"]]);
   };
 
+  const ordersEqual = function (left, right) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i++) {
+      const l = left[i];
+      const r = right[i];
+      if (!Array.isArray(l) || !Array.isArray(r) || l.length < 2 || r.length < 2) return false;
+      if (Number(l[0]) !== Number(r[0])) return false;
+      if (String(l[1]).toLowerCase() !== String(r[1]).toLowerCase()) return false;
+    }
+    return true;
+  };
+
   /**
    * Apply row group selection and optional snackbar feedback.
    *
@@ -279,11 +291,15 @@
         }
         $(selector).filter('[value=""]').first().prop("checked", true);
         api.rowGroup().disable();
-        api.order(orderToApply);
+        if (!ordersEqual(api.order(), orderToApply)) {
+          api.order(orderToApply);
+        }
       }
     } else {
       api.rowGroup().disable();
-      api.order(orderToApply);
+      if (!ordersEqual(api.order(), orderToApply)) {
+        api.order(orderToApply);
+      }
     }
   };
 

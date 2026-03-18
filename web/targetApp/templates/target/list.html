@@ -27,7 +27,7 @@ Targets
 				<div class="row">
 					<div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center flex-wrap gap-1">
 						{% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='targetListQuickSearch' %}
-						{% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_target_list.html' id_prefix='targetList' %}
+						{% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_target_list.html' id_prefix='targetList' filtering_text_id='targetListFilteringTextHidden' %}
 						<div class="btn-group ms-1 dropstart">
 							<button type="button" class="btn btn-soft-info dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Target grouping">
 								<i class="fe-layout"></i>
@@ -47,6 +47,7 @@ Targets
 								</div>
 							</div>
 						</div>
+						<div id="targetListFilteringText" class="w-100 d-flex flex-wrap gap-1 mt-2"></div>
 					</div>
 					<div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
             <span class="small text-muted me-1">Bulk actions:</span>
@@ -306,7 +307,7 @@ $(document).ready(function(){
 		}).fail(function() {});
 
 		if (window.attachDatatableFilters) {
-			window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('target_list', table, { onApply: function() { table.draw(); } }));
+			window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('target_list', table, { filteringTextId: 'targetListFilteringText', onApply: function() { table.draw(); } }));
 		} else {
 			document.getElementById('filterByOrganization').addEventListener('change', function() { table.draw(); }, false);
 			document.getElementById('filterByScope').addEventListener('change', function() { table.draw(); }, false);

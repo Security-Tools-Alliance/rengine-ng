@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from startScan.models import Domain, EndPoint, ScanHistory, Subdomain, Vulnerability
-from targetApp.models import Target
+from targetApp.models import Organization, Scope, Target
 from utils.test_base import BaseTestCase
 
 
@@ -330,3 +330,31 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
         self.assertEqual(row["subdomain_count"], 2, "Distinct subdomain names across scans")
         self.assertEqual(row["endpoint_count"], 2, "Distinct endpoint URLs across scans")
         self.assertEqual(row["vulnerability_count"], 2, "Total vulnerabilities across scans")
+
+
+class TestListScopesApi(BaseTestCase):
+    """Tests for ListScopes API used by target list filter dropdown."""
+
+    def test_list_scopes_returns_scopes_linked_to_project_targets(self):
+        project = self.data_generator.project
+        target = self.data_generator.target
+        org = Organization.objects.create(
+            name="Scope API Org",
+            description="",
+            insert_date=timezone.now(),
+            project=None,
+        )
+        scope = Scope.objects.create(
+            organization=org,
+            name="ScopeFromTargetLink",
+            scope_type="engagement_external",
+            description="",
+        )
+        scope.targets.add(target)
+
+        api_url = reverse("api:listScopes")
+        response = self.client.get(api_url, {"project": project.slug})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = [item["name"] for item in response.data.get("scopes", [])]
+        self.assertIn("ScopeFromTargetLink", names)

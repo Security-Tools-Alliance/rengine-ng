@@ -112,7 +112,8 @@ Scan Engines <small class="text-muted">(Legacy)</small>
             </button>
           </div>
           <div>
-            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scan_engine.html' id_prefix='scanEngine' %}
+            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scan_engine.html' id_prefix='scanEngine' filtering_text_id='scanEngineFilteringTextHidden' %}
+            <div id="scanEngineFilteringText" class="w-100 d-flex flex-wrap gap-1 mt-2"></div>
           </div>
         </div>
       </div>

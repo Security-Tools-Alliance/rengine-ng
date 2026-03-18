@@ -10,6 +10,87 @@
   "use strict";
 
   const storage = window.rengineStorage;
+  const PENDING_FILTER_VALUES_ATTR = "data-rengine-pending-filter-values";
+  const PENDING_FILTER_OBSERVER_ATTR = "data-rengine-pending-filter-observer";
+  const getCurrentProjectSlug = function () {
+    if (typeof window.getCurrentProjectSlug === "function") {
+      return window.getCurrentProjectSlug() || "";
+    }
+    if (typeof document === "undefined" || !document.body) return "";
+    return (document.body.getAttribute("data-project-slug") || "").trim();
+  };
+
+  const applyValuesToFilterSelect = function (el, values) {
+    if (!el || !el.options || !Array.isArray(values) || values.length === 0) return false;
+    let applied = false;
+    if (el.multiple) {
+      for (let i = 0; i < el.options.length; i++) {
+        const opt = el.options[i];
+        const shouldSelect = values.indexOf(opt.value) !== -1;
+        if (shouldSelect) applied = true;
+        opt.selected = shouldSelect;
+      }
+      return applied;
+    }
+    const scalar = values[0];
+    for (let j = 0; j < el.options.length; j++) {
+      if (el.options[j].value === scalar) {
+        el.value = scalar;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const savePendingFilterValues = function (el, values) {
+    if (!el || !Array.isArray(values) || values.length === 0) return false;
+    try {
+      el.setAttribute(PENDING_FILTER_VALUES_ATTR, JSON.stringify(values));
+      return true;
+    } catch (e) {
+      // ignore malformed values
+      return false;
+    }
+  };
+
+  const consumePendingFilterValues = function (el) {
+    if (!el) return null;
+    const raw = el.getAttribute(PENDING_FILTER_VALUES_ATTR);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      clearPendingFilterValues(el);
+    } catch (e) {
+      clearPendingFilterValues(el);
+    }
+    return null;
+  };
+
+  const clearPendingFilterValues = function (el) {
+    if (!el) return;
+    el.removeAttribute(PENDING_FILTER_VALUES_ATTR);
+  };
+
+  const attachPendingFilterObserver = function (el) {
+    if (!el || el.getAttribute(PENDING_FILTER_OBSERVER_ATTR) === "1") return;
+    if (typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(function () {
+      const pendingValues = consumePendingFilterValues(el);
+      if (!pendingValues) return;
+      const restored = applyValuesToFilterSelect(el, pendingValues);
+      if (!restored) return;
+      clearPendingFilterValues(el);
+      if (typeof CustomEvent === "function") {
+        el.dispatchEvent(new CustomEvent("change", { bubbles: true, detail: { rengineFromPendingRestore: true } }));
+      } else {
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    // Some select options are populated asynchronously, so retry restore when child options are inserted.
+    observer.observe(el, { childList: true });
+    el.setAttribute(PENDING_FILTER_OBSERVER_ATTR, "1");
+  };
 
   const getMultiSelectValues = function (selectId) {
     const sel = typeof document !== "undefined" ? document.getElementById(selectId) : null;
@@ -23,7 +104,38 @@
 
   const getFilterStorageKey = function (tableId) {
     if (!tableId || typeof tableId !== "string") return null;
-    return "datatable-filters-" + tableId;
+    const projectSlug = getCurrentProjectSlug();
+    const suffix = projectSlug ? ":" + projectSlug : "";
+    return "datatable-filters-" + tableId + suffix;
+  };
+
+  const getPersistedDatatableFilterState = function (tableId, filterSelectIds) {
+    const key = getFilterStorageKey(tableId);
+    if (!key || !Array.isArray(filterSelectIds) || !filterSelectIds.length) return {};
+    if (!storage || typeof storage.getJson !== "function") return {};
+    let state;
+    try {
+      state = storage.getJson(key);
+    } catch (e) {
+      return {};
+    }
+    if (!state || Array.isArray(state) || typeof state !== "object") return {};
+    const normalized = {};
+    filterSelectIds.forEach(function (id) {
+      if (!id || !Object.prototype.hasOwnProperty.call(state, id)) return;
+      const raw = state[id];
+      if (Array.isArray(raw)) {
+        const values = raw.filter(function (value) { return value != null && String(value) !== ""; }).map(function (value) {
+          return String(value);
+        });
+        if (values.length > 0) normalized[id] = values;
+        return;
+      }
+      if (raw != null && String(raw) !== "") {
+        normalized[id] = [String(raw)];
+      }
+    });
+    return normalized;
   };
 
   const saveDatatableFilterState = function (tableId, filterSelectIds) {
@@ -56,31 +168,55 @@
   };
 
   const restoreDatatableFilterState = function (tableId, filterSelectIds) {
-    const key = getFilterStorageKey(tableId);
-    if (!key || !Array.isArray(filterSelectIds) || !filterSelectIds.length) return;
-    if (!storage || typeof storage.getJson !== "function") return;
-    let state;
-    try {
-      state = storage.getJson(key);
-    } catch (e) {
-      return;
-    }
-    if (!state || Array.isArray(state) || typeof state !== "object") return;
+    const state = getPersistedDatatableFilterState(tableId, filterSelectIds);
+    if (!state || typeof state !== "object" || Object.keys(state).length === 0) return false;
+    let restored = false;
     filterSelectIds.forEach(function (id) {
       const el = typeof document !== "undefined" ? document.getElementById(id) : null;
       if (!el || !el.options) return;
       const stored = state[id];
       if (stored == null) return;
       const values = Array.isArray(stored) ? stored.slice() : [stored];
-      if (el.multiple) {
-        for (let i = 0; i < el.options.length; i++) {
-          const opt = el.options[i];
-          opt.selected = values.indexOf(opt.value) !== -1;
-        }
-      } else if (values.length > 0) {
-        el.value = values[0];
+      const restoredNow = applyValuesToFilterSelect(el, values);
+      if (restoredNow) restored = true;
+      if (!restoredNow && savePendingFilterValues(el, values)) {
+        attachPendingFilterObserver(el);
       }
     });
+    return restored;
+  };
+
+  const clearSelectIdFromPersistedFilterState = function (selectId) {
+    if (!selectId || typeof window === "undefined" || !window.localStorage) return;
+    const prefix = "rengine-datatable-filters-";
+    try {
+      const matchingKeys = [];
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const rawKey = window.localStorage.key(i);
+        if (!rawKey || rawKey.indexOf(prefix) !== 0) continue;
+        matchingKeys.push(rawKey);
+      }
+      matchingKeys.forEach(function (rawKey) {
+        const rawState = window.localStorage.getItem(rawKey);
+        if (!rawState) return;
+        let parsed = null;
+        try {
+          parsed = JSON.parse(rawState);
+        } catch (e) {
+          parsed = null;
+        }
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+        if (!Object.prototype.hasOwnProperty.call(parsed, selectId)) return;
+        delete parsed[selectId];
+        if (Object.keys(parsed).length === 0) {
+          window.localStorage.removeItem(rawKey);
+        } else {
+          window.localStorage.setItem(rawKey, JSON.stringify(parsed));
+        }
+      });
+    } catch (e) {
+      // ignore storage access errors
+    }
   };
 
   const attachDatatableFilters = function (config) {
@@ -91,14 +227,26 @@
     const buildBadgeHtml = config.buildBadgeHtml;
     const onApply = config.onApply || function () { if (tableApi) tableApi.draw(); };
     const tableId = config.tableId;
+    const initialApplyPolicy = config.initialApplyPolicy || "always";
+    const initialStateAlreadyApplied = !!(tableApi && tableApi._rengineInitialStateApplied === true);
+    const effectiveInitialApplyPolicy = initialStateAlreadyApplied ? "never" : initialApplyPolicy;
+    const skipPendingRestoreApply = config.skipPendingRestoreApply === true || initialStateAlreadyApplied;
 
-    const applyFilters = function () {
+    const applyFilters = function (event) {
       const selected = {};
       filterSelectIds.forEach(function (id) { selected[id] = getMultiSelectValues(id); });
       const container = document.getElementById(filteringTextId);
       if (container && typeof buildBadgeHtml === "function") container.innerHTML = buildBadgeHtml(selected);
       if (tableId) {
         saveDatatableFilterState(tableId, filterSelectIds);
+      }
+      if (
+        skipPendingRestoreApply
+        && event
+        && event.detail
+        && event.detail.rengineFromPendingRestore === true
+      ) {
+        return;
       }
       onApply();
     };
@@ -139,6 +287,14 @@
         const container = document.getElementById(filteringTextId);
         if (container) container.innerHTML = buildBadgeHtml(selected);
       }
+      if (effectiveInitialApplyPolicy === "never") return;
+      if (effectiveInitialApplyPolicy === "if-filters-active") {
+        const hasSelectedFilters = filterSelectIds.some(function (id) {
+          const values = getMultiSelectValues(id);
+          return Array.isArray(values) && values.length > 0;
+        });
+        if (!hasSelectedFilters) return;
+      }
       onApply();
     }
   };
@@ -148,16 +304,12 @@
    *
    * @param {Object} selected - Map of selectId -> array of selected value strings.
    * @param {Array<{selectId: string, label: string, badgeClass?: string}>} spec - Badge spec per filter.
-   * @param {Object} [options] - Optional { resetId, clearChipId } for the clear chip.
-   * @returns {string} HTML string of badges plus optional clear chip.
+   * @returns {string} HTML string of badges (each badge has its own clear cross).
    */
   const buildRengineFilterBadgesHtml = function (selected, spec, options) {
     const safeText = window.safeText;
     const safeAttr = window.safeAttr;
     if (typeof safeText !== "function") return "";
-    const opts = options || {};
-    const resetId = opts.resetId || "resetFilters";
-    const clearChipId = opts.clearChipId || "clearFilterChip";
     const parts = [];
     (spec || []).forEach(function (item) {
       const values = selected && selected[item.selectId];
@@ -165,11 +317,16 @@
       const label = item.label || item.selectId;
       const cls = item.badgeClass || "badge-soft-primary";
       const encoded = values.map(function (v) { return safeText(String(v)); }).join(", ");
-      parts.push('<span class="badge ' + (typeof safeAttr === "function" ? safeAttr(cls) : cls) + ' me-1">' + safeText(label) + ": " + encoded + "</span>");
+      const selectIdAttr = typeof safeAttr === "function" ? safeAttr(item.selectId) : item.selectId;
+      parts.push(
+        '<span class="badge ' + (typeof safeAttr === "function" ? safeAttr(cls) : cls) + ' me-1">'
+        + safeText(label) + ": " + encoded
+        + ' <span class="js-clear-single-filter-chip ms-1" role="button" tabindex="0" data-select-id="'
+        + selectIdAttr + '" aria-label="Clear ' + safeText(label) + ' filter">×</span>'
+        + "</span>"
+      );
     });
-    if (parts.length === 0) return "";
-    const safeResetId = (typeof safeAttr === "function" ? safeAttr(resetId) : resetId);
-    return parts.join("") + ' <span class="badge-link ms-1 js-clear-filter-chip" id="' + clearChipId + '" role="button" tabindex="0" data-reset-id="' + safeResetId + '">X</span>';
+    return parts.join("");
   };
 
   /**
@@ -348,9 +505,13 @@
           if (!el || !Array.isArray(list)) return;
           list.forEach(function (v) {
             const option = document.createElement("option");
-            const str = v != null ? String(v) : "";
-            option.value = typeof safeText === "function" ? safeText(str) : str;
-            option.textContent = option.value;
+            const isObj = v && typeof v === "object" && !Array.isArray(v);
+            const rawValue = isObj && v.value != null ? v.value : v;
+            const rawLabel = isObj && v.label != null ? v.label : rawValue;
+            const value = rawValue != null ? String(rawValue) : "";
+            const label = rawLabel != null ? String(rawLabel) : value;
+            option.value = typeof safeText === "function" ? safeText(value) : value;
+            option.textContent = typeof safeText === "function" ? safeText(label) : label;
             el.appendChild(option);
           });
         };
@@ -360,7 +521,7 @@
           : (data.scan_status_labels || []);
         appendOptions("filterByScanStatus", statusLabels);
         appendOptions("filterByTarget", data.targets || []);
-        appendOptions("filterByScanType", data.scan_engines || []);
+        appendOptions("filterByScanType", data.scan_engine_options || data.scan_engines || []);
       })
       .catch(function (e) {
         if (window.console && typeof window.console.warn === "function") {
@@ -386,6 +547,8 @@
       buildBadgeHtml: options.buildBadgeHtml,
       onApply: options.onApply,
       tableId: options.tableId,
+      initialApplyPolicy: options.initialApplyPolicy,
+      skipPendingRestoreApply: options.skipPendingRestoreApply,
     });
     const rowGroup = options.rowGroup;
     if (rowGroup && typeof window.attachRengineDatatableRowGroupSelector === "function") {
@@ -397,11 +560,21 @@
     document.body.addEventListener("click", function (e) {
       let el = e.target;
       while (el && el !== document.body) {
-        if (el.classList && el.classList.contains("js-clear-filter-chip")) {
-          const resetId = el.getAttribute && el.getAttribute("data-reset-id");
-          if (resetId) {
-            const resetEl = document.getElementById(resetId);
-            if (resetEl && typeof resetEl.click === "function") resetEl.click();
+        if (el.classList && el.classList.contains("js-clear-single-filter-chip")) {
+          const selectId = el.getAttribute && el.getAttribute("data-select-id");
+          if (selectId) {
+            const selectEl = document.getElementById(selectId);
+            if (selectEl) {
+              if (selectEl.multiple && selectEl.options) {
+                for (let i = 0; i < selectEl.options.length; i++) {
+                  selectEl.options[i].selected = false;
+                }
+              } else {
+                selectEl.value = "";
+              }
+              clearSelectIdFromPersistedFilterState(selectId);
+              selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+            }
           }
           return;
         }
@@ -416,6 +589,7 @@
   window.attachDatatableFilters = attachDatatableFilters;
   window.buildRengineFilterBadgesHtml = buildRengineFilterBadgesHtml;
   window.buildDatatableFilterPayload = buildDatatableFilterPayload;
+  window.getPersistedDatatableFilterState = getPersistedDatatableFilterState;
   window.populateRengineFilterSelects = populateRengineFilterSelects;
   window.populateScanHistoryFilterChoices = populateScanHistoryFilterChoices;
   window.attachRengineDatatableFiltersAndRowGroup = attachRengineDatatableFiltersAndRowGroup;

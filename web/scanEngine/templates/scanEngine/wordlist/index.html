@@ -38,7 +38,8 @@ Wordlists
   <div class="col-12">
     <div class="card">
 			<div class="card-body">
-        {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_wordlist.html' id_prefix='wordlist' %}
+        {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_wordlist.html' id_prefix='wordlist' filtering_text_id='wordlistFilteringTextHidden' %}
+        <div id="wordlistFilteringText" class="w-100 d-flex flex-wrap gap-1 mt-2"></div>
         <table id="wordlist_table" class="table dt-responsive w-100">
         <thead>
           <tr>

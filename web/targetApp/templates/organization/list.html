@@ -26,7 +26,8 @@ Organizations
         <div class="row">
           <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center flex-wrap gap-1">
             {% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='organizationListQuickSearch' %}
-            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_organization_list.html' id_prefix='organizationList' %}
+            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_organization_list.html' id_prefix='organizationList' filtering_text_id='organizationListFilteringTextHidden' %}
+            <div id="organizationListFilteringText" class="w-100 d-flex flex-wrap gap-1 mt-2"></div>
           </div>
           <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
             {% if user|can:'modify_targets' %}

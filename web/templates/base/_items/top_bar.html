@@ -44,6 +44,7 @@
       <form class="app-search" method="get" action="{% url 'search' %}">
         <div class="app-search-box dropdown">
           <div class="input-group">
+            {% if current_project %}<input type="hidden" name="{{ project_context_query_param }}" value="{{ current_project.slug }}">{% endif %}
             <input type="search" class="form-control d-none d-md-block" placeholder="Universal Search..." id="top-search" name="query" autocomplete="off">
             <button class="btn input-group-text" type="submit">
               <i class="fe-search"></i>
@@ -92,7 +93,7 @@
           </a>
           {% endif %}
           {% if user|can:'modify_wordlists' %}
-          <a href="{% url 'add_wordlist' %}" class="dropdown-item">
+          <a href="{% url 'add_wordlist' %}{{ project_nav_q }}" class="dropdown-item">
             <i class="fe-list me-1"></i>
             <span>Wordlist</span>
           </a>
@@ -111,20 +112,20 @@
           <div class="dropdown-header noti-title">
             <h6 class="text-overflow m-0">Welcome {{user.get_username}}!</h6>
           </div>
-          <a href="{% url 'profile' %}" class="dropdown-item notify-item">
+          <a href="{% url 'profile' %}{{ project_nav_q }}" class="dropdown-item notify-item">
             <i class="fe-user"></i>
             <span>My Account</span>
           </a>
-          <a href="{% url 'api_keys' %}" class="dropdown-item notify-item">
+          <a href="{% url 'api_keys' %}{{ project_nav_q }}" class="dropdown-item notify-item">
             <i class="mdi mdi-key-variant"></i>
             <span>API Keys</span>
           </a>
-          <a href="{% url 'interface_settings' %}" class="dropdown-item notify-item">
+          <a href="{% url 'interface_settings' %}{{ project_nav_q }}" class="dropdown-item notify-item">
             <i class="fe-sliders"></i>
             <span>Interface</span>
           </a>
           {% if user|can:'modify_system_configurations' %}
-          <a href="{% url 'admin_interface' %}" class="dropdown-item notify-item">
+          <a href="{% url 'admin_interface' %}{{ project_nav_q }}" class="dropdown-item notify-item">
             <i class="fe-settings"></i>
             <span>Admin Settings</span>
           </a>
@@ -187,7 +188,7 @@
     </a>
   </div>
   <div class="nav-item">
-    <a class="nav-link" href="{% url 'list_projects' %}">
+    <a class="nav-link" href="{% url 'list_projects' %}{{ project_nav_q }}">
       <i class="fe-folder"></i> Projects
     </a>
   </div>
@@ -234,20 +235,21 @@
     </div>
     <div class="mobile-submenu">
       {% if user|can:'modify_scan_configurations' %}
-      <a href="{% url 'scans' %}" class="dropdown-item">Scans</a>
-      <a href="{% url 'workflows' %}" class="dropdown-item">Workflows</a>
-      <a href="{% url 'tasks' %}" class="dropdown-item">Tasks</a>
-      <a href="{% url 'profiles' %}" class="dropdown-item">Profiles</a>
+      <a href="{% url 'scans' %}{{ project_nav_q }}" class="dropdown-item">Scans</a>
+      <a href="{% url 'workflows' %}{{ project_nav_q }}" class="dropdown-item">Workflows</a>
+      <a href="{% url 'tasks' %}{{ project_nav_q }}" class="dropdown-item">Tasks</a>
+      <a href="{% url 'profiles' %}{{ project_nav_q }}" class="dropdown-item">Profiles</a>
+      <a href="{% url 'worker_list' %}{{ project_nav_q }}" class="dropdown-item">Workers</a>
       <div class="dropdown-divider"></div>
       {% endif %}
       {% if user|can:'modify_wordlists' %}
-      <a href="{% url 'wordlist_list' %}" class="dropdown-item">Wordlists</a>
+      <a href="{% url 'wordlist_list' %}{{ project_nav_q }}" class="dropdown-item">Wordlists</a>
       {% endif %}
       {% if user|can:'modify_interesting_lookup' %}
-      <a href="{% url 'interesting_lookup' %}" class="dropdown-item">Interesting Lookup</a>
+      <a href="{% url 'interesting_lookup' %}{{ project_nav_q }}" class="dropdown-item">Interesting Lookup</a>
       {% endif %}
       {% if user|can:'modify_scan_configurations' %}
-      <a href="{% url 'scan_engine_index' %}" class="dropdown-item">
+      <a href="{% url 'scan_engine_index' %}{{ project_nav_q }}" class="dropdown-item">
         <i class="fas fa-exclamation-triangle text-warning me-1"></i>Scan Engines
         <small class="text-muted d-block">(Legacy - Use Secator instead)</small>
       </a>
@@ -262,22 +264,22 @@
     </div>
     <div class="mobile-submenu">
       {% if user|can:'modify_scan_configurations' %}
-      <a href="{% url 'proxy_settings' %}" class="dropdown-item">Proxies</a>
-      <a href="{% url 'tool_settings' %}" class="dropdown-item">Tool Settings</a>
+      <a href="{% url 'proxy_settings' %}{{ project_nav_q }}" class="dropdown-item">Proxies</a>
+      <a href="{% url 'tool_settings' %}{{ project_nav_q }}" class="dropdown-item">Tool Settings</a>
       {% endif %}
       {% if user|can:'modify_system_configurations' %}
-      <a href="{% url 'api_vault' %}" class="dropdown-item">API Vault</a>
-      <a href="{% url 'llm_toolkit' %}" class="dropdown-item">LLM Toolkit</a>
+      <a href="{% url 'api_vault' %}{{ project_nav_q }}" class="dropdown-item">API Vault</a>
+      <a href="{% url 'llm_toolkit' %}{{ project_nav_q }}" class="dropdown-item">LLM Toolkit</a>
       {% endif %}
       {% if user|can:'modify_scan_report' %}
-      <a href="{% url 'report_settings' %}" class="dropdown-item">Report Settings</a>
+      <a href="{% url 'report_settings' %}{{ project_nav_q }}" class="dropdown-item">Report Settings</a>
       {% endif %}
       {% if user|can:'modify_system_configurations' %}
-      <a href="{% url 'rengine_settings' %}" class="dropdown-item">reNgine-ng Settings</a>
+      <a href="{% url 'rengine_settings' %}{{ project_nav_q }}" class="dropdown-item">reNgine-ng Settings</a>
       {% endif %}
       {% if user|can:'modify_scan_configurations' %}
-      <a href="{% url 'hackerone_settings' %}" class="dropdown-item">Hackerone Settings</a>
-      <a href="{% url 'notification_settings' %}" class="dropdown-item">Notification Settings</a>
+      <a href="{% url 'hackerone_settings' %}{{ project_nav_q }}" class="dropdown-item">Hackerone Settings</a>
+      <a href="{% url 'notification_settings' %}{{ project_nav_q }}" class="dropdown-item">Notification Settings</a>
       {% endif %}
     </div>
   </div>

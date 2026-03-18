@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 
-from startScan.models import Domain, ScanHistory, Subdomain, Technology
+from startScan.models import Domain, ScanHistory, SecatorRunner, Subdomain, Technology
 from utils.test_base import BaseTestCase
 
 
@@ -78,6 +78,249 @@ class TestScanHistoryFilterChoices(BaseTestCase):
         self.assertIsInstance(response.data["task_status_labels"], list)
         self.assertIsInstance(response.data["targets"], list)
         self.assertIsInstance(response.data["scan_engines"], list)
+
+    def test_includes_secator_runner_types_in_scan_engines(self):
+        """Scan type choices include workflow and task labels shown in scan history."""
+        secator_scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=1,
+            target=self.data_generator.target,
+            is_legacy_scan=False,
+            tasks=["httpx"],
+        )
+        SecatorRunner.objects.create(
+            scan_history=secator_scan,
+            runner_type="workflow",
+            runner_name="recon-workflow",
+        )
+        task_only_scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=1,
+            target=self.data_generator.target,
+            is_legacy_scan=False,
+            tasks=["httpx"],
+        )
+        SecatorRunner.objects.create(
+            scan_history=task_only_scan,
+            runner_type="task",
+            runner_name="httpx",
+        )
+
+        url = reverse("api:scanHistoryFilterChoices")
+        response = self.client.get(url, {"project": self.data_generator.project.slug})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("scan_engines", response.data)
+        expected_workflow_label = f"{secator_scan.display_runner_type}: {secator_scan.display_scan_name}"
+        self.assertIn(expected_workflow_label, response.data["scan_engines"])
+        self.assertTrue(
+            any(label.startswith("Task: ") for label in response.data["scan_engines"]),
+            msg="Expected at least one Task label in scan_engines",
+        )
+        self.assertIn("scan_engine_options", response.data)
+        self.assertTrue(
+            any(
+                isinstance(item, dict) and item.get("value") and item.get("label")
+                for item in response.data["scan_engine_options"]
+            )
+        )
+
+
+class TestScanHistoryScanTypeFiltering(BaseTestCase):
+    """Tests for ListScanHistory scan type filter with Secator labels."""
+
+    def test_filter_scan_engine_with_secator_workflow_label(self):
+        secator_scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=1,
+            target=self.data_generator.target,
+            is_legacy_scan=False,
+            tasks=["nuclei"],
+        )
+        SecatorRunner.objects.create(
+            scan_history=secator_scan,
+            runner_type="workflow",
+            runner_name="my-workflow",
+        )
+
+        url = reverse("api:listScanHistory")
+        response = self.client.get(
+            url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": 0,
+                "length": 25,
+                "filter_scan_engine": f"{secator_scan.display_runner_type}: {secator_scan.display_scan_name}",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data", [])
+        ids = [row.get("id") for row in rows]
+        self.assertIn(secator_scan.id, ids)
+
+    def test_filter_scan_engine_with_task_label(self):
+        task_scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=1,
+            target=self.data_generator.target,
+            is_legacy_scan=False,
+            tasks=["httpx"],
+        )
+        SecatorRunner.objects.create(
+            scan_history=task_scan,
+            runner_type="task",
+            runner_name="httpx",
+        )
+
+        url = reverse("api:listScanHistory")
+        response = self.client.get(
+            url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": 0,
+                "length": 25,
+                "filter_scan_engine": "Task",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data", [])
+        ids = [row.get("id") for row in rows]
+        self.assertIn(task_scan.id, ids)
+
+    def test_filter_scan_engine_with_legacy_label(self):
+        legacy_scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=1,
+            target=self.data_generator.target,
+            is_legacy_scan=True,
+            scan_type=self.data_generator.engine_type,
+            tasks=["legacy"],
+        )
+
+        url = reverse("api:listScanHistory")
+        response = self.client.get(
+            url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": 0,
+                "length": 25,
+                "filter_scan_engine": f"Legacy: {self.data_generator.engine_type.engine_name}",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data", [])
+        ids = [row.get("id") for row in rows]
+        self.assertIn(legacy_scan.id, ids)
+
+    def test_filter_scan_engine_with_multi_task_label(self):
+        task_scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=1,
+            target=self.data_generator.target,
+            is_legacy_scan=False,
+            tasks=["dnsx", "jswhois"],
+        )
+        SecatorRunner.objects.create(
+            scan_history=task_scan,
+            runner_type="task",
+            runner_name="dnsx",
+        )
+        SecatorRunner.objects.create(
+            scan_history=task_scan,
+            runner_type="task",
+            runner_name="jswhois",
+        )
+
+        url = reverse("api:listScanHistory")
+        response = self.client.get(
+            url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": 0,
+                "length": 25,
+                "filter_scan_engine": "Task: dnsx, jswhois",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data", [])
+        ids = [row.get("id") for row in rows]
+        self.assertIn(task_scan.id, ids)
+
+    def test_filter_scan_engine_with_stable_multi_task_key(self):
+        task_scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=1,
+            target=self.data_generator.target,
+            is_legacy_scan=False,
+            tasks=["dnsx", "jswhois"],
+        )
+        SecatorRunner.objects.create(
+            scan_history=task_scan,
+            runner_type="task",
+            runner_name="dnsx",
+        )
+        SecatorRunner.objects.create(
+            scan_history=task_scan,
+            runner_type="task",
+            runner_name="jswhois",
+        )
+
+        url = reverse("api:listScanHistory")
+        response = self.client.get(
+            url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": 0,
+                "length": 25,
+                "filter_scan_engine": "task_names:dnsx,jswhois",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data", [])
+        ids = [row.get("id") for row in rows]
+        self.assertIn(task_scan.id, ids)
+
+    def test_filter_scan_engine_with_single_task_key_does_not_overmatch(self):
+        httpx_scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=1,
+            target=self.data_generator.target,
+            is_legacy_scan=False,
+            tasks=["httpx"],
+        )
+        SecatorRunner.objects.create(
+            scan_history=httpx_scan,
+            runner_type="task",
+            runner_name="httpx",
+        )
+        cariddi_scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=1,
+            target=self.data_generator.target,
+            is_legacy_scan=False,
+            tasks=["cariddi"],
+        )
+        SecatorRunner.objects.create(
+            scan_history=cariddi_scan,
+            runner_type="task",
+            runner_name="cariddi",
+        )
+
+        url = reverse("api:listScanHistory")
+        response = self.client.get(
+            url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": 0,
+                "length": 25,
+                "filter_scan_engine": "task_names:httpx",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data", [])
+        ids = [row.get("id") for row in rows]
+        self.assertIn(httpx_scan.id, ids)
+        self.assertNotIn(cariddi_scan.id, ids)
 
 
 class TestListS3BucketsDatatable(BaseTestCase):

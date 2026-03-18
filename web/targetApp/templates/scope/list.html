@@ -23,7 +23,7 @@ Scopes
         <div class="row">
           <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center flex-wrap gap-1">
             {% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='scopeListQuickSearch' %}
-            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scope_list.html' id_prefix='scopeList' %}
+            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scope_list.html' id_prefix='scopeList' filtering_text_id='scopeListFilteringTextHidden' %}
             <div class="btn-group ms-1 dropstart">
               <button type="button" class="btn btn-soft-info dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Scope grouping">
                 <i class="fe-layout"></i>
@@ -49,6 +49,7 @@ Scopes
                 </div>
               </div>
             </div>
+            <div id="scopeListFilteringText" class="w-100 d-flex flex-wrap gap-1 mt-2"></div>
           </div>
           <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
             {% if user|can:'modify_targets' %}

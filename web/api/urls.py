@@ -167,7 +167,7 @@ urlpatterns = [
     ),
     path("queryTargetsInOrganization/", ListTargetsInOrganization.as_view(), name="queryTargetsInOrganization"),
     path("listOrganizations/", ListOrganizations.as_view(), name="listOrganizations"),
-    path("listScopes/", ListScopes.as_view(), name="listScopes"),
+    path("queryScopes/", ListScopes.as_view(), name="listScopes"),
     path(
         "listDatatableSubscans/",
         ListSubScansDatatableViewSet.as_view({"get": "list"}),

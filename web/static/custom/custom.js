@@ -132,6 +132,75 @@ function getCookieFromDocument(name) {
 	return cookieValue;
 }
 
+var RENGINE_SESSION_PROJECT_KEY = 'rengine-current-project-slug';
+
+function getTrimmedBodyAttr(name) {
+	if (!document.body) {
+		return '';
+	}
+	var value = document.body.getAttribute(name);
+	if (!value) {
+		return '';
+	}
+	return String(value).trim();
+}
+
+function getTabProjectSlugForHeader() {
+	var fromUrl = getTrimmedBodyAttr('data-project-slug-from-url');
+	if (fromUrl) {
+		return fromUrl;
+	}
+
+	try {
+		var s = window.sessionStorage.getItem(RENGINE_SESSION_PROJECT_KEY);
+		if (s && String(s).trim()) {
+			return String(s).trim();
+		}
+	} catch (e) {
+		if (!(typeof DOMException !== 'undefined' && e instanceof DOMException)) {
+			throw e;
+		}
+	}
+
+	return getTrimmedBodyAttr('data-project-slug');
+}
+
+function applyProjectSlugHeaderToFetchOptions(url, options) {
+	if (!options || typeof options !== 'object') {
+		return;
+	}
+	if (isExternalUrl(url)) {
+		return;
+	}
+	var slug = getTabProjectSlugForHeader();
+	if (!slug) {
+		return;
+	}
+	var headers = options.headers;
+	if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+		if (!headers.has('X-Project-Slug')) {
+			headers.set('X-Project-Slug', slug);
+		}
+		return;
+	}
+	var h = headers && typeof headers === 'object' && !Array.isArray(headers) ? headers : {};
+	var hasProjectSlugHeader = false;
+	for (var key in h) {
+		if (!Object.prototype.hasOwnProperty.call(h, key)) {
+			continue;
+		}
+		if (typeof key === 'string' && key.toLowerCase() === 'x-project-slug') {
+			hasProjectSlugHeader = true;
+			break;
+		}
+	}
+	if (!hasProjectSlugHeader) {
+		options.headers = Object.assign({}, h, { 'X-Project-Slug': slug });
+	}
+}
+
+window.getCurrentProjectSlug = getTabProjectSlugForHeader;
+
 /**
  * Global CSRF Token Configuration for AJAX Requests
  * This ensures all AJAX requests automatically include the CSRF token
@@ -147,6 +216,12 @@ function setupCSRFToken() {
 				if (!csrfSafeMethod(settings.type) && !this.crossDomain) {
 					xhr.setRequestHeader("X-CSRFToken", csrftoken);
 				}
+				if (!settings.crossDomain) {
+					var ps = getTabProjectSlugForHeader();
+					if (ps) {
+						xhr.setRequestHeader("X-Project-Slug", ps);
+					}
+				}
 			}
 		});
 	}
@@ -155,21 +230,38 @@ function setupCSRFToken() {
 	if (typeof window !== 'undefined' && window.fetch) {
 		const originalFetch = window.fetch;
 		window.fetch = function(url, options = {}) {
-			// Ensure we have headers object
-			options.headers = options.headers || {};
+			options = options || {};
+			const opts = { ...options };
+			if (typeof Headers !== 'undefined' && options.headers instanceof Headers) {
+				opts.headers = options.headers;
+			} else {
+				const originalHeaders =
+					options.headers && typeof options.headers === 'object' && !Array.isArray(options.headers)
+						? options.headers
+						: {};
+				opts.headers = { ...originalHeaders };
+			}
 			
 			// Add CSRF token for non-safe methods
-			const method = (options.method || 'GET').toUpperCase();
-			if (!csrfSafeMethod(method) && !isExternalUrl(url) && !options.headers['X-CSRFToken'] && !options.headers['X-Csrftoken']) {
-				options.headers['X-CSRFToken'] = csrftoken;
+			const method = (opts.method || 'GET').toUpperCase();
+			if (!csrfSafeMethod(method) && !isExternalUrl(url)) {
+				if (typeof Headers !== 'undefined' && opts.headers instanceof Headers) {
+					if (!opts.headers.has('X-CSRFToken')) {
+						opts.headers.set('X-CSRFToken', csrftoken);
+					}
+				} else if (!opts.headers['X-CSRFToken'] && !opts.headers['X-Csrftoken']) {
+					opts.headers['X-CSRFToken'] = csrftoken;
+				}
 			}
+			
+			applyProjectSlugHeaderToFetchOptions(url, opts);
 			
 			// Ensure credentials are included for same-origin requests
-			if (!options.credentials && !isExternalUrl(url)) {
-				options.credentials = 'same-origin';
+			if (!opts.credentials && !isExternalUrl(url)) {
+				opts.credentials = 'same-origin';
 			}
 			
-			return originalFetch.call(this, url, options);
+			return originalFetch.call(this, url, opts);
 		};
 	}
 }

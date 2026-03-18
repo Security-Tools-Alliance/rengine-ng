@@ -56,7 +56,37 @@
     {% endblock custom_js_css_link %}
   </head>
 
-  <body class="loading" data-layout-mode="horizontal" data-project-slug="{{ current_project.slug|default:'' }}">
+  <body class="loading" data-layout-mode="horizontal" data-project-slug="{{ current_project.slug|default:'' }}" data-project-slug-from-url="{{ project_slug_from_url|default:'' }}">
+    <script>
+      (function () {
+        try {
+          var el = document.body;
+          var fromUrl = el && el.getAttribute("data-project-slug-from-url");
+          var key = "rengine-current-project-slug";
+          var current = "";
+          try { current = window.sessionStorage.getItem(key) || ""; } catch (e1) { current = ""; }
+
+          if (fromUrl && typeof fromUrl === "string") {
+            fromUrl = fromUrl.trim();
+            if (fromUrl.length) {
+              window.sessionStorage.setItem(key, fromUrl);
+              return;
+            }
+          }
+
+          // Pages without URL slug: do not overwrite an existing tab context.
+          if (!current) {
+            var slug = el && el.getAttribute("data-project-slug");
+            if (slug && typeof slug === "string") {
+              slug = slug.trim();
+              if (slug.length) {
+                window.sessionStorage.setItem(key, slug);
+              }
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
     <!-- Topbar begins -->
     {% include 'base/_items/top_bar.html' %}
     {# topbar ends #}
@@ -187,6 +217,7 @@
           fetchSubscanUrl: '{% url "api:fetch_subscan_results" %}'
         };
 
+        window.RENGINE_SEARCH_PROJECT_QS = "{{ project_nav_a|escapejs }}";
         window.RENGINE_API_URLS = window.RENGINE_API_URLS || {};
         Object.assign(window.RENGINE_API_URLS, {
           vulnerabilityReport: '{% url "api:vulnerability_report" %}',
@@ -225,17 +256,34 @@
         handleHashInUrl();
       });
 
+      function buildSearchHistoryItem(query, projectQueryString) {
+        var anchor = document.createElement("a");
+        var span = document.createElement("span");
+        var safeQuery = query == null ? "" : String(query);
+        var href = "{% url 'search' %}?query=" + encodeURIComponent(safeQuery) + projectQueryString;
+        anchor.setAttribute("href", href);
+        anchor.setAttribute("class", "dropdown-item notify-item");
+        span.textContent = safeQuery;
+        anchor.appendChild(span);
+        return anchor;
+      }
+
       function render_search_history(slug){
         fetch('/api/search/history/')
         .then(response => response.json())
         .then(function (response) {
           if (response.status) {
-            for (var history in response.results) {
-              $('#search-history-items').append(`
-                <a href="{% url 'search' %}?query=${response.results[history].query}" class="dropdown-item notify-item">
-                  <span>${response.results[history].query}</span>
-                </a>
-              `);
+            var projQsRaw = window.RENGINE_SEARCH_PROJECT_QS || "";
+            var projQs = projQsRaw
+              ? (projQsRaw.charAt(0) === "&" ? projQsRaw : "&" + projQsRaw)
+              : "";
+            var historyContainer = document.getElementById("search-history-items");
+            if (!historyContainer) {
+              return;
+            }
+            for (var hi = 0; hi < response.results.length; hi++) {
+              var row = response.results[hi];
+              historyContainer.appendChild(buildSearchHistoryItem(row.query, projQs));
             }
           }
           else{
