@@ -6,33 +6,34 @@ Stdlib only. Configure via environment variables (see README in worker bundle).
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import dataclass
 import json
 import logging
 import os
+from pathlib import Path
 import ssl
 import subprocess
 import sys
 import time
-import uuid
-from contextlib import suppress
 import urllib.error
 import urllib.parse
 import urllib.request
-from pathlib import Path
+import uuid
+
 
 try:
     from pull_agent_constants import (  # type: ignore[import-not-found]
-        DEFAULT_PULL_FAILURE_BACKOFF_MAX_DELAY,
         DEFAULT_PULL_CHECKIN_INTERVAL_SECONDS,
+        DEFAULT_PULL_FAILURE_BACKOFF_MAX_DELAY,
         DEFAULT_PULL_HTTP_TIMEOUT,
         DEFAULT_PULL_JOB_TIMEOUT,
         DEFAULT_PULL_MAX_CONSECUTIVE_FAILURES,
         DEFAULT_PULL_POLL_INTERVAL,
         DEFAULT_PULL_REVOKE_WAIT_SECONDS,
         ENV_PULL_API_BASE_URL,
-        ENV_PULL_FAILURE_BACKOFF_MAX_DELAY,
         ENV_PULL_CHECKIN_INTERVAL_SECONDS,
+        ENV_PULL_FAILURE_BACKOFF_MAX_DELAY,
         ENV_PULL_HTTP_TIMEOUT,
         ENV_PULL_JOB_TIMEOUT,
         ENV_PULL_MAX_CONSECUTIVE_FAILURES,
@@ -431,9 +432,7 @@ def _maybe_run_periodic_checkin(
         logger.warning("checkin failed with unexpected exception: %s", exc)
         checkin_ok = False
     updated_failures = 0 if checkin_ok else consecutive_checkin_failures + 1
-    next_checkin_at = (
-        time.monotonic() + checkin_interval_seconds if checkin_interval_seconds > 0 else 0.0
-    )
+    next_checkin_at = time.monotonic() + checkin_interval_seconds if checkin_interval_seconds > 0 else 0.0
     return CheckinScheduleState(
         consecutive_failures=updated_failures,
         next_checkin_at=next_checkin_at,
@@ -621,10 +620,7 @@ def main() -> None:
 
     while True:
         now = time.monotonic()
-        should_checkin = (
-            runtime_config.checkin_interval_seconds > 0
-            and now >= next_checkin_at
-        )
+        should_checkin = runtime_config.checkin_interval_seconds > 0 and now >= next_checkin_at
         poll_interval = runtime_config.poll_interval
         try:
             code, data = _request("POST", claim_url, b"{}")
