@@ -120,7 +120,11 @@ from .views_advanced_search import (
     AdvancedSearchValidateView,
     AdvancedSearchValuesView,
 )
-from .views_worker_pull import secator_worker_pull_claim, secator_worker_pull_complete
+from .views_worker_pull import (
+    secator_worker_pull_checkin,
+    secator_worker_pull_claim,
+    secator_worker_pull_complete,
+)
 
 
 app_name = "api"
@@ -297,6 +301,11 @@ urlpatterns = [
         "secator/workers/<int:worker_id>/pull/complete/",
         secator_worker_pull_complete,
         name="secator_worker_pull_complete",
+    ),
+    path(
+        "secator/workers/<int:worker_id>/pull/checkin/",
+        secator_worker_pull_checkin,
+        name="secator_worker_pull_checkin",
     ),
 ]
 

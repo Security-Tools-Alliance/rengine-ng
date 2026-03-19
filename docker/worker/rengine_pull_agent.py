@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 import os
 import ssl
 import subprocess
@@ -23,6 +24,7 @@ from pathlib import Path
 try:
     from pull_agent_constants import (  # type: ignore[import-not-found]
         DEFAULT_PULL_FAILURE_BACKOFF_MAX_DELAY,
+        DEFAULT_PULL_CHECKIN_INTERVAL_SECONDS,
         DEFAULT_PULL_HTTP_TIMEOUT,
         DEFAULT_PULL_JOB_TIMEOUT,
         DEFAULT_PULL_MAX_CONSECUTIVE_FAILURES,
@@ -30,6 +32,7 @@ try:
         DEFAULT_PULL_REVOKE_WAIT_SECONDS,
         ENV_PULL_API_BASE_URL,
         ENV_PULL_FAILURE_BACKOFF_MAX_DELAY,
+        ENV_PULL_CHECKIN_INTERVAL_SECONDS,
         ENV_PULL_HTTP_TIMEOUT,
         ENV_PULL_JOB_TIMEOUT,
         ENV_PULL_MAX_CONSECUTIVE_FAILURES,
@@ -48,6 +51,7 @@ except ModuleNotFoundError:
     PULL_TOKEN_HEADER = "X-Rengine-Worker-Pull-Token"
     ENV_PULL_API_BASE_URL = "RENGINE_PULL_API_BASE_URL"
     ENV_PULL_FAILURE_BACKOFF_MAX_DELAY = "RENGINE_PULL_FAILURE_BACKOFF_MAX_DELAY"
+    ENV_PULL_CHECKIN_INTERVAL_SECONDS = "RENGINE_PULL_CHECKIN_INTERVAL_SECONDS"
     ENV_PULL_HTTP_TIMEOUT = "RENGINE_PULL_TIMEOUT"
     ENV_PULL_JOB_TIMEOUT = "RENGINE_PULL_JOB_TIMEOUT"
     ENV_PULL_MAX_CONSECUTIVE_FAILURES = "RENGINE_PULL_MAX_CONSECUTIVE_FAILURES"
@@ -60,6 +64,7 @@ except ModuleNotFoundError:
     ENV_PULL_WORKER_ID = "RENGINE_WORKER_ID"
     ENV_PULL_WORKER_TOKEN = "RENGINE_WORKER_PULL_TOKEN"
     DEFAULT_PULL_FAILURE_BACKOFF_MAX_DELAY = 300.0
+    DEFAULT_PULL_CHECKIN_INTERVAL_SECONDS = 60.0
     DEFAULT_PULL_HTTP_TIMEOUT = 120.0
     DEFAULT_PULL_JOB_TIMEOUT = 86400
     DEFAULT_PULL_MAX_CONSECUTIVE_FAILURES = 12
@@ -69,6 +74,10 @@ except ModuleNotFoundError:
 _SSL_CONTEXT_CACHE: ssl.SSLContext | None = None
 _SSL_DISABLE_WARNING_EMITTED = False
 TIMEOUT_EXIT_CODE = -1
+_CHECKIN_WARNING_THRESHOLD = 3
+_CHECKIN_LAST_ERROR_MAX_LEN = 2000
+_CHECKIN_LAST_ERROR_LOG_PREVIEW_LEN = 200
+logger = logging.getLogger(__name__)
 
 
 def _env(name: str, default: str = "") -> str:
@@ -113,7 +122,7 @@ def _is_non_retriable_http_code(code: int) -> bool:
 def _api_base() -> str:
     base = _env(ENV_PULL_API_BASE_URL)
     if not base:
-        sys.stderr.write(f"{ENV_PULL_API_BASE_URL} is required\n")
+        logger.error("%s is required", ENV_PULL_API_BASE_URL)
         sys.exit(1)
     return base.rstrip("/")
 
@@ -121,19 +130,19 @@ def _api_base() -> str:
 def _worker_id() -> int:
     raw = _env(ENV_PULL_WORKER_ID)
     if not raw:
-        sys.stderr.write(f"{ENV_PULL_WORKER_ID} is required\n")
+        logger.error("%s is required", ENV_PULL_WORKER_ID)
         sys.exit(1)
     try:
         return int(raw)
     except ValueError:
-        sys.stderr.write("RENGINE_WORKER_ID must be an integer\n")
+        logger.error("%s must be an integer", ENV_PULL_WORKER_ID)
         sys.exit(1)
 
 
 def _token() -> str:
     t = _env(ENV_PULL_WORKER_TOKEN)
     if not t:
-        sys.stderr.write(f"{ENV_PULL_WORKER_TOKEN} is required\n")
+        logger.error("%s is required", ENV_PULL_WORKER_TOKEN)
         sys.exit(1)
     return t
 
@@ -181,6 +190,13 @@ class PullAgentRuntimeConfig:
     failure_backoff_max_delay: float
     revoke_timeout: int
     job_timeout: int
+    checkin_interval_seconds: float
+
+
+@dataclass(frozen=True)
+class CheckinScheduleState:
+    consecutive_failures: int
+    next_checkin_at: float
 
 
 def _load_runtime_config() -> PullAgentRuntimeConfig:
@@ -192,21 +208,62 @@ def _load_runtime_config() -> PullAgentRuntimeConfig:
         failure_backoff_max_delay=backoff_max_delay,
         revoke_timeout=_revoke_timeout(),
         job_timeout=_load_job_timeout(),
+        checkin_interval_seconds=_load_checkin_interval_seconds(),
     )
 
 
 def _log_runtime_config(config: PullAgentRuntimeConfig) -> None:
     """Log effective runtime tuning once at startup."""
-    sys.stderr.write(
-        "pull-agent config: poll_interval=%.1fs max_consecutive_failures=%s backoff_max_delay=%.1fs revoke_timeout=%ss job_timeout=%ss\n"
-        % (
-            config.poll_interval,
-            config.max_consecutive_failures,
-            config.failure_backoff_max_delay,
-            config.revoke_timeout,
-            config.job_timeout,
-        )
+    checkin_mode = "disabled" if config.checkin_interval_seconds <= 0 else "enabled"
+    logger.info(
+        "pull-agent config: poll_interval=%.1fs max_consecutive_failures=%s backoff_max_delay=%.1fs revoke_timeout=%ss job_timeout=%ss checkin_interval=%.1fs checkin_mode=%s",
+        config.poll_interval,
+        config.max_consecutive_failures,
+        config.failure_backoff_max_delay,
+        config.revoke_timeout,
+        config.job_timeout,
+        config.checkin_interval_seconds,
+        checkin_mode,
     )
+
+
+def _load_checkin_interval_seconds() -> float:
+    """
+    Interval between pull-agent status check-ins.
+
+    <= 0 disables periodic check-ins.
+    """
+    raw = os.environ.get(ENV_PULL_CHECKIN_INTERVAL_SECONDS)
+    if raw is None:
+        return DEFAULT_PULL_CHECKIN_INTERVAL_SECONDS
+
+    normalized = raw.strip().lower()
+    if normalized in {"", "0", "false", "none", "off"}:
+        logger.info(
+            "%s=%r interpreted as disabled; periodic check-ins are disabled.",
+            ENV_PULL_CHECKIN_INTERVAL_SECONDS,
+            raw,
+        )
+        return 0.0
+
+    try:
+        parsed = float(raw)
+    except ValueError:
+        logger.warning(
+            "Invalid %s value; using default %.1fs",
+            ENV_PULL_CHECKIN_INTERVAL_SECONDS,
+            DEFAULT_PULL_CHECKIN_INTERVAL_SECONDS,
+        )
+        return DEFAULT_PULL_CHECKIN_INTERVAL_SECONDS
+
+    if parsed <= 0:
+        logger.info(
+            "%s=%r parsed as non-positive; periodic check-ins are disabled.",
+            ENV_PULL_CHECKIN_INTERVAL_SECONDS,
+            raw,
+        )
+        return 0.0
+    return parsed
 
 
 def _ssl_context() -> ssl.SSLContext | None:
@@ -215,9 +272,8 @@ def _ssl_context() -> ssl.SSLContext | None:
 
     if _env(ENV_PULL_SSL_VERIFY, "true").lower() in ("0", "false", "no"):
         if not _SSL_DISABLE_WARNING_EMITTED:
-            sys.stderr.write(
-                "Warning: TLS verification is disabled (RENGINE_PULL_SSL_VERIFY). "
-                "Connections to the reNgine API are not verified.\n"
+            logger.warning(
+                "TLS verification is disabled (RENGINE_PULL_SSL_VERIFY). Connections to the reNgine API are not verified."
             )
             _SSL_DISABLE_WARNING_EMITTED = True
         ctx = ssl.create_default_context()
@@ -262,7 +318,126 @@ def _complete(command_id: str, ok: bool, error: str = "") -> None:
     payload = json.dumps({"command_id": command_id, "ok": ok, "error": error[:2000]}).encode("utf-8")
     code, data = _request("POST", url, payload)
     if code != 200:
-        sys.stderr.write("complete failed %s: %s\n" % (code, data.decode("utf-8", errors="replace")[:500]))
+        logger.warning("complete failed %s: %s", code, data.decode("utf-8", errors="replace")[:500])
+
+
+def _checkin(
+    wid: int,
+    *,
+    api_reachable: bool = True,
+    last_error: str = "",
+    consecutive_failures: int,
+) -> bool:
+    """
+    Push worker API status for UI label updates.
+
+    This check-in is best-effort: failures are logged but do not affect
+    claim/backoff/liveness exit decisions for the pull-agent process.
+    """
+    url = f"{_api_base()}/secator/workers/{wid}/pull/checkin/"
+    last_error_for_checkin = (last_error or "")[:_CHECKIN_LAST_ERROR_MAX_LEN]
+    last_error_preview = last_error_for_checkin[:_CHECKIN_LAST_ERROR_LOG_PREVIEW_LEN]
+    payload = json.dumps(
+        {
+            "api_reachable": api_reachable,
+            "last_error": last_error_for_checkin,
+        }
+    ).encode("utf-8")
+    try:
+        code, data = _request("POST", url, payload)
+    except urllib.error.URLError as exc:
+        if consecutive_failures + 1 >= _CHECKIN_WARNING_THRESHOLD:
+            logger.warning(
+                "checkin request error consecutive_failures=%s api_reachable=%s last_error=%r error=%s",
+                consecutive_failures + 1,
+                api_reachable,
+                last_error_preview,
+                exc,
+            )
+        else:
+            logger.debug(
+                "checkin request error consecutive_failures=%s api_reachable=%s last_error=%r error=%s",
+                consecutive_failures + 1,
+                api_reachable,
+                last_error_preview,
+                exc,
+            )
+        return False
+    except Exception as exc:  # pragma: no cover - defensive guardrail
+        logger.warning(
+            "checkin unexpected error consecutive_failures=%s api_reachable=%s last_error=%r error=%s",
+            consecutive_failures + 1,
+            api_reachable,
+            last_error_preview,
+            exc,
+        )
+        return False
+
+    if code == 200:
+        return True
+
+    body_preview = data.decode("utf-8", errors="replace")[:500]
+    if consecutive_failures + 1 >= _CHECKIN_WARNING_THRESHOLD:
+        logger.warning(
+            "checkin failed http_code=%s consecutive_failures=%s api_reachable=%s last_error=%r body=%s",
+            code,
+            consecutive_failures + 1,
+            api_reachable,
+            last_error_preview,
+            body_preview,
+        )
+        return False
+
+    logger.debug(
+        "checkin failed http_code=%s consecutive_failures=%s api_reachable=%s last_error=%r body=%s",
+        code,
+        consecutive_failures + 1,
+        api_reachable,
+        last_error_preview,
+        body_preview,
+    )
+    return False
+
+
+def _maybe_run_periodic_checkin(
+    *,
+    should_checkin: bool,
+    worker_id: int,
+    current_next_checkin_at: float,
+    checkin_interval_seconds: float,
+    consecutive_checkin_failures: int,
+    api_reachable: bool,
+    last_error: str,
+) -> CheckinScheduleState:
+    """
+    Execute one periodic check-in attempt if due.
+
+    Returns the updated check-in schedule state.
+    """
+    if not should_checkin:
+        return CheckinScheduleState(
+            consecutive_failures=consecutive_checkin_failures,
+            next_checkin_at=current_next_checkin_at,
+        )
+
+    try:
+        checkin_ok = _checkin(
+            worker_id,
+            api_reachable=api_reachable,
+            last_error=last_error,
+            consecutive_failures=consecutive_checkin_failures,
+        )
+    except Exception as exc:  # pragma: no cover - defensive guardrail
+        logger.warning("checkin failed with unexpected exception: %s", exc)
+        checkin_ok = False
+    updated_failures = 0 if checkin_ok else consecutive_checkin_failures + 1
+    next_checkin_at = (
+        time.monotonic() + checkin_interval_seconds if checkin_interval_seconds > 0 else 0.0
+    )
+    return CheckinScheduleState(
+        consecutive_failures=updated_failures,
+        next_checkin_at=next_checkin_at,
+    )
 
 
 def _run_subprocess(argv: list[str], timeout: int | None) -> tuple[int, str, str]:
@@ -301,9 +476,15 @@ def _log_final_exit_summary(
     tail = (last_body_preview or "")[:1000]
     err = (last_error or "")[:500]
     code_part = "None" if last_http_code is None else str(last_http_code)
-    sys.stderr.write(
-        "FINAL pull-agent exit: worker_id=%s reason=%s consecutive_failures=%s/%s last_http=%s last_error=%s last_body_preview=%s\n"
-        % (worker_id, reason, consecutive_claim_failures, max_failures, code_part, err, repr(tail))
+    logger.error(
+        "FINAL pull-agent exit: worker_id=%s reason=%s consecutive_failures=%s/%s last_http=%s last_error=%s last_body_preview=%s",
+        worker_id,
+        reason,
+        consecutive_claim_failures,
+        max_failures,
+        code_part,
+        err,
+        repr(tail),
     )
 
 
@@ -412,9 +593,7 @@ def main() -> None:
     )
     runner_script = Path(_env(ENV_PULL_RUNNER_SCRIPT, str(scripts_dir / "run_secator_job.py")))
     if not runner_script.is_file():
-        sys.stderr.write(
-            "Error: RENGINE_PULL_RUNNER_SCRIPT is misconfigured or missing: %s\n" % (runner_script,)
-        )
+        logger.error("RENGINE_PULL_RUNNER_SCRIPT is misconfigured or missing: %s", runner_script)
         sys.exit(2)
     runtime_config = _load_runtime_config()
     _log_runtime_config(runtime_config)
@@ -429,8 +608,23 @@ def main() -> None:
     last_claim_http_code: int | None = None
     last_claim_body_preview: str = ""
     last_claim_error: str = ""
+    checkin_last_error: str = ""
+    checkin_api_reachable = True
+    consecutive_checkin_failures = 0
+    # Uses monotonic time only for local scheduling; API persists wall-clock
+    # timestamps independently (`last_status_at`), so these clocks are not compared.
+    next_checkin_at = (
+        time.monotonic() + runtime_config.checkin_interval_seconds
+        if runtime_config.checkin_interval_seconds > 0
+        else 0.0
+    )
 
     while True:
+        now = time.monotonic()
+        should_checkin = (
+            runtime_config.checkin_interval_seconds > 0
+            and now >= next_checkin_at
+        )
         poll_interval = runtime_config.poll_interval
         try:
             code, data = _request("POST", claim_url, b"{}")
@@ -439,13 +633,18 @@ def main() -> None:
             last_claim_http_code = getattr(e, "code", None)
             last_claim_error = str(e)
             last_claim_body_preview = ""
+            checkin_api_reachable = False
+            checkin_last_error = last_claim_error
             delay = _compute_backoff_delay(consecutive_claim_failures, poll_interval, backoff_max_delay)
-            sys.stderr.write(
-                "claim request error (%s/%s); retrying in %.1fs: %s\n"
-                % (consecutive_claim_failures, max_failures, delay, e)
+            logger.warning(
+                "claim request error (%s/%s); retrying in %.1fs: %s",
+                consecutive_claim_failures,
+                max_failures,
+                delay,
+                e,
             )
             if _is_non_retriable_http_code(getattr(e, "code", 0) or 0):
-                sys.stderr.write("Non-retriable claim request error, exiting.\n")
+                logger.error("Non-retriable claim request error, exiting.")
                 _log_final_exit_summary(
                     worker_id=wid,
                     reason="non-retriable claim request error",
@@ -457,7 +656,7 @@ def main() -> None:
                 )
                 sys.exit(1)
             if consecutive_claim_failures >= max_failures:
-                sys.stderr.write("Too many consecutive claim errors; exiting.\n")
+                logger.error("Too many consecutive claim errors; exiting.")
                 _log_final_exit_summary(
                     worker_id=wid,
                     reason="too many consecutive claim request errors",
@@ -473,6 +672,19 @@ def main() -> None:
 
         if code == 204:
             consecutive_claim_failures = 0
+            checkin_api_reachable = True
+            checkin_last_error = ""
+            checkin_state = _maybe_run_periodic_checkin(
+                should_checkin=should_checkin,
+                worker_id=wid,
+                current_next_checkin_at=next_checkin_at,
+                checkin_interval_seconds=runtime_config.checkin_interval_seconds,
+                consecutive_checkin_failures=consecutive_checkin_failures,
+                api_reachable=checkin_api_reachable,
+                last_error=checkin_last_error,
+            )
+            consecutive_checkin_failures = checkin_state.consecutive_failures
+            next_checkin_at = checkin_state.next_checkin_at
             time.sleep(poll_interval)
             continue
         if code != 200:
@@ -481,18 +693,18 @@ def main() -> None:
             last_claim_http_code = code
             last_claim_body_preview = data.decode("utf-8", errors="replace")[:500]
             last_claim_error = ""
-            sys.stderr.write(
-                "claim failed (http=%s, %s/%s); retrying in %.1fs: %s\n"
-                % (
-                    last_claim_http_code,
-                    consecutive_claim_failures,
-                    max_failures,
-                    delay,
-                    last_claim_body_preview,
-                )
+            checkin_api_reachable = False
+            checkin_last_error = f"claim failed http={code}: {last_claim_body_preview}"
+            logger.warning(
+                "claim failed (http=%s, %s/%s); retrying in %.1fs: %s",
+                last_claim_http_code,
+                consecutive_claim_failures,
+                max_failures,
+                delay,
+                last_claim_body_preview,
             )
             if _is_non_retriable_http_code(code):
-                sys.stderr.write("Non-retriable auth/config error; exiting.\n")
+                logger.error("Non-retriable auth/config error; exiting.")
                 _log_final_exit_summary(
                     worker_id=wid,
                     reason="non-retriable auth/config error",
@@ -504,7 +716,7 @@ def main() -> None:
                 )
                 sys.exit(1)
             if consecutive_claim_failures >= max_failures:
-                sys.stderr.write("Too many consecutive claim errors; exiting.\n")
+                logger.error("Too many consecutive claim errors; exiting.")
                 _log_final_exit_summary(
                     worker_id=wid,
                     reason="too many consecutive claim errors",
@@ -530,21 +742,21 @@ def main() -> None:
             last_claim_http_code = code
             last_claim_body_preview = preview
             last_claim_error = str(e)
-            sys.stderr.write(
-                "claim JSON decode error (%s/%s); retrying in %.1fs | http=%s | json_error=%s (line %s col %s) | body_preview=%s\n"
-                % (
-                    consecutive_claim_failures,
-                    max_failures,
-                    delay,
-                    code,
-                    e.msg,
-                    getattr(e, "lineno", "?"),
-                    getattr(e, "colno", "?"),
-                    repr(preview),
-                )
+            checkin_api_reachable = False
+            checkin_last_error = "claim JSON decode error: %s" % e
+            logger.warning(
+                "claim JSON decode error (%s/%s); retrying in %.1fs | http=%s | json_error=%s (line %s col %s) | body_preview=%s",
+                consecutive_claim_failures,
+                max_failures,
+                delay,
+                code,
+                e.msg,
+                getattr(e, "lineno", "?"),
+                getattr(e, "colno", "?"),
+                repr(preview),
             )
             if consecutive_claim_failures >= max_failures:
-                sys.stderr.write("Too many consecutive claim errors; exiting.\n")
+                logger.error("Too many consecutive claim errors; exiting.")
                 _log_final_exit_summary(
                     worker_id=wid,
                     reason="too many consecutive claim errors (json decode)",
@@ -559,6 +771,19 @@ def main() -> None:
             continue
 
         consecutive_claim_failures = 0
+        checkin_api_reachable = True
+        checkin_last_error = ""
+        checkin_state = _maybe_run_periodic_checkin(
+            should_checkin=should_checkin,
+            worker_id=wid,
+            current_next_checkin_at=next_checkin_at,
+            checkin_interval_seconds=runtime_config.checkin_interval_seconds,
+            consecutive_checkin_failures=consecutive_checkin_failures,
+            api_reachable=checkin_api_reachable,
+            last_error=checkin_last_error,
+        )
+        consecutive_checkin_failures = checkin_state.consecutive_failures
+        next_checkin_at = checkin_state.next_checkin_at
         command_id = msg.get("command_id") or ""
         kind = msg.get("kind") or ""
         payload = msg.get("payload") or {}

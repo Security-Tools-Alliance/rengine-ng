@@ -27,6 +27,7 @@ class TestWorkerPullApi(BaseTestCase):
         )
         self.claim_url = reverse("api:secator_worker_pull_claim", kwargs={"worker_id": self.worker.id})
         self.complete_url = reverse("api:secator_worker_pull_complete", kwargs={"worker_id": self.worker.id})
+        self.checkin_url = reverse("api:secator_worker_pull_checkin", kwargs={"worker_id": self.worker.id})
 
     def test_claim_without_token_returns_403(self) -> None:
         r = self.client.post(self.claim_url, content_type="application/json")
@@ -106,3 +107,85 @@ class TestWorkerPullApi(BaseTestCase):
             HTTP_X_RENGINE_WORKER_PULL_TOKEN=self.worker.pull_token,
         )
         self.assertEqual(r.status_code, 403)
+
+    def test_checkin_updates_worker_status(self) -> None:
+        r = self.client.post(
+            self.checkin_url,
+            data=json.dumps({"api_reachable": True, "last_error": ""}),
+            content_type="application/json",
+            HTTP_X_RENGINE_WORKER_PULL_TOKEN=self.worker.pull_token,
+        )
+        self.assertEqual(r.status_code, 200)
+        self.worker.refresh_from_db()
+        self.assertTrue(self.worker.api_reachable)
+        self.assertIsNone(self.worker.last_error)
+        self.assertIsNotNone(self.worker.last_status_at)
+
+    def test_checkin_preserves_last_error_when_key_is_absent(self) -> None:
+        self.worker.last_error = "previous error"
+        self.worker.save_partial(update_fields=["last_error"])
+
+        r = self.client.post(
+            self.checkin_url,
+            data=json.dumps({"api_reachable": False}),
+            content_type="application/json",
+            HTTP_X_RENGINE_WORKER_PULL_TOKEN=self.worker.pull_token,
+        )
+        self.assertEqual(r.status_code, 200)
+        self.worker.refresh_from_db()
+        self.assertFalse(self.worker.api_reachable)
+        self.assertEqual(self.worker.last_error, "previous error")
+
+    def test_checkin_rejects_last_error_when_non_string_value_is_provided(self) -> None:
+        self.worker.last_error = "previous error"
+        self.worker.save_partial(update_fields=["last_error"])
+
+        r = self.client.post(
+            self.checkin_url,
+            data=json.dumps({"api_reachable": True, "last_error": False}),
+            content_type="application/json",
+            HTTP_X_RENGINE_WORKER_PULL_TOKEN=self.worker.pull_token,
+        )
+        self.assertEqual(r.status_code, 400)
+        self.worker.refresh_from_db()
+        self.assertEqual(self.worker.last_error, "previous error")
+
+    def test_checkin_clears_last_error_when_null_is_provided(self) -> None:
+        self.worker.last_error = "previous error"
+        self.worker.save_partial(update_fields=["last_error"])
+
+        r = self.client.post(
+            self.checkin_url,
+            data=json.dumps({"api_reachable": True, "last_error": None}),
+            content_type="application/json",
+            HTTP_X_RENGINE_WORKER_PULL_TOKEN=self.worker.pull_token,
+        )
+        self.assertEqual(r.status_code, 200)
+        self.worker.refresh_from_db()
+        self.assertTrue(self.worker.api_reachable)
+        self.assertIsNone(self.worker.last_error)
+
+    def test_checkin_rejects_last_error_when_too_long(self) -> None:
+        too_long_error = "x" * 4001
+        r = self.client.post(
+            self.checkin_url,
+            data=json.dumps({"api_reachable": True, "last_error": too_long_error}),
+            content_type="application/json",
+            HTTP_X_RENGINE_WORKER_PULL_TOKEN=self.worker.pull_token,
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_checkin_preserves_api_reachable_when_key_is_absent(self) -> None:
+        self.worker.api_reachable = False
+        self.worker.save_partial(update_fields=["api_reachable"])
+
+        r = self.client.post(
+            self.checkin_url,
+            data=json.dumps({"last_error": "intermittent network issue"}),
+            content_type="application/json",
+            HTTP_X_RENGINE_WORKER_PULL_TOKEN=self.worker.pull_token,
+        )
+        self.assertEqual(r.status_code, 200)
+        self.worker.refresh_from_db()
+        self.assertFalse(self.worker.api_reachable)
+        self.assertEqual(self.worker.last_error, "intermittent network issue")
