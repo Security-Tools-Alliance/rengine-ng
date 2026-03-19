@@ -55,6 +55,55 @@ class TestEndPointViewSet(BaseTestCase):
             self.data_generator.endpoint.http_url,
         )
 
+    def test_datatable_advanced_search_http_url_equals(self):
+        """DataTables search[value] supports field=value syntax for endpoints."""
+        self.data_generator.create_endpoint(name="admin")
+        api_url = reverse("api:endpoints-list")
+        expected_url = self.data_generator.endpoint.http_url
+        response = self.client.get(
+            api_url,
+            {
+                "project": self.data_generator.project.slug,
+                "target_id": self.data_generator.target.id,
+                "start": "0",
+                "length": "10",
+                "draw": "1",
+                "search[value]": f"http_url={expected_url}",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("data", response.data)
+        returned_urls = [row.get("http_url") for row in response.data["data"]]
+        self.assertIn(expected_url, returned_urls)
+
+    def test_datatable_advanced_search_invalid_paren_ignored(self):
+        """Unmatched parenthesis leaves endpoint list unfiltered."""
+        api_url = reverse("api:endpoints-list")
+        baseline = self.client.get(
+            api_url,
+            {
+                "project": self.data_generator.project.slug,
+                "target_id": self.data_generator.target.id,
+                "start": "0",
+                "length": "50",
+                "draw": "1",
+            },
+        )
+        bad = self.client.get(
+            api_url,
+            {
+                "project": self.data_generator.project.slug,
+                "target_id": self.data_generator.target.id,
+                "start": "0",
+                "length": "50",
+                "draw": "1",
+                "search[value]": "(http_url=a",
+            },
+        )
+        self.assertEqual(baseline.status_code, status.HTTP_200_OK)
+        self.assertEqual(bad.status_code, status.HTTP_200_OK)
+        self.assertEqual(baseline.data.get("recordsFiltered"), bad.data.get("recordsFiltered"))
+
 
 class TestEndPointChangesViewSet(BaseTestCase):
     """Test case for endpoint changes viewset."""

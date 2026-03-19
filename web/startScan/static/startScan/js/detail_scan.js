@@ -336,6 +336,12 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
         }
         endpoint_table = $("#endpoint_results").DataTable(endpointTableOpts);
     }
+    if (window.RengineAdvancedSearch && typeof window.RengineAdvancedSearch.registerDataTable === "function") {
+        window.RengineAdvancedSearch.registerDataTable("endpoints", endpoint_table);
+    } else {
+        window.RENGINE_TABLES = window.RENGINE_TABLES || {};
+        window.RENGINE_TABLES.endpoints = endpoint_table;
+    }
 
     const endpointSnackbarMsg = typeof window.getRengineRowGroupSnackbarMessage === 'function'
         ? window.getRengineRowGroupSnackbarMessage('Grouping cleared', 'Endpoints grouped by {label}')
@@ -1053,11 +1059,12 @@ function escapeHtml(text) {
 }
 
 function getRunnerIcon(runnerType) {
-	if (runnerType === 'scan') {
+	const normalizedRunnerType = String(runnerType || '').toLowerCase();
+	if (normalizedRunnerType === 'scan') {
 		return '<i class="fas fa-search me-2 text-primary"></i>';
-	} else if (runnerType === 'workflow') {
+	} else if (normalizedRunnerType === 'workflow') {
 		return '<i class="fas fa-project-diagram me-2 text-info"></i>';
-	} else if (runnerType === 'task') {
+	} else if (normalizedRunnerType === 'task') {
 		return '<i class="fas fa-tasks me-2 text-success"></i>';
 	}
 	return '<i class="fas fa-terminal me-2 text-secondary"></i>';
@@ -1093,7 +1100,7 @@ function create_log_element(log) {
 	const logElement = document.createElement("div");
 	logElement.className = "command-log-entry mb-1";
 	logElement.setAttribute("data-command-id", log.id);
-	const runnerType = log.runner_type || '';
+	const runnerType = String(log.runner_type || '').toLowerCase();
 	const commandName = log.name || log.workflow_name || '';
 	if (runnerType) {
 		logElement.setAttribute("data-runner-type", runnerType);
@@ -1261,8 +1268,17 @@ if (typeof window !== 'undefined') {
 
 function get_logs_modal(scan_id = null, activity_id = null, project_slug = null, runner_id = null) {
 	const slug = project_slug || (typeof current_project_slug !== 'undefined' ? current_project_slug : '');
-	let contextScanId = scan_id;
-	if (contextScanId == null) {
+	const explicitScanId =
+		scan_id != null && scan_id !== '' && !Number.isNaN(parseInt(String(scan_id), 10))
+			? parseInt(String(scan_id), 10)
+			: null;
+	const activityIdNum =
+		activity_id != null && activity_id !== '' && !Number.isNaN(parseInt(String(activity_id), 10))
+			? parseInt(String(activity_id), 10)
+			: null;
+	const hasActivityFocus = activityIdNum != null;
+	let contextScanId = explicitScanId;
+	if (contextScanId == null && !hasActivityFocus) {
 		const summaryInput = document.getElementById('summary_identifier_val');
 		if (summaryInput && summaryInput.value) {
 			const parsed = parseInt(summaryInput.value, 10);
@@ -1272,16 +1288,15 @@ function get_logs_modal(scan_id = null, activity_id = null, project_slug = null,
 		}
 	}
 	const hasScanContext = contextScanId != null;
-	const expandForActivity = activity_id != null || runner_id != null;
 
 	let url;
 	let title;
-	if (hasScanContext) {
+	if (hasActivityFocus) {
+		url = `/scan/${slug}/logs/?activity_id=${encodeURIComponent(activityIdNum)}`;
+		title = `Logs for activity #${activityIdNum}`;
+	} else if (hasScanContext) {
 		url = `/scan/${slug}/logs/?scan_id=${encodeURIComponent(contextScanId)}`;
 		title = `Logs for scan #${contextScanId}`;
-	} else if (expandForActivity && activity_id != null) {
-		url = `/scan/${slug}/logs/?activity_id=${activity_id}`;
-		title = `Logs for activity #${activity_id}`;
 	} else {
 		url = `/scan/${slug}/logs/`;
 		title = 'Logs';
@@ -1322,17 +1337,23 @@ function get_logs_modal(scan_id = null, activity_id = null, project_slug = null,
 				$('#xl-modal-content').html(bodyHtml);
 				if (window.ModalManager) ModalManager.showXlOnly();
 			}
-			if (expandForActivity || hasScanContext) {
+			if (hasActivityFocus || hasScanContext) {
+				const runnerIdNum =
+					runner_id != null &&
+					runner_id !== '' &&
+					!Number.isNaN(parseInt(String(runner_id), 10))
+						? parseInt(String(runner_id), 10)
+						: null;
 				window.currentLogsModalContext = {
 					isOpen: true,
-					activity_id: expandForActivity ? activity_id : null,
-					runner_id: expandForActivity ? runner_id : null,
-					scan_id: hasScanContext ? contextScanId : null,
+					activity_id: hasActivityFocus ? activityIdNum : null,
+					runner_id: hasActivityFocus ? runnerIdNum : null,
+					scan_id: hasActivityFocus ? null : contextScanId,
 				};
 			} else {
 				window.currentLogsModalContext = null;
 			}
-			if (expandForActivity) {
+			if (hasActivityFocus) {
 				const runExpandCollapses = function () {
 					const modalContent = document.getElementById('xl-modal-content');
 					if (!modalContent) return;
@@ -1341,7 +1362,9 @@ function get_logs_modal(scan_id = null, activity_id = null, project_slug = null,
 						const id = collapseElement.id;
 						if (!id) return;
 						collapseElement.classList.add('show');
-						const trigger = modalContent.querySelector('.command-log-header[data-bs-target="#' + id + '"]');
+						const trigger = modalContent.querySelector(
+							'.command-log-header[data-bs-target="#' + id + '"]'
+						);
 						if (trigger) {
 							trigger.setAttribute('aria-expanded', 'true');
 						}

@@ -199,6 +199,51 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
         self.assertIn("name", response.data["results"][0])
         self.assertIn("is_interesting", response.data["results"][0])
 
+    def test_datatable_advanced_search_name_equals(self):
+        """DataTables search[value] supports field=value syntax for subdomains."""
+        self.data_generator.create_subdomain(name="api-dev.example.invalid")
+        api_url = reverse("api:subdomain-datatable-list")
+        response = self.client.get(
+            api_url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": "0",
+                "length": "10",
+                "draw": "1",
+                "search[value]": "name=api-dev.example.invalid",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("data", response.data)
+        returned_names = [row.get("name") for row in response.data["data"]]
+        self.assertIn("api-dev.example.invalid", returned_names)
+
+    def test_datatable_advanced_search_invalid_paren_ignored(self):
+        """Unmatched parenthesis is ignored (no filter change vs unparseable)."""
+        api_url = reverse("api:subdomain-datatable-list")
+        baseline = self.client.get(
+            api_url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": "0",
+                "length": "50",
+                "draw": "1",
+            },
+        )
+        bad = self.client.get(
+            api_url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": "0",
+                "length": "50",
+                "draw": "1",
+                "search[value]": "(name=test",
+            },
+        )
+        self.assertEqual(baseline.status_code, status.HTTP_200_OK)
+        self.assertEqual(bad.status_code, status.HTTP_200_OK)
+        self.assertEqual(baseline.data.get("recordsFiltered"), bad.data.get("recordsFiltered"))
+
 
 class TestInterestingSubdomainViewSet(BaseTestCase):
     """Test case for the Interesting Subdomain ViewSet API."""

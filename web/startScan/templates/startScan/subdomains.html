@@ -7,6 +7,7 @@ All subdomains
 {% endblock title %}
 
 {% block custom_js_css_link %}
+<link href="{% static 'plugins/select2/select2.min.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/lightbox/css/lightbox.css' %}" rel="stylesheet" />
 <link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
@@ -51,7 +52,8 @@ window.DETAIL_SCAN_API_CERTIFICATES_LIST = "{% url 'api:certificates_list' %}";
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
 <script src="{% static 'assets/js/clipboard.min.js' %}"></script>
-<script src="{% static 'startScan/js/subdomains-suggestions.js' %}"></script>
+<script src="{% static 'plugins/select2/select2.min.js' %}"></script>
+{% include 'shared/_advanced_search_scripts.html' %}
 <script src="{% static 'custom/subdomain.js' %}"></script>
 <script type="text/javascript">
 window.SUBDOMAIN_DATATABLE_BASE_URL = "{% url 'api:subdomain-datatable-list' %}?project={{ current_project.slug|escapejs }}&format=datatables";
@@ -332,6 +334,7 @@ $(document).ready(function() {
 				}
 			},
 		}));
+	window.subdomain_datatables = subdomain_datatables;
 
 		window.attachRengineDatatableRowGroupSelector(subdomain_datatables, {
 			selector: 'input[name="grouping_subd_row"]',

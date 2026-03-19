@@ -144,6 +144,62 @@ form-control:disabled, .form-control[readonly]{
   height: 34px !important;
 }
 
+/*
+ * Build filter value: Select2 after init must match adjacent .form-select.form-select-sm
+ * (same font-size 0.7875rem, padding, Bootstrap chevron — avoids jump vs native "Loading…" state).
+ */
+.rengine-advanced-search-builder select.rengine-advanced-search-builder-value + .select2-container {
+  max-width: 10rem;
+  vertical-align: middle;
+}
+/* Match .form-select-sm; only !important where global Select2 rules win */
+.rengine-advanced-search-builder
+  select.rengine-advanced-search-builder-value
+  + .select2-container.select2-container--default
+  .select2-selection--single {
+  display: flex;
+  align-items: center;
+  height: calc(0.56rem + 1.5 * 0.7875rem + 2px);
+  min-height: calc(0.56rem + 1.5 * 0.7875rem + 2px);
+  padding: 0 2.15rem 0 0.8rem;
+  font-size: 0.7875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #6c757d;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 12px 9px;
+  border: 1px solid #ced4da;
+  border-radius: 0.25rem;
+  box-sizing: border-box;
+}
+.rengine-advanced-search-builder
+  select.rengine-advanced-search-builder-value
+  + .select2-container.select2-container--default
+  .select2-selection--single
+  .select2-selection__rendered {
+  line-height: 1.5;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+}
+.rengine-advanced-search-builder
+  select.rengine-advanced-search-builder-value
+  + .select2-container.select2-container--default
+  .select2-selection--single
+  .select2-selection__arrow {
+  display: none !important;
+}
+.rengine-advanced-search-builder
+  select.rengine-advanced-search-builder-value
+  + .select2-container.select2-container--default
+  .select2-selection--single
+  .select2-selection__clear {
+  display: none !important;
+}
+
 .badge {
   font-weight: 600 !important;
   line-height: 1.4 !important;
@@ -273,9 +329,11 @@ table.domain_details_table td:nth-child(1) {
   border-radius: 6px;
   position: relative;
   box-shadow: 0px 1px 5px 3px rgba(0,0,0,0.12);
+  padding-bottom: .75rem;
 }
 
-.search-input input{
+/* Legacy tall search bar (CodingNepal-style); skip DataTable advanced search bars */
+.search-input:not([data-advanced-search]) input{
   height: 55px;
   width: 100%;
   outline: none;
@@ -286,13 +344,77 @@ table.domain_details_table td:nth-child(1) {
   box-shadow: 0px 1px 5px rgba(0,0,0,0.1);
 }
 
-.search-input button{
+.search-input:not([data-advanced-search]) button{
   height: 55px;
   font-size: 16px;
 }
 
-.search-input.active input{
+.search-input:not([data-advanced-search]).active input{
   border-radius: 5px 5px 0 0;
+}
+
+.search-input[data-advanced-search] .rengine-advanced-search-builder {
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.search-input[data-advanced-search]
+  .rengine-advanced-search-builder
+  > .d-flex.flex-wrap.align-items-center.gap-2
+  > * {
+  margin-bottom: 0 !important;
+}
+
+/* Advanced search: slightly taller field + Search / clear buttons */
+.search-input[data-advanced-search] .input-group-sm > .form-control {
+  min-height: 2.5rem;
+  padding-top: 0.45rem;
+  padding-bottom: 0.45rem;
+}
+.search-input[data-advanced-search] .input-group-append .btn-sm {
+  min-height: 2.5rem;
+  min-width: 2.5rem;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.search-input[data-advanced-search] .input-group-append .btn-primary.btn-sm {
+  padding-left: 0.85rem;
+  padding-right: 0.85rem;
+  min-width: auto;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.search-input[data-advanced-search] .input-group-append .rengine-advanced-search-clear.btn-sm {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background-color: rgba(241, 245, 249, 0.85);
+  color: #64748b;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right-width: 0;
+  box-shadow: none;
+}
+.search-input[data-advanced-search] .input-group-append .rengine-advanced-search-clear.btn-sm:hover {
+  background-color: #e2e8f0;
+  border-color: rgba(148, 163, 184, 0.5);
+  color: #475569;
+}
+.search-input[data-advanced-search] .input-group-append .rengine-advanced-search-clear.btn-sm:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.35);
+  border-color: rgba(100, 116, 139, 0.45);
+  color: #334155;
+}
+.search-input[data-advanced-search] .input-group-append .rengine-advanced-search-clear.btn-sm:active {
+  background-color: #cbd5e1;
+  color: #334155;
+}
+
+.search-input.active .autocom-box li.rengine-advanced-search-suggestion-active {
+  background-color: var(--bs-gray-200, #e9ecef);
+  border-radius: 4px;
 }
 
 .search-input .autocom-box{
@@ -328,7 +450,7 @@ table.domain_details_table td:nth-child(1) {
   background: #efefef;
 }
 
-.search-input .icon{
+.search-input:not([data-advanced-search]) .icon{
   position: absolute;
   right: 0px;
   top: 0px;

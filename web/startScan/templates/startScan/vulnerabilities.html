@@ -7,6 +7,7 @@ All Vulnerabilities
 {% endblock title %}
 
 {% block custom_js_css_link %}
+<link href="{% static 'plugins/select2/select2.min.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.css' %}" rel="stylesheet" type="text/css" />
 {% endblock custom_js_css_link %}
 
@@ -28,7 +29,8 @@ Vulnerabilities
 {% block page_level_script %}
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
-<script src="{% static 'startScan/js/vulnerability-datatables-suggestions.js' %}"></script>
+<script src="{% static 'plugins/select2/select2.min.js' %}"></script>
+{% include 'shared/_advanced_search_scripts.html' %}
 <script type="text/javascript">
 window.VULN_ROW_GROUP_COOKIE_KEY = "{{ datatable_row_group_cookie_key|default:''|escapejs }}";
 window.VULN_ROW_GROUP_SELECTOR = "{{ datatable_row_group_selector|default:''|escapejs }}";
@@ -131,6 +133,7 @@ $(document).ready(function() {
 			}
 		},
 	}));
+	window.vulnerability_table = vulnerability_table;
 
 	$('#vulnerability-search-button').click(function () {
 		vulnerability_table.search($('#vulnerability-search').val()).draw() ;

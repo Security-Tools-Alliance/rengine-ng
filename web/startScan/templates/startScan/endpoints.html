@@ -7,6 +7,7 @@ All Endpoints
 {% endblock title %}
 
 {% block custom_js_css_link %}
+<link href="{% static 'plugins/select2/select2.min.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.css' %}" rel="stylesheet" type="text/css" />
 {% endblock custom_js_css_link %}
 
@@ -21,7 +22,8 @@ All Endpoints
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
 <script src="{% static 'assets/js/clipboard.min.js' %}"></script>
-<script src="{% static 'startScan/js/endpoint-datatables-suggestions.js' %}"></script>
+<script src="{% static 'plugins/select2/select2.min.js' %}"></script>
+{% include 'shared/_advanced_search_scripts.html' %}
 <script type="text/javascript">
 $(document).ready(function() {
   const ps = new PerfectScrollbar(document.querySelector('.endpoint-search'));

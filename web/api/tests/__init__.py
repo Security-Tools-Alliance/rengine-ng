@@ -1,5 +1,6 @@
 from utils.test_base import BaseTestCase
 
+from .test_advanced_search import TestAdvancedSearchParser
 from .test_endpoint import (
     TestEndPointChangesViewSet,
     TestEndPointViewSet,
@@ -91,6 +92,8 @@ from .test_vulnerability import (
 __all__ = [
     # Base
     "BaseTestCase",
+    # test_advanced_search
+    "TestAdvancedSearchParser",
     # test_endpoint
     "TestEndPointChangesViewSet",
     "TestEndPointViewSet",

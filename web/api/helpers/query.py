@@ -11,6 +11,7 @@ from typing import Any, Optional, Union
 from django.db.models import Max, Prefetch, Q
 from django.db.models.query import QuerySet
 
+from reNgine.core.data import safe_int_cast
 from reNgine.definitions import (
     FAILED_TASK,
     RUNNING_TASK,
@@ -84,6 +85,38 @@ def get_scan_status_querysets(
         "current_tasks": current_tasks,
         "recently_completed_tasks": recently_completed_tasks,
     }
+
+
+def build_endpoint_datatable_queryset(request: Any) -> QuerySet:
+    """
+    EndPoint rows for the endpoint DataTable: latest id per http_url within request scope.
+    Same filters as EndPointViewSet list / advanced-search distinct values.
+    """
+    from startScan.models import EndPoint
+
+    req = datatable_request_params(request)
+    scan_id = safe_int_cast(req.get("scan_history")) or safe_int_cast(req.get("scan_id"))
+    target_id = safe_int_cast(req.get("target_id"))
+    url_query = req.get("query_param")
+    subdomain_id = safe_int_cast(req.get("subdomain_id"))
+    project = (req.get("project") or "").strip()
+    if not project:
+        return EndPoint.objects.none()
+
+    endpoints = EndPoint.objects.filter(scan_history__target__project__slug=project)
+    if scan_id:
+        endpoints = endpoints.filter(scan_history__id=scan_id)
+    if url_query:
+        endpoints = endpoints.filter(Q(domain__name=url_query))
+    if "gf_tag" in req and req.get("gf_tag"):
+        endpoints = endpoints.filter(matched_gf_patterns__icontains=req.get("gf_tag"))
+    if target_id:
+        endpoints = endpoints.filter(domain__scan_history__target_id=target_id)
+    if subdomain_id:
+        endpoints = endpoints.filter(subdomain__id=subdomain_id)
+
+    latest_ids = endpoints.values("http_url").annotate(max_id=Max("id")).values_list("max_id", flat=True)
+    return EndPoint.objects.filter(id__in=latest_ids).order_by("-scan_history_id", "-id")
 
 
 def build_subdomain_datatable_queryset(
@@ -200,6 +233,78 @@ def build_subdomain_datatable_queryset(
         )
     )
     return queryset, datatable_interesting_names
+
+
+def datatable_request_params(request: Any) -> Any:
+    """Query dict for DataTable / advanced-search value requests (DRF or WSGI)."""
+    return request.query_params if hasattr(request, "query_params") else request.GET
+
+
+def parse_subdomain_datatable_request(request: Any) -> dict[str, Any]:
+    """
+    Parsed filter params for subdomain DataTable and distinct-value APIs.
+    Single source for SubdomainViewSet.get_queryset and advanced_search_values.
+    """
+    req = datatable_request_params(request)
+    return {
+        "project_slug": (req.get("project") or "").strip(),
+        "scan_id": safe_int_cast(req.get("scan_id")),
+        "target_id": safe_int_cast(req.get("target_id")),
+        "url_query": req.get("query_param"),
+        "ip_address": req.get("ip_address"),
+        "name": req.get("name"),
+        "is_important": "is_important" in req,
+        "only_directory": "only_directory" in req,
+    }
+
+
+def subdomain_datatable_from_request(request: Any) -> tuple[QuerySet, Any]:
+    """Subdomain queryset and interesting-names set; same scope as the DataTable list."""
+    kwargs = parse_subdomain_datatable_request(request)
+    return build_subdomain_datatable_queryset(**kwargs)
+
+
+def build_vulnerability_datatable_base_queryset(request: Any) -> QuerySet:
+    """
+    Vulnerability rows scoped like VulnerabilityViewSet (filters only, no prefetch).
+    Used by distinct-value API and list view base filter.
+    """
+    from startScan.models import Subdomain, Vulnerability
+
+    req = datatable_request_params(request)
+    scan_id = safe_int_cast(req.get("scan_history"))
+    target_id = safe_int_cast(req.get("target_id"))
+    domain = req.get("domain")
+    severity = req.get("severity")
+    subdomain_id = safe_int_cast(req.get("subdomain_id"))
+    subdomain_name = req.get("subdomain")
+    vulnerability_name = req.get("vulnerability_name")
+    slug = (req.get("project") or "").strip()
+
+    if slug:
+        vulnerabilities = Vulnerability.objects.filter(scan_history__target__project__slug=slug)
+    else:
+        vulnerabilities = Vulnerability.objects.all()
+
+    if scan_id:
+        qs = vulnerabilities.filter(scan_history__id=scan_id).distinct()
+    elif target_id:
+        qs = vulnerabilities.filter(domain__scan_history__target_id=target_id).distinct()
+    elif subdomain_name:
+        subdomains = Subdomain.objects.filter(name=subdomain_name)
+        qs = vulnerabilities.filter(subdomain__in=subdomains).distinct()
+    else:
+        qs = vulnerabilities.distinct()
+
+    if domain:
+        qs = qs.filter(Q(domain__name=domain)).distinct()
+    if vulnerability_name:
+        qs = qs.filter(Q(name=vulnerability_name)).distinct()
+    if severity:
+        qs = qs.filter(severity=severity)
+    if subdomain_id:
+        qs = qs.filter(subdomain__id=subdomain_id)
+    return qs
 
 
 def get_ip_subdomain_data(ip_queryset: Union[QuerySet, list]) -> dict[int, dict[str, Any]]:

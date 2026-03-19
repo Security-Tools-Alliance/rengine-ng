@@ -1168,12 +1168,7 @@ window.DETAIL_SCAN_API_LIST_SUBSCANS = "{% url 'api:listSubScans' %}";
 <script src="{% static 'plugins/j-map/jquery-jvectormap.min.js' %}"></script>
 <script src="{% static 'plugins/j-map/maps/jquery-jvectormap-world-mill-en.js' %}"></script>
 {# search suggestions scripts #}
-<script src="{% static 'startScan/js/subdomains-suggestions.js' %}"></script>
-<script src="{% static 'startScan/js/endpoint-datatables-suggestions.js' %}"></script>
-
-{% if total_vulnerability_count > 0 %}
-<script src="{% static 'startScan/js/vulnerability-datatables-suggestions.js' %}"></script>
-{% endif %}
+{% include 'shared/_advanced_search_scripts.html' %}
 
 {# visualisation libraries #}
 <script src="{% static 'custom/mitch.js' %}"></script>
@@ -1469,6 +1464,10 @@ $(document).ready(function() {
 					}
 				},
 			}));
+			window.vulnerability_table = vulnerability_table;
+			if (window.RengineAdvancedSearch && typeof window.RengineAdvancedSearch.registerDataTable === "function") {
+				window.RengineAdvancedSearch.registerDataTable("vulnerabilities", vulnerability_table);
+			}
 
 			if (window.DETAIL_SCAN_VULN_ROW_GROUP_SELECTOR && window.attachRengineDatatableRowGroupSelector) {
 				window.attachRengineDatatableRowGroupSelector(vulnerability_table, {
@@ -2222,6 +2221,13 @@ $(document).ready(function() {
 				columns: subdomain_datatable_columns,
 				snackbarMessage: window.getRengineRowGroupSnackbarMessage('Grouping cleared', 'Subdomains grouped by {label}')
 			});
+			window.subdomain_datatables = subdomain_datatables;
+			if (window.RengineAdvancedSearch && typeof window.RengineAdvancedSearch.registerDataTable === "function") {
+				window.RengineAdvancedSearch.registerDataTable("subdomains", subdomain_datatables);
+			} else {
+				window.RENGINE_TABLES = window.RENGINE_TABLES || {};
+				window.RENGINE_TABLES.subdomains = subdomain_datatables;
+			}
 
 			$('#reload_subdomain_table_btn').click(function () {
 				subdomain_datatables.ajax.reload();
@@ -2432,7 +2438,7 @@ $(document).ready(function() {
 		initComplete: function() {
 			if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('#s3-datatable [data-toggle="tooltip"]'));
 		}
-	}));
+		}));
 
   if (window.attachDatatableFilters) {
     window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('s3_buckets', s3Table, { onApply: function() { s3Table.draw(); } }));

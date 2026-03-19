@@ -84,8 +84,15 @@ from api.helpers.datatables import (
     get_scan_status_filter_labels,
     get_task_status_filter_labels,
 )
-from api.helpers.query import build_subdomain_datatable_queryset, get_ip_subdomain_data, get_scan_status_querysets
+from api.helpers.query import (
+    build_subdomain_datatable_queryset,
+    build_vulnerability_datatable_base_queryset,
+    get_ip_subdomain_data,
+    get_scan_status_querysets,
+    parse_subdomain_datatable_request,
+)
 from api.mixins import (
+    AdvancedSearchMixin,
     DatatableListMixin,
     DatatablePaginationMixin,
     build_datatables_serverside_response,
@@ -240,145 +247,6 @@ from .serializers import (
 
 PREFIX_API = "[API]"
 logger = get_module_logger(__name__)
-
-
-class AdvancedSearchMixin:
-    """
-    Mixin providing advanced search functionality with operators.
-
-    Supports operators: = (equals), > (greater than), < (less than), ! (exclude)
-    Supports logic: & (AND), | (OR)
-
-    Subclasses must define search_config attribute with the following structure:
-    {
-        'general_fields': [Q(...), Q(...), ...],  # Q objects for general text search
-        'special_fields': {
-            'field_name': 'model__field__lookup',  # Mapping for special searches
-            ...
-        },
-        'numeric_fields': {
-            'field_name': 'model__field',  # Fields supporting >, < operators
-            ...
-        },
-        'boolean_fields': {
-            'field_name': ('model__field', true_value, false_value),
-            ...
-        },
-        'custom_handlers': {
-            'field_name': callable,  # Custom handler function(queryset, operator, value)
-            ...
-        }
-    }
-    """
-
-    search_config = None
-
-    def apply_advanced_search(self, queryset, search_value):
-        """Apply advanced search with support for complex queries using & and | operators."""
-        if not search_value:
-            return queryset
-
-        has_operators = any(op in search_value for op in ["=", "&", "|", ">", "<", "!"])
-
-        if not has_operators:
-            return self.general_lookup(queryset, search_value)
-
-        if "&" in search_value:
-            complex_query = search_value.split("&")
-            for query in complex_query:
-                if query.strip():
-                    queryset = queryset & self.special_lookup(queryset, query.strip())
-        elif "|" in search_value:
-            new_queryset = queryset.none()
-            complex_query = search_value.split("|")
-            for query in complex_query:
-                if query.strip():
-                    new_queryset = self.special_lookup(queryset, query.strip()) | new_queryset
-            queryset = new_queryset
-        else:
-            queryset = self.special_lookup(queryset, search_value)
-
-        return queryset
-
-    def general_lookup(self, queryset, search_value):
-        """Perform general search across configured fields."""
-        if not self.search_config or "general_fields" not in self.search_config:
-            return queryset
-
-        combined_q = Q()
-        for field_q in self.search_config["general_fields"]:
-            if callable(field_q):
-                combined_q |= field_q(search_value)
-            else:
-                combined_q |= field_q
-
-        return queryset.filter(combined_q) if combined_q else queryset
-
-    def special_lookup(self, queryset, search_value):
-        """Perform special search with operators (=, >, <, !)."""
-        if not self.search_config:
-            return queryset
-
-        operator = None
-        for op in ["=", ">", "<", "!"]:
-            if op in search_value:
-                operator = op
-                break
-
-        if not operator:
-            return queryset
-
-        search_param = search_value.split(operator)
-        if len(search_param) != 2:
-            return queryset
-
-        lookup_title = search_param[0].lower().strip()
-        lookup_content = search_param[1].strip()
-
-        special_fields = self.search_config.get("special_fields", {})
-        numeric_fields = self.search_config.get("numeric_fields", {})
-        boolean_fields = self.search_config.get("boolean_fields", {})
-        custom_handlers = self.search_config.get("custom_handlers", {})
-
-        # Check for custom handler first
-        if lookup_title in custom_handlers:
-            return custom_handlers[lookup_title](queryset, operator, lookup_content)
-
-        # Handle boolean fields
-        if lookup_title in boolean_fields:
-            field_path, true_val, false_val = boolean_fields[lookup_title]
-            if operator == "=":
-                bool_value = lookup_content.lower() in ["true", "1", "yes", true_val.lower()]
-                return queryset.filter(**{field_path: bool_value})
-            elif operator == "!":
-                bool_value = lookup_content.lower() in ["true", "1", "yes", true_val.lower()]
-                return queryset.exclude(**{field_path: bool_value})
-
-        # Handle numeric comparisons
-        if lookup_title in numeric_fields:
-            field_path = numeric_fields[lookup_title]
-            try:
-                int_value = int(lookup_content)
-                if operator == "=":
-                    return queryset.filter(**{field_path: int_value})
-                elif operator == ">":
-                    return queryset.filter(**{f"{field_path}__gt": int_value})
-                elif operator == "<":
-                    return queryset.filter(**{f"{field_path}__lt": int_value})
-                elif operator == "!":
-                    return queryset.exclude(**{field_path: int_value})
-            except (ValueError, TypeError):
-                return queryset
-
-        # Handle text field searches
-        if lookup_title in special_fields:
-            field_path = special_fields[lookup_title]
-            if operator == "=":
-                return queryset.filter(**{field_path: lookup_content})
-            elif operator == "!":
-                return queryset.exclude(**{field_path: lookup_content})
-
-        return queryset
 
 
 class OllamaManager(APIView):
@@ -3624,10 +3492,8 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
     search_config = {
         "general_fields": [
             lambda sv: Q(name__icontains=sv),
-            lambda sv: Q(cname__icontains=sv),
             lambda sv: Q(http_status__icontains=sv),
             lambda sv: Q(page_title__icontains=sv),
-            lambda sv: Q(http_url__icontains=sv),
             lambda sv: Q(technologies__name__icontains=sv),
             lambda sv: Q(webserver__icontains=sv),
             lambda sv: Q(ip_addresses__address__icontains=sv),
@@ -4242,10 +4108,8 @@ class SubdomainDatatableViewSet(
         self.search_config = {
             "general_fields": [
                 lambda sv: Q(name__icontains=sv),
-                lambda sv: Q(cname__icontains=sv),
                 lambda sv: Q(http_status__icontains=sv),
                 lambda sv: Q(page_title__icontains=sv),
-                lambda sv: Q(http_url__icontains=sv),
                 lambda sv: Q(technologies__name__icontains=sv),
                 lambda sv: Q(webserver__icontains=sv),
                 lambda sv: Q(ip_addresses__address__icontains=sv),
@@ -4256,9 +4120,6 @@ class SubdomainDatatableViewSet(
             "special_fields": {
                 "name": "name__icontains",
                 "page_title": "page_title__icontains",
-                "http_url": "http_url__icontains",
-                "content_type": "content_type__icontains",
-                "cname": "cname__icontains",
                 "webserver": "webserver__icontains",
                 "ip_addresses": "ip_addresses__address__icontains",
                 "technology": "technologies__name__icontains",
@@ -4275,21 +4136,26 @@ class SubdomainDatatableViewSet(
             },
         }
 
+    def _custom_handler_to_q(self, lookup_title: str, operator: str, lookup_content: str):
+        if lookup_title == "port":
+            if operator == "!":
+                return None
+            n = Q(ip_addresses__ports__number__icontains=lookup_content)
+            s = Q(ip_addresses__ports__service_name__icontains=lookup_content)
+            d = Q(ip_addresses__ports__description__icontains=lookup_content)
+            return n | s | d
+        return super()._custom_handler_to_q(lookup_title, operator, lookup_content)
+
+    def general_lookup_q(self, search_value: str):
+        q = super().general_lookup_q(search_value)
+        if getattr(self, "request", None) and "only_directory" in self.request.query_params:
+            q |= Q(directories__directory_files__name__icontains=search_value)
+        return q
+
     def get_queryset(self):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get("scan_id"))
-        target_id = safe_int_cast(req.query_params.get("target_id"))
-        self._datatable_scan_id = scan_id
-        queryset, self._datatable_interesting_names = build_subdomain_datatable_queryset(
-            project_slug=req.query_params.get("project", ""),
-            scan_id=scan_id,
-            target_id=target_id,
-            url_query=req.query_params.get("query_param"),
-            ip_address=req.query_params.get("ip_address"),
-            name=req.query_params.get("name"),
-            is_important="is_important" in req.query_params,
-            only_directory="only_directory" in req.query_params,
-        )
+        kwargs = parse_subdomain_datatable_request(self.request)
+        self._datatable_scan_id = kwargs["scan_id"]
+        queryset, self._datatable_interesting_names = build_subdomain_datatable_queryset(**kwargs)
         self.queryset = queryset
         return self.queryset
 
@@ -4473,56 +4339,13 @@ class EndPointViewSet(DatatableListMixin, DatatablePaginationMixin, AdvancedSear
     }
 
     def get_queryset(self):
+        from api.helpers.query import build_endpoint_datatable_queryset
+
         req = self.request
-
-        scan_id = safe_int_cast(req.query_params.get("scan_history")) or safe_int_cast(req.query_params.get("scan_id"))
-        target_id = safe_int_cast(req.query_params.get("target_id"))
-        url_query = req.query_params.get("query_param")
-        subdomain_id = safe_int_cast(req.query_params.get("subdomain_id"))
-        project = req.query_params.get("project")
-
-        endpoints_obj = EndPoint.objects.filter(scan_history__target__project__slug=project)
-
-        gf_tag = req.query_params.get("gf_tag") if "gf_tag" in req.query_params else None
-
-        # Start with base query without ordering
-        endpoints = endpoints_obj
-
-        if scan_id:
-            endpoints = endpoints.filter(scan_history__id=scan_id)
-
-        if url_query:
-            endpoints = endpoints.filter(Q(domain__name=url_query))
-
-        if gf_tag:
-            endpoints = endpoints.filter(matched_gf_patterns__icontains=gf_tag)
-
-        if target_id:
-            endpoints = endpoints.filter(domain__scan_history__target_id=target_id)
-
-        if subdomain_id:
-            endpoints = endpoints.filter(subdomain__id=subdomain_id)
-
-        # Get unique endpoints by http_url, keeping the latest (highest ID) for each URL
-        # Use a subquery to get the latest ID for each unique http_url
-        from django.db.models import Max
-
-        latest_endpoint_ids = endpoints.values("http_url").annotate(max_id=Max("id")).values_list("max_id", flat=True)
-        endpoints = EndPoint.objects.filter(id__in=latest_endpoint_ids)
-
+        endpoints = build_endpoint_datatable_queryset(req)
         if "only_urls" in req.query_params:
             self.serializer_class = EndpointOnlyURLsSerializer
-
-        # Filter status code 404 and 0
-        # endpoints = (
-        #     endpoints
-        #     .exclude(http_status=0)
-        #     .exclude(http_status=None)
-        #     .exclude(http_status=404)
-        # )
-
         self.queryset = endpoints
-
         return self.queryset
 
     datatable_column_map = DATATABLE_COLUMN_MAP_ENDPOINT
@@ -4654,24 +4477,65 @@ class VulnerabilityViewSet(DatatableListMixin, DatatablePaginationMixin, Advance
             )
         return queryset
 
+    def _custom_handler_to_q(self, lookup_title: str, operator: str, lookup_content: str):
+        if lookup_title == "severity":
+            severity_value = NUCLEI_SEVERITY_MAP.get(lookup_content.lower(), -1)
+            if operator == "=":
+                return Q(severity=severity_value)
+            if operator == "!":
+                return ~Q(severity=severity_value)
+            return Q()
+        if lookup_title == "status":
+            open_status = lookup_content.lower() == "open"
+            if operator == "=":
+                return Q(open_status=open_status)
+            if operator == "!":
+                return ~Q(open_status=open_status)
+            return Q()
+        if lookup_title == "description":
+            description_q = (
+                Q(description__icontains=lookup_content)
+                | Q(template__icontains=lookup_content)
+                | Q(extracted_results__icontains=lookup_content)
+            )
+            if operator == "=":
+                return description_q
+            if operator == "!":
+                return ~description_q
+            return Q()
+        if lookup_title == "cvss_score":
+            try:
+                float_value = float(lookup_content)
+                if operator == "=":
+                    return Q(cvss_score__exact=float_value)
+                if operator == ">":
+                    return Q(cvss_score__gt=float_value)
+                if operator == "<":
+                    return Q(cvss_score__lt=float_value)
+                if operator == "!":
+                    return ~Q(cvss_score__exact=float_value)
+            except (ValueError, TypeError):
+                logger.log_line(
+                    PREFIX_API,
+                    "VULNERABILITY_SEARCH",
+                    "Invalid numeric value for cvss_score: %s" % (lookup_content,),
+                    level="warning",
+                )
+            return Q()
+        return super()._custom_handler_to_q(lookup_title, operator, lookup_content)
+
     @property
     def search_config(self):
         return {
             "general_fields": [
                 lambda sv: Q(http_url__icontains=sv),
                 lambda sv: Q(domain__name__icontains=sv),
-                lambda sv: Q(template__icontains=sv),
-                lambda sv: Q(template_id__icontains=sv),
                 lambda sv: Q(name__icontains=sv),
                 lambda sv: Q(severity__icontains=sv),
                 lambda sv: Q(description__icontains=sv),
                 lambda sv: Q(extracted_results__icontains=sv),
                 lambda sv: Q(references__icontains=sv),
-                lambda sv: Q(cve_ids__name__icontains=sv),
-                lambda sv: Q(cwe_ids__name__icontains=sv),
-                lambda sv: Q(cvss_metrics__icontains=sv),
                 lambda sv: Q(cvss_score__icontains=sv),
-                lambda sv: Q(type__icontains=sv),
                 lambda sv: Q(open_status__icontains=sv),
                 lambda sv: Q(hackerone_report_id__icontains=sv),
                 lambda sv: Q(tags__name__icontains=sv),
@@ -4679,14 +4543,6 @@ class VulnerabilityViewSet(DatatableListMixin, DatatablePaginationMixin, Advance
             "special_fields": {
                 "name": "name__icontains",
                 "http_url": "http_url__icontains",
-                "template": "template__icontains",
-                "template_id": "template_id__icontains",
-                "cve_id": "cve_ids__name__icontains",
-                "cve": "cve_ids__name__icontains",
-                "cwe_id": "cwe_ids__name__icontains",
-                "cwe": "cwe_ids__name__icontains",
-                "cvss_metrics": "cvss_metrics__icontains",
-                "type": "type__icontains",
                 "tag": "tags__name__icontains",
             },
             "numeric_fields": {},
@@ -4700,41 +4556,7 @@ class VulnerabilityViewSet(DatatableListMixin, DatatablePaginationMixin, Advance
         }
 
     def get_queryset(self):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get("scan_history"))
-        target_id = safe_int_cast(req.query_params.get("target_id"))
-        domain = req.query_params.get("domain")
-        severity = req.query_params.get("severity")
-        subdomain_id = safe_int_cast(req.query_params.get("subdomain_id"))
-        subdomain_name = req.query_params.get("subdomain")
-        vulnerability_name = req.query_params.get("vulnerability_name")
-        slug = self.request.GET.get("project", None)
-
-        if slug:
-            vulnerabilities = Vulnerability.objects.filter(scan_history__target__project__slug=slug)
-        else:
-            vulnerabilities = Vulnerability.objects.all()
-
-        if scan_id:
-            qs = vulnerabilities.filter(scan_history__id=scan_id).distinct()
-        elif target_id:
-            qs = vulnerabilities.filter(domain__scan_history__target_id=target_id).distinct()
-        elif subdomain_name:
-            subdomains = Subdomain.objects.filter(name=subdomain_name)
-            qs = vulnerabilities.filter(subdomain__in=subdomains).distinct()
-        else:
-            qs = vulnerabilities.distinct()
-
-        if domain:
-            qs = qs.filter(Q(domain__name=domain)).distinct()
-        if vulnerability_name:
-            qs = qs.filter(Q(name=vulnerability_name)).distinct()
-        if severity:
-            qs = qs.filter(severity=severity)
-        if subdomain_id:
-            qs = qs.filter(subdomain__id=subdomain_id)
-
-        # Optimize queries with select_related and prefetch_related to avoid N+1 queries
+        qs = build_vulnerability_datatable_base_queryset(self.request)
         qs = qs.select_related(
             "subdomain",
             "endpoint",

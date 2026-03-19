@@ -115,6 +115,11 @@ from .views import (
     VulnerabilityReport,
     VulnerabilityViewSet,
 )
+from .views_advanced_search import (
+    AdvancedSearchFieldsView,
+    AdvancedSearchValidateView,
+    AdvancedSearchValuesView,
+)
 
 
 app_name = "api"
@@ -141,6 +146,9 @@ router.register(r"secator/workers", SecatorWorkerViewSet, basename="secator-work
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("advancedSearch/fields/", AdvancedSearchFieldsView.as_view(), name="advancedSearchFields"),
+    path("advancedSearch/validate/", AdvancedSearchValidateView.as_view(), name="advancedSearchValidate"),
+    path("advancedSearch/values/", AdvancedSearchValuesView.as_view(), name="advancedSearchValues"),
     path("add/target/", AddTarget.as_view(), name="addTarget"),
     path("add/recon_note/", AddReconNote.as_view(), name="addReconNote"),
     path("queryTechnologies/", ListTechnology.as_view(), name="listTechnologies"),
