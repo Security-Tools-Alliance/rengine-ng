@@ -1321,6 +1321,8 @@ def worker_update(request, worker_id):
             worker.api_access_type,
             worker.api_tunnel_port,
             (worker.api_url or "").strip(),
+            worker.https_pull_agent,
+            worker.https_pull_verify_ssl,
         )
         form = SecatorWorkerForm(request.POST, instance=worker)
         if form.is_valid():
@@ -1332,6 +1334,8 @@ def worker_update(request, worker_id):
                 worker.api_access_type,
                 worker.api_tunnel_port,
                 (worker.api_url or "").strip(),
+                worker.https_pull_agent,
+                worker.https_pull_verify_ssl,
             )
             if old_api != new_api:
                 from scanEngine.services.worker_deploy import push_env_and_restart_worker
@@ -1373,17 +1377,17 @@ def worker_update(request, worker_id):
 
 @login_required
 def worker_download_bundle(request, worker_id):
-    """Return a ZIP bundle for manual worker deployment (compose, .env, templates, README)."""
+    """Return a tar.gz bundle for manual worker deployment (compose, .env, templates, README)."""
     worker = get_object_or_404(SecatorWorker, id=worker_id)
     try:
-        from scanEngine.services.worker_deploy import build_worker_bundle_zip
+        from scanEngine.services.worker_deploy import build_worker_bundle_tar_gz
 
-        zip_bytes = build_worker_bundle_zip(worker)
+        archive_bytes = build_worker_bundle_tar_gz(worker)
     except UserSafeError as e:
         messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
         return http.HttpResponseRedirect(reverse("worker_list"))
     safe_name = sanitize_path_component(worker.name) or "worker"
-    filename = f"worker-{safe_name}-{worker.id}.zip"
-    response = http.HttpResponse(zip_bytes, content_type="application/zip")
+    filename = f"worker-{safe_name}-{worker.id}.tar.gz"
+    response = http.HttpResponse(archive_bytes, content_type="application/gzip")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response

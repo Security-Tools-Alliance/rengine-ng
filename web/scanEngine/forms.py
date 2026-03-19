@@ -697,7 +697,7 @@ class ReportForm(forms.ModelForm):
             "executive_summary_description"
         ] = """On **{scan_date}**, **{target_name}** engaged **{company_name}** to perform a security audit on their Web application.
 
-**{company_name}** performed both Security Audit and Reconnaissance using automated tool reNgine. https://github.com/Security-Tools-Alliance/rengine-ng/.
+**{company_name}** performed both Security Audit and Reconnaissance using automated tool reNgine-ng. https://github.com/Security-Tools-Alliance/rengine-ng/.
 
 ## Observations
 
@@ -1146,6 +1146,8 @@ class SecatorWorkerForm(forms.ModelForm):
             "api_access_type",
             "api_tunnel_port",
             "api_url",
+            "https_pull_agent",
+            "https_pull_verify_ssl",
             "is_active",
         ]
 
@@ -1155,7 +1157,7 @@ class SecatorWorkerForm(forms.ModelForm):
         widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Worker name (e.g. worker-1)"}),
     )
     ssh_host = forms.CharField(
-        required=True,
+        required=False,
         max_length=255,
         widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Hostname or IP"}),
     )
@@ -1167,7 +1169,7 @@ class SecatorWorkerForm(forms.ModelForm):
         widget=forms.NumberInput(attrs={"class": "form-control"}),
     )
     ssh_user = forms.CharField(
-        required=True,
+        required=False,
         max_length=255,
         widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "SSH user"}),
     )
@@ -1214,22 +1216,104 @@ class SecatorWorkerForm(forms.ModelForm):
             }
         ),
     )
+    https_pull_agent = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input", "id": "id_https_pull_agent"}),
+    )
+    https_pull_verify_ssl = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Verify reNgine-ng TLS certificate (pull agent)",
+        help_text="Uncheck if reNgine-ng HTTPS uses a self-signed certificate.",
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input", "id": "id_https_pull_verify_ssl"}),
+    )
+    regenerate_pull_token = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="Regenerate pull token",
+        help_text="Invalidates the previous token; update the worker .env and restart the container.",
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
     is_active = forms.BooleanField(
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
     )
 
-    def clean(self):
-        cleaned_data = super().clean()
-        auth_type = cleaned_data.get("ssh_auth_type")
+    def _is_pull_classic(self, api_access: str | None, https_pull_agent: object) -> bool:
+        return SecatorWorker.uses_https_pull_agent_from(api_access or "", bool(https_pull_agent))
+
+    def _apply_pull_classic_ssh_defaults(self, cleaned_data: dict[str, object], pull_classic: bool) -> None:
+        """In pull-classic mode, SSH fields are irrelevant for execution (pull agent)."""
+        if not pull_classic:
+            return
+        cleaned_data["ssh_auth_type"] = SecatorWorker.AUTH_KEY
+        instance = self.instance if self.instance and self.instance.pk else None
+
+        if submitted_host := (cleaned_data.get("ssh_host") or "").strip():
+            cleaned_data["ssh_host"] = submitted_host
+        elif instance and (instance.ssh_host or "").strip():
+            # Preserve existing SSH metadata for operators.
+            cleaned_data["ssh_host"] = instance.ssh_host
+        else:
+            cleaned_data["ssh_host"] = "not-used-pull-agent"
+
+        if submitted_user := (cleaned_data.get("ssh_user") or "").strip():
+            cleaned_data["ssh_user"] = submitted_user
+        elif instance and (instance.ssh_user or "").strip():
+            cleaned_data["ssh_user"] = instance.ssh_user
+        else:
+            cleaned_data["ssh_user"] = "not-used-pull-agent"
+
+    def _require_ssh_fields_for_non_pull_api(self, cleaned_data: dict[str, object], api_access: str | None) -> None:
+        if api_access not in (SecatorWorker.API_ACCESS_CLASSIC, SecatorWorker.API_ACCESS_TUNNEL):
+            return
+
+        if not (cleaned_data.get("ssh_host") or "").strip():
+            self.add_error("ssh_host", "This field is required.")
+        if not (cleaned_data.get("ssh_user") or "").strip():
+            self.add_error("ssh_user", "This field is required.")
+
+        ssh_port = cleaned_data.get("ssh_port")
+        if ssh_port in (None, ""):
+            # Ensure deterministic SSH behavior when the form does not require ssh_port
+            # (or when a client submits an empty value).
+            cleaned_data["ssh_port"] = 22
+            return
+
+        try:
+            ssh_port_int = int(ssh_port)  # `ssh_port` is expected to be numeric.
+        except (TypeError, ValueError):
+            self.add_error("ssh_port", "Enter a valid port number.")
+            return
+
+        if not (1 <= ssh_port_int <= 65535):
+            self.add_error("ssh_port", "Enter a valid port number.")
+            return
+
+        cleaned_data["ssh_port"] = ssh_port_int
+
+    def _validate_password_auth(
+        self,
+        cleaned_data: dict[str, object],
+        pull_classic: bool,
+        auth_type: str | None,
+    ) -> None:
         if (
             auth_type == SecatorWorker.AUTH_PASSWORD
+            and not pull_classic
             and not cleaned_data.get("ssh_password_encrypted")
             and (not self.instance or not self.instance.ssh_password_encrypted)
         ):
             raise ValidationError("Password is required when using password authentication.")
-        api_access = cleaned_data.get("api_access_type")
+
+    def _validate_api_access_fields(
+        self,
+        cleaned_data: dict[str, object],
+        api_access: str | None,
+        auth_type: str | None,
+    ) -> None:
         if api_access == SecatorWorker.API_ACCESS_CLASSIC:
             api_url = (cleaned_data.get("api_url") or "").strip()
             if not api_url:
@@ -1244,12 +1328,42 @@ class SecatorWorkerForm(forms.ModelForm):
                 raise ValidationError(
                     {"ssh_auth_type": "Password authentication is not supported when using API tunnel access."}
                 )
+
+    def _validate_https_pull_agent_flag(self, cleaned_data: dict[str, object], pull_classic: bool) -> None:
+        if cleaned_data.get("https_pull_agent") and not pull_classic:
+            raise ValidationError(
+                {
+                    "https_pull_agent": "Pull agent is only available with HTTPS (classic) API access.",
+                }
+            )
+
+    def _apply_https_pull_verify_ssl_default(self, cleaned_data: dict[str, object], pull_classic: bool) -> None:
+        # Preserve the posted preference even when pull-agent is disabled.
+        # At runtime, we only use this preference when pull-agent is actually enabled.
+        return
+
+    def clean(self):
+        cleaned_data = super().clean()
+        api_access = cleaned_data.get("api_access_type")
+        # Pull-classic mode: we normalize SSH fields for form consistency and we
+        # skip SSH-required validation because execution is handled via pull-agent.
+        pull_classic = self._is_pull_classic(api_access, cleaned_data.get("https_pull_agent"))
+        self._apply_pull_classic_ssh_defaults(cleaned_data, pull_classic=pull_classic)
+        self._require_ssh_fields_for_non_pull_api(cleaned_data, api_access=None if pull_classic else api_access)
+        auth_type = cleaned_data.get("ssh_auth_type")
+        self._validate_password_auth(cleaned_data, pull_classic=pull_classic, auth_type=auth_type)
+        self._validate_api_access_fields(cleaned_data, api_access=api_access, auth_type=auth_type)
+        self._validate_https_pull_agent_flag(cleaned_data, pull_classic=pull_classic)
+        self._apply_https_pull_verify_ssl_default(cleaned_data, pull_classic=pull_classic)
         return cleaned_data
 
     def save(self, commit=True):
+        regen = self.cleaned_data.get("regenerate_pull_token")
         instance = super().save(commit=False)
         if self.cleaned_data.get("ssh_auth_type") == SecatorWorker.AUTH_KEY:
             instance.ssh_key_path = ""
         if commit:
             instance.save()
+            if regen and instance.pk:
+                instance.regenerate_pull_token()
         return instance

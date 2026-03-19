@@ -1,4 +1,6 @@
+import secrets
 from urllib.parse import urlparse, urlunparse
+import uuid
 
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -912,8 +914,18 @@ class SecatorWorkerManager(models.Manager):
 
 class SecatorWorker(models.Model):
     """
-    Remote Secator worker host. Used for deployment via SSH and to associate
-    runners (scan executions) with the worker that executed them.
+    Remote Secator worker host configuration for execution and deployment.
+
+    Pull-token persistence has explicit save semantics:
+    - For full saves (no `update_fields`), blank tokens are generated.
+    - For partial saves, token generation happens only if `pull_token` is part of
+      `update_fields`.
+    - For partial saves where `pull_token` is not in `update_fields`, a blank
+      in-memory token triggers a DB read to restore the persisted value so callers
+      do not accidentally rotate tokens.
+
+    For call sites doing partial updates, prefer `save_partial(...)` to make this
+    behavior explicit.
     """
 
     AUTH_KEY = "key"
@@ -958,6 +970,15 @@ class SecatorWorker(models.Model):
         blank=True,
         help_text="Base URL of reNgine API (e.g. https://rengine.example.com) for classic access.",
     )
+    https_pull_agent = models.BooleanField(
+        default=False,
+        help_text="When HTTPS classic: worker pulls jobs via API (no SSH for run/revoke).",
+    )
+    https_pull_verify_ssl = models.BooleanField(
+        default=True,
+        help_text="When pull agent: verify reNgine TLS certificate (disable for self-signed).",
+    )
+    pull_token = models.CharField(max_length=64, blank=True, editable=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -969,6 +990,107 @@ class SecatorWorker(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs) -> None:
+        """
+        Auto-generate pull_token only when creating a new instance, or when pull_token
+        is explicitly part of the update_fields.
+
+        This avoids unintentionally rotating tokens during partial updates where the
+        caller does not intend to modify pull_token.
+
+        Side effect: when pull_token is blank in-memory during a partial update
+        (i.e. `update_fields` does not include `pull_token`), this method performs
+        a DB read to restore the persisted value. Callers should be aware that
+        pull_token may be overwritten from the database on `save()`.
+        """
+        self._prepare_pull_token_for_save(kwargs)
+        super().save(*args, **kwargs)
+
+    def _should_generate_pull_token(
+        self, update_fields: list[str] | tuple[str, ...] | None
+    ) -> bool:
+        """Return True when pull_token must be generated for this save call."""
+        return self.pk is None or update_fields is None or "pull_token" in update_fields
+
+    @staticmethod
+    def _append_pull_token_update_field(update_fields: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+        """Return update_fields with pull_token appended without mutating caller data."""
+        return tuple(update_fields) + ("pull_token",)
+
+    def _restore_pull_token_from_db(self) -> bool:
+        """Restore pull_token from DB for partial updates that don't include pull_token."""
+        try:
+            self.pull_token = self.__class__.objects.only("pull_token").get(pk=self.pk).pull_token
+            return True
+        except self.__class__.DoesNotExist:
+            return False
+
+    def _prepare_pull_token_for_save(self, kwargs: dict) -> None:
+        """
+        Prepare pull_token semantics before persistence.
+
+        Side effects:
+        - may append `pull_token` to `kwargs["update_fields"]` for partial saves
+        - may perform one DB read on existing rows to restore persisted pull_token
+        """
+        update_fields = kwargs.get("update_fields")
+        token_is_blank = not (self.pull_token or "").strip()
+        if not token_is_blank:
+            return
+
+        # Unsaved instances: never round-trip to DB; just generate token.
+        if self.pk is None:
+            self.pull_token = secrets.token_urlsafe(32)
+            if update_fields is not None and "pull_token" not in update_fields:
+                kwargs["update_fields"] = self._append_pull_token_update_field(update_fields)
+            return
+
+        if self._should_generate_pull_token(update_fields):
+            self.pull_token = secrets.token_urlsafe(32)
+            if update_fields is not None and "pull_token" not in update_fields:
+                kwargs["update_fields"] = self._append_pull_token_update_field(update_fields)
+            return
+
+        # Existing row + partial update without `pull_token`: restore persisted
+        # token to avoid accidental rotation from a blank in-memory value.
+        if self._restore_pull_token_from_db():
+            return
+
+        # Fallback for unexpected deletes or inconsistent state.
+        self.pull_token = secrets.token_urlsafe(32)
+        if update_fields is not None and "pull_token" not in update_fields:
+            kwargs["update_fields"] = self._append_pull_token_update_field(update_fields)
+
+    def save_partial(self, update_fields: list[str] | tuple[str, ...]) -> None:
+        """
+        Explicit helper for partial updates on existing workers.
+
+        This delegates to `save(update_fields=...)` and makes intent explicit at
+        call sites: pull_token is preserved unless `pull_token` is explicitly
+        included in `update_fields`.
+        """
+        self.save(update_fields=update_fields)
+
+    def regenerate_pull_token(self) -> None:
+        """Assign a new pull token and persist."""
+        self.pull_token = secrets.token_urlsafe(32)
+        self.save(update_fields=["pull_token"])
+
+    def uses_https_pull_agent(self) -> bool:
+        """True when this worker runs scans via the pull agent (HTTPS classic, no inbound SSH)."""
+        return (
+            bool(self.https_pull_agent)
+            and self.api_access_type == self.API_ACCESS_CLASSIC
+        )
+
+    @classmethod
+    def uses_https_pull_agent_from(cls, api_access_type: str, https_pull_agent: bool) -> bool:
+        """Same as uses_https_pull_agent() for use with raw values (e.g. form cleaned_data)."""
+        return (
+            bool(https_pull_agent)
+            and api_access_type == cls.API_ACCESS_CLASSIC
+        )
 
     def get_api_base_url(self) -> str:
         """Return the API base URL this worker uses (for .env and health check)."""
@@ -982,3 +1104,47 @@ class SecatorWorker(models.Model):
                 (parsed.scheme or "https", new_netloc, parsed.path or "/", parsed.params, parsed.query, parsed.fragment)
             ).rstrip("/")
         return (self.api_url or "").strip().rstrip("/")
+
+
+class SecatorWorkerQueuedCommand(models.Model):
+    """Commands queued for a pull-mode worker; claimed and executed by rengine_pull_agent on the host."""
+
+    KIND_RUN_JOB = "run_job"
+    KIND_REVOKE = "revoke"
+    KIND_CHOICES = [(KIND_RUN_JOB, "Run job"), (KIND_REVOKE, "Revoke")]
+
+    STATUS_PENDING = "pending"
+    STATUS_RUNNING = "running"
+    STATUS_SUCCEEDED = "succeeded"
+    STATUS_FAILED = "failed"
+    STATUS_TIMED_OUT = "timed_out"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_RUNNING, "Running"),
+        (STATUS_SUCCEEDED, "Succeeded"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_TIMED_OUT, "Timed out"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    worker = models.ForeignKey(
+        SecatorWorker,
+        on_delete=models.CASCADE,
+        related_name="queued_commands",
+    )
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES)
+    payload = models.JSONField(default=dict)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["worker", "status", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return "%s %s %s" % (self.worker_id, self.kind, self.status)

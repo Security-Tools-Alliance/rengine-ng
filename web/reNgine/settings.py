@@ -253,6 +253,11 @@ STATICFILES_DIRS = [
 
 LOGIN_REQUIRED_IGNORE_VIEW_NAMES = [
     "login",
+    # Pull-agent endpoints use X-Rengine-Worker-Pull-Token only (no session)
+    "api:secator_worker_pull_claim",
+    "api:secator_worker_pull_complete",
+    "secator_worker_pull_claim",
+    "secator_worker_pull_complete",
 ]
 
 LOGIN_URL = "login"

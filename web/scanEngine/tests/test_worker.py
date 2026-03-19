@@ -3,10 +3,13 @@ Unit tests for SecatorWorker model, worker deploy service, and worker views.
 """
 
 from io import BytesIO
+from datetime import timedelta
+import os
 from unittest.mock import MagicMock, patch
-import zipfile
+import tarfile
 
 from django.urls import reverse
+from django.utils import timezone
 
 from reNgine.utilities.error import UserSafeError
 from scanEngine.forms import SecatorWorkerForm
@@ -17,13 +20,21 @@ from scanEngine.services.worker_config import (
     is_tunnel_api_access,
 )
 from scanEngine.services.worker_config_sync import sync_configs_for_run
+from scanEngine.models import SecatorWorkerQueuedCommand
 from scanEngine.services.worker_deploy import (
     _build_worker_env_content,
-    build_worker_bundle_zip,
+    build_worker_bundle_tar_gz,
     deploy_worker,
     push_env_and_restart_worker,
     refresh_worker_status,
     teardown_worker_remote,
+)
+from scanEngine.services.worker_pull import (
+    claim_next_command,
+    complete_command,
+    enqueue_revoke,
+    enqueue_run_job,
+    wait_for_command,
 )
 from scanEngine.services.worker_ssh import (
     default_ssh_key_path,
@@ -98,6 +109,196 @@ class TestSecatorWorkerModel(BaseTestCase):
             api_url="https://rengine.example.com/",
         )
         self.assertEqual(worker.get_api_base_url(), "https://rengine.example.com")
+
+    def test_pull_token_generated_on_create(self) -> None:
+        worker = SecatorWorker.objects.create(
+            name="w-pull-token",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+        )
+        self.assertGreaterEqual(len(worker.pull_token), 16)
+
+    def test_save_does_not_regenerate_pull_token_when_not_in_update_fields(self) -> None:
+        worker = SecatorWorker.objects.create(
+            name="w-token-save-guard",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+        )
+        original_token = worker.pull_token
+
+        # Simulate a partial update where pull_token is blanked in memory, but
+        # the caller does not intend to modify pull_token in the database.
+        worker.pull_token = ""
+        worker.container_name = "container-x"
+        worker.save(update_fields=["container_name", "updated_at"])
+        worker.refresh_from_db()
+
+        self.assertEqual(worker.pull_token, original_token)
+
+    def test_save_partial_documents_and_preserves_pull_token_intent(self) -> None:
+        worker = SecatorWorker.objects.create(
+            name="w-token-save-partial-helper",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+        )
+        original_token = worker.pull_token
+
+        worker.pull_token = ""
+        worker.container_name = "container-y"
+        worker.save_partial(update_fields=["container_name", "updated_at"])
+        worker.refresh_from_db()
+
+        self.assertEqual(worker.pull_token, original_token)
+        self.assertEqual(worker.container_name, "container-y")
+
+    def test_save_regenerates_pull_token_when_in_update_fields(self) -> None:
+        worker = SecatorWorker.objects.create(
+            name="w-token-save-explicit",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+        )
+        original_token = worker.pull_token
+
+        worker.pull_token = ""
+        worker.save(update_fields=["pull_token", "updated_at"])
+        worker.refresh_from_db()
+
+        self.assertNotEqual(worker.pull_token, original_token)
+
+
+class TestSecatorWorkerFormPullAgent(BaseTestCase):
+    def test_https_pull_agent_requires_classic_api(self) -> None:
+        form = SecatorWorkerForm(
+            data={
+                "name": "w1",
+                "ssh_host": "192.0.2.1",
+                "ssh_port": 22,
+                "ssh_user": "u",
+                "ssh_auth_type": SecatorWorker.AUTH_KEY,
+                "deploy_path": "/opt/w",
+                "api_access_type": SecatorWorker.API_ACCESS_TUNNEL,
+                "api_tunnel_port": 8443,
+                "https_pull_agent": True,
+                "is_active": True,
+            }
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("https_pull_agent", form.errors)
+
+    def test_pull_agent_classic_fills_placeholder_ssh(self) -> None:
+        form = SecatorWorkerForm(
+            data={
+                "name": "w-pull-form",
+                "ssh_host": "",
+                "ssh_port": 22,
+                "ssh_user": "",
+                "ssh_auth_type": SecatorWorker.AUTH_KEY,
+                "deploy_path": "/opt/w",
+                "api_access_type": SecatorWorker.API_ACCESS_CLASSIC,
+                "api_url": "https://rengine.example.com",
+                "https_pull_agent": True,
+                "is_active": True,
+            }
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        worker = form.save()
+        self.assertEqual(worker.ssh_host, "not-used-pull-agent")
+        self.assertEqual(worker.ssh_user, "not-used-pull-agent")
+        self.assertEqual(worker.ssh_auth_type, SecatorWorker.AUTH_KEY)
+
+    def test_pull_agent_classic_preserves_existing_ssh_metadata(self) -> None:
+        worker = SecatorWorker.objects.create(
+            name="w-pull-update-preserve",
+            ssh_host="203.0.113.10",
+            ssh_port=22,
+            ssh_user="alice",
+            ssh_auth_type=SecatorWorker.AUTH_PASSWORD,
+            ssh_password_encrypted="secret",
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            https_pull_agent=False,
+            https_pull_verify_ssl=True,
+            is_active=True,
+        )
+
+        form = SecatorWorkerForm(
+            instance=worker,
+            data={
+                "name": worker.name,
+                "ssh_host": "",
+                "ssh_port": 22,
+                "ssh_user": "",
+                "ssh_auth_type": SecatorWorker.AUTH_PASSWORD,
+                "ssh_password_encrypted": "secret",
+                "deploy_path": worker.deploy_path,
+                "container_name": "",
+                "api_access_type": SecatorWorker.API_ACCESS_CLASSIC,
+                "api_url": worker.api_url,
+                "api_tunnel_port": 8443,
+                "https_pull_agent": True,
+                "https_pull_verify_ssl": True,
+                "is_active": True,
+            },
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        updated = form.save()
+
+        self.assertEqual(updated.ssh_host, "203.0.113.10")
+        self.assertEqual(updated.ssh_user, "alice")
+        self.assertEqual(updated.ssh_auth_type, SecatorWorker.AUTH_KEY)
+
+    def test_https_pull_verify_ssl_preserved_when_pull_disabled(self) -> None:
+        worker = SecatorWorker.objects.create(
+            name="w-verify-persist",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            ssh_key_path="/k",
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            https_pull_agent=False,
+            https_pull_verify_ssl=True,
+            is_active=True,
+        )
+
+        # Pull-agent is disabled; checkbox is intentionally omitted to simulate
+        # an unchecked value. The posted preference should be persisted.
+        form = SecatorWorkerForm(
+            instance=worker,
+            data={
+                "name": worker.name,
+                "ssh_host": "192.0.2.9",
+                "ssh_port": 22,
+                "ssh_user": "u",
+                "ssh_auth_type": SecatorWorker.AUTH_KEY,
+                "ssh_password_encrypted": "",
+                "deploy_path": worker.deploy_path,
+                "container_name": "",
+                "api_access_type": SecatorWorker.API_ACCESS_CLASSIC,
+                "api_url": worker.api_url,
+                "api_tunnel_port": 8443,
+                "https_pull_agent": False,
+                "is_active": True,
+            },
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        updated = form.save()
+        self.assertFalse(updated.https_pull_verify_ssl)
 
 
 class TestWorkerDeployValidation(BaseTestCase):
@@ -948,13 +1149,85 @@ class TestRemoteRunnerContainerPython(BaseTestCase):
         self.assertNotIn("/home/rengine/secator-worker", cmd)
 
 
-class TestBuildWorkerBundleZip(BaseTestCase):
-    """Tests for build_worker_bundle_zip (manual deploy ZIP)."""
+class TestRemoteRunnerPullMode(BaseTestCase):
+    """run_scan_on_worker and revoke in HTTPS pull-agent mode (no SSH)."""
 
+    @patch("reNgine.secator.remote_runner.wait_for_command")
+    @patch("reNgine.secator.remote_runner.enqueue_run_job")
+    @patch("reNgine.secator.remote_runner.sync_configs_for_run")
+    @patch("reNgine.secator.remote_runner.get_ssh_client")
+    def test_run_scan_pull_skips_ssh_and_sync(self, mock_ssh, mock_sync, mock_enqueue, mock_wait) -> None:
+        import uuid
+
+        from django.test import override_settings
+
+        from reNgine.secator.remote_runner import run_scan_on_worker
+
+        mock_enqueue.return_value = uuid.uuid4()
+        worker = SecatorWorker.objects.create(
+            name="w-pull-run",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/home/secator",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            https_pull_agent=True,
+        )
+        with override_settings(SECATOR_WORKER_CONTAINER_PYTHON="python"):
+            run_scan_on_worker(
+                worker,
+                scan_history_id=7,
+                target_id=self.data_generator.target.id,
+                workspace_name="default",
+                execution_mode="workflow",
+                targets=["https://example.com"],
+                workflow_name="test_workflow",
+            )
+        mock_sync.assert_not_called()
+        mock_ssh.assert_not_called()
+        mock_enqueue.assert_called_once()
+        mock_wait.assert_called_once()
+
+    @patch("reNgine.secator.remote_runner.wait_for_command")
+    @patch("reNgine.secator.remote_runner.enqueue_revoke")
+    @patch("reNgine.secator.remote_runner.get_ssh_client")
+    def test_revoke_pull_uses_queue(self, mock_ssh, mock_enqueue_revoke, mock_wait) -> None:
+        import uuid
+
+        from reNgine.secator.remote_runner import revoke_task_on_remote_worker
+
+        mock_enqueue_revoke.return_value = uuid.uuid4()
+        worker = SecatorWorker.objects.create(
+            name="w-pull-revoke",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            https_pull_agent=True,
+        )
+        ok = revoke_task_on_remote_worker(worker, "celery-task-id-1")
+        self.assertTrue(ok)
+        mock_ssh.assert_not_called()
+        mock_enqueue_revoke.assert_called_once_with(worker, "celery-task-id-1")
+        mock_wait.assert_called_once()
+
+
+class TestBuildWorkerBundleTarGz(BaseTestCase):
+    """Tests for build_worker_bundle_tar_gz (manual deploy tar.gz)."""
+
+    @patch("scanEngine.services.worker_deploy._get_worker_run_job_path")
+    @patch("scanEngine.services.worker_deploy._get_rengine_pull_agent_path")
     @patch("scanEngine.services.worker_deploy._get_entrypoint_path")
     @patch("scanEngine.services.worker_deploy._get_compose_path")
-    def test_build_worker_bundle_zip_contains_required_files(self, mock_compose_path, mock_entrypoint_path):
-        """ZIP contains docker-compose.worker.yml, .env and README.txt."""
+    def test_build_worker_bundle_tar_gz_contains_required_files(
+        self, mock_compose_path, mock_entrypoint_path, mock_agent_path, mock_run_job_path
+    ):
+        """ZIP contains docker-compose.worker.yml, .env, pull agent, runner script, README.txt."""
         mock_compose = MagicMock()
         mock_compose.is_file.return_value = True
         mock_compose.read_bytes.return_value = b'version: "3"\nservices:\n  worker:\n    image: secator\n'
@@ -962,6 +1235,14 @@ class TestBuildWorkerBundleZip(BaseTestCase):
         mock_ep = MagicMock()
         mock_ep.is_file.return_value = False
         mock_entrypoint_path.return_value = mock_ep
+        mock_ap = MagicMock()
+        mock_ap.is_file.return_value = True
+        mock_ap.read_bytes.return_value = b"# pull agent"
+        mock_agent_path.return_value = mock_ap
+        mock_rj = MagicMock()
+        mock_rj.is_file.return_value = True
+        mock_rj.read_bytes.return_value = b"# runner"
+        mock_run_job_path.return_value = mock_rj
 
         worker = SecatorWorker.objects.create(
             name="bundle-worker",
@@ -972,20 +1253,95 @@ class TestBuildWorkerBundleZip(BaseTestCase):
             deploy_path="/opt/bundle",
             api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
             api_url="https://rengine.example.com",
+            https_pull_agent=True,
         )
-        zip_bytes = build_worker_bundle_zip(worker)
-        self.assertIsInstance(zip_bytes, bytes)
-        self.assertGreater(len(zip_bytes), 0)
+        archive_bytes = build_worker_bundle_tar_gz(worker)
+        self.assertIsInstance(archive_bytes, bytes)
+        self.assertGreater(len(archive_bytes), 0)
 
-        with zipfile.ZipFile(BytesIO(zip_bytes), "r") as zf:
-            names = zf.namelist()
+        with tarfile.open(fileobj=BytesIO(archive_bytes), mode="r:gz") as tf:
+            names = tf.getnames()
+            env = tf.extractfile(".env").read().decode("utf-8")
         self.assertIn("docker-compose.worker.yml", names)
         self.assertIn(".env", names)
+        self.assertIn("pull_agent_constants.py", names)
         self.assertIn("README.txt", names)
-        # templates/ entries are added only when custom configs exist; both cases are valid
+        self.assertIn("rengine_pull_agent.py", names)
+        self.assertIn("scripts/run_secator_job.py", names)
+        self.assertIn("RENGINE_PULL_AGENT_ENABLED=true", env)
+        self.assertIn("RENGINE_PULL_API_BASE_URL=https://rengine.example.com/api", env)
+        self.assertIn("RENGINE_PULL_SSL_VERIFY=true", env)
+
+    @patch("scanEngine.services.worker_deploy._get_worker_run_job_path")
+    @patch("scanEngine.services.worker_deploy._get_rengine_pull_agent_path")
+    @patch("scanEngine.services.worker_deploy._get_entrypoint_path")
+    @patch("scanEngine.services.worker_deploy._get_compose_path")
+    def test_build_worker_bundle_tar_gz_pull_ssl_verify_false(
+        self, mock_compose_path, mock_entrypoint_path, mock_agent_path, mock_run_job_path
+    ) -> None:
+        mock_compose = MagicMock()
+        mock_compose.is_file.return_value = True
+        mock_compose.read_bytes.return_value = b"x"
+        mock_compose_path.return_value = mock_compose
+        mock_ep = MagicMock()
+        mock_ep.is_file.return_value = False
+        mock_entrypoint_path.return_value = mock_ep
+        mock_ap = MagicMock()
+        mock_ap.is_file.return_value = True
+        mock_ap.read_bytes.return_value = b"#"
+        mock_agent_path.return_value = mock_ap
+        mock_rj = MagicMock()
+        mock_rj.is_file.return_value = True
+        mock_rj.read_bytes.return_value = b"#"
+        mock_run_job_path.return_value = mock_rj
+        worker = SecatorWorker.objects.create(
+            name="bundle-ssl",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/b",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://r.example.com",
+            https_pull_agent=True,
+            https_pull_verify_ssl=False,
+        )
+        archive_bytes = build_worker_bundle_tar_gz(worker)
+        with tarfile.open(fileobj=BytesIO(archive_bytes), mode="r:gz") as tf:
+            env = tf.extractfile(".env").read().decode("utf-8")
+        self.assertIn("RENGINE_PULL_SSL_VERIFY=false", env)
+
+    @patch("scanEngine.services.worker_deploy._get_worker_run_job_path")
+    @patch("scanEngine.services.worker_deploy._get_rengine_pull_agent_path")
+    @patch("scanEngine.services.worker_deploy._get_compose_path")
+    def test_build_worker_bundle_tar_gz_pull_agent_missing_script_raises(
+        self, mock_compose_path, mock_agent_path, mock_run_job_path
+    ):
+        """When pull agent is enabled and agent script is missing, UserSafeError is raised."""
+        mock_compose = MagicMock()
+        mock_compose.is_file.return_value = True
+        mock_compose.read_bytes.return_value = b"version: '3'\n"
+        mock_compose_path.return_value = mock_compose
+        mock_agent_path.return_value = MagicMock(is_file=MagicMock(return_value=False))
+        mock_run_job_path.return_value = MagicMock(is_file=MagicMock(return_value=True))
+
+        worker = SecatorWorker.objects.create(
+            name="bundle-pull-missing-agent",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            https_pull_agent=True,
+        )
+        with self.assertRaises(UserSafeError) as ctx:
+            build_worker_bundle_tar_gz(worker)
+        self.assertIn("pull", str(ctx.exception).lower())
 
     @patch("scanEngine.services.worker_deploy._get_compose_path")
-    def test_build_worker_bundle_zip_missing_compose_raises(self, mock_compose_path):
+    def test_build_worker_bundle_tar_gz_missing_compose_raises(self, mock_compose_path):
         """When compose file is missing, UserSafeError is raised."""
         mock_compose = MagicMock()
         mock_compose.is_file.return_value = False
@@ -1000,8 +1356,148 @@ class TestBuildWorkerBundleZip(BaseTestCase):
             deploy_path="/opt/w",
         )
         with self.assertRaises(UserSafeError) as ctx:
-            build_worker_bundle_zip(worker)
+            build_worker_bundle_tar_gz(worker)
         self.assertIn("compose", str(ctx.exception).lower())
+
+
+class TestWorkerPullWaitForCommand(BaseTestCase):
+    """Tests for worker_pull.wait_for_command."""
+
+    def test_wait_for_command_timeout_transitions_still_running_to_timed_out(self):
+        """On timeout, a command still RUNNING is transitioned to TIMED_OUT and error_message set."""
+        worker = SecatorWorker.objects.create(
+            name="pull-wait-worker",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            https_pull_agent=True,
+            is_active=True,
+        )
+        cmd = SecatorWorkerQueuedCommand.objects.create(
+            worker=worker,
+            kind=SecatorWorkerQueuedCommand.KIND_RUN_JOB,
+            payload={},
+            status=SecatorWorkerQueuedCommand.STATUS_RUNNING,
+        )
+        with self.assertRaises(RuntimeError) as ctx:
+            wait_for_command(cmd.id, timeout_seconds=0, poll_interval=0.01)
+        error_text = str(ctx.exception)
+        self.assertIn("timed out", error_text)
+        self.assertIn(str(cmd.id), error_text)
+        self.assertIn("status=timed_out", error_text)
+        cmd.refresh_from_db()
+        self.assertEqual(cmd.status, SecatorWorkerQueuedCommand.STATUS_TIMED_OUT)
+        self.assertIn("timed out", (cmd.error_message or ""))
+
+    def test_complete_command_after_timeout_can_finalize(self):
+        """If a command was marked TIMED_OUT, the pull-agent can still finalize it."""
+        worker = SecatorWorker.objects.create(
+            name="pull-complete-after-timeout",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            https_pull_agent=True,
+            is_active=True,
+        )
+        cmd = SecatorWorkerQueuedCommand.objects.create(
+            worker=worker,
+            kind=SecatorWorkerQueuedCommand.KIND_RUN_JOB,
+            payload={},
+            status=SecatorWorkerQueuedCommand.STATUS_TIMED_OUT,
+            error_message="timed out previously",
+        )
+
+        updated = complete_command(cmd.id, worker, succeeded=True)
+        self.assertTrue(updated)
+        cmd.refresh_from_db()
+        self.assertEqual(cmd.status, SecatorWorkerQueuedCommand.STATUS_SUCCEEDED)
+        self.assertIsNotNone(cmd.completed_at)
+        self.assertEqual(cmd.error_message, "")
+
+
+class TestWorkerPullQueueGuards(BaseTestCase):
+    """Tests that pull-agent queue helpers are not used incorrectly."""
+
+    def test_enqueue_run_job_raises_for_non_pull_agent_worker(self) -> None:
+        worker = SecatorWorker.objects.create(
+            name="pull-guard-false",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            https_pull_agent=False,
+            is_active=True,
+        )
+        with self.assertRaises(ValueError):
+            enqueue_run_job(worker, job={"execution_mode": "workflow"}, scan_history_id=1)
+
+    def test_enqueue_revoke_raises_for_non_pull_agent_worker(self) -> None:
+        worker = SecatorWorker.objects.create(
+            name="revoke-guard-false",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            https_pull_agent=False,
+            is_active=True,
+        )
+        with self.assertRaises(ValueError):
+            enqueue_revoke(worker, celery_id="celery-task-id")
+
+
+class TestWorkerPullCommandRetention(BaseTestCase):
+    """Tests for worker_pull queue retention cleanup."""
+
+    @patch.dict(os.environ, {"RENGINE_PULL_COMMAND_RETENTION_SECONDS": "60"})
+    def test_claim_next_command_deletes_old_terminal_commands(self):
+        worker = SecatorWorker.objects.create(
+            name="pull-retention",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            https_pull_agent=True,
+            is_active=True,
+        )
+
+        old_terminal = SecatorWorkerQueuedCommand.objects.create(
+            worker=worker,
+            kind=SecatorWorkerQueuedCommand.KIND_RUN_JOB,
+            payload={},
+            status=SecatorWorkerQueuedCommand.STATUS_SUCCEEDED,
+        )
+        SecatorWorkerQueuedCommand.objects.filter(pk=old_terminal.id).update(
+            created_at=timezone.now() - timedelta(seconds=120)
+        )
+
+        pending = SecatorWorkerQueuedCommand.objects.create(
+            worker=worker,
+            kind=SecatorWorkerQueuedCommand.KIND_RUN_JOB,
+            payload={},
+            status=SecatorWorkerQueuedCommand.STATUS_PENDING,
+        )
+
+        claimed = claim_next_command(worker)
+        self.assertIsNotNone(claimed)
+        self.assertEqual(claimed.id, pending.id)
+        self.assertFalse(SecatorWorkerQueuedCommand.objects.filter(pk=old_terminal.id).exists())
 
 
 class TestWorkerDownloadBundleView(BaseTestCase):
@@ -1010,7 +1506,7 @@ class TestWorkerDownloadBundleView(BaseTestCase):
     @patch("scanEngine.services.worker_deploy._get_entrypoint_path")
     @patch("scanEngine.services.worker_deploy._get_compose_path")
     def test_worker_download_bundle_returns_zip(self, mock_compose_path, mock_entrypoint_path):
-        """GET download-bundle returns 200 and application/zip."""
+        """GET download-bundle returns 200 and application/gzip."""
         mock_compose = MagicMock()
         mock_compose.is_file.return_value = True
         mock_compose.read_bytes.return_value = b'version: "3"\n'
@@ -1030,10 +1526,10 @@ class TestWorkerDownloadBundleView(BaseTestCase):
         url = reverse("worker_download_bundle", kwargs={"worker_id": worker.id})
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "application/zip")
+        self.assertEqual(response["Content-Type"], "application/gzip")
         self.assertIn("attachment", response["Content-Disposition"])
         self.assertIn("worker-", response["Content-Disposition"])
-        self.assertIn(".zip", response["Content-Disposition"])
+        self.assertIn(".tar.gz", response["Content-Disposition"])
 
     def test_worker_download_bundle_404_for_invalid_id(self):
         """GET download-bundle with invalid worker_id returns 404."""
@@ -1041,9 +1537,9 @@ class TestWorkerDownloadBundleView(BaseTestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 404)
 
-    @patch("scanEngine.services.worker_deploy.build_worker_bundle_zip")
+    @patch("scanEngine.services.worker_deploy.build_worker_bundle_tar_gz")
     def test_worker_download_bundle_redirects_on_user_safe_error(self, mock_build_zip):
-        """When build_worker_bundle_zip raises UserSafeError, redirect to worker_list with message."""
+        """When build_worker_bundle_tar_gz raises UserSafeError, redirect to worker_list with message."""
         mock_build_zip.side_effect = UserSafeError("Compose file not found.")
         worker = SecatorWorker.objects.create(
             name="error-worker",

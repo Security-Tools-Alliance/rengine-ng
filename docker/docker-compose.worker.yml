@@ -16,9 +16,11 @@ version: '3.8'
 # Then the container uses host.docker.internal:api_tunnel_port. Worker host sshd needs GatewayPorts yes.
 
 # Optional: set SECATOR_WORKER_CONTAINER_NAME in .env to distinguish workers on the same host
+# On ARM64 (aarch64), the Secator image is amd64-only; platform forces amd64 so Docker runs it via QEMU.
 services:
   secator-worker:
     image: freelabz/secator:latest
+    platform: linux/amd64
     container_name: ${SECATOR_WORKER_CONTAINER_NAME:-secator-worker}
     restart: unless-stopped
     entrypoint: /entrypoint.sh
@@ -31,6 +33,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./entrypoint.sh:/entrypoint.sh:ro
+      - ./rengine_pull_agent.py:/rengine-pull-agent/rengine_pull_agent.py:ro
       # Load sitecustomize.py to suppress urllib3 InsecureRequestWarning (copy docker/worker/python_ssl_suppress to deploy path)
       - ./python_ssl_suppress:/opt/rengine-ssl-suppress:ro
       # Custom templates (workflows, scans, tasks, profiles) synced from reNgine-ng

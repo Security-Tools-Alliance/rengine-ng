@@ -1,5 +1,6 @@
 {% extends "base/base.html" %}
 {% load static %}
+{% load worker_extras %}
 
 {% block title %}Workers{% endblock %}
 
@@ -23,6 +24,10 @@
                     </div>
                 </div>
                 <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        <strong>Pull-agent workers</strong> (HTTPS classic + pull): deploy with <strong>Download bundle</strong>; SSH actions are disabled.
+                        The <strong>API</strong> column means the worker can reach reNgine-ng (HTTPS, worker → reNgine-ng). It is updated when <strong>Refresh status</strong> runs over SSH (curl from the container to reNgine-ng). Without SSH, refresh cannot run that check—the badge may stay stale; rely on scans/findings or optional worker check-in to <code>/api/secator/worker/&lt;id&gt;/check/</code>.
+                    </p>
                     <div class="table-responsive">
                         <table class="table table-striped" id="workersTable">
                             <thead>
@@ -40,12 +45,16 @@
                             </thead>
                             <tbody>
                                 {% for worker in workers %}
-                                <tr data-worker-id="{{ worker.id }}">
+                                <tr data-worker-id="{{ worker.id }}"
+                                    data-api-access="{{ worker.api_access_type }}"
+                                    data-https-pull="{% if worker.https_pull_agent %}1{% else %}0{% endif %}">
                                     <td><strong>{{ worker.name }}</strong></td>
-                                    <td>{{ worker.ssh_host }}</td>
-                                    <td>{{ worker.ssh_port }}</td>
+                                    <td>{% if worker|worker_is_pull_only %}<span class="text-muted" title="SSH not used">—</span>{% else %}{{ worker.ssh_host }}{% endif %}</td>
+                                    <td>{% if worker|worker_is_pull_only %}<span class="text-muted">—</span>{% else %}{{ worker.ssh_port }}{% endif %}</td>
                                     <td class="worker-ssh">
-                                        {% if worker.ssh_ok %}
+                                        {% if worker|worker_is_pull_only %}
+                                        <span class="badge bg-secondary" title="Pull agent mode">N/A</span>
+                                        {% elif worker.ssh_ok %}
                                         <span class="badge bg-success">OK</span>
                                         {% else %}
                                         <span class="badge bg-danger">No</span>
@@ -84,19 +93,46 @@
                                             <a href="{% url 'worker_update' worker.id %}" class="btn btn-warning btn-sm" title="Edit">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <button type="button" class="btn btn-info btn-sm btn-worker-deploy" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Deploy">
+                                            {% if worker|worker_is_pull_only %}
+                                            <span class="d-inline-block" title="Use manual bundle deploy for pull-agent workers">
+                                                <button type="button" class="btn btn-info btn-sm" disabled aria-disabled="true">
+                                                    <i class="fas fa-rocket"></i>
+                                                </button>
+                                            </span>
+                                            {% else %}
+                                            <button type="button" class="btn btn-info btn-sm btn-worker-deploy" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Deploy via SSH">
                                                 <i class="fas fa-rocket"></i>
                                             </button>
-                                            <button type="button" class="btn btn-secondary btn-sm btn-worker-refresh" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Refresh status">
+                                            {% endif %}
+                                            {% if worker|worker_is_pull_only %}
+                                            <button type="button" class="btn btn-secondary btn-sm" disabled aria-disabled="true" title="Refresh via SSH is disabled for pull-agent workers (SSH is not used).">
                                                 <i class="fas fa-sync-alt"></i>
                                             </button>
-                                            <button type="button" class="btn btn-outline-secondary btn-sm btn-worker-restart" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Restart container">
+                                            {% else %}
+                                            <button type="button" class="btn btn-secondary btn-sm btn-worker-refresh" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Refresh via SSH: container status and HTTPS from worker container to reNgine">
+                                                <i class="fas fa-sync-alt"></i>
+                                            </button>
+                                            {% endif %}
+                                            {% if worker|worker_is_pull_only %}
+                                            <span class="d-inline-block" title="Restart requires SSH or host shell">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled aria-disabled="true">
+                                                    <i class="fas fa-redo"></i>
+                                                </button>
+                                            </span>
+                                            <span class="d-inline-block" title="Sync via bundle or re-download ZIP">
+                                                <button type="button" class="btn btn-outline-primary btn-sm" disabled aria-disabled="true">
+                                                    <i class="fas fa-cloud-upload-alt"></i>
+                                                </button>
+                                            </span>
+                                            {% else %}
+                                            <button type="button" class="btn btn-outline-secondary btn-sm btn-worker-restart" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Restart container (SSH)">
                                                 <i class="fas fa-redo"></i>
                                             </button>
-                                            <button type="button" class="btn btn-outline-primary btn-sm btn-worker-sync-configs" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Sync configs">
+                                            <button type="button" class="btn btn-outline-primary btn-sm btn-worker-sync-configs" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Sync configs (SSH)">
                                                 <i class="fas fa-cloud-upload-alt"></i>
                                             </button>
-                                            <a href="{% url 'worker_download_bundle' worker.id %}" class="btn btn-outline-secondary btn-sm" title="Download bundle (manual deploy)" download>
+                                            {% endif %}
+                                            <a href="{% url 'worker_download_bundle' worker.id %}" class="btn btn-{% if worker|worker_is_pull_only %}primary{% else %}outline-secondary{% endif %} btn-sm" title="{% if worker|worker_is_pull_only %}Download bundle (required for pull-agent deploy){% else %}Download bundle (manual deploy){% endif %}" download>
                                                 <i class="fas fa-download"></i><span class="sr-only">Download bundle</span>
                                             </a>
                                             {% if worker.is_active %}

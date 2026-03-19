@@ -28,7 +28,7 @@ logger = get_module_logger(__name__)
 
 def start_worker_tunnel(worker: SecatorWorker) -> Optional[subprocess.Popen[bytes]]:
     """
-    Start an SSH reverse tunnel so the worker can reach reNgine API at 127.0.0.1:api_tunnel_port.
+    Start an SSH reverse tunnel so the worker can reach reNgine-ng API at 127.0.0.1:api_tunnel_port.
     Runs: ssh -R api_tunnel_port:target_host:target_port user@worker_host -N
     Returns the Popen handle for stop_worker_tunnel, or None if tunnel is not applicable (e.g. classic mode).
     Raises ValueError if worker is not configured for tunnel or SSH key auth is required but missing.

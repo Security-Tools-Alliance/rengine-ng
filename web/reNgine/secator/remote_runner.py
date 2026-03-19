@@ -17,6 +17,7 @@ from scanEngine.services.worker_config import (
     is_tunnel_api_access,
 )
 from scanEngine.services.worker_config_sync import sync_configs_for_run
+from scanEngine.services.worker_pull import enqueue_revoke, enqueue_run_job, wait_for_command
 from scanEngine.services.worker_ssh import (
     get_ssh_client,
     normalize_remote_error,
@@ -27,6 +28,7 @@ from scanEngine.services.worker_ssh import (
     validate_deploy_path,
 )
 from scanEngine.services.worker_tunnel import start_worker_tunnel, stop_worker_tunnel
+from scanEngine.services.pull_agent_config import pull_revoke_wait_seconds
 from targetApp.services.scope_params import resolve_profiles_for_runner
 
 
@@ -35,6 +37,11 @@ logger = get_module_logger(__name__)
 
 RUNNER_SCRIPT_NAME = "run_secator_job.py"
 REVOKE_TIMEOUT_SECONDS = 30
+PULL_REVOKE_WAIT_SECONDS = pull_revoke_wait_seconds()
+
+
+def _uses_https_pull_agent(worker: SecatorWorker) -> bool:
+    return worker.uses_https_pull_agent()
 
 
 def _get_runner_script_content() -> str:
@@ -59,6 +66,7 @@ def revoke_task_on_remote_worker(
     worker: SecatorWorker,
     celery_id: str,
     task_name: str | None = None,
+    timeout_seconds: int | None = None,
 ) -> bool:
     """
     Revoke a Celery task on the remote worker by running the standalone script in revoke mode.
@@ -73,6 +81,36 @@ def revoke_task_on_remote_worker(
         True if revoke command succeeded (exit 0), False otherwise.
     """
     validate_deploy_path(worker.deploy_path)
+    pull_timeout_seconds = timeout_seconds if timeout_seconds is not None else PULL_REVOKE_WAIT_SECONDS
+    ssh_timeout_seconds = timeout_seconds if timeout_seconds is not None else REVOKE_TIMEOUT_SECONDS
+    if _uses_https_pull_agent(worker):
+        try:
+            cmd_id = enqueue_revoke(worker, celery_id)
+            wait_for_command(cmd_id, pull_timeout_seconds)
+            if task_name:
+                logger.log_line(
+                    PREFIX_REMOTE_RUNNER,
+                    "REVOKE",
+                    "Revoked task %s (%s) on worker %s (pull agent)" % (celery_id, task_name, worker.name),
+                    level="debug",
+                )
+            return True
+        except RuntimeError as e:
+            logger.log_line(
+                PREFIX_REMOTE_RUNNER,
+                "REVOKE",
+                "Pull-agent revoke failed for worker %s: %s" % (worker.name, e),
+                level="warning",
+            )
+            return False
+        except Exception as e:
+            logger.log_line(
+                PREFIX_REMOTE_RUNNER,
+                "REVOKE",
+                "revoke_task_on_remote_worker pull mode failed for worker %s: %s" % (worker.name, e),
+                level="warning",
+            )
+            return False
     tunnel_handle = None
     if is_tunnel_api_access(worker):
         try:
@@ -92,7 +130,7 @@ def revoke_task_on_remote_worker(
         cmd = f"{quote_for_shell(python_exe)} {quote_for_shell(script_path)} revoke {quote_for_shell(celery_id)}"
         client = get_ssh_client(worker)
         try:
-            exit_code, out, err = run_in_container(client, worker, cmd, timeout=REVOKE_TIMEOUT_SECONDS)
+            exit_code, out, err = run_in_container(client, worker, cmd, timeout=ssh_timeout_seconds)
             if exit_code != 0:
                 logger.log_line(
                     PREFIX_REMOTE_RUNNER,
@@ -150,13 +188,14 @@ def run_scan_on_worker(
     try:
         profile_names = _profile_names_from_config(secator_config)
         profile_items = resolve_profiles_for_runner(profile_names)
-        sync_configs_for_run(
-            worker,
-            workflow_name=workflow_name,
-            scan_type=scan_type,
-            task_names=task_names if execution_mode == "tasks" else None,
-            profile_names=profile_names,
-        )
+        if not _uses_https_pull_agent(worker):
+            sync_configs_for_run(
+                worker,
+                workflow_name=workflow_name,
+                scan_type=scan_type,
+                task_names=task_names if execution_mode == "tasks" else None,
+                profile_names=profile_names,
+            )
         job = _build_job_payload(
             worker,
             scan_history_id,
@@ -171,21 +210,36 @@ def run_scan_on_worker(
             profile_items,
             subscan_id,
         )
-        client = get_ssh_client(worker)
-        try:
-            _upload_and_execute_on_worker(client, worker, job, scan_history_id, timeout_seconds)
-        except RuntimeError:
-            raise
-        except Exception as e:
-            logger.log_line(
-                PREFIX_REMOTE_RUNNER,
-                "RUN_SCAN",
-                "run_scan_on_worker failed for worker %s: %s" % (worker.name, e),
-                level="warning",
-            )
-            raise RuntimeError("Failed to run scan on worker. Check SSH and container.") from e
-        finally:
-            client.close()
+        if _uses_https_pull_agent(worker):
+            try:
+                cmd_id = enqueue_run_job(worker, job, scan_history_id)
+                wait_for_command(cmd_id, timeout_seconds)
+            except RuntimeError:
+                raise
+            except Exception as e:
+                logger.log_line(
+                    PREFIX_REMOTE_RUNNER,
+                    "RUN_SCAN",
+                    "run_scan_on_worker pull failed for worker %s: %s" % (worker.name, e),
+                    level="warning",
+                )
+                raise RuntimeError("Failed to run scan on worker. Check pull agent and worker logs.") from e
+        else:
+            client = get_ssh_client(worker)
+            try:
+                _upload_and_execute_on_worker(client, worker, job, scan_history_id, timeout_seconds)
+            except RuntimeError:
+                raise
+            except Exception as e:
+                logger.log_line(
+                    PREFIX_REMOTE_RUNNER,
+                    "RUN_SCAN",
+                    "run_scan_on_worker failed for worker %s: %s" % (worker.name, e),
+                    level="warning",
+                )
+                raise RuntimeError("Failed to run scan on worker. Check SSH and container.") from e
+            finally:
+                client.close()
     finally:
         if tunnel_handle is not None:
             stop_worker_tunnel(tunnel_handle)

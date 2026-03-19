@@ -836,6 +836,8 @@ class SecatorWorkerListSerializer(serializers.ModelSerializer):
             "api_access_type",
             "api_tunnel_port",
             "api_url",
+            "https_pull_agent",
+            "https_pull_verify_ssl",
             "created_at",
             "updated_at",
         ]
@@ -867,6 +869,8 @@ class SecatorWorkerDetailSerializer(serializers.ModelSerializer):
             "api_access_type",
             "api_tunnel_port",
             "api_url",
+            "https_pull_agent",
+            "https_pull_verify_ssl",
             "created_at",
             "updated_at",
             "runners",
@@ -894,6 +898,8 @@ class SecatorWorkerCreateUpdateSerializer(serializers.ModelSerializer):
             "api_access_type",
             "api_tunnel_port",
             "api_url",
+            "https_pull_agent",
+            "https_pull_verify_ssl",
         ]
         read_only_fields = ["id"]
 

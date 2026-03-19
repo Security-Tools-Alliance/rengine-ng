@@ -1,13 +1,14 @@
 """
 SSH-based deployment of Secator workers to remote hosts.
 Uses worker_ssh for SSH/SFTP and remote commands; tries docker compose (v2) then docker-compose (standalone).
-Also provides build_worker_bundle_zip for manual deploy (download ZIP with compose, .env, templates).
+Also provides build_worker_bundle_tar_gz for manual deploy (download tar.gz with compose, .env, templates).
 """
 
 import io
+import stat
+import tarfile
 from pathlib import Path
 from typing import Callable, Optional, Tuple
-import zipfile
 
 from django.conf import settings
 import paramiko
@@ -33,6 +34,114 @@ logger = get_module_logger(__name__)
 _COMPOSE_FILENAME = "docker-compose.worker.yml"
 _ENV_FILENAME = ".env"
 _ENTRYPOINT_FILENAME = "entrypoint.sh"
+_PULL_AGENT_FILENAME = "rengine_pull_agent.py"
+_RUN_JOB_FILENAME = "scripts/run_secator_job.py"
+
+_TARFILE_FIXED_MTIME = 0
+_TAR_MODE_REGULAR = 0o644
+_TAR_MODE_EXECUTABLE = 0o755
+
+
+def _tar_add_bytes(tf: tarfile.TarFile, name: str, content: bytes, mode: int) -> None:
+    info = tarfile.TarInfo(name=name)
+    info.size = len(content)
+    info.mode = mode
+    # Normalize metadata for reproducible archives and to avoid host-specific data.
+    info.uid = 0
+    info.gid = 0
+    info.uname = "root"
+    info.gname = "root"
+    info.mtime = _TARFILE_FIXED_MTIME
+    tf.addfile(info, io.BytesIO(content))
+
+
+def _tar_add_regular_file(tf: tarfile.TarFile, name: str, content: bytes) -> None:
+    """Add a non-executable file to the deployment archive."""
+    _tar_add_bytes(tf, name, content, _TAR_MODE_REGULAR)
+
+
+def _tar_add_executable_file(tf: tarfile.TarFile, name: str, content: bytes) -> None:
+    """Add an executable file to the deployment archive."""
+    _tar_add_bytes(tf, name, content, _TAR_MODE_EXECUTABLE)
+
+
+def _add_optional_bundle_file(
+    tf: tarfile.TarFile,
+    bundle_name: str,
+    source_path: Path,
+    *,
+    executable: bool = False,
+    log_label: str = "BUNDLE",
+) -> bool:
+    """Add optional file to bundle and return True when added."""
+    if source_path.is_file():
+        adder = _tar_add_executable_file if executable else _tar_add_regular_file
+        adder(tf, bundle_name, source_path.read_bytes())
+        return True
+
+    logger.log_line(
+        PREFIX_WORKER_DEPLOY,
+        log_label,
+        "Optional %s missing at %s (bundle will omit it)" % (bundle_name, source_path),
+        level="warning",
+    )
+    return False
+
+
+def _add_custom_templates(tf: tarfile.TarFile) -> None:
+    """Add custom Secator templates into the worker bundle."""
+    from scanEngine.services.worker_config_sync import (
+        _collect_custom_profiles,
+        _collect_custom_scans,
+        _collect_custom_tasks,
+        _collect_custom_workflows,
+    )
+
+    for name, content in _collect_custom_workflows():
+        data = content if isinstance(content, bytes) else content.encode("utf-8")
+        _tar_add_regular_file(tf, f"templates/workflows/{name}.yaml", data)
+    for name, content in _collect_custom_scans():
+        data = content if isinstance(content, bytes) else content.encode("utf-8")
+        _tar_add_regular_file(tf, f"templates/scans/{name}.yaml", data)
+    for name, content in _collect_custom_tasks():
+        data = content if isinstance(content, bytes) else content.encode("utf-8")
+        _tar_add_regular_file(tf, f"templates/tasks/{name}.yaml", data)
+    for name, content in _collect_custom_profiles():
+        data = content if isinstance(content, bytes) else content.encode("utf-8")
+        _tar_add_regular_file(tf, f"templates/profiles/{name}.yaml", data)
+
+
+def _build_bundle_readme(worker: SecatorWorker) -> str:
+    """Build README content shipped inside worker bundle."""
+    readme = (
+        "Manual Secator worker deployment bundle.\n\n"
+        "1. Extract this archive on the target server (e.g. into /opt/secator-worker).\n"
+        "2. Edit .env: set SECATOR_ADDONS_API_KEY. For HTTPS pull-agent workers,\n"
+        "   RENGINE_PULL_AGENT_ENABLED=true and related vars are set from the worker form.\n"
+        "3. Run: docker compose -f docker-compose.worker.yml up -d\n\n"
+    )
+
+    if worker.uses_https_pull_agent():
+        readme += (
+            "Pull agent: when enabled, rengine_pull_agent.py polls the reNgine-ng API and runs\n"
+            "jobs locally (no inbound SSH for scan execution). Ensure templates in ./templates\n"
+            "match reNgine-ng (re-download the bundle after changing custom workflows).\n\n"
+        )
+
+    readme += (
+        "The python_ssl_suppress/ directory contains sitecustomize.py to suppress urllib3\n"
+        "InsecureRequestWarning when the reNgine-ng API uses a self-signed certificate.\n"
+    )
+    if worker.uses_https_pull_agent():
+        readme += "For pull agent TLS issues, set RENGINE_PULL_SSL_VERIFY=false in .env.\n\n"
+
+    readme += (
+        "ARM64 (aarch64): the compose file uses platform linux/amd64 so the image runs under\n"
+        "emulation (QEMU). Ensure Docker has emulation support (e.g. binfmt_misc).\n\n"
+        "See install-worker wiki page for full documentation:\n"
+        "https://github.com/Security-Tools-Alliance/rengine-ng/wiki/install-worker\n"
+    )
+    return readme
 
 
 def _get_compose_path() -> Path:
@@ -51,6 +160,41 @@ def _get_python_ssl_suppress_dir() -> Path:
     """Path to worker python_ssl_suppress (sitecustomize.py for urllib3 warning suppression)."""
     base = Path(settings.BASE_DIR)
     return base.parent / "docker" / "worker" / "python_ssl_suppress"
+
+
+def _get_rengine_pull_agent_path() -> Path:
+    base = Path(settings.BASE_DIR)
+    return base.parent / "docker" / "worker" / "rengine_pull_agent.py"
+
+
+def _get_worker_run_job_path() -> Path:
+    return Path(settings.BASE_DIR) / "reNgine" / "secator" / "worker_run_job.py"
+
+
+def _get_pull_agent_constants_path() -> Path:
+    """Path to web/pull_agent_constants.py (bundled next to rengine_pull_agent.py)."""
+    return Path(settings.BASE_DIR) / "pull_agent_constants.py"
+
+
+def _pull_env_lines(worker: SecatorWorker) -> list[str]:
+    """Lines appended to worker .env for pull-agent mode."""
+    if worker.uses_https_pull_agent():
+        base = worker.get_api_base_url().rstrip("/")
+        api_base = base if base.endswith("/api") else "%s/api" % base
+        ssl_verify = "true" if getattr(worker, "https_pull_verify_ssl", True) else "false"
+        return [
+            "",
+            "# reNgine pull agent (run scans without inbound SSH to the worker)",
+            "RENGINE_PULL_AGENT_ENABLED=true",
+            "RENGINE_WORKER_ID=%s" % worker.id,
+            "RENGINE_WORKER_PULL_TOKEN=%s" % worker.pull_token,
+            "RENGINE_PULL_API_BASE_URL=%s" % api_base,
+            "RENGINE_PULL_SSL_VERIFY=%s" % ssl_verify,
+        ]
+    return [
+        "",
+        "RENGINE_PULL_AGENT_ENABLED=false",
+    ]
 
 
 _API_KEY_PLACEHOLDER = "your-generated-api-key-here"
@@ -97,6 +241,7 @@ def _build_worker_env_content(worker: SecatorWorker) -> str:
     ]
     if worker.container_name:
         lines.append(f"SECATOR_WORKER_CONTAINER_NAME={worker.container_name}")
+    lines.extend(_pull_env_lines(worker))
     return "\n".join(lines) + "\n"
 
 
@@ -109,13 +254,15 @@ def _build_worker_env_content_for_bundle(worker: SecatorWorker) -> str:
     ]
     if worker.container_name:
         lines.append(f"SECATOR_WORKER_CONTAINER_NAME={worker.container_name}")
+    lines.extend(_pull_env_lines(worker))
     return "\n".join(lines) + "\n"
 
 
-def build_worker_bundle_zip(worker: SecatorWorker) -> bytes:
+def build_worker_bundle_tar_gz(worker: SecatorWorker) -> bytes:
     """
-    Build a ZIP archive for manual worker deployment (same content as deploy + sync config).
-    Contains: docker-compose.worker.yml, .env, entrypoint.sh (if present), python_ssl_suppress/sitecustomize.py, templates/*, README.txt.
+    Build a tar.gz archive for manual worker deployment (same content as deploy + sync config).
+    Contains: docker-compose.worker.yml, .env, entrypoint.sh (if present), python_ssl_suppress/sitecustomize.py,
+    templates/*, rengine_pull_agent.py, scripts/run_secator_job.py, README.txt.
     Raises UserSafeError if compose file is missing (safe message only).
     """
     validate_deploy_path(worker.deploy_path)
@@ -129,43 +276,62 @@ def build_worker_bundle_zip(worker: SecatorWorker) -> bytes:
         )
         raise UserSafeError("Worker compose file not found. Check server configuration.")
 
-    from scanEngine.services.worker_config_sync import (
-        _collect_custom_profiles,
-        _collect_custom_scans,
-        _collect_custom_tasks,
-        _collect_custom_workflows,
-    )
-
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(_COMPOSE_FILENAME, compose_path.read_bytes())
-        zf.writestr(_ENV_FILENAME, _build_worker_env_content_for_bundle(worker).encode("utf-8"))
-        entrypoint_path = _get_entrypoint_path()
-        if entrypoint_path.is_file():
-            zf.writestr(_ENTRYPOINT_FILENAME, entrypoint_path.read_bytes())
-        ssl_suppress_dir = _get_python_ssl_suppress_dir()
-        sitecustomize = ssl_suppress_dir / "sitecustomize.py"
-        if sitecustomize.is_file():
-            zf.writestr("python_ssl_suppress/sitecustomize.py", sitecustomize.read_bytes())
-        for name, content in _collect_custom_workflows():
-            zf.writestr(f"templates/workflows/{name}.yaml", content)
-        for name, content in _collect_custom_scans():
-            zf.writestr(f"templates/scans/{name}.yaml", content)
-        for name, content in _collect_custom_tasks():
-            zf.writestr(f"templates/tasks/{name}.yaml", content)
-        for name, content in _collect_custom_profiles():
-            zf.writestr(f"templates/profiles/{name}.yaml", content)
-        readme = (
-            "Manual Secator worker deployment bundle.\n\n"
-            "1. Extract this archive on the target server (e.g. into /opt/secator-worker).\n"
-            "2. If needed, edit .env and set SECATOR_ADDONS_API_KEY to your API key.\n"
-            "3. Run: docker compose -f docker-compose.worker.yml up -d\n\n"
-            "The python_ssl_suppress/ directory contains sitecustomize.py to suppress urllib3\n"
-            "InsecureRequestWarning when the reNgine API uses a self-signed certificate.\n\n"
-            "See WORKER_DEPLOYMENT.md for full documentation.\n"
+    with tarfile.open(mode="w:gz", fileobj=buffer) as tf:
+        _tar_add_regular_file(tf, _COMPOSE_FILENAME, compose_path.read_bytes())
+        _tar_add_regular_file(tf, _ENV_FILENAME, _build_worker_env_content_for_bundle(worker).encode("utf-8"))
+        if worker.uses_https_pull_agent():
+            constants_path = _get_pull_agent_constants_path()
+            if constants_path.is_file():
+                _tar_add_regular_file(tf, "pull_agent_constants.py", constants_path.read_bytes())
+            else:
+                logger.log_line(
+                    PREFIX_WORKER_DEPLOY,
+                    "BUNDLE",
+                    "Optional pull_agent_constants.py missing at %s (bundle will omit it)" % (constants_path,),
+                    level="warning",
+                )
+
+        _add_optional_bundle_file(
+            tf,
+            _ENTRYPOINT_FILENAME,
+            _get_entrypoint_path(),
+            executable=True,
         )
-        zf.writestr("README.txt", readme.encode("utf-8"))
+
+        agent_path = _get_rengine_pull_agent_path()
+        run_job_path = _get_worker_run_job_path()
+        if worker.uses_https_pull_agent():
+            if not agent_path.is_file():
+                raise UserSafeError(
+                    "Pull-agent script (rengine_pull_agent.py) is missing. "
+                    "Ensure the script is present before building the deployment bundle."
+                )
+            if not run_job_path.is_file():
+                raise UserSafeError(
+                    "Worker run script is missing. "
+                    "Ensure the script is present before building the deployment bundle."
+                )
+        if agent_path.is_file():
+            _tar_add_executable_file(tf, _PULL_AGENT_FILENAME, agent_path.read_bytes())
+        if run_job_path.is_file():
+            _tar_add_executable_file(tf, _RUN_JOB_FILENAME, run_job_path.read_bytes())
+
+        _add_optional_bundle_file(
+            tf,
+            "python_ssl_suppress/sitecustomize.py",
+            _get_python_ssl_suppress_dir() / "sitecustomize.py",
+            executable=False,
+        )
+        _add_custom_templates(tf)
+        _tar_add_regular_file(tf, "README.txt", _build_bundle_readme(worker).encode("utf-8"))
+
     return buffer.getvalue()
+
+
+def build_worker_bundle_zip(worker: SecatorWorker) -> bytes:
+    """Backward-compatible alias for build_worker_bundle_tar_gz()."""
+    return build_worker_bundle_tar_gz(worker)
 
 
 def deploy_worker(

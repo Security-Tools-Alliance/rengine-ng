@@ -6135,7 +6135,7 @@ class SecatorWorkerCheckIn(APIView):
             if "last_error" in data:
                 worker.last_error = data["last_error"] or None
             worker.last_status_at = timezone.now()
-            worker.save(update_fields=["api_reachable", "last_error", "last_status_at"])
+            worker.save_partial(update_fields=["api_reachable", "last_error", "last_status_at"])
             from reNgine.utilities.websocket import send_worker_status_update
 
             send_worker_status_update(worker.id)
@@ -6439,7 +6439,7 @@ class SecatorWorkerViewSet(viewsets.ModelViewSet):
         worker.ssh_auth_type = SecatorWorker.AUTH_KEY
         worker.ssh_key_path = ""
         worker.ssh_password_encrypted = ""
-        worker.save(update_fields=["ssh_auth_type", "ssh_key_path", "ssh_password_encrypted"])
+        worker.save_partial(update_fields=["ssh_auth_type", "ssh_key_path", "ssh_password_encrypted"])
         return Response({"ok": True})
 
     @action(detail=True, methods=["post"], url_path="sync-configs")
@@ -6460,7 +6460,7 @@ class SecatorWorkerViewSet(viewsets.ModelViewSet):
         """Set worker is_active=False."""
         worker = self.get_object()
         worker.is_active = False
-        worker.save(update_fields=["is_active"])
+        worker.save_partial(update_fields=["is_active"])
         from reNgine.utilities.websocket import send_worker_status_update
 
         send_worker_status_update(worker.id)
@@ -6471,7 +6471,7 @@ class SecatorWorkerViewSet(viewsets.ModelViewSet):
         """Set worker is_active=True."""
         worker = self.get_object()
         worker.is_active = True
-        worker.save(update_fields=["is_active"])
+        worker.save_partial(update_fields=["is_active"])
         from reNgine.utilities.websocket import send_worker_status_update
 
         send_worker_status_update(worker.id)

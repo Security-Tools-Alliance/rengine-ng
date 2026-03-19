@@ -103,7 +103,7 @@ services:
       - ../web:/home/rengine/rengine:rw,z
       - ./web/entrypoint.sh:/entrypoint.sh:ro
       - ./docker-compose.worker.yml:/home/rengine/docker/docker-compose.worker.yml:ro
-      - ./worker/entrypoint.sh:/home/rengine/docker/entrypoint.sh:ro
+      - ./worker:/home/rengine/docker/worker:ro
       - rengine_ssh_keys:/home/rengine/.ssh
       - nuclei_templates:/home/rengine/nuclei-templates
       - wordlist:/home/rengine/wordlists

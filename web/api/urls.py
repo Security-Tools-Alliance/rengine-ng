@@ -120,6 +120,7 @@ from .views_advanced_search import (
     AdvancedSearchValidateView,
     AdvancedSearchValuesView,
 )
+from .views_worker_pull import secator_worker_pull_claim, secator_worker_pull_complete
 
 
 app_name = "api"
@@ -287,6 +288,16 @@ urlpatterns = [
     path("secator/health/", SecatorHealth.as_view(), name="secator_health"),
     path("health/datatables-filters/", DatatableFilterHealth.as_view(), name="datatable_filter_health"),
     path("secator/worker/<int:worker_id>/check/", SecatorWorkerCheckIn.as_view(), name="secator_worker_check"),
+    path(
+        "secator/workers/<int:worker_id>/pull/claim/",
+        secator_worker_pull_claim,
+        name="secator_worker_pull_claim",
+    ),
+    path(
+        "secator/workers/<int:worker_id>/pull/complete/",
+        secator_worker_pull_complete,
+        name="secator_worker_pull_complete",
+    ),
 ]
 
 urlpatterns += router.urls

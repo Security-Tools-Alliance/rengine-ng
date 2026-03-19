@@ -13,12 +13,15 @@
 {% endblock page_title %}
 
 {% block main_content %}
-<div class="row">
+<div class="row" id="worker-form-root"
+    data-auth-type-id="{{ form.ssh_auth_type.id_for_label|escape }}"
+    data-api-access-type-id="{{ form.api_access_type.id_for_label|escape }}"
+    data-https-pull-agent-id="{{ form.https_pull_agent.id_for_label|escape }}">
     <div class="col-xl-12">
         <div class="card">
             <div class="card-body">
-                <p class="text-muted">
-                    Configure a remote host for Secator worker deployment. After saving, use "Deploy" on the workers list to copy the compose file and start the container via SSH.
+                <p class="text-muted" id="worker-form-intro">
+                    Configure how this worker reaches reNgine and how scans are executed.
                 </p>
                 <form method="POST">
                     {% csrf_token %}
@@ -34,33 +37,13 @@
                             <div class="form-group mb-3">
                                 <label for="{{ form.deploy_path.id_for_label }}">Deploy path *</label>
                                 {{ form.deploy_path }}
+                                <small class="form-text text-muted d-block">Directory on the worker host for compose, templates, and scripts (e.g. <code>/opt/secator-worker</code>).</small>
                                 {% if form.deploy_path.errors %}<div class="text-danger small">{{ form.deploy_path.errors }}</div>{% endif %}
                             </div>
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-md-4">
-                            <div class="form-group mb-3">
-                                <label for="{{ form.ssh_host.id_for_label }}">SSH host *</label>
-                                {{ form.ssh_host }}
-                                {% if form.ssh_host.errors %}<div class="text-danger small">{{ form.ssh_host.errors }}</div>{% endif %}
-                            </div>
-                        </div>
-                        <div class="col-md-2">
-                            <div class="form-group mb-3">
-                                <label for="{{ form.ssh_port.id_for_label }}">SSH port *</label>
-                                {{ form.ssh_port }}
-                                {% if form.ssh_port.errors %}<div class="text-danger small">{{ form.ssh_port.errors }}</div>{% endif %}
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group mb-3">
-                                <label for="{{ form.ssh_user.id_for_label }}">SSH user *</label>
-                                {{ form.ssh_user }}
-                                {% if form.ssh_user.errors %}<div class="text-danger small">{{ form.ssh_user.errors }}</div>{% endif %}
-                            </div>
-                        </div>
-                        <div class="col-md-2">
+                        <div class="col-md-6">
                             <div class="form-group mb-3">
                                 <label for="{{ form.container_name.id_for_label }}">Container name</label>
                                 {{ form.container_name }}
@@ -68,40 +51,10 @@
                             </div>
                         </div>
                     </div>
-                    <div class="row">
-                        <div class="col-md-12">
-                            <div class="form-group mb-3">
-                                <label for="{{ form.ssh_auth_type.id_for_label }}">Authentication *</label>
-                                {{ form.ssh_auth_type }}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row" id="ssh-key-row">
-                        <div class="col-md-12">
-                            <div class="form-group mb-3">
-                                <label>Public key to copy on the worker server</label>
-                                {% if ssh_public_key_content %}
-                                <textarea class="form-control font-monospace" rows="3" readonly>{{ ssh_public_key_content|escape }}</textarea>
-                                <small class="text-muted">Copy this key into <code>~/.ssh/authorized_keys</code> on the worker host, then use &quot;Check connection&quot; below.</small>
-                                {% else %}
-                                <p class="text-muted mb-0">Key will be generated at next container start. Restart the web container if you just added the SSH volume.</p>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row" id="ssh-password-row">
-                        <div class="col-md-12">
-                            <div class="form-group mb-3">
-                                <label for="{{ form.ssh_password_encrypted.id_for_label }}">Password</label>
-                                {{ form.ssh_password_encrypted }}
-                                {% if worker %}<small class="form-text text-muted">Leave blank to keep current password.</small>{% endif %}
-                                {% if form.ssh_password_encrypted.errors %}<div class="text-danger small">{{ form.ssh_password_encrypted.errors }}</div>{% endif %}
-                            </div>
-                        </div>
-                    </div>
+
                     <h6 class="mb-2 mt-3">API access</h6>
                     <p class="text-muted small mb-2">
-                        How the worker reaches the reNgine API: SSH tunnel (reverse tunnel from this server) or classic HTTPS with an external URL.
+                        How the worker container reaches the reNgine API (findings, pull jobs).
                     </p>
                     <div class="row">
                         <div class="col-md-12">
@@ -114,14 +67,14 @@
                     <div class="row" id="api-tunnel-row">
                         <div class="col-md-12">
                             <div class="alert alert-info small mb-2" role="alert">
-                                <strong>SSH server requirement:</strong> On the worker host, the SSH server must have <code>GatewayPorts yes</code> in <code>sshd_config</code> (e.g. <code>/etc/ssh/sshd_config</code>), then restart <code>sshd</code>. Otherwise the reverse tunnel cannot bind to all interfaces and the container will not reach the API.
+                                <strong>SSH server requirement:</strong> On the worker host, <code>GatewayPorts yes</code> in <code>sshd_config</code> is required for the reverse tunnel.
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="form-group mb-3">
                                 <label for="{{ form.api_tunnel_port.id_for_label }}">Tunnel port (worker side)</label>
                                 {{ form.api_tunnel_port }}
-                                <small class="form-text text-muted">Port on the worker host where the tunnel listens; the container reaches it via host.docker.internal.</small>
+                                <small class="form-text text-muted">Container uses <code>host.docker.internal</code> and this port.</small>
                                 {% if form.api_tunnel_port.errors %}<div class="text-danger small">{{ form.api_tunnel_port.errors }}</div>{% endif %}
                             </div>
                         </div>
@@ -131,12 +84,103 @@
                             <div class="form-group mb-3">
                                 <label for="{{ form.api_url.id_for_label }}">API URL *</label>
                                 {{ form.api_url }}
-                                <small class="form-text text-muted">Base URL of the reNgine API (e.g. https://rengine.example.com).</small>
+                                <small class="form-text text-muted">Base URL (e.g. <code>https://rengine.example.com</code>). Pull agent calls <code>…/api/secator/workers/…</code>.</small>
                                 {% if form.api_url.errors %}<div class="text-danger small">{{ form.api_url.errors }}</div>{% endif %}
                             </div>
                         </div>
                     </div>
-                    <div class="form-check form-switch mb-3">
+                    <div class="row" id="https-pull-agent-row">
+                        <div class="col-md-12">
+                            <div class="form-check form-switch mb-2">
+                                {{ form.https_pull_agent }}
+                                <label class="form-check-label" for="{{ form.https_pull_agent.id_for_label }}">Execute scans via pull agent (no inbound SSH)</label>
+                            </div>
+                            <p class="text-muted small mb-2" id="https-pull-agent-hint">
+                                Jobs are fetched over HTTPS; SSH is not used to start scans. Deploy using the downloaded bundle on the worker host.
+                            </p>
+                            {% if form.https_pull_agent.errors %}<div class="text-danger small">{{ form.https_pull_agent.errors }}</div>{% endif %}
+                            <div class="form-check form-switch mb-2" id="https-pull-verify-ssl-row">
+                                {{ form.https_pull_verify_ssl }}
+                                <label class="form-check-label" for="{{ form.https_pull_verify_ssl.id_for_label }}">{{ form.https_pull_verify_ssl.label }}</label>
+                            </div>
+                            {% if form.https_pull_verify_ssl.help_text %}<small class="form-text text-muted d-block mb-2">{{ form.https_pull_verify_ssl.help_text }}</small>{% endif %}
+                            {% if form.https_pull_verify_ssl.errors %}<div class="text-danger small">{{ form.https_pull_verify_ssl.errors }}</div>{% endif %}
+                            {% if worker %}
+                            <div class="form-check mb-2">
+                                {{ form.regenerate_pull_token }}
+                                <label class="form-check-label" for="{{ form.regenerate_pull_token.id_for_label }}">{{ form.regenerate_pull_token.label }}</label>
+                            </div>
+                            {% if form.regenerate_pull_token.help_text %}<small class="form-text text-muted d-block mb-2">{{ form.regenerate_pull_token.help_text }}</small>{% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning d-none mb-3" id="manual-deploy-pull-notice" role="alert">
+                        <strong>Manual deployment:</strong> SSH is not used for this worker. In pull-agent mode, <code>ssh_auth_type</code> normally uses SSH key authentication and SSH host/user inputs may be auto-filled for convenience, but they are ignored during execution. After saving, download the worker bundle from the workers list, extract it on the host under the deploy path, edit <code>.env</code>, then run <code>docker compose -f docker-compose.worker.yml up -d</code>. Re-download the bundle when custom workflows or templates change on reNgine.
+                    </div>
+
+                    <div id="ssh-section">
+                        <h6 class="mb-2 mt-3">SSH (remote administration)</h6>
+                        <p class="text-muted small mb-2" id="ssh-section-lead">
+                            Used to deploy the container, sync configs, restart, and refresh status. Required for tunnel API mode.
+                        </p>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.ssh_host.id_for_label }}">SSH host *</label>
+                                    {{ form.ssh_host }}
+                                    {% if form.ssh_host.errors %}<div class="text-danger small">{{ form.ssh_host.errors }}</div>{% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.ssh_port.id_for_label }}">SSH port *</label>
+                                    {{ form.ssh_port }}
+                                    {% if form.ssh_port.errors %}<div class="text-danger small">{{ form.ssh_port.errors }}</div>{% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.ssh_user.id_for_label }}">SSH user *</label>
+                                    {{ form.ssh_user }}
+                                    {% if form.ssh_user.errors %}<div class="text-danger small">{{ form.ssh_user.errors }}</div>{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.ssh_auth_type.id_for_label }}">Authentication *</label>
+                                    {{ form.ssh_auth_type }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row" id="ssh-key-row">
+                            <div class="col-md-12">
+                                <div class="form-group mb-3">
+                                    <label>Public key (worker host <code>authorized_keys</code>)</label>
+                                    {% if ssh_public_key_content %}
+                                    <textarea class="form-control font-monospace" rows="3" readonly>{{ ssh_public_key_content|escape }}</textarea>
+                                    <small class="text-muted">Use &quot;Check SSH &amp; API&quot; below after deployment.</small>
+                                    {% else %}
+                                    <p class="text-muted mb-0">Key is created when the web container starts.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row" id="ssh-password-row">
+                            <div class="col-md-12">
+                                <div class="form-group mb-3">
+                                    <label for="{{ form.ssh_password_encrypted.id_for_label }}">Password</label>
+                                    {{ form.ssh_password_encrypted }}
+                                    {% if worker %}<small class="form-text text-muted">Leave blank to keep current password.</small>{% endif %}
+                                    {% if form.ssh_password_encrypted.errors %}<div class="text-danger small">{{ form.ssh_password_encrypted.errors }}</div>{% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-check form-switch mb-3 mt-3">
                         {{ form.is_active }}
                         <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active</label>
                     </div>
@@ -151,16 +195,21 @@
                             <i class="fas fa-arrow-left"></i> Back to Workers
                         </a>
                         {% if worker and worker_check_connection_url %}
-                        <button type="button" class="btn btn-outline-info" id="btn-check-connection" data-url="{{ worker_check_connection_url|escape }}">
-                            <i class="fas fa-plug"></i> Check connection
+                        <button type="button" class="btn btn-outline-info worker-form-check-ssh-api" id="btn-check-connection" data-url="{{ worker_check_connection_url|escape }}">
+                            <i class="fas fa-plug"></i> Check SSH &amp; API
                         </button>
                         {% endif %}
                         {% if worker and worker.ssh_auth_type == 'password' and worker_install_public_key_url %}
-                        <button type="button" class="btn btn-outline-success" id="btn-install-public-key" data-url="{{ worker_install_public_key_url|escape }}">
-                            <i class="fas fa-key"></i> Install public key and switch to key auth
+                        <button type="button" class="btn btn-outline-success worker-form-install-key" id="btn-install-public-key" data-url="{{ worker_install_public_key_url|escape }}">
+                            <i class="fas fa-key"></i> Install public key
                         </button>
                         {% endif %}
                     </div>
+                    <p class="text-muted small mt-2 d-none" id="worker-form-api-status-hint">
+                        The <strong>API</strong> badge reflects whether the <strong>worker can reach reNgine-ng</strong> over HTTPS (worker → reNgine-ng, same as Secator hooks)—not the other way around.
+                        With SSH, <strong>Refresh status</strong> on the workers list runs that test <em>from inside the worker container</em>.
+                        In pull-only mode without SSH to the host, that refresh path is unavailable; judge connectivity from scans and findings, or call <code>POST /api/secator/worker/&lt;id&gt;/check/</code> from the worker if you implement check-in.
+                    </p>
                     <div id="check-connection-result" class="mt-2" style="display: none;"></div>
                     <div id="install-key-result" class="mt-2" style="display: none;"></div>
                 </form>
@@ -171,116 +220,5 @@
 {% endblock main_content %}
 
 {% block page_level_script %}
-<script>
-(function() {
-    const authType = document.getElementById('{{ form.ssh_auth_type.id_for_label }}');
-    const keyRow = document.getElementById('ssh-key-row');
-    const pwdRow = document.getElementById('ssh-password-row');
-    function toggleAuth() {
-        const isKey = authType.value === 'key';
-        keyRow.style.display = isKey ? '' : 'none';
-        pwdRow.style.display = isKey ? 'none' : '';
-    }
-    if (authType) {
-        authType.addEventListener('change', toggleAuth);
-        toggleAuth();
-    }
-
-    const apiAccessType = document.getElementById('{{ form.api_access_type.id_for_label }}');
-    const apiTunnelRow = document.getElementById('api-tunnel-row');
-    const apiUrlRow = document.getElementById('api-url-row');
-    function toggleApiAccess() {
-        const isTunnel = apiAccessType && apiAccessType.value === 'tunnel';
-        if (apiTunnelRow) apiTunnelRow.style.display = isTunnel ? '' : 'none';
-        if (apiUrlRow) apiUrlRow.style.display = isTunnel ? 'none' : '';
-    }
-    if (apiAccessType) {
-        apiAccessType.addEventListener('change', toggleApiAccess);
-        toggleApiAccess();
-    }
-
-    const btnCheck = document.getElementById('btn-check-connection');
-    const resultDiv = document.getElementById('check-connection-result');
-    if (btnCheck && resultDiv) {
-        const url = btnCheck.getAttribute('data-url');
-        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]') ? document.querySelector('[name=csrfmiddlewaretoken]').value : '';
-        function getCookie(name) {
-            let v = null;
-            if (document.cookie && document.cookie !== '') {
-                document.cookie.split(';').forEach(function(c) {
-                    const parts = c.trim().split('=');
-                    if (parts[0] === name) v = decodeURIComponent(parts[1] || '');
-                });
-            }
-            return v;
-        }
-        btnCheck.addEventListener('click', function() {
-            btnCheck.disabled = true;
-            resultDiv.style.display = 'block';
-            resultDiv.innerHTML = '<span class="text-muted">Checking...</span>';
-            fetch(url, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    'X-CSRFToken': csrfToken || getCookie('csrftoken'),
-                    'Content-Type': 'application/json',
-                },
-                body: '{}',
-            }).then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); }).then(function(res) {
-                if (res.data.ok === true) {
-                    resultDiv.innerHTML = '<span class="text-success"><i class="fas fa-check-circle"></i> Connection successful.</span>';
-                } else {
-                    resultDiv.innerHTML = '<span class="text-danger"><i class="fas fa-times-circle"></i> ' + (res.data.error || 'Connection failed.') + '</span>';
-                }
-            }).catch(function() {
-                resultDiv.innerHTML = '<span class="text-danger"><i class="fas fa-times-circle"></i> Connection failed.</span>';
-            }).finally(function() {
-                btnCheck.disabled = false;
-            });
-        });
-    }
-
-    const btnInstallKey = document.getElementById('btn-install-public-key');
-    const installKeyResult = document.getElementById('install-key-result');
-    if (btnInstallKey && installKeyResult) {
-        const installUrl = btnInstallKey.getAttribute('data-url');
-        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]') ? document.querySelector('[name=csrfmiddlewaretoken]').value : '';
-        function getCookieForInstall(name) {
-            let v = null;
-            if (document.cookie && document.cookie !== '') {
-                document.cookie.split(';').forEach(function(c) {
-                    const parts = c.trim().split('=');
-                    if (parts[0] === name) v = decodeURIComponent(parts[1] || '');
-                });
-            }
-            return v;
-        }
-        btnInstallKey.addEventListener('click', function() {
-            btnInstallKey.disabled = true;
-            installKeyResult.style.display = 'block';
-            installKeyResult.innerHTML = '<span class="text-muted">Installing key and switching to key auth...</span>';
-            fetch(installUrl, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    'X-CSRFToken': csrfToken || getCookieForInstall('csrftoken'),
-                    'Content-Type': 'application/json',
-                },
-                body: '{}',
-            }).then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); }).then(function(res) {
-                if (res.data.ok === true) {
-                    installKeyResult.innerHTML = '<span class="text-success"><i class="fas fa-check-circle"></i> Key installed. Reloading...</span>';
-                    window.location.reload();
-                } else {
-                    installKeyResult.innerHTML = '<span class="text-danger"><i class="fas fa-times-circle"></i> ' + (res.data.error || 'Install failed.') + '</span>';
-                    btnInstallKey.disabled = false;
-                }
-            }).catch(function() {
-                installKeyResult.innerHTML = '<span class="text-danger"><i class="fas fa-times-circle"></i> Install failed.</span>';
-                btnInstallKey.disabled = false;
-            });
-        });
-    }
-})();
-</script>
+<script src="{% static 'custom/worker_form.js' %}"></script>
 {% endblock %}

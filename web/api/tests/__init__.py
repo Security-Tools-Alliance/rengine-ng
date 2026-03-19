@@ -87,6 +87,7 @@ from .test_vulnerability import (
     TestVulnerabilityReport,
     TestVulnerabilityViewSet,
 )
+from .test_worker_pull import TestWorkerPullApi
 
 
 __all__ = [
@@ -162,6 +163,8 @@ __all__ = [
     "TestGetFileContents",
     "TestOllamaManager",
     "TestRengineUpdateCheck",
+    # test_worker_pull
+    "TestWorkerPullApi",
     # test_vulnerability
     "TestDeleteVulnerability",
     "TestFetchMostCommonVulnerability",
