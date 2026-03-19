@@ -1007,9 +1007,7 @@ class SecatorWorker(models.Model):
         self._prepare_pull_token_for_save(kwargs)
         super().save(*args, **kwargs)
 
-    def _should_generate_pull_token(
-        self, update_fields: list[str] | tuple[str, ...] | None
-    ) -> bool:
+    def _should_generate_pull_token(self, update_fields: list[str] | tuple[str, ...] | None) -> bool:
         """Return True when pull_token must be generated for this save call."""
         return self.pk is None or update_fields is None or "pull_token" in update_fields
 
@@ -1079,18 +1077,12 @@ class SecatorWorker(models.Model):
 
     def uses_https_pull_agent(self) -> bool:
         """True when this worker runs scans via the pull agent (HTTPS classic, no inbound SSH)."""
-        return (
-            bool(self.https_pull_agent)
-            and self.api_access_type == self.API_ACCESS_CLASSIC
-        )
+        return bool(self.https_pull_agent) and self.api_access_type == self.API_ACCESS_CLASSIC
 
     @classmethod
     def uses_https_pull_agent_from(cls, api_access_type: str, https_pull_agent: bool) -> bool:
         """Same as uses_https_pull_agent() for use with raw values (e.g. form cleaned_data)."""
-        return (
-            bool(https_pull_agent)
-            and api_access_type == cls.API_ACCESS_CLASSIC
-        )
+        return bool(https_pull_agent) and api_access_type == cls.API_ACCESS_CLASSIC
 
     def get_api_base_url(self) -> str:
         """Return the API base URL this worker uses (for .env and health check)."""

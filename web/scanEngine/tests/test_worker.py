@@ -2,25 +2,24 @@
 Unit tests for SecatorWorker model, worker deploy service, and worker views.
 """
 
-from io import BytesIO
 from datetime import timedelta
+from io import BytesIO
 import os
-from unittest.mock import MagicMock, patch
 import tarfile
+from unittest.mock import MagicMock, patch
 
 from django.urls import reverse
 from django.utils import timezone
 
 from reNgine.utilities.error import UserSafeError
 from scanEngine.forms import SecatorWorkerForm
-from scanEngine.models import SecatorWorker
+from scanEngine.models import SecatorWorker, SecatorWorkerQueuedCommand
 from scanEngine.services.worker_config import (
     REMOTE_SCRIPTS_DIR,
     get_container_script_base,
     is_tunnel_api_access,
 )
 from scanEngine.services.worker_config_sync import sync_configs_for_run
-from scanEngine.models import SecatorWorkerQueuedCommand
 from scanEngine.services.worker_deploy import (
     _build_worker_env_content,
     build_worker_bundle_tar_gz,

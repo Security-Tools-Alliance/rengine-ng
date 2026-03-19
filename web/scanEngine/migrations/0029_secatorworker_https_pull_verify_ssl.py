@@ -2,7 +2,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("scanEngine", "0028_secatorworker_pull_agent_and_queued_command"),
     ]

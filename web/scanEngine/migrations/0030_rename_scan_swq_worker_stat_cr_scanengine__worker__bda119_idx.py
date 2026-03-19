@@ -4,15 +4,14 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0029_secatorworker_https_pull_verify_ssl'),
+        ("scanEngine", "0029_secatorworker_https_pull_verify_ssl"),
     ]
 
     operations = [
         migrations.RenameIndex(
-            model_name='secatorworkerqueuedcommand',
-            new_name='scanEngine__worker__bda119_idx',
-            old_name='scan_swq_worker_stat_cr',
+            model_name="secatorworkerqueuedcommand",
+            new_name="scanEngine__worker__bda119_idx",
+            old_name="scan_swq_worker_stat_cr",
         ),
     ]

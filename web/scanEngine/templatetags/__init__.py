@@ -1,2 +1,1 @@
 """Template tags for scanEngine."""
-

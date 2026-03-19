@@ -17,4 +17,3 @@ def worker_is_pull_only(worker: object) -> bool:
     https_pull_agent = bool(getattr(worker, "https_pull_agent", False))
     api_access_type = getattr(worker, "api_access_type", None)
     return api_access_type == SecatorWorker.API_ACCESS_CLASSIC and https_pull_agent
-

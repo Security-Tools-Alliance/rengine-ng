@@ -25,8 +25,10 @@ from pull_agent_constants import PULL_TOKEN_HEADER
 from scanEngine.models import SecatorWorker, SecatorWorkerQueuedCommand
 from scanEngine.services.pull_agent_config import (
     get_pull_command_wait_config,
+    pull_command_retention_seconds,
     pull_token_max_length,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +67,13 @@ def _compute_poll_sleep_seconds(poll_interval: float, remaining: float) -> float
 
 
 def _terminal_command_retention_seconds() -> int:
-    """How long pull-agent terminal commands are kept."""
-    return _PULL_COMMAND_WAIT_CONFIG.command_retention_seconds
+    """
+    How long pull-agent terminal commands are kept.
+
+    Use the direct env reader instead of the cached startup config so tests and
+    runtime overrides can adjust retention without reloading this module.
+    """
+    return pull_command_retention_seconds()
 
 
 def _cleanup_old_terminal_commands(worker: SecatorWorker) -> None:
@@ -88,9 +95,9 @@ def worker_from_pull_request(request: Any, worker_id: int, token: str | None = N
     if not token:
         return None
     try:
-        worker = SecatorWorker.objects.only(
-            "id", "is_active", "https_pull_agent", "api_access_type", "pull_token"
-        ).get(pk=worker_id)
+        worker = SecatorWorker.objects.only("id", "is_active", "https_pull_agent", "api_access_type", "pull_token").get(
+            pk=worker_id
+        )
     except SecatorWorker.DoesNotExist:
         return None
     if not worker.is_active or not worker.uses_https_pull_agent():
@@ -224,11 +231,7 @@ def wait_for_command(
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
-        cmd = (
-            SecatorWorkerQueuedCommand.objects.filter(pk=command_id)
-            .only("status", "error_message")
-            .first()
-        )
+        cmd = SecatorWorkerQueuedCommand.objects.filter(pk=command_id).only("status", "error_message").first()
         if cmd is None:
             raise RuntimeError("Worker command was removed.")
         if cmd.status == SecatorWorkerQueuedCommand.STATUS_SUCCEEDED:

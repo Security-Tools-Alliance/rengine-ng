@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Centralized server-side tuning for pull-agent command waiting.
 
@@ -14,6 +12,8 @@ Ownership map:
 - `worker_pull.py`: queue wait/cleanup behavior and token header validation
 - `docker/worker/rengine_pull_agent.py`: worker-side polling/backoff/runtime behavior
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
@@ -34,6 +34,7 @@ from pull_agent_constants import (
     ENV_PULL_REVOKE_WAIT_SECONDS,
     ENV_PULL_TOKEN_MAX_LENGTH,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -137,4 +138,3 @@ def get_pull_command_wait_config() -> PullCommandWaitConfig:
         config.command_retention_seconds,
     )
     return config
-

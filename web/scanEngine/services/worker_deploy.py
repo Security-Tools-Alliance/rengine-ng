@@ -5,9 +5,8 @@ Also provides build_worker_bundle_tar_gz for manual deploy (download tar.gz with
 """
 
 import io
-import stat
-import tarfile
 from pathlib import Path
+import tarfile
 from typing import Callable, Optional, Tuple
 
 from django.conf import settings
@@ -309,8 +308,7 @@ def build_worker_bundle_tar_gz(worker: SecatorWorker) -> bytes:
                 )
             if not run_job_path.is_file():
                 raise UserSafeError(
-                    "Worker run script is missing. "
-                    "Ensure the script is present before building the deployment bundle."
+                    "Worker run script is missing. Ensure the script is present before building the deployment bundle."
                 )
         if agent_path.is_file():
             _tar_add_executable_file(tf, _PULL_AGENT_FILENAME, agent_path.read_bytes())

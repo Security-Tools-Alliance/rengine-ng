@@ -11,6 +11,7 @@ import time
 from reNgine.secator.run_opts import build_run_opts
 from reNgine.utilities.logger import get_module_logger
 from scanEngine.models import SecatorWorker
+from scanEngine.services.pull_agent_config import pull_revoke_wait_seconds
 from scanEngine.services.worker_config import (
     REMOTE_SCRIPTS_DIR,
     get_container_script_base,
@@ -28,7 +29,6 @@ from scanEngine.services.worker_ssh import (
     validate_deploy_path,
 )
 from scanEngine.services.worker_tunnel import start_worker_tunnel, stop_worker_tunnel
-from scanEngine.services.pull_agent_config import pull_revoke_wait_seconds
 from targetApp.services.scope_params import resolve_profiles_for_runner
 
 

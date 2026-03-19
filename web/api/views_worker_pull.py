@@ -14,7 +14,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from reNgine.utilities.logger import get_module_logger
-from scanEngine.models import SecatorWorker
 from scanEngine.services.worker_pull import (
     claim_next_command,
     complete_command,
