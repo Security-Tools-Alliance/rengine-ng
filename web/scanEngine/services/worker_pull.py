@@ -20,7 +20,6 @@ import uuid
 from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
-
 from pull_agent_constants import PULL_TOKEN_HEADER
 
 from scanEngine.models import SecatorWorker, SecatorWorkerQueuedCommand
