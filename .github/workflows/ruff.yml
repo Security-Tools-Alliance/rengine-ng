@@ -19,8 +19,43 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Resolve Ruff version from pyproject
+        run: |
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          pyproject = Path("docker/web/pyproject.toml")
+          data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+
+          dep = (
+              data.get("tool", {})
+              .get("poetry", {})
+              .get("group", {})
+              .get("dev", {})
+              .get("dependencies", {})
+              .get("ruff")
+          )
+
+          if dep is None:
+              raise SystemExit("ruff dependency not found in docker/web/pyproject.toml")
+
+          if isinstance(dep, str):
+              version = dep
+          elif isinstance(dep, dict) and "version" in dep:
+              version = dep["version"]
+          else:
+              raise SystemExit(f"Unsupported ruff dependency format: {dep!r}")
+
+          version = version.lstrip("^~>=<")
+          print(f"RUFF_VERSION={version}")
+          with Path("/tmp/github_env_ruff").open("w", encoding="utf-8") as f:
+              f.write(f"RUFF_VERSION={version}\n")
+          PY
+          cat /tmp/github_env_ruff >> "$GITHUB_ENV"
+
       - name: Install Ruff
-        run: pip install "ruff==0.12.11"
+        run: pip install "ruff==${RUFF_VERSION}"
 
       - name: Ruff format (check only)
         run: ruff format --config docker/web/pyproject.toml --check .
@@ -45,8 +80,43 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Resolve Ruff version from pyproject
+        run: |
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          pyproject = Path("docker/web/pyproject.toml")
+          data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+
+          dep = (
+              data.get("tool", {})
+              .get("poetry", {})
+              .get("group", {})
+              .get("dev", {})
+              .get("dependencies", {})
+              .get("ruff")
+          )
+
+          if dep is None:
+              raise SystemExit("ruff dependency not found in docker/web/pyproject.toml")
+
+          if isinstance(dep, str):
+              version = dep
+          elif isinstance(dep, dict) and "version" in dep:
+              version = dep["version"]
+          else:
+              raise SystemExit(f"Unsupported ruff dependency format: {dep!r}")
+
+          version = version.lstrip("^~>=<")
+          print(f"RUFF_VERSION={version}")
+          with Path("/tmp/github_env_ruff").open("w", encoding="utf-8") as f:
+              f.write(f"RUFF_VERSION={version}\n")
+          PY
+          cat /tmp/github_env_ruff >> "$GITHUB_ENV"
+
       - name: Install Ruff
-        run: pip install "ruff==0.12.11"
+        run: pip install "ruff==${RUFF_VERSION}"
 
       - name: Apply Ruff formatting
         run: ruff format --config docker/web/pyproject.toml .
