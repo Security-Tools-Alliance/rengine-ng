@@ -123,9 +123,20 @@
   function showResult(data, resultEl) {
     var domainCount = (data.domain_targets && data.domain_targets.length) || 0;
     var ipCount = (data.ip_targets && data.ip_targets.length) || 0;
+    var cidrCount = (data.cidr_targets && data.cidr_targets.length) || 0;
+    var urlCount = (data.url_targets && data.url_targets.length) || 0;
     var hostCount = (data.allowed_finding_hosts && data.allowed_finding_hosts.length) || 0;
     resultEl.textContent =
-      "Domain targets: " + domainCount + ", IP targets: " + ipCount + ", Allowed hosts: " + hostCount;
+      "Domain targets: " +
+      domainCount +
+      ", IP targets: " +
+      ipCount +
+      ", CIDR targets: " +
+      cidrCount +
+      ", URL targets: " +
+      urlCount +
+      ", Allowed hosts: " +
+      hostCount;
     resultEl.style.display = "block";
   }
 
@@ -231,19 +242,36 @@
           }
           var domainTargets = data.domain_targets && data.domain_targets.length ? data.domain_targets : [];
           var ipTargets = data.ip_targets && data.ip_targets.length ? data.ip_targets : [];
+          var cidrTargets = data.cidr_targets && data.cidr_targets.length ? data.cidr_targets : [];
+          var urlTargets = data.url_targets && data.url_targets.length ? data.url_targets : [];
+          var hasPending =
+            domainTargets.length ||
+            ipTargets.length ||
+            cidrTargets.length ||
+            urlTargets.length;
           if (pendingInput) {
-            pendingInput.value =
-              domainTargets.length || ipTargets.length
-                ? JSON.stringify({ domain_targets: domainTargets, ip_targets: ipTargets })
-                : "";
+            pendingInput.value = hasPending
+              ? JSON.stringify({
+                  domain_targets: domainTargets,
+                  ip_targets: ipTargets,
+                  cidr_targets: cidrTargets,
+                  url_targets: urlTargets,
+                })
+              : "";
           }
-          if (previewDiv && previewSummary && (domainTargets.length || ipTargets.length)) {
+          if (previewDiv && previewSummary && hasPending) {
             var parts = [];
             if (domainTargets.length) {
               parts.push(domainTargets.length + " domain target(s): " + domainTargets.slice(0, 5).join(", ") + (domainTargets.length > 5 ? " …" : ""));
             }
             if (ipTargets.length) {
               parts.push(ipTargets.length + " IP target(s): " + ipTargets.slice(0, 5).join(", ") + (ipTargets.length > 5 ? " …" : ""));
+            }
+            if (cidrTargets.length) {
+              parts.push(cidrTargets.length + " CIDR target(s): " + cidrTargets.slice(0, 5).join(", ") + (cidrTargets.length > 5 ? " …" : ""));
+            }
+            if (urlTargets.length) {
+              parts.push(urlTargets.length + " URL target(s): " + urlTargets.slice(0, 5).join(", ") + (urlTargets.length > 5 ? " …" : ""));
             }
             previewSummary.textContent = parts.join("; ");
             previewDiv.style.display = "block";

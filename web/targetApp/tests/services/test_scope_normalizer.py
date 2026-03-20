@@ -41,6 +41,8 @@ class ScopeNormalizerParseTest(BaseTestCase):
         result = parse_scope_raw_input("")
         self.assertEqual(result.domain_targets, ())
         self.assertEqual(result.ip_targets, ())
+        self.assertEqual(result.cidr_targets, ())
+        self.assertEqual(result.url_targets, ())
         self.assertEqual(result.allowed_finding_hosts, ())
 
     def test_none_and_whitespace_only_returns_empty(self) -> None:
@@ -48,6 +50,8 @@ class ScopeNormalizerParseTest(BaseTestCase):
             result = parse_scope_raw_input(raw)  # type: ignore[arg-type]
             self.assertEqual(result.domain_targets, ())
             self.assertEqual(result.ip_targets, ())
+            self.assertEqual(result.cidr_targets, ())
+            self.assertEqual(result.url_targets, ())
             self.assertEqual(result.allowed_finding_hosts, ())
 
     def test_single_domain_extracts_root_and_host(self) -> None:
@@ -138,3 +142,48 @@ class ScopeNormalizerParseTest(BaseTestCase):
         self.assertEqual(result.domain_targets, ())
         self.assertEqual(result.ip_targets, ("2001:db8::1",))
         self.assertEqual(result.allowed_finding_hosts, ("2001:db8::1",))
+
+    def test_valid_cidr_in_cidr_targets_and_allowed_hosts(self) -> None:
+        result = parse_scope_raw_input("192.168.0.0/24")
+        self.assertEqual(result.domain_targets, ())
+        self.assertEqual(result.ip_targets, ())
+        self.assertEqual(result.cidr_targets, ("192.168.0.0/24",))
+        self.assertEqual(result.url_targets, ())
+        self.assertEqual(result.allowed_finding_hosts, ("192.168.0.0/24",))
+
+    def test_ipv6_cidr(self) -> None:
+        result = parse_scope_raw_input("2001:db8::/64")
+        self.assertEqual(result.cidr_targets, ("2001:db8::/64",))
+        self.assertEqual(result.url_targets, ())
+        self.assertIn("2001:db8::/64", result.allowed_finding_hosts)
+
+    def test_https_url_target_and_hostname_in_allowed_hosts(self) -> None:
+        result = parse_scope_raw_input("https://app.scope-test.example.com/path")
+        self.assertEqual(result.url_targets, ("https://app.scope-test.example.com/path",))
+        self.assertEqual(result.domain_targets, ())
+        self.assertEqual(result.ip_targets, ())
+        self.assertEqual(result.cidr_targets, ())
+        self.assertIn("app.scope-test.example.com", result.allowed_finding_hosts)
+
+    def test_http_url_lowercased(self) -> None:
+        result = parse_scope_raw_input("HTTP://API.SCOPE-TEST.EXAMPLE.COM/")
+        self.assertEqual(result.url_targets, ("http://api.scope-test.example.com/",))
+        self.assertIn("api.scope-test.example.com", result.allowed_finding_hosts)
+
+    def test_mixed_domain_ip_cidr_url(self) -> None:
+        raw = "sub.scope-test.example.com, 10.0.0.1, 172.16.0.0/16, https://svc.scope-test.example.com/x"
+        result = parse_scope_raw_input(raw)
+        self.assertEqual(result.domain_targets, ("example.com",))
+        self.assertEqual(result.ip_targets, ("10.0.0.1",))
+        self.assertEqual(result.cidr_targets, ("172.16.0.0/16",))
+        self.assertEqual(result.url_targets, ("https://svc.scope-test.example.com/x",))
+        self.assertIn("sub.scope-test.example.com", result.allowed_finding_hosts)
+        self.assertIn("svc.scope-test.example.com", result.allowed_finding_hosts)
+
+    def test_invalid_http_prefix_not_classified_as_domain(self) -> None:
+        result = parse_scope_raw_input("http://this is not a valid url")
+        self.assertEqual(result.url_targets, ())
+        self.assertEqual(result.domain_targets, ())
+        self.assertEqual(result.ip_targets, ())
+        self.assertEqual(result.cidr_targets, ())
+        self.assertEqual(result.allowed_finding_hosts, ())

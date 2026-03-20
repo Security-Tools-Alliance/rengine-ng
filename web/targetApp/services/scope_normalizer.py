@@ -1,8 +1,8 @@
 """
 Scope normalizer service.
 
-Parses raw scope input (hosts and/or IPs, comma or newline separated),
-deduplicates, and produces domain targets, IP targets, and allowed_finding_hosts.
+Parses raw scope input (hosts, IPs, CIDR ranges, HTTP(S) URLs; comma or newline separated),
+deduplicates, and produces domain, IP, CIDR, and URL targets plus allowed_finding_hosts.
 Pure logic, no HTTP/DB dependencies; reusable from API or management commands.
 """
 
@@ -10,8 +10,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import re
+from urllib.parse import urlparse
 
-from reNgine.core.validators import is_valid_ip
+import validators
+
+from reNgine.core.validators import is_valid_cidr, is_valid_ip
 from reNgine.utilities.domain import normalize_host_string
 from reNgine.utilities.url import get_domain_from_subdomain
 
@@ -47,37 +50,59 @@ class ScopeNormalizerResult:
 
     domain_targets: tuple[str, ...]
     ip_targets: tuple[str, ...]
+    cidr_targets: tuple[str, ...]
+    url_targets: tuple[str, ...]
     allowed_finding_hosts: tuple[str, ...]
 
 
 def parse_scope_raw_input(raw_text: str) -> ScopeNormalizerResult:
     """
-    Parse raw scope text into domain targets, IP targets, and allowed hosts.
+    Parse raw scope text into domain, IP, CIDR, and URL targets, and allowed hosts.
 
     Splits by newlines and commas, strips and lowercases, deduplicates.
+    - HTTP(S) URLs (validated like add_target) go to url_targets; hostname is added
+      to allowed_finding_hosts when present.
+    - Valid CIDR notations go to cidr_targets and allowed_finding_hosts.
     - Valid IPs go to ip_targets and allowed_finding_hosts.
-    - Non-IP tokens with a valid registered domain go to allowed_finding_hosts
+    - Other tokens with a valid registered domain go to allowed_finding_hosts
       and their root domain is added to domain_targets.
 
     Returns:
-        ScopeNormalizerResult with domain_targets, ip_targets, allowed_finding_hosts
-        (all deduplicated, stable order).
+        ScopeNormalizerResult (all deduplicated, stable order).
     """
     if not raw_text or not isinstance(raw_text, str):
-        return ScopeNormalizerResult((), (), ())
+        return ScopeNormalizerResult((), (), (), (), ())
 
     raw = raw_text.strip()
     if not raw:
-        return ScopeNormalizerResult((), (), ())
+        return ScopeNormalizerResult((), (), (), (), ())
 
     tokens = re.split(r"[\n,]+", raw)
     seen_hosts: set[str] = set()
     seen_roots: set[str] = set()
     domain_targets: list[str] = []
     ip_targets: list[str] = []
+    cidr_targets: list[str] = []
+    url_targets: list[str] = []
     allowed_finding_hosts: list[str] = []
 
     for token in tokens:
+        trimmed = token.strip()
+        if not trimmed:
+            continue
+        lowered_url_candidate = trimmed.lower()
+        if lowered_url_candidate.startswith(("http://", "https://")):
+            if not validators.url(lowered_url_candidate):
+                continue
+            if lowered_url_candidate in seen_hosts:
+                continue
+            seen_hosts.add(lowered_url_candidate)
+            url_targets.append(lowered_url_candidate)
+            hostname = urlparse(lowered_url_candidate).hostname
+            if hostname:
+                allowed_finding_hosts.append(hostname.lower())
+            continue
+
         value = normalize_host_string(token)
         if not value:
             continue
@@ -88,6 +113,11 @@ def parse_scope_raw_input(raw_text: str) -> ScopeNormalizerResult:
         if value in seen_hosts:
             continue
         seen_hosts.add(value)
+
+        if is_valid_cidr(value):
+            cidr_targets.append(value)
+            allowed_finding_hosts.append(value)
+            continue
 
         if is_valid_ip(value):
             ip_targets.append(value)
@@ -103,5 +133,7 @@ def parse_scope_raw_input(raw_text: str) -> ScopeNormalizerResult:
     return ScopeNormalizerResult(
         domain_targets=tuple(domain_targets),
         ip_targets=tuple(ip_targets),
+        cidr_targets=tuple(cidr_targets),
+        url_targets=tuple(url_targets),
         allowed_finding_hosts=tuple(allowed_finding_hosts),
     )

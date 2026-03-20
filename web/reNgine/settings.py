@@ -268,8 +268,10 @@ LOGIN_REQUIRED_IGNORE_VIEW_NAMES = [
     # Pull-agent endpoints use X-Rengine-Worker-Pull-Token only (no session)
     "api:secator_worker_pull_claim",
     "api:secator_worker_pull_complete",
+    "api:secator_worker_pull_checkin",
     "secator_worker_pull_claim",
     "secator_worker_pull_complete",
+    "secator_worker_pull_checkin",
 ]
 
 LOGIN_REQUIRED_IGNORE_PATHS = [

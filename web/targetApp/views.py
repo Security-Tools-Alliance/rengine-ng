@@ -263,7 +263,9 @@ def _apply_pending_normalizer_targets(scope, request):
         return
     domain_targets = data.get("domain_targets") or []
     ip_targets = data.get("ip_targets") or []
-    if not domain_targets and not ip_targets:
+    cidr_targets = data.get("cidr_targets") or []
+    url_targets = data.get("url_targets") or []
+    if not domain_targets and not ip_targets and not cidr_targets and not url_targets:
         return
     project = scope.organization.project
     with transaction.atomic():
@@ -274,6 +276,14 @@ def _apply_pending_normalizer_targets(scope, request):
         for value in ip_targets:
             if value and isinstance(value, str) and value.strip():
                 target, _ = _get_or_create_target(project, value.strip(), target_type=TARGET_TYPE_IP)
+                scope.targets.add(target)
+        for value in cidr_targets:
+            if value and isinstance(value, str) and value.strip():
+                target, _ = _get_or_create_target(project, value.strip(), target_type=TARGET_TYPE_CIDR_RANGE)
+                scope.targets.add(target)
+        for value in url_targets:
+            if value and isinstance(value, str) and value.strip():
+                target, _ = _get_or_create_target(project, value.strip(), target_type=TARGET_TYPE_URL)
                 scope.targets.add(target)
 
 
@@ -1567,7 +1577,7 @@ def scope_detail(request, slug, id):
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
 @require_POST
 def scope_normalize(request, slug):
-    """POST: normalize raw scope input; returns JSON with domain_targets, ip_targets, allowed_finding_hosts."""
+    """POST: normalize raw scope input; returns JSON with domain/ip/cidr/url targets and allowed_finding_hosts."""
     raw, body_error = get_string_from_post_or_json(request, key="raw")
     if body_error:
         return JsonResponse({"error": body_error}, status=400)
@@ -1578,6 +1588,8 @@ def scope_normalize(request, slug):
         {
             "domain_targets": list(result.domain_targets),
             "ip_targets": list(result.ip_targets),
+            "cidr_targets": list(result.cidr_targets),
+            "url_targets": list(result.url_targets),
             "allowed_finding_hosts": list(result.allowed_finding_hosts),
         }
     )
@@ -1606,11 +1618,19 @@ def scope_normalize_apply(request, slug):
         for value in result.ip_targets:
             target, _ = _get_or_create_target(project, value, target_type=TARGET_TYPE_IP)
             target_ids.append(target.id)
+        for value in result.cidr_targets:
+            target, _ = _get_or_create_target(project, value, target_type=TARGET_TYPE_CIDR_RANGE)
+            target_ids.append(target.id)
+        for value in result.url_targets:
+            target, _ = _get_or_create_target(project, value, target_type=TARGET_TYPE_URL)
+            target_ids.append(target.id)
     return JsonResponse(
         {
             "target_ids": target_ids,
             "domain_targets": list(result.domain_targets),
             "ip_targets": list(result.ip_targets),
+            "cidr_targets": list(result.cidr_targets),
+            "url_targets": list(result.url_targets),
             "allowed_finding_hosts": list(result.allowed_finding_hosts),
             "restrict_findings_to_target": True,
         }

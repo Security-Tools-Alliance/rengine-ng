@@ -8,7 +8,12 @@ from django.db import IntegrityError
 from django.urls import reverse
 from django.utils import timezone
 
-from targetApp.constants import SCOPE_TYPE_BUG_BOUNTY, SCOPE_TYPE_ENGAGEMENT_EXTERNAL
+from targetApp.constants import (
+    SCOPE_TYPE_BUG_BOUNTY,
+    SCOPE_TYPE_ENGAGEMENT_EXTERNAL,
+    TARGET_TYPE_CIDR_RANGE,
+    TARGET_TYPE_URL,
+)
 from targetApp.models import Organization, Scope, Target
 from utils.test_base import BaseTestCase
 
@@ -340,6 +345,41 @@ class ScopeViewsTest(BaseTestCase):
         self.assertIn("other-root.org", host_targets)
         ip_targets = Target.objects.filter(project=project, target_type="ip").values_list("value", flat=True)
         self.assertIn("10.9.8.7", ip_targets)
+
+    def test_add_scope_with_pending_cidr_and_url_targets(self):
+        """pending_normalizer_targets may include cidr_targets and url_targets (scope normalizer JSON)."""
+        org = self.data_generator.organization
+        project = org.project
+        pending = json.dumps(
+            {
+                "domain_targets": [],
+                "ip_targets": [],
+                "cidr_targets": ["10.10.0.0/16"],
+                "url_targets": ["https://app.pending-scope.example.com/api"],
+            }
+        )
+        response = self.client.post(
+            reverse("add_scope", kwargs={"slug": self.slug}),
+            {
+                "organization": org.id,
+                "name": "Scope Pending CIDR URL",
+                "scope_type": SCOPE_TYPE_ENGAGEMENT_EXTERNAL,
+                "pending_normalizer_targets": pending,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        scope = Scope.objects.get(name="Scope Pending CIDR URL")
+        self.assertEqual(scope.targets.count(), 2)
+        self.assertTrue(
+            scope.targets.filter(value="10.10.0.0/16", target_type=TARGET_TYPE_CIDR_RANGE).exists()
+        )
+        self.assertTrue(
+            scope.targets.filter(
+                value="https://app.pending-scope.example.com/api",
+                target_type=TARGET_TYPE_URL,
+            ).exists()
+        )
+        self.assertTrue(Target.objects.filter(project=project, value="10.10.0.0/16").exists())
 
     def test_update_scope_with_pending_normalizer_targets_creates_targets_on_save(self):
         """Updating a scope with pending_normalizer_targets creates those targets and adds them to the scope."""

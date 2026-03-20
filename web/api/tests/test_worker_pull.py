@@ -3,6 +3,7 @@
 import json
 import uuid
 
+from django.test import Client
 from django.urls import reverse
 
 from scanEngine.models import SecatorWorker, SecatorWorkerQueuedCommand
@@ -107,6 +108,17 @@ class TestWorkerPullApi(BaseTestCase):
             HTTP_X_RENGINE_WORKER_PULL_TOKEN=self.worker.pull_token,
         )
         self.assertEqual(r.status_code, 403)
+
+    def test_checkin_works_without_django_session(self) -> None:
+        """Pull-agent uses only the pull token; middleware must not redirect to login (302)."""
+        anon = Client()
+        r = anon.post(
+            self.checkin_url,
+            data=json.dumps({}),
+            content_type="application/json",
+            HTTP_X_RENGINE_WORKER_PULL_TOKEN=self.worker.pull_token,
+        )
+        self.assertEqual(r.status_code, 200)
 
     def test_checkin_updates_worker_status(self) -> None:
         r = self.client.post(
