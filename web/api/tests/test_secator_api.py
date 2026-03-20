@@ -5,7 +5,7 @@ Tests for SecatorRunnerCreate, SecatorRunnerUpdate, SecatorFindingCreate, Secato
 
 from unittest.mock import MagicMock, patch
 
-from django.test import override_settings
+from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -82,6 +82,15 @@ class TestSecatorRunnerCreate(BaseTestCase):
         response = self.client.post(self.url, runner_data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(response.data["status"])
+
+    def test_create_runner_without_session_is_not_redirected(self):
+        """
+        Secator hooks do not use Django session auth.
+        Endpoint must not return login redirect HTML (302) for anonymous requests.
+        """
+        anon_client = Client()
+        response = anon_client.post(self.url, data="{}", content_type="application/json")
+        self.assertNotEqual(response.status_code, status.HTTP_302_FOUND)
 
 
 class TestSecatorRunnerUpdate(BaseTestCase):

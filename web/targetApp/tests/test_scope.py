@@ -370,9 +370,7 @@ class ScopeViewsTest(BaseTestCase):
         self.assertEqual(response.status_code, 302)
         scope = Scope.objects.get(name="Scope Pending CIDR URL")
         self.assertEqual(scope.targets.count(), 2)
-        self.assertTrue(
-            scope.targets.filter(value="10.10.0.0/16", target_type=TARGET_TYPE_CIDR_RANGE).exists()
-        )
+        self.assertTrue(scope.targets.filter(value="10.10.0.0/16", target_type=TARGET_TYPE_CIDR_RANGE).exists())
         self.assertTrue(
             scope.targets.filter(
                 value="https://app.pending-scope.example.com/api",

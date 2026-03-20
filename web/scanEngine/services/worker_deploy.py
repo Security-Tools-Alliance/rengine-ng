@@ -397,6 +397,8 @@ def deploy_worker(
                     f"mkdir -p {quote_for_shell(f'{deploy_path}/templates/{sub}')}",
                 )
             run_remote_command(client, f"mkdir -p {quote_for_shell(f'{deploy_path}/scripts')}")
+            # Ensure the container user can write transient job files in bind-mounted scripts/.
+            run_remote_command(client, f"chmod 0777 {quote_for_shell(f'{deploy_path}/scripts')}")
             run_remote_command(client, f"mkdir -p {quote_for_shell(f'{deploy_path}/python_ssl_suppress')}")
             progress_callback("mkdir", "Deploy path and templates/scripts created.")
 

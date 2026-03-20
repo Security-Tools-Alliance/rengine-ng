@@ -78,11 +78,93 @@ TIMEOUT_EXIT_CODE = -1
 _CHECKIN_WARNING_THRESHOLD = 3
 _CHECKIN_LAST_ERROR_MAX_LEN = 2000
 _CHECKIN_LAST_ERROR_LOG_PREVIEW_LEN = 200
+_SUBPROCESS_HEARTBEAT_SECONDS = 30.0
+_SUBPROCESS_TERMINATE_GRACE_SECONDS = 10.0
+ENV_PULL_AGENT_LOG_FILE = "RENGINE_PULL_AGENT_LOG_FILE"
+ENV_PULL_AGENT_LOG_LEVEL = "RENGINE_PULL_AGENT_LOG_LEVEL"
+ENV_PULL_DEBUG_PAYLOADS_DIR = "RENGINE_PULL_DEBUG_PAYLOADS_DIR"
+DEFAULT_PULL_AGENT_LOG_FILE = "/home/secator/scripts/rengine_pull_agent.log"
+DEFAULT_PULL_DEBUG_PAYLOADS_DIR = "/home/secator/scripts/pull_payloads"
 logger = logging.getLogger(__name__)
 
 
 def _env(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
+
+
+def _configure_logging() -> None:
+    """
+    Configure pull-agent logging for both container logs and optional file logging.
+
+    Env vars:
+    - RENGINE_PULL_AGENT_LOG_LEVEL (default: INFO)
+    - RENGINE_PULL_AGENT_LOG_FILE (default: /home/secator/scripts/rengine_pull_agent.log)
+    """
+    level_name = _env(ENV_PULL_AGENT_LOG_LEVEL, "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s | %(message)s")
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    if not root_logger.handlers:
+        stream_handler = logging.StreamHandler(sys.stderr)
+        stream_handler.setFormatter(formatter)
+        root_logger.addHandler(stream_handler)
+    else:
+        for handler in root_logger.handlers:
+            handler.setLevel(level)
+
+    log_file = _env(ENV_PULL_AGENT_LOG_FILE, DEFAULT_PULL_AGENT_LOG_FILE)
+    if not log_file:
+        return
+
+    log_path = Path(log_file)
+    with suppress(OSError):
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    except OSError as exc:
+        logger.warning("cannot enable file logging at %s: %s", log_path, exc)
+        return
+    file_handler.setLevel(level)
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
+
+
+def _dump_payload_snapshot(command_id: str, kind: str, payload: dict) -> None:
+    """
+    Persist incoming command payload to a text file for offline debugging.
+    """
+    base_dir = _env(ENV_PULL_DEBUG_PAYLOADS_DIR, DEFAULT_PULL_DEBUG_PAYLOADS_DIR)
+    if not base_dir:
+        return
+
+    safe_kind = kind or "unknown"
+    dump_dir = Path(base_dir)
+    ts = int(time.time())
+    file_path = dump_dir / f"{ts}_{safe_kind}_{command_id}.txt"
+    with suppress(OSError):
+        dump_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        payload_dump = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True)
+        file_path.write_text(
+            "\n".join(
+                [
+                    f"timestamp_unix={ts}",
+                    f"command_id={command_id}",
+                    f"kind={safe_kind}",
+                    "",
+                    "payload_json:",
+                    payload_dump,
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        logger.info("payload snapshot written command_id=%s path=%s", command_id, file_path)
+    except OSError as exc:
+        logger.warning("failed to write payload snapshot command_id=%s error=%s", command_id, exc)
 
 
 def _max_consecutive_claim_failures() -> int:
@@ -318,8 +400,10 @@ def _complete(command_id: str, ok: bool, error: str = "") -> None:
     url = f"{_api_base()}/secator/workers/{wid}/pull/complete/"
     payload = json.dumps({"command_id": command_id, "ok": ok, "error": error[:2000]}).encode("utf-8")
     code, data = _request("POST", url, payload)
-    if code != 200:
-        logger.warning("complete failed %s: %s", code, data.decode("utf-8", errors="replace")[:500])
+    if code == 200:
+        logger.info("complete ok command_id=%s ok=%s", command_id, ok)
+        return
+    logger.warning("complete failed %s: %s", code, data.decode("utf-8", errors="replace")[:500])
 
 
 def _checkin(
@@ -431,6 +515,8 @@ def _maybe_run_periodic_checkin(
     except Exception as exc:  # pragma: no cover - defensive guardrail
         logger.warning("checkin failed with unexpected exception: %s", exc)
         checkin_ok = False
+    if checkin_ok:
+        logger.info("periodic checkin ok worker_id=%s api_reachable=%s", worker_id, api_reachable)
     updated_failures = 0 if checkin_ok else consecutive_checkin_failures + 1
     next_checkin_at = time.monotonic() + checkin_interval_seconds if checkin_interval_seconds > 0 else 0.0
     return CheckinScheduleState(
@@ -440,21 +526,67 @@ def _maybe_run_periodic_checkin(
 
 
 def _run_subprocess(argv: list[str], timeout: int | None) -> tuple[int, str, str]:
+    cmd_repr = " ".join(argv)
+    start = time.monotonic()
+    logger.info("subprocess starting timeout=%s cmd=%s", timeout, cmd_repr)
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             argv,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
-            check=False,
         )
-        return proc.returncode, proc.stdout or "", proc.stderr or ""
-    except subprocess.TimeoutExpired:
-        # Internal sentinel (distinct from subprocess return codes).
-        cmd_repr = " ".join(argv)
-        effective_timeout = "None" if timeout is None else f"{timeout}s"
-        stderr_msg = f"Command timed out after {effective_timeout}: {cmd_repr}"
-        return TIMEOUT_EXIT_CODE, "", stderr_msg
+        last_heartbeat_at = start
+
+        while True:
+            now = time.monotonic()
+            if proc.poll() is not None:
+                break
+
+            if now - last_heartbeat_at >= _SUBPROCESS_HEARTBEAT_SECONDS:
+                elapsed = now - start
+                logger.info(
+                    "subprocess still running elapsed=%.2fs timeout=%s cmd=%s",
+                    elapsed,
+                    timeout,
+                    cmd_repr,
+                )
+                last_heartbeat_at = now
+
+            if timeout is not None and now - start >= timeout:
+                effective_timeout = f"{timeout}s"
+                elapsed = now - start
+                logger.warning(
+                    "subprocess timed out elapsed=%.2fs timeout=%s cmd=%s; sending terminate",
+                    elapsed,
+                    effective_timeout,
+                    cmd_repr,
+                )
+                proc.terminate()
+                try:
+                    out, err = proc.communicate(timeout=_SUBPROCESS_TERMINATE_GRACE_SECONDS)
+                except subprocess.TimeoutExpired:
+                    logger.warning(
+                        "subprocess did not terminate after %.1fs; sending kill cmd=%s",
+                        _SUBPROCESS_TERMINATE_GRACE_SECONDS,
+                        cmd_repr,
+                    )
+                    proc.kill()
+                    out, err = proc.communicate()
+                stderr_msg = f"Command timed out after {effective_timeout}: {cmd_repr}"
+                merged_err = (err or "")[:1800]
+                return TIMEOUT_EXIT_CODE, out or "", f"{stderr_msg}. tail={merged_err}"
+
+            time.sleep(1.0)
+
+        out, err = proc.communicate()
+        elapsed = time.monotonic() - start
+        logger.info("subprocess finished rc=%s elapsed=%.2fs cmd=%s", proc.returncode, elapsed, cmd_repr)
+        return proc.returncode, out or "", err or ""
+    except Exception as exc:  # pragma: no cover - defensive guardrail
+        elapsed = time.monotonic() - start
+        logger.exception("subprocess failed elapsed=%.2fs cmd=%s error=%s", elapsed, cmd_repr, exc)
+        return TIMEOUT_EXIT_CODE, "", f"subprocess failed: {exc}"
 
 
 def _log_final_exit_summary(
@@ -499,10 +631,17 @@ def _handle_revoke(
     if not celery_id:
         _complete(command_id, False, "missing celery_id")
         return
+
+    logger.info("revoke started command_id=%s celery_id=%s", command_id, celery_id)
     rc, out, err = _run_subprocess(
         [python_exe, str(runner_script), "revoke", celery_id],
         timeout=config.revoke_timeout,
     )
+    if out:
+        logger.info("revoke stdout command_id=%s output=%s", command_id, out[-2000:])
+    if err:
+        logger.warning("revoke stderr command_id=%s output=%s", command_id, err[-2000:])
+    logger.info("revoke finished command_id=%s rc=%s", command_id, rc)
     if rc == TIMEOUT_EXIT_CODE:
         _complete(command_id, False, f"revoke command timed out: {(err or out or '')[:1900]}")
         return
@@ -535,10 +674,41 @@ def _handle_run_job(
     with suppress(OSError):
         job_path.unlink()
 
+    execution_mode = job.get("execution_mode")
+    raw_targets = job.get("targets") or []
+    targets_count = len(raw_targets) if isinstance(raw_targets, list) else 0
+    task_names = job.get("task_names") or []
+    task_count = len(task_names) if isinstance(task_names, list) else 0
+    logger.info(
+        "run_job started command_id=%s execution_mode=%s targets=%s tasks=%s scan_history_id=%s",
+        command_id,
+        execution_mode,
+        targets_count,
+        task_count,
+        scan_history_id,
+    )
     job_path.write_text(json.dumps(job, indent=2), encoding="utf-8")
+    logger.info(
+        "run_job invoke command_id=%s cmd=%s %s %s",
+        command_id,
+        python_exe,
+        runner_script,
+        job_path,
+    )
     rc, out, err = _run_subprocess(
         [python_exe, str(runner_script), str(job_path)],
         timeout=config.job_timeout,
+    )
+    if out:
+        logger.info("run_job stdout command_id=%s output=%s", command_id, out[-3000:])
+    if err:
+        logger.warning("run_job stderr command_id=%s output=%s", command_id, err[-3000:])
+    logger.info(
+        "run_job finished command_id=%s rc=%s stdout_len=%s stderr_len=%s",
+        command_id,
+        rc,
+        len(out or ""),
+        len(err or ""),
     )
     if rc == TIMEOUT_EXIT_CODE:
         _complete(command_id, False, f"run_job timed out: {(err or out or '')[:1900]}")
@@ -562,6 +732,7 @@ def _handle_command(
     runner_script: Path,
     config: PullAgentRuntimeConfig,
 ) -> None:
+    _dump_payload_snapshot(command_id, kind, payload)
     if kind == "revoke":
         _handle_revoke(
             command_id,
@@ -581,10 +752,13 @@ def _handle_command(
             config=config,
         )
         return
+    logger.warning("unknown command kind=%s command_id=%s", kind, command_id)
     _complete(command_id, False, f"unknown kind: {kind}")
 
 
 def main() -> None:
+    _configure_logging()
+
     scripts_dir = Path(_env(ENV_PULL_SCRIPTS_DIR, "/home/secator/scripts"))
     python_exe = _env(
         ENV_PULL_PYTHON,
@@ -594,6 +768,7 @@ def main() -> None:
     if not runner_script.is_file():
         logger.error("RENGINE_PULL_RUNNER_SCRIPT is misconfigured or missing: %s", runner_script)
         sys.exit(2)
+
     runtime_config = _load_runtime_config()
     _log_runtime_config(runtime_config)
 
@@ -617,6 +792,7 @@ def main() -> None:
         if runtime_config.checkin_interval_seconds > 0
         else 0.0
     )
+    consecutive_empty_claims = 0
 
     while True:
         now = time.monotonic()
@@ -631,6 +807,7 @@ def main() -> None:
             last_claim_body_preview = ""
             checkin_api_reachable = False
             checkin_last_error = last_claim_error
+            consecutive_empty_claims = 0
             delay = _compute_backoff_delay(consecutive_claim_failures, poll_interval, backoff_max_delay)
             logger.warning(
                 "claim request error (%s/%s); retrying in %.1fs: %s",
@@ -670,6 +847,7 @@ def main() -> None:
             consecutive_claim_failures = 0
             checkin_api_reachable = True
             checkin_last_error = ""
+            consecutive_empty_claims += 1
             checkin_state = _maybe_run_periodic_checkin(
                 should_checkin=should_checkin,
                 worker_id=wid,
@@ -681,10 +859,17 @@ def main() -> None:
             )
             consecutive_checkin_failures = checkin_state.consecutive_failures
             next_checkin_at = checkin_state.next_checkin_at
+            if consecutive_empty_claims % 12 == 0:
+                logger.info(
+                    "claim empty queue (204) worker_id=%s consecutive_empty_claims=%s",
+                    wid,
+                    consecutive_empty_claims,
+                )
             time.sleep(poll_interval)
             continue
         if code != 200:
             consecutive_claim_failures += 1
+            consecutive_empty_claims = 0
             delay = _compute_backoff_delay(consecutive_claim_failures, poll_interval, backoff_max_delay)
             last_claim_http_code = code
             last_claim_body_preview = data.decode("utf-8", errors="replace")[:500]
@@ -734,12 +919,12 @@ def main() -> None:
             raw_body = data.decode("utf-8", errors="replace")
             preview = raw_body[:raw_preview_len] if len(raw_body) > raw_preview_len else raw_body
             if len(raw_body) > raw_preview_len:
-                preview += "... [truncated, total %d chars]" % len(raw_body)
+                preview += f"... [truncated, total {len(raw_body)} chars]"
             last_claim_http_code = code
             last_claim_body_preview = preview
             last_claim_error = str(e)
             checkin_api_reachable = False
-            checkin_last_error = "claim JSON decode error: %s" % e
+            checkin_last_error = f"claim JSON decode error: {e}"
             logger.warning(
                 "claim JSON decode error (%s/%s); retrying in %.1fs | http=%s | json_error=%s (line %s col %s) | body_preview=%s",
                 consecutive_claim_failures,
@@ -780,10 +965,12 @@ def main() -> None:
         )
         consecutive_checkin_failures = checkin_state.consecutive_failures
         next_checkin_at = checkin_state.next_checkin_at
+        consecutive_empty_claims = 0
         command_id = msg.get("command_id") or ""
         kind = msg.get("kind") or ""
         payload = msg.get("payload") or {}
 
+        logger.info("claim received command_id=%s kind=%s", command_id, kind)
         _handle_command(
             command_id,
             kind,

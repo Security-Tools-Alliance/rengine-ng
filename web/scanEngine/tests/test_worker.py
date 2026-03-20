@@ -665,6 +665,58 @@ class TestDeployWorkerProgressCallback(BaseTestCase):
         finally:
             compose_path.unlink(missing_ok=True)
 
+    @patch("scanEngine.services.worker_deploy.settings")
+    @patch("scanEngine.services.worker_deploy.get_ssh_client")
+    @patch("scanEngine.services.worker_deploy.run_remote_command")
+    @patch("scanEngine.services.worker_deploy.detect_compose_cmd")
+    def test_deploy_worker_sets_scripts_permissions_for_container_write(
+        self, mock_detect, mock_run, mock_get_ssh, mock_settings
+    ) -> None:
+        """Deploy ensures scripts/ is writable by the container user for transient job files."""
+        from pathlib import Path
+        import tempfile
+
+        mock_settings.SECATOR_ADDONS_API_KEY = "test-key"
+        mock_detect.return_value = "docker compose"
+        mock_run.return_value = (0, "", "")
+        mock_client = MagicMock()
+        mock_get_ssh.return_value = mock_client
+        mock_sftp = MagicMock()
+        mock_client.open_sftp.return_value = mock_sftp
+        mock_sftp.stat.side_effect = FileNotFoundError
+        mock_sftp.file.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_sftp.file.return_value.__exit__ = MagicMock(return_value=False)
+
+        worker = SecatorWorker.objects.create(
+            name="w-perms",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            ssh_key_path="/k",
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+        )
+
+        with tempfile.NamedTemporaryFile(suffix=".yml", delete=False) as f:
+            f.write(b"version: '3'")
+            compose_path = Path(f.name)
+        try:
+            with patch("scanEngine.services.worker_deploy._get_compose_path", return_value=compose_path):
+                with patch("scanEngine.services.worker_deploy._get_entrypoint_path") as mock_ep:
+                    mock_ep.return_value = Path("/nonexistent/entrypoint.sh")
+                    deploy_worker(worker, progress_callback=lambda s, m: None)
+
+            chmod_calls = [
+                call
+                for call in mock_run.call_args_list
+                if len(call.args) >= 2 and "chmod 0777 /opt/w/scripts" in call.args[1]
+            ]
+            self.assertTrue(chmod_calls, "deploy should chmod scripts/ for writable bind mount jobs")
+        finally:
+            compose_path.unlink(missing_ok=True)
+
 
 class TestRefreshWorkerStatus(BaseTestCase):
     """refresh_worker_status returns dict; SSH is mocked."""
