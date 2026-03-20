@@ -541,6 +541,30 @@ class TestScanHistorySecatorWorkerName(BaseTestCase):
         )
         self.assertEqual(self.scan_history.secator_worker_name, "Worker-Test")
 
+    def test_secator_worker_name_task_only_runner_with_worker_returns_worker_name(self):
+        """Task-only Secator scan with worker should expose that worker name."""
+        self.scan_history.is_legacy_scan = False
+        self.scan_history.save()
+        SecatorRunner.objects.filter(scan_history=self.scan_history).delete()
+        worker = SecatorWorker.objects.create(
+            name="Task-Only-Worker",
+            ssh_host="192.0.2.4",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/tmp/task-worker",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+        )
+        SecatorRunner.objects.create(
+            scan_history=self.scan_history,
+            runner_type="task",
+            runner_name="nuclei",
+            celery_id="celery-task-1",
+            worker=worker,
+        )
+        self.assertEqual(self.scan_history.secator_worker_name, "Task-Only-Worker")
+
 
 class TestSubScanSecatorWorkerName(BaseTestCase):
     """Test secator_worker_name property for SubScan."""

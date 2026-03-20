@@ -471,6 +471,26 @@ class ScanHistory(models.Model):
         main_runner = self._get_main_runner()
         if main_runner and main_runner.worker_id and getattr(main_runner, "worker", None):
             return main_runner.worker.name or "Local"
+        prefetched = getattr(self, "_prefetched_objects_cache", None)
+        if prefetched and "secatorrunner_set" in prefetched:
+            if task_runners := [
+                runner
+                for runner in self.secatorrunner_set.all()
+                if runner.runner_type == "task" and runner.worker_id and getattr(runner, "worker", None)
+            ]:
+                task_runner = min(task_runners, key=lambda runner: runner.id)
+                return task_runner.worker.name or "Local"
+        else:
+            from startScan.models import SecatorRunner
+
+            task_runner = (
+                SecatorRunner.objects.filter(scan_history=self, runner_type="task", worker__isnull=False)
+                .select_related("worker")
+                .order_by("id")
+                .first()
+            )
+            if task_runner and task_runner.worker:
+                return task_runner.worker.name or "Local"
         return "Local"
 
     def get_time_ago(self, time):
