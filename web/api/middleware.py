@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.utils import timezone
 from rest_framework_api_key.models import APIKey
 
@@ -48,12 +49,24 @@ class APIKeyAuthenticationMiddleware:
     def get_api_key_from_request(self, request):
         """
         Extract API key from Authorization header.
-        Expected format: Authorization: Api-Key <key>
+        Expected format: Authorization: <header_name> <key>
         """
-        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+        auth_header = (request.META.get("HTTP_AUTHORIZATION", "") or "").strip()
+        if not auth_header:
+            return None
 
-        if auth_header.startswith("Api-Key "):
-            key = auth_header[8:]  # Remove 'Api-Key ' prefix
+        configured_header_name = (getattr(settings, "SECATOR_ADDONS_API_HEADER_NAME", "") or "").strip()
+        candidate_header_names = [configured_header_name, "Api-Key"]
+
+        for header_name in candidate_header_names:
+            if not header_name:
+                continue
+            prefix = f"{header_name} "
+            if not auth_header.lower().startswith(prefix.lower()):
+                continue
+            key = auth_header[len(prefix) :].strip()
+            if not key:
+                return None
             try:
                 # Try to find UserAPIKey directly using get_from_key
                 return UserAPIKey.objects.get_from_key(key)

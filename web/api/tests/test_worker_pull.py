@@ -34,6 +34,11 @@ class TestWorkerPullApi(BaseTestCase):
         r = self.client.post(self.claim_url, content_type="application/json")
         self.assertEqual(r.status_code, 403)
 
+    def test_claim_without_session_and_without_token_returns_403_not_redirect(self) -> None:
+        anon = Client()
+        r = anon.post(self.claim_url, content_type="application/json")
+        self.assertEqual(r.status_code, 403)
+
     def test_claim_with_wrong_token_returns_403(self) -> None:
         r = self.client.post(
             self.claim_url,

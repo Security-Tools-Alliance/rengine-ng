@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 
+from dashboard.models import UserAPIKey
 from reNgine.definitions import RUNNING_TASK, SUCCESS_TASK
 from startScan.models import Domain, ScanHistory, SecatorRunner, Subdomain, SubScan
 from utils.test_base import BaseTestCase
@@ -23,9 +24,8 @@ class TestSecatorRunnerCreate(BaseTestCase):
         super().setUp()
         self.url = reverse("api:secator_runner_create")
 
-    def test_create_runner_success(self):
-        """Test successful runner creation."""
-        runner_data = {
+    def _build_runner_payload(self):
+        return {
             "config": {"type": "workflow", "name": "test_workflow"},
             "context": {
                 "scan_history_id": self.data_generator.scan_history.id,
@@ -33,6 +33,10 @@ class TestSecatorRunnerCreate(BaseTestCase):
             },
             "status": "RUNNING",
         }
+
+    def test_create_runner_success(self):
+        """Test successful runner creation."""
+        runner_data = self._build_runner_payload()
         response = self.client.post(self.url, runner_data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
@@ -91,6 +95,32 @@ class TestSecatorRunnerCreate(BaseTestCase):
         anon_client = Client()
         response = anon_client.post(self.url, data="{}", content_type="application/json")
         self.assertNotEqual(response.status_code, status.HTTP_302_FOUND)
+
+    def test_create_runner_with_valid_api_key_without_session(self):
+        """Valid API key must authenticate API calls without requiring session login."""
+        api_key_obj, raw_key = UserAPIKey.objects.create_key(name="secator-hook", user=self.user, is_active=True)
+        self.assertIsNotNone(api_key_obj)
+        anon_client = Client()
+        response = anon_client.post(
+            self.url,
+            self._build_runner_payload(),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Api-Key {raw_key}",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+
+    def test_create_runner_with_invalid_api_key_without_session_is_not_redirected(self):
+        """Invalid API key must be rejected by API permissions, not redirected to login page."""
+        anon_client = Client()
+        response = anon_client.post(
+            self.url,
+            self._build_runner_payload(),
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Api-Key invalid-key",
+        )
+        self.assertNotEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertIn(response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
 
 
 class TestSecatorRunnerUpdate(BaseTestCase):

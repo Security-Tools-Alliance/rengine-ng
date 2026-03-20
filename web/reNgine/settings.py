@@ -265,16 +265,12 @@ LOGIN_REQUIRED_IGNORE_VIEW_NAMES = [
     "login",
     "socialaccount_login",
     "socialaccount_signup",
-    # Pull-agent endpoints use X-Rengine-Worker-Pull-Token only (no session)
-    "api:secator_worker_pull_claim",
-    "api:secator_worker_pull_complete",
-    "api:secator_worker_pull_checkin",
-    "secator_worker_pull_claim",
-    "secator_worker_pull_complete",
-    "secator_worker_pull_checkin",
 ]
 
 LOGIN_REQUIRED_IGNORE_PATHS = [
+    # API endpoints are authenticated via API key / endpoint-specific auth,
+    # not via Django session login.
+    r"^/api/",
     # Only exempt the specific allauth routes needed for OAuth login/callback flow.
     # Do NOT use a broad r"/accounts/" pattern — that would expose account-management
     # views (email, password, etc.) to anonymous users.
