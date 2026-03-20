@@ -40,7 +40,7 @@ run_with_direct_db() {
 }
 
 # Run all setup steps in a single Python process to avoid repeated Django startup time
-print_msg "Django setup (migrations, cron, Secator load, collectstatic)"
+print_msg "Django setup (migrations, OAuth, cron, Secator load, collectstatic)"
 run_with_direct_db poetry run -C $RENGINE_FOLDER python3 manage.py entrypoint_setup
 
 print_msg "Starting ASGI server with Uvicorn"

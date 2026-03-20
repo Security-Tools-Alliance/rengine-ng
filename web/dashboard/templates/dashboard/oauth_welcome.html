@@ -1,0 +1,88 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-layout="horizontal" data-topbar-color="dark">
+  <head>
+    <meta charset="utf-8" />
+    <title>Welcome - reNgine-ng</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="{% static 'bootstrap/bootstrap.min.css' %}" rel="stylesheet" type="text/css" id="bootstrap-stylesheet" />
+    <link href="{% static 'assets/css/app.min.css' %}" rel="stylesheet" type="text/css" id="main-stylesheet" />
+    <link href="{% static 'assets/css/icons.min.css' %}" rel="stylesheet" type="text/css" />
+  </head>
+  <body class="authentication-bg authentication-bg-pattern">
+    <div class="account-pages mt-5 mb-5">
+      <div class="container">
+        <div class="row justify-content-center">
+          <div class="col-xl-8">
+            <div class="card bg-pattern">
+              <div class="card-body p-4">
+                <div class="text-center">
+                  <a href="/" class="logo text-center mb-4 d-block">
+                    <img src="/staticfiles/img/logo-lg.png" alt="reNgine-ng" height="90">
+                  </a>
+                </div>
+
+                <div class="text-center py-3">
+                  <div class="mb-3">
+                    <i class="mdi mdi-shield-check text-success" style="font-size: 64px;"></i>
+                  </div>
+                  <h3 class="text-dark">Welcome, <strong>{{ user.username }}</strong>!</h3>
+                  <p class="text-muted fs-5 mt-2">
+                    You have successfully signed in via <strong>{{ provider_name }}</strong>.
+                  </p>
+                </div>
+
+                <div class="row mt-3">
+                  <div class="col-md-6 offset-md-3">
+                    <div class="card border border-info mb-3">
+                      <div class="card-body">
+                        <h5 class="card-title text-info"><i class="mdi mdi-information-outline me-1"></i> What happens next?</h5>
+                        <ul class="mb-0 ps-3">
+                          <li class="mb-2">Your account has been created with <strong>read-only</strong> (Auditor) permissions.</li>
+                          <li class="mb-2">An <strong>administrator</strong> needs to assign you to a project before you can view scan results.</li>
+                          <li class="mb-2">To create targets or launch scans, an administrator must upgrade your role.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {% if has_projects %}
+                <div class="text-center mt-2">
+                  <p class="text-muted">You have been assigned to one or more projects.</p>
+                </div>
+                {% endif %}
+
+                <div class="text-center mt-4">
+                  {% if has_projects %}
+                  <a href="{% url 'list_projects' %}" class="btn btn-primary btn-lg me-2">
+                    <i class="mdi mdi-folder-open me-1"></i> Go to Projects
+                  </a>
+                  {% else %}
+                  <a href="{% url 'list_projects' %}" class="btn btn-soft-primary btn-lg me-2">
+                    <i class="mdi mdi-folder-outline me-1"></i> View Projects
+                  </a>
+                  {% endif %}
+                  <a href="{% url 'profile' %}" class="btn btn-outline-secondary btn-lg">
+                    <i class="mdi mdi-account me-1"></i> My Profile
+                  </a>
+                </div>
+
+                <div class="text-center mt-4">
+                  <form method="post" action="{% url 'logout' %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-link text-muted p-0" style="text-decoration: none;">
+                      <i class="mdi mdi-logout me-1"></i> Logout
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="{% static 'assets/js/vendor.min.js' %}"></script>
+    <script src="{% static 'assets/js/app.min.js' %}"></script>
+  </body>
+</html>

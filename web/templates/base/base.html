@@ -113,6 +113,21 @@
             </div>
             {% block main_content %}
             {% endblock main_content %}
+
+            {# Persistent OAuth info banner for OAuth users without project access #}
+            {% if is_oauth_user %}
+              {% if not current_project|default:"" %}
+              <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <i class="mdi mdi-shield-account me-2"></i>
+                <strong>OAuth Account</strong> &mdash;
+                Your account is managed via OAuth. An administrator needs to assign you to a project before you can access scan features.
+                <a href="https://github.com/Security-Tools-Alliance/rengine-ng/wiki/usage-oauth" target="_blank" class="alert-link">
+                  <i class="mdi mdi-open-in-new"></i> Learn more on the Wiki
+                </a>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+              {% endif %}
+            {% endif %}
           </div>
           <div id="additional-content"></div>
         </div>
@@ -204,7 +219,13 @@
           }
         });
         $(window).on('hashchange', handleHashInUrl);
-        render_search_history('{{current_project.slug}}');
+
+        // Only call project-specific helpers when a project is selected
+        var currentProjectSlug = '{{ current_project.slug|default:""|escapejs }}';
+        if (currentProjectSlug) {
+          render_search_history(currentProjectSlug);
+          getScanStatusSidebar('{% url 'api:scan_status' %}', '{% url 'api:stop_scan' %}', '{% url 'api:fetch_subscan_results' %}', project=currentProjectSlug, reload=false);
+        }
 
         // reNgine-ng will also check everyday if update exists for reNgine-ng
         checkForUpdates(false);
@@ -425,10 +446,11 @@
             {% if message.tags == 'error'%}
               actionTextColor: '#fff',
               backgroundColor: '#e7515a',
+              duration: 8000,
             {% else %}
             actionTextColor: '#42A5F5',
+            duration: 5000,
             {% endif %}
-            duration: 2500
           });
         </script>
       {% endfor %}

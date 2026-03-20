@@ -6,13 +6,17 @@ import json
 from unittest.mock import MagicMock, patch
 import uuid
 
+from allauth.socialaccount.models import SocialAccount
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rolepermissions.checkers import has_role
 from rolepermissions.roles import assign_role
 
+from dashboard.adapters import AccountAdapter
+from dashboard.models import Project
 from utils.test_base import BaseTestCase
 
 
@@ -226,6 +230,9 @@ class AdminInterfaceUpdateTests(BaseTestCase):
         self.client.force_login(self.superuser)
         response = self.client.post(f"{url}&mode=update", data={"role": "auditor"}, content_type="application/json")
         self.assertEqual(response.status_code, 200)
+        # Verify role was actually changed
+        self.target_user.refresh_from_db()
+        self.assertTrue(has_role(self.target_user, "auditor"))
 
         # Test sys_admin modifying normal user
         self.client.force_login(self.sys_admin)
@@ -233,11 +240,17 @@ class AdminInterfaceUpdateTests(BaseTestCase):
             f"{url}&mode=update", data={"role": "penetration_tester"}, content_type="application/json"
         )
         self.assertEqual(response.status_code, 200)
+        # Verify role was actually changed
+        self.target_user.refresh_from_db()
+        self.assertTrue(has_role(self.target_user, "penetration_tester"))
 
         # Test normal user modifying normal user
         self.client.force_login(self.normal_user)
         response = self.client.post(f"{url}&mode=update", data={"role": "auditor"}, content_type="application/json")
         self.assertEqual(response.status_code, 302)
+        # Verify role was NOT changed (should still be penetration_tester)
+        self.target_user.refresh_from_db()
+        self.assertTrue(has_role(self.target_user, "penetration_tester"))
 
     def test_self_modification_restrictions(self):
         # Test superuser trying to delete themselves
@@ -249,3 +262,165 @@ class AdminInterfaceUpdateTests(BaseTestCase):
         self.client.force_login(self.sys_admin)
         response = self.client.post(reverse("admin_interface_update") + f"?user={self.sys_admin.id}&mode=delete")
         self.assertEqual(response.status_code, 403)
+
+
+class OAuthRedirectTests(TestCase):
+    """Test cases for OAuth and non-OAuth login redirect behavior in AccountAdapter."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.adapter = AccountAdapter()
+        self.user = get_user_model().objects.create_user(username="oauthuser", password="password123")
+        SocialAccount.objects.create(user=self.user, provider="google", uid="oauth-123")
+
+    def _build_request(self, user):
+        request = self.factory.get("/")
+        request.user = user
+        return request
+
+    def _assert_redirect_for_user_without_projects(self, user, expected_view_name):
+        """
+        Helper to assert the redirect target for a user without any projects.
+
+        Used by non-OAuth redirect tests for different roles
+        (e.g. superuser, sys_admin, non-admin) to keep expectations consistent.
+        """
+        request = self._build_request(user)
+        url = self.adapter.get_login_redirect_url(request)
+        self.assertEqual(url, reverse(expected_view_name))
+
+    def test_oauth_user_first_login_redirects_to_welcome(self):
+        """OAuth user on very first login (last_login is None) redirects to welcome page."""
+        # New user, last_login is None by default
+        request = self._build_request(self.user)
+
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(redirect_url, reverse("oauth_welcome"))
+        self.assertTrue(has_role(self.user, "auditor"))
+
+    def test_oauth_user_without_projects_redirects_to_list(self):
+        """OAuth user without any projects redirects to projects list (after first login)."""
+        # Simulate a returning user (last_login is set after first login)
+        self.user.last_login = timezone.now()
+        self.user.save()
+
+        request = self._build_request(self.user)
+
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(redirect_url, reverse("list_projects"))
+        # Auditor role should be applied
+        self.assertTrue(has_role(self.user, "auditor"))
+
+    def test_oauth_user_with_assigned_project_redirects_to_dashboard(self):
+        """OAuth user assigned to a project redirects to that project's dashboard."""
+        project = Project.objects.create(
+            name="Assigned Project", description="", slug="assigned-project", insert_date=timezone.now()
+        )
+        project.users.add(self.user)
+
+        request = self._build_request(self.user)
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(redirect_url, reverse("dashboardIndex", kwargs={"slug": project.slug}))
+
+    def test_non_oauth_user_with_projects_redirects_to_dashboard(self):
+        """Non-OAuth user assigned to a project redirects to that project's dashboard."""
+        user = get_user_model().objects.create_user(
+            username="normaluser",
+            password="password123",
+        )
+        project = Project.objects.create(
+            name="First project", description="", slug="first-project", insert_date=timezone.now()
+        )
+        project.users.add(user)
+
+        request = self._build_request(user)
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(
+            redirect_url,
+            reverse("dashboardIndex", kwargs={"slug": project.slug}),
+        )
+
+    def test_non_oauth_superuser_without_projects_redirects_to_onboarding(self):
+        """Superuser without projects redirects to onboarding to create one."""
+        superuser = get_user_model().objects.create_superuser(
+            username="superuser",
+            email="super@example.com",
+            password="password123",
+        )
+
+        self._assert_redirect_for_user_without_projects(superuser, "onboarding")
+
+    def test_non_oauth_sys_admin_without_projects_redirects_to_onboarding(self):
+        """sys_admin role without projects redirects to onboarding."""
+        sys_admin = get_user_model().objects.create_user(
+            username="sysadminuser",
+            password="password123",
+        )
+        assign_role(sys_admin, "sys_admin")
+
+        self._assert_redirect_for_user_without_projects(sys_admin, "onboarding")
+
+    def test_non_oauth_non_admin_without_projects_redirects_to_list_projects(self):
+        """Non-admin user without projects redirects to projects list (read-only)."""
+        user = get_user_model().objects.create_user(
+            username="noprojuser",
+            password="password123",
+        )
+
+        self._assert_redirect_for_user_without_projects(user, "list_projects")
+
+    def test_oauth_user_role_assignment_is_idempotent(self):
+        """Calling get_login_redirect_url multiple times doesn't duplicate role."""
+        request = self._build_request(self.user)
+
+        # Call multiple times
+        self.adapter.get_login_redirect_url(request)
+        self.adapter.get_login_redirect_url(request)
+
+        # Should still have auditor role assigned only once
+        self.assertTrue(has_role(self.user, "auditor"))
+
+    def test_oauth_user_with_existing_role_keeps_role(self):
+        """OAuth user with existing higher role keeps that role."""
+        # Assign a higher role first
+        assign_role(self.user, "penetration_tester")
+
+        request = self._build_request(self.user)
+        self.adapter.get_login_redirect_url(request)
+
+        # Should still have penetration_tester role
+        self.assertTrue(has_role(self.user, "penetration_tester"))
+
+    def test_oauth_user_unassigned_from_project_redirects_to_list(self):
+        """OAuth user not assigned to any project goes to projects list (after first login)."""
+        # Simulate a returning user (last_login is set after first login)
+        self.user.last_login = timezone.now()
+        self.user.save()
+
+        # Create a project but don't assign the user
+        Project.objects.create(
+            name="Unassigned Project", description="", slug="unassigned-project", insert_date=timezone.now()
+        )
+
+        request = self._build_request(self.user)
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        # OAuth users without project assignment go to list
+        self.assertEqual(redirect_url, reverse("list_projects"))
+
+    def test_oauth_user_deleted_and_recreated_redirects_to_welcome(self):
+        """OAuth user deleted and re-created (fresh account) redirects to welcome page."""
+        # Simulate a brand-new OAuth account (last_login is None)
+        new_user = get_user_model().objects.create_user(username="newgoogleuser", password="!")
+        new_user.set_unusable_password()
+        new_user.save()
+        SocialAccount.objects.create(user=new_user, provider="google", uid="new-oauth-456")
+
+        request = self._build_request(new_user)
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(redirect_url, reverse("oauth_welcome"))

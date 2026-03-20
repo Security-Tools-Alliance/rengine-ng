@@ -105,6 +105,64 @@
                   <button class="btn btn-primary" type="submit"> Log In </button>
                 </div>
               </form>
+              
+              <!-- OAuth Login Section -->
+              {% load socialaccount %}
+              {% if has_any_oauth %}{% providers_media_js %}{% endif %}
+              <div class="mt-3">
+                <div class="text-center">
+                  <p class="text-muted mb-2">Or login with</p>
+                </div>
+                <div class="d-grid gap-2">
+                  {% if oauth_providers.google %}
+                  <a href="{% provider_login_url 'google' method='oauth2' %}" class="btn btn-outline-secondary">
+                    <i class="mdi mdi-google"></i> Sign in with Google
+                  </a>
+                  {% else %}
+                  <button type="button" class="btn btn-outline-secondary" disabled title="Google OAuth not configured">
+                    <i class="mdi mdi-google"></i> Sign in with Google
+                  </button>
+                  {% endif %}
+                  {% if oauth_providers.github %}
+                  <a href="{% provider_login_url 'github' %}" class="btn btn-outline-secondary">
+                    <i class="mdi mdi-github"></i> Sign in with GitHub
+                  </a>
+                  {% else %}
+                  <button type="button" class="btn btn-outline-secondary" disabled title="GitHub OAuth not configured">
+                    <i class="mdi mdi-github"></i> Sign in with GitHub
+                  </button>
+                  {% endif %}
+                  {% if oauth_providers.microsoft %}
+                  <a href="{% provider_login_url 'microsoft' %}" class="btn btn-outline-secondary">
+                    <i class="mdi mdi-microsoft"></i> Sign in with Microsoft
+                  </a>
+                  {% else %}
+                  <button type="button" class="btn btn-outline-secondary" disabled title="Microsoft OAuth not configured">
+                    <i class="mdi mdi-microsoft"></i> Sign in with Microsoft
+                  </button>
+                  {% endif %}
+                  {% if oauth_providers.gitlab %}
+                  <a href="{% provider_login_url 'gitlab' %}" class="btn btn-outline-secondary">
+                    <i class="mdi mdi-gitlab"></i> Sign in with GitLab
+                  </a>
+                  {% else %}
+                  <button type="button" class="btn btn-outline-secondary" disabled title="GitLab OAuth not configured">
+                    <i class="mdi mdi-gitlab"></i> Sign in with GitLab
+                  </button>
+                  {% endif %}
+                </div>
+              </div>
+              {% if not has_any_oauth %}
+              <div class="mt-2">
+                <div class="alert alert-light border text-center mb-0" role="alert">
+                  <i class="mdi mdi-shield-key-outline me-1"></i>
+                  <a href="https://github.com/Security-Tools-Alliance/rengine-ng/wiki/usage-oauth" target="_blank" class="alert-link">
+                    Configure OAuth providers on the Wiki <i class="mdi mdi-open-in-new"></i>
+                  </a>
+                </div>
+              </div>
+              {% endif %}
+              
             </div>
           </div>
         </div>

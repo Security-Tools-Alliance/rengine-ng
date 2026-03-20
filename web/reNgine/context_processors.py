@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from django.core.cache import cache
 import requests
 
+from dashboard.utils import is_oauth_user
 from reNgine.utilities.logger import get_module_logger
 
 from . import settings
@@ -36,28 +37,90 @@ _cached_external_ip_value: str | None = None
 _cached_external_ip_expires_at: float = 0.0
 _cached_external_ip_lock = threading.Lock()
 
+# Ordered fallback list; fourth entry is httpbin (JSON) — see tests.
+_EXTERNAL_IP_SERVICE_URLS: tuple[str, ...] = (
+    "https://checkip.amazonaws.com",
+    "https://api.ipify.org",
+    "https://icanhazip.com",
+    "https://httpbin.org/ip",
+    "https://ifconfig.me/ip",
+)
+
 
 def version(request):
     return {"RENGINE_CURRENT_VERSION": settings.RENGINE_CURRENT_VERSION}
 
 
-def _get_external_ip_with_fallback():
-    """
-    Retrieve external IP address using multiple fallback services.
+def oauth_providers(request):
+    """Expose which OAuth providers are actually usable at runtime.
 
-    Returns:
-        str: External IP address or "Unable to retrieve IP" if all services fail
-    """
-    # List of IP services to try in order
-    ip_services = [
-        "https://checkip.amazonaws.com",
-        "https://ipecho.net/plain",
-        "https://api.ipify.org",
-        "https://httpbin.org/ip",
-        "https://icanhazip.com",
-    ]
+    Detection checks **both** paths allauth supports:
+    1. Settings-based — ``SOCIALACCOUNT_PROVIDERS[provider]["APP"]`` with a
+       non-empty ``client_id`` and ``secret``.
+    2. Database-based — a ``SocialApp`` record exists for the provider.
 
-    for service_url in ip_services:
+    A provider is considered configured if *either* source has valid
+    credentials.  This avoids the "grayed-out buttons" problem that occurs
+    when settings carry the credentials but ``setup_oauth`` has not (yet)
+    created the corresponding ``SocialApp`` row.
+
+    To avoid an extra DB query on every template render, ``is_oauth_user`` is
+    only evaluated when OAuth is actually configured *and* the user is
+    authenticated.  Views that need user-specific OAuth information for other
+    purposes should call ``dashboard.utils.is_oauth_user`` explicitly.
+    """
+    # --- 1. Settings-based providers (SOCIALACCOUNT_PROVIDERS → APP/APPS) ---
+    socialaccount_providers = getattr(settings, "SOCIALACCOUNT_PROVIDERS", {})
+    settings_configured = set()
+    for provider_id, config in socialaccount_providers.items():
+        # Single-app providers use "APP"
+        app_cfg = config.get("APP", {})
+        if app_cfg.get("client_id") and app_cfg.get("secret"):
+            settings_configured.add(provider_id)
+            continue
+        # Multi-app providers (e.g. openid_connect) use "APPS"
+        for app in config.get("APPS", []):
+            if app.get("client_id") and app.get("secret"):
+                settings_configured.add(provider_id)
+                break
+
+    # Use settings as the source of truth for OAuth availability.
+    # The database (SocialApp) is just a cache that gets updated by setup_oauth.
+    # Only check settings to ensure .env changes are immediately reflected.
+    app_providers = settings_configured
+
+    # Ensure commonly-used provider keys are always present so templates can
+    # safely reference them (e.g. ``oauth_providers.github``).
+    configured = {
+        provider_id: provider_id in app_providers
+        for provider_id in ("google", "github", "microsoft", "gitlab", "openid_connect")
+    }
+
+    # Also expose any additional providers that have a SocialApp but aren't in
+    # the hard-coded list above.
+    for provider_id in app_providers:
+        configured.setdefault(provider_id, True)
+
+    has_any_oauth = bool(app_providers)
+
+    # Only hit the DB when OAuth is configured and the user is logged in
+    _is_oauth_user = False
+    if has_any_oauth and getattr(getattr(request, "user", None), "is_authenticated", False):
+        _is_oauth_user = is_oauth_user(request.user)
+
+    return {
+        "oauth_providers": configured,
+        "has_any_oauth": has_any_oauth,
+        "is_oauth_user": _is_oauth_user,
+    }
+
+
+def _get_external_ip_with_fallback() -> str:
+    """
+    Fetch public IPv4 from external services in order until one succeeds.
+    Returns a dotted-quad string or the sentinel ``Unable to retrieve IP``.
+    """
+    for service_url in _EXTERNAL_IP_SERVICE_URLS:
         try:
             logger.log_line(
                 PREFIX_CONTEXT_PROCESSORS,
@@ -68,15 +131,12 @@ def _get_external_ip_with_fallback():
             response = requests.get(service_url, timeout=settings.IP_SERVICE_TIMEOUT)
             response.raise_for_status()
 
-            # Extract IP from response
             ip_text = response.text.strip()
 
-            # For httpbin.org, the response is JSON
             if urlparse(service_url).netloc == "httpbin.org":
                 data = json.loads(ip_text)
                 ip_text = data.get("origin", "").split(",")[0].strip()
 
-            # Validate that we got a valid IP address
             if re.match(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", ip_text):
                 logger.log_line(
                     PREFIX_CONTEXT_PROCESSORS,
@@ -85,14 +145,13 @@ def _get_external_ip_with_fallback():
                     level="info",
                 )
                 return ip_text
-            else:
-                logger.log_line(
-                    PREFIX_CONTEXT_PROCESSORS,
-                    "EXTERNAL_IP",
-                    "Invalid IP format received from %s: %s" % (service_url, ip_text),
-                    level="warning",
-                )
 
+            logger.log_line(
+                PREFIX_CONTEXT_PROCESSORS,
+                "EXTERNAL_IP",
+                "Invalid IP format received from %s: %s" % (service_url, ip_text),
+                level="warning",
+            )
         except requests.RequestException as e:
             logger.log_line(
                 PREFIX_CONTEXT_PROCESSORS,
@@ -100,7 +159,6 @@ def _get_external_ip_with_fallback():
                 "Failed to retrieve IP from %s: %s" % (service_url, e),
                 level="warning",
             )
-            continue
         except Exception as e:
             logger.log_line(
                 PREFIX_CONTEXT_PROCESSORS,
@@ -108,7 +166,6 @@ def _get_external_ip_with_fallback():
                 "Unexpected error retrieving IP from %s: %s" % (service_url, e),
                 level="warning",
             )
-            continue
 
     logger.log_line(
         PREFIX_CONTEXT_PROCESSORS,

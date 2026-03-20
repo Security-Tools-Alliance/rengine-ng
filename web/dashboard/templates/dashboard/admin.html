@@ -9,6 +9,7 @@ Profile
 {% endblock title %}
 
 {% block custom_js_css_link %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 {% endblock custom_js_css_link %}
 
 {% block page_title %}
@@ -16,7 +17,9 @@ Admin Settings
 {% endblock page_title %}
 
 {% block breadcrumb_title %}
+{% if current_project %}
 <li class="breadcrumb-item"><a href="{% url 'dashboardIndex' current_project.slug %}">Dashboard</a></li>
+{% endif %}
 <li class="breadcrumb-item active">Admin Settings</li>
 {% endblock breadcrumb_title %}
 
@@ -51,6 +54,7 @@ Admin Settings
                 <th>Created on</th>
                 <th>Last Logged in</th>
                 <th>Status</th>
+                <th class="text-center" data-bs-toggle="tooltip" data-bs-placement="top" title="Third-party OAuth provider connections" style="cursor:default;">OAuth</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -100,6 +104,63 @@ Admin Settings
                   {% else %}
                   <span class="badge bg-soft-danger text-danger p-1">Disabled</span>
                   {% endif %}
+                </td>
+                <td class="text-center align-middle">
+                  {% with social_accounts=muser.socialaccount_set.all %}
+                    {% if social_accounts %}
+                      <div class="d-flex justify-content-center align-items-center gap-2">
+                        {% for sa in social_accounts %}
+                          {% if sa.provider == "google" %}
+                            <i class="bi bi-google fs-5"
+                               style="color:#6c757d;"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="Google"
+                               role="img"
+                               aria-label="Connected with Google"></i>
+                          {% elif sa.provider == "github" %}
+                            <i class="bi bi-github fs-5"
+                               style="color:#6c757d;"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="GitHub"
+                               role="img"
+                               aria-label="Connected with GitHub"></i>
+                          {% elif sa.provider == "microsoft" %}
+                            <i class="bi bi-microsoft fs-5"
+                               style="color:#6c757d;"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="Microsoft"
+                               role="img"
+                               aria-label="Connected with Microsoft"></i>
+                          {% elif sa.provider == "gitlab" %}
+                            <i class="bi bi-gitlab fs-5"
+                               style="color:#6c757d;"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="GitLab"
+                               role="img"
+                               aria-label="Connected with GitLab"></i>
+                          {% else %}
+                            <i class="bi bi-shield-lock-fill fs-5"
+                               style="color:#6c757d;"
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="OpenID Connect"
+                               role="img"
+                               aria-label="Connected with OpenID Connect"></i>
+                          {% endif %}
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <span class="text-muted"
+                            aria-label="No OAuth provider connected"
+                            title="No OAuth provider connected">
+                        None
+                      </span>
+                    {% endif %}
+                  {% endwith %}
                 </td>
                 <td>
                   {% if user != muser %}

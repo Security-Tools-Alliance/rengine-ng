@@ -1,5 +1,5 @@
 """
-Run all Django setup steps in a single process (migrations, cron, Secator load, collectstatic).
+Run all Django setup steps in a single process (migrations, OAuth, cron, Secator load, collectstatic).
 
 Used by docker/web/entrypoint.sh to avoid multiple Python/Django startups.
 """
@@ -9,9 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):
-    help = (
-        "Run migrations, ensure scheduled scans cron, load Secator components, collect static files (single process)."
-    )
+    help = "Run migrations, setup OAuth, ensure scheduled scans cron, load Secator components, collect static files (single process)."
 
     def _print_section(self, title: str) -> None:
         """Print a section header matching entrypoint.sh print_msg style."""
@@ -28,6 +26,9 @@ class Command(BaseCommand):
 
         self._print_section("Migrate database")
         call_command("migrate")
+
+        self._print_section("Setup OAuth providers from environment")
+        call_command("setup_oauth")
 
         self._print_section("Ensure scheduled scans (if any schedule exists)")
         try:
