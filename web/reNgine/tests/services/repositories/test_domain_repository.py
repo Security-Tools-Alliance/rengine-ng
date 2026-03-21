@@ -509,6 +509,54 @@ class TestDomainRepository(BaseTestCase):
 
         self.assertIsNone(result)
 
+    def test_save_from_secator_rejects_ipv4_as_domain(self):
+        """IPv4 labels must not be persisted as Domain / DomainInfo."""
+        whois = self._build_whois_payload()
+        item = {
+            "_type": "domain",
+            "domain": "192.0.2.1",
+            "registrar": "Example Registrar Ltd",
+            "extra_data": {"whois": whois},
+        }
+
+        result = self.domain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+
+        self.assertIsNone(result)
+
+    def test_save_from_secator_rejects_ipv6_as_domain(self):
+        """IPv6 labels must not be persisted as Domain / DomainInfo."""
+        whois = self._build_whois_payload()
+        item = {
+            "_type": "domain",
+            "domain": "2001:db8::1",
+            "registrar": "Example Registrar Ltd",
+            "extra_data": {"whois": whois},
+        }
+
+        result = self.domain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+
+        self.assertIsNone(result)
+
+    def test_save_raw_whois_skips_ip_without_scope_restriction(self):
+        """IP raw_whois is ignored even when restrict_findings_to_target is off."""
+        result = self.domain_repo.save_raw_whois_from_secator_tag(
+            self.scan_history.id,
+            self.data_generator.target.id,
+            "192.0.2.2",
+            "raw whois text",
+        )
+        self.assertIsNone(result)
+
+    def test_save_asn_skips_ip(self):
+        """ASN tag must not create a Domain row for an IP-only label."""
+        result = self.domain_repo.save_asn_from_secator_tag(
+            self.scan_history.id,
+            self.data_generator.target.id,
+            "192.0.2.3",
+            "AS64500",
+        )
+        self.assertIsNone(result)
+
     def test_save_from_secator_updates_existing_domain_info(self):
         """Test updating existing domain info."""
         # Create initial domain info
@@ -1291,7 +1339,7 @@ class DomainRepositoryFindingScopeFilterTest(BaseTestCase):
             )
 
     def test_save_raw_whois_ip_as_domain_returns_none(self):
-        """IP must not be created as Domain when scope restricts findings."""
+        """IP must not be created as Domain (including under restrict_findings_to_target)."""
         result = self.domain_repo.save_raw_whois_from_secator_tag(
             self.scan_history.id,
             self.target.id,

@@ -34,6 +34,11 @@ PREFIX_DOMAIN_REPO = "[DOMAIN_REPO]"
 logger = get_module_logger(__name__)
 
 
+def _is_ip_address_label(normalized: str) -> bool:
+    """True if normalized string is only a valid IPv4/IPv6 address (not a domain name)."""
+    return bool(normalized) and is_valid_ip(normalized)
+
+
 def _domain_scope_filter(rengine_context: Optional[Dict[str, Any]], target_id: int) -> Optional[Callable[[str], bool]]:
     """Resolve domain filter from context or from target_id."""
     if rengine_context:
@@ -125,6 +130,14 @@ class DomainRepository:
                 level="warning",
             )
             return None
+        if _is_ip_address_label(normalized):
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "raw_whois: skipped, IP addresses are not stored as domains (%s)" % (normalized,),
+                level="info",
+            )
+            return None
         scope_filter = _domain_scope_filter(rengine_context, target_id)
         if scope_filter is not None and not scope_filter(normalized):
             logger.log_line(
@@ -133,8 +146,6 @@ class DomainRepository:
                 "raw_whois: domain out of scope (restrict_findings_to_target)",
                 level="debug",
             )
-            if is_valid_ip(normalized):
-                return None
             raise FindingOutOfScopeError("Domain out of scope (restrict_findings_to_target)")
         domain = get_or_create_domain_for_target(scan_history_id, normalized)
         if not domain:
@@ -167,6 +178,14 @@ class DomainRepository:
                 "SAVE",
                 "save_asn: empty domain name after normalization",
                 level="warning",
+            )
+            return None
+        if _is_ip_address_label(normalized):
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "save_asn: skipped, IP addresses are not stored as domains (%s)" % (normalized,),
+                level="info",
             )
             return None
         scope_filter = _domain_scope_filter(rengine_context, target_id)
@@ -214,6 +233,15 @@ class DomainRepository:
                 "SAVE",
                 "Domain item rejected: failed to normalize domain_name",
                 level="warning",
+            )
+            return None
+
+        if _is_ip_address_label(normalized):
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Domain item rejected: host is an IP address, not a domain name (%s)" % (normalized,),
+                level="info",
             )
             return None
 
