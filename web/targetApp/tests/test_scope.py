@@ -8,6 +8,7 @@ from django.db import IntegrityError
 from django.urls import reverse
 from django.utils import timezone
 
+from scanEngine.models import SecatorWorker
 from targetApp.constants import (
     SCOPE_TYPE_BUG_BOUNTY,
     SCOPE_TYPE_ENGAGEMENT_EXTERNAL,
@@ -231,6 +232,43 @@ class ScopeViewsTest(BaseTestCase):
         scope.refresh_from_db()
         self.assertEqual(scope.name, "Updated Name")
         self.assertEqual(scope.scope_type, SCOPE_TYPE_BUG_BOUNTY)
+
+    def test_update_scope_post_persists_default_worker(self):
+        """default_worker must bind from POST (same name as Advanced Configuration worker select)."""
+        worker_a = SecatorWorker.objects.create(
+            name="scope-form-worker-a",
+            ssh_host="192.0.2.20",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        worker_b = SecatorWorker.objects.create(
+            name="scope-form-worker-b",
+            ssh_host="192.0.2.21",
+            ssh_user="u",
+            deploy_path="/opt/s",
+            is_active=True,
+        )
+        scope = self.data_generator.create_scope()
+        scope.workers.set([worker_a, worker_b])
+        scope.allow_local_worker = True
+        scope.default_worker = None
+        scope.save()
+        org = scope.organization
+        response = self.client.post(
+            reverse("update_scope", kwargs={"slug": self.slug, "id": scope.id}),
+            {
+                "organization": org.id,
+                "name": scope.name,
+                "scope_type": scope.scope_type,
+                "allow_local_worker": "on",
+                "workers": [worker_a.id, worker_b.id],
+                "default_worker": str(worker_b.id),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        scope.refresh_from_db()
+        self.assertEqual(scope.default_worker_id, worker_b.id)
 
     def test_scope_normalize_invalid_json_returns_400(self):
         url = reverse("scope_normalize", kwargs={"slug": self.slug})

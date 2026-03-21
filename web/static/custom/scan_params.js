@@ -394,7 +394,9 @@
       }
     });
     if (Object.keys(profiles).length) draft.profiles = profiles;
-    const $workerSelect = $scope.find('select[name="worker_id"], input[name="worker_id"]');
+    const $workerSelect = $scope.find(
+      'select[name="worker_id"], input[name="worker_id"], select[name="default_worker"]'
+    );
     if ($workerSelect.length) {
       const workerVal = $workerSelect.val();
       if (workerVal !== undefined && workerVal !== null && String(workerVal).trim() !== '') {
@@ -575,7 +577,8 @@
         return 'input[name="' + prefix + p + '"], select[name="' + prefix + p + '"], textarea[name="' + prefix + p + '"]';
       }).join(', ');
       const profileSel = PROFILE_HIDDEN_NAMES.map(function (n) { return 'input[name="' + n + '"]'; }).join(', ');
-      const workerSel = 'select[name="worker_id"], input[name="worker_id"]';
+      const workerSel =
+        'select[name="worker_id"], input[name="worker_id"], select[name="default_worker"]';
 
       $scope.on('input change', selInputs + ', ' + profileSel + ', ' + workerSel, function () {
         scheduleEffectivePreview(root);
@@ -593,7 +596,9 @@
     const form = scopeForm || document.querySelector('form[data-scope-worker-sync]');
     if (!form) return;
     const workersMulti = form.querySelector('[id="id_workers"]');
-    const workerIdSelect = form.querySelector('select[name="worker_id"]');
+    const workerIdSelect =
+      form.querySelector('select[name="default_worker"]') ||
+      form.querySelector('select[name="worker_id"]');
     if (!workersMulti || workersMulti.tagName !== 'SELECT' || !workerIdSelect) return;
     if (!form.contains(workerIdSelect)) return;
 
@@ -635,10 +640,14 @@
       workerIdSelect.value = '';
     }
 
-    const defaultWorkerField = form.querySelector('[id="id_default_worker"]');
-    const defaultWorkerRow = defaultWorkerField && defaultWorkerField.closest('.row');
-    if (defaultWorkerRow) {
-      defaultWorkerRow.style.display = optionsCount >= 2 ? '' : 'none';
+    const defaultWorkerField =
+      form.querySelector('select[name="default_worker"]') ||
+      form.querySelector('[id="id_default_worker"]');
+    const defaultWorkerWrap =
+      (defaultWorkerField && defaultWorkerField.closest('.worker-select')) ||
+      (defaultWorkerField && defaultWorkerField.closest('.row'));
+    if (defaultWorkerWrap) {
+      defaultWorkerWrap.style.display = optionsCount >= 2 ? '' : 'none';
     }
   }
 
@@ -650,7 +659,9 @@
     const scopeForm = document.querySelector('form[data-scope-worker-sync]');
     if (!scopeForm) return;
     const workersMulti = scopeForm.querySelector('[id="id_workers"]');
-    const workerIdSelect = scopeForm.querySelector('select[name="worker_id"]');
+    const workerIdSelect =
+      scopeForm.querySelector('select[name="default_worker"]') ||
+      scopeForm.querySelector('select[name="worker_id"]');
     if (!workersMulti || !workerIdSelect) return;
     syncScopeWorkerDropdown(scopeForm);
     $(scopeForm).off('change.scanParamsScopeWorker', '#id_workers');

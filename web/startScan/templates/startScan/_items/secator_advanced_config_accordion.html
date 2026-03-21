@@ -1,5 +1,5 @@
 {# Advanced Configuration Accordion - Contains Secator Profiles, Scan params (optional), Worker, Simple Options (legacy) #}
-{# Params: id_prefix, show_random_proxy, show_profiles (default True), show_simple_options (default True). #}
+{# Params: id_prefix, worker_select_name (default worker_id; use default_worker on Scope form), show_random_proxy, show_profiles (default True), show_simple_options (default True). #}
 {# When include_scan_params_section=True, the unified scan params section is rendered inside the accordion (replacing simple_options); pass scan_params_* and section_* vars. #}
 <div class="advanced-config-section mt-4">
   <div class="accordion">
@@ -25,7 +25,7 @@
           {% endif %}
 
           <!-- Optional worker (run on remote Secator host) -->
-          {% include 'startScan/_items/secator_worker_select.html' with id_prefix=id_prefix|default:'' secator_workers=secator_workers|default:None %}
+          {% include 'startScan/_items/secator_worker_select.html' with id_prefix=id_prefix|default:'' secator_workers=secator_workers|default:None worker_select_name=worker_select_name|default:'worker_id' %}
         </div>
       </div>
     </div>

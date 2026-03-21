@@ -8,6 +8,7 @@ import io
 from pathlib import Path
 import tarfile
 from typing import Callable, Optional, Tuple
+from urllib.parse import urlparse, urlunparse
 
 from django.conf import settings
 import paramiko
@@ -178,8 +179,7 @@ def _get_pull_agent_constants_path() -> Path:
 def _pull_env_lines(worker: SecatorWorker) -> list[str]:
     """Lines appended to worker .env for pull-agent mode."""
     if worker.uses_https_pull_agent():
-        base = worker.get_api_base_url().rstrip("/")
-        api_base = base if base.endswith("/api") else "%s/api" % base
+        api_base = _build_pull_api_base_url(worker.get_api_base_url())
         ssl_verify = "true" if getattr(worker, "https_pull_verify_ssl", True) else "false"
         return [
             "",
@@ -194,6 +194,42 @@ def _pull_env_lines(worker: SecatorWorker) -> list[str]:
         "",
         "RENGINE_PULL_AGENT_ENABLED=false",
     ]
+
+
+def _build_pull_api_base_url(api_base_url: str) -> str:
+    """Build pull-agent API base URL from worker API URL."""
+    parsed, root_path = _normalize_api_root_path(api_base_url)
+    pull_path = f"{root_path}/api" if root_path else "/api"
+    return urlunparse(parsed._replace(path=pull_path, params="", query="", fragment=""))
+
+
+def _build_secator_api_url(api_base_url: str) -> str:
+    """Build Secator addons API URL from worker base URL."""
+    parsed, root_path = _normalize_api_root_path(api_base_url)
+    secator_path = f"{root_path}/api/secator" if root_path else "/api/secator"
+    return urlunparse(parsed._replace(path=secator_path, params="", query="", fragment=""))
+
+
+def _normalize_api_root_path(api_base_url: str) -> tuple:
+    """
+    Normalize API URL to a root path without '/api' or '/api/secator' suffix.
+
+    Example:
+      - https://host -> root ''
+      - https://host/api -> root ''
+      - https://host/api/secator -> root ''
+      - https://host/prefix/api/secator -> root '/prefix'
+    """
+    base = (api_base_url or "").rstrip("/")
+    parsed = urlparse(base)
+    path = parsed.path.rstrip("/")
+    if path.endswith("/api/secator"):
+        root_path = path[: -len("/api/secator")]
+    elif path.endswith("/api"):
+        root_path = path[: -len("/api")]
+    else:
+        root_path = path
+    return parsed, root_path.rstrip("/")
 
 
 _API_KEY_PLACEHOLDER = "your-generated-api-key-here"
@@ -213,7 +249,7 @@ def _validate_api_key_for_worker() -> None:
 
 def get_worker_api_env_dict(worker: SecatorWorker) -> dict[str, str]:
     """Return Secator API env vars for this worker (for .env file or job injection)."""
-    api_url = worker.get_api_base_url()
+    api_url = _build_secator_api_url(worker.get_api_base_url())
     api_key = getattr(settings, "SECATOR_ADDONS_API_KEY", "") or _API_KEY_PLACEHOLDER
     api_header_name = getattr(settings, "SECATOR_ADDONS_API_HEADER_NAME", "") or "Api-Key"
     force_ssl = getattr(settings, "SECATOR_ADDONS_API_FORCE_SSL", False)

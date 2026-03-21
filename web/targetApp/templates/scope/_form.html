@@ -111,19 +111,10 @@
     </div>
   </div>
 </div>
-{% if show_default_worker %}
+{% if form.errors.default_worker %}
 <div class="row">
   <div class="col-12">
-    <div class="mb-1">
-      <label for="id_default_worker" class="form-label mt-1">Default worker</label>
-      {% if form.default_worker.help_text %}
-      <div class="form-text">{{ form.default_worker.help_text }}</div>
-      {% endif %}
-      {{ form.default_worker }}
-      {% if form.errors.default_worker %}
-      <div class="text-danger small mt-1">{{ form.errors.default_worker|striptags }}</div>
-      {% endif %}
-    </div>
+    <div class="text-danger small mt-1">{{ form.errors.default_worker|striptags }}</div>
   </div>
 </div>
 {% endif %}
@@ -196,7 +187,7 @@
 {% endwith %}
 
 <hr>
-{% include "startScan/_items/secator_advanced_config_accordion.html" with id_prefix="scope_" include_scan_params_section=True show_profiles=False show_simple_options=False scan_params_section_collapse_id=section_collapse_id scan_params_section_form_id="scan-params-form" scan_params_prefix="" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=False %}
+{% include "startScan/_items/secator_advanced_config_accordion.html" with id_prefix="scope_" worker_select_name="default_worker" include_scan_params_section=True show_profiles=False show_simple_options=False scan_params_section_collapse_id=section_collapse_id scan_params_section_form_id="scan-params-form" scan_params_prefix="" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=False %}
 
 {% if form.non_field_errors %}
 <div class="alert alert-danger mt-2">

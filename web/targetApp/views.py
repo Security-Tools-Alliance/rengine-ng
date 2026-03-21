@@ -91,7 +91,6 @@ from targetApp.services.scope_normalizer import parse_scope_raw_input
 from targetApp.services.scope_params import (
     _normalize_scan_config,
     build_effective_params_display,
-    get_allowed_workers_for_scope,
     get_default_worker_for_scope,
     get_scope_for_target,
     get_workers_for_scan_dropdown,
@@ -1486,14 +1485,12 @@ def add_scope(request, slug):
     initial_workers = form.initial.get("workers") or []
     allowed_ids = [w.id for w in initial_workers] if initial_workers else []
     allow_local = form.initial.get("allow_local_worker", True)
-    show_default_worker = (1 if allow_local else 0) + len(allowed_ids) >= 2
     context = {
         "scope_active": "active",
         "form": form,
         "slug": slug,
         "section_collapse_id": "scanOverridesSectionScopeAdd",
         "secator_workers": get_workers_for_scan_dropdown(allowed_worker_ids=allowed_ids),
-        "show_default_worker": show_default_worker,
         "scan_params_allow_local_worker": allow_local,
         "scan_params_default_worker_id": None,
     }
@@ -1521,8 +1518,6 @@ def update_scope(request, slug, id):
             _apply_pending_normalizer_targets(updated_scope, request)
             messages.add_message(request, messages.INFO, "Scope %s updated successfully" % (scope.name,))
             return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
-    allowed_options = get_allowed_workers_for_scope(scope)
-    show_default_worker = len(allowed_options) >= 2
     default_worker_id = get_default_worker_for_scope(scope)
     context = {
         "scope_active": "active",
@@ -1531,7 +1526,6 @@ def update_scope(request, slug, id):
         "slug": slug,
         "section_collapse_id": "scanOverridesSectionScope",
         "secator_workers": get_workers_for_scan_dropdown(scope=scope),
-        "show_default_worker": show_default_worker,
         "scan_params_allow_local_worker": scope_allow_local(scope),
         "scan_params_default_worker_id": default_worker_id,
     }

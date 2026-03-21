@@ -413,7 +413,7 @@ class TestBuildWorkerEnvContent(BaseTestCase):
 
     @patch("scanEngine.services.worker_deploy.settings")
     def test_build_worker_env_classic_url(self, mock_settings):
-        """Classic worker gets api_url as API URL in .env."""
+        """Classic worker base URL is normalized to Secator API URL in .env."""
         mock_settings.SECATOR_ADDONS_API_KEY = "key"
         mock_settings.SECATOR_ADDONS_API_HEADER_NAME = "Api-Key"
         mock_settings.SECATOR_ADDONS_API_FORCE_SSL = False
@@ -428,7 +428,51 @@ class TestBuildWorkerEnvContent(BaseTestCase):
             api_url="https://api.example.com",
         )
         content = _build_worker_env_content(worker)
-        self.assertIn("SECATOR_ADDONS_API_URL=https://api.example.com", content)
+        self.assertIn("SECATOR_ADDONS_API_URL=https://api.example.com/api/secator", content)
+
+    @patch("scanEngine.services.worker_deploy.settings")
+    def test_build_worker_env_pull_agent_with_secator_path_uses_api_for_pull_base(self, mock_settings):
+        """When api_url is a base URL, env values are normalized for secator and pull APIs."""
+        mock_settings.SECATOR_ADDONS_API_KEY = "key"
+        mock_settings.SECATOR_ADDONS_API_HEADER_NAME = "Api-Key"
+        mock_settings.SECATOR_ADDONS_API_FORCE_SSL = False
+        worker = SecatorWorker.objects.create(
+            name="w-pull-secator-path",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://reco.2sec.fr:1337",
+            https_pull_agent=True,
+            https_pull_verify_ssl=False,
+        )
+        content = _build_worker_env_content(worker)
+        self.assertIn("SECATOR_ADDONS_API_URL=https://reco.2sec.fr:1337/api/secator", content)
+        self.assertIn("RENGINE_PULL_API_BASE_URL=https://reco.2sec.fr:1337/api", content)
+
+    @patch("scanEngine.services.worker_deploy.settings")
+    def test_build_worker_env_pull_agent_accepts_secator_url_and_keeps_same_final_urls(self, mock_settings):
+        """When api_url already includes /api/secator, final env URLs remain normalized."""
+        mock_settings.SECATOR_ADDONS_API_KEY = "key"
+        mock_settings.SECATOR_ADDONS_API_HEADER_NAME = "Api-Key"
+        mock_settings.SECATOR_ADDONS_API_FORCE_SSL = False
+        worker = SecatorWorker.objects.create(
+            name="w-pull-secator-input",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://reco.2sec.fr:1337/api/secator",
+            https_pull_agent=True,
+            https_pull_verify_ssl=False,
+        )
+        content = _build_worker_env_content(worker)
+        self.assertIn("SECATOR_ADDONS_API_URL=https://reco.2sec.fr:1337/api/secator", content)
+        self.assertIn("RENGINE_PULL_API_BASE_URL=https://reco.2sec.fr:1337/api", content)
 
     @patch("scanEngine.services.worker_deploy.settings")
     def test_build_worker_env_includes_api_host_from_domain_name(self, mock_settings):

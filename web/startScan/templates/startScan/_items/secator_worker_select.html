@@ -1,9 +1,10 @@
 {# Optional worker selection: run scan on remote worker #}
-{# Params: id_prefix (string, optional), secator_workers (list of SecatorWorker, optional), scan_params_allow_local_worker (bool, default True), scan_params_default_worker_id (int or None for Local) #}
+{# Params: id_prefix (string, optional), secator_workers (list of SecatorWorker, optional), scan_params_allow_local_worker (bool, default True), scan_params_default_worker_id (int or None for Local), worker_select_name (default "worker_id"; use "default_worker" on Scope form so POST binds to ScopeForm) #}
+{% with wname=worker_select_name|default:"worker_id" %}
 <div class="worker-select mt-3">
   {% if scan_params_allow_local_worker|default:True or secator_workers %}
-  <label for="{{ id_prefix|default:'' }}worker_id">Run on worker</label>
-  <select class="form-control" name="worker_id" id="{{ id_prefix|default:'' }}worker_id">
+  <label for="{% if wname == 'default_worker' %}id_default_worker{% else %}{{ id_prefix|default:'' }}worker_id{% endif %}">Run on worker</label>
+  <select class="form-control" name="{{ wname }}" id="{% if wname == 'default_worker' %}id_default_worker{% else %}{{ id_prefix|default:'' }}worker_id{% endif %}">
     {% if scan_params_allow_local_worker|default:True %}
     <option value="" {% if scan_params_default_worker_id == None or scan_params_default_worker_id == '' %}selected{% endif %}>Local (this server)</option>
     {% endif %}
@@ -20,3 +21,4 @@
   <p class="text-muted small mb-0">No workers are available for this context. Enable &quot;Allow Local worker&quot; or add remote workers in the scope configuration.</p>
   {% endif %}
 </div>
+{% endwith %}
