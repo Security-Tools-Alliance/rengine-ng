@@ -63,6 +63,27 @@
         "description",
       ],
     },
+    ips: {
+      wrapperId: "ip-search-input",
+      inputId: "ips-search",
+      buttonId: "ip-search-button",
+      suggestionBoxId: "ips-autocom-box",
+      contextLabel: "ips",
+      tableId: "ip_scan_results",
+      tableGlobal: "ipTable",
+      fields: [
+        "address",
+        "subdomain",
+        "port",
+        "alive",
+        "is_cdn",
+        "is_private",
+        "is_important",
+        "reverse_pointer",
+        "protocol",
+        "version",
+      ],
+    },
   };
 
   R.registry = R.registry || {};

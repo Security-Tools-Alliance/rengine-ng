@@ -823,8 +823,35 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
     });
 }
 
-function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, scan_id=null, domain_id=null){
-    
+/**
+ * Coerce scan/target context IDs to a positive integer or null (invalid, empty, or non-integer strings -> null).
+ */
+function normalizePositiveIdOrNull(value) {
+    if (value == null || value === "") {
+        return null;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+        const n = Math.trunc(value);
+        return n > 0 ? n : null;
+    }
+    const t = String(value).trim();
+    if (t === "") {
+        return null;
+    }
+    const n = parseInt(t, 10);
+    if (!Number.isFinite(n) || n <= 0) {
+        return null;
+    }
+    if (String(n) !== t) {
+        return null;
+    }
+    return n;
+}
+
+function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, scan_id = null, domain_id = null) {
+    scan_id = normalizePositiveIdOrNull(scan_id);
+    domain_id = normalizePositiveIdOrNull(domain_id);
+
     // Store modal data globally for tab click events (no port for IP modals)
     window.currentModalData = { scan_id: scan_id, domain_id: domain_id };
         

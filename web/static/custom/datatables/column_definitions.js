@@ -189,16 +189,30 @@
    * @param {object} options
    * @param {string} options.getIpDetailsUrl - Absolute path for get_ip_details API.
    * @param {string} options.querySubdomainsUrl - Absolute path for subdomain query API.
-   * @param {number} options.scanHistoryId - Current scan history id for get_ip_details.
+   * @param {number} options.scanHistoryId - Scan history id (scan detail); use 0 with domainId for target summary.
+   * @param {number} [options.domainId] - Target/domain id for aggregated IP table (target summary); omit on scan detail.
+   *   If both scanHistoryId (>0) and domainId are set, scan-scoped mode wins and domainId is ignored (console warning).
    * @param {string} options.listIPsUrl - Base list IPs API URL (same as DataTables ajax base path without query).
    * @param {string} options.projectSlug - Current project slug for action URLs.
-   * @returns {object[]} DataTables columnDefs for the scan detail IP table.
+   * @returns {object[]} DataTables columnDefs for the IP table (scan detail and target summary).
    */
   const getScanIpTableColumnDefs = function (options) {
     const opts = options || {};
     const getIpDetailsUrl = opts.getIpDetailsUrl || "";
     const querySubdomainsUrl = opts.querySubdomainsUrl || "";
-    const scanHistoryId = opts.scanHistoryId != null ? opts.scanHistoryId : 0;
+    const scanHistoryRaw = opts.scanHistoryId != null ? opts.scanHistoryId : 0;
+    const scanHistoryNum = Number(scanHistoryRaw);
+    const hasValidScanHistory = !Number.isNaN(scanHistoryNum) && scanHistoryNum > 0;
+    const domainRaw = opts.domainId;
+    const domainNum = domainRaw != null && domainRaw !== "" ? Number(domainRaw) : NaN;
+    const hasDomainContext = !Number.isNaN(domainNum) && domainNum > 0;
+    const useScanScope = hasValidScanHistory;
+    const useDomainScope = !useScanScope && hasDomainContext;
+    if (hasValidScanHistory && hasDomainContext && typeof console !== "undefined" && console.warn) {
+      console.warn(
+        "getScanIpTableColumnDefs: both scanHistoryId and domainId are set; using scan-scoped mode (domainId ignored).",
+      );
+    }
     const listIPsUrl = opts.listIPsUrl || "";
     const projectSlug = opts.projectSlug || "";
     const safeAttrFn = window.safeAttr;
@@ -215,6 +229,10 @@
       const t = s == null ? "" : String(s);
       return typeof safeTextFn === "function" ? safeTextFn(t) : t;
     };
+
+    // Inline onclick: emit bare JS `null` or a numeric literal (never the quoted string 'null').
+    const scanIdArgExpr = useScanScope ? String(scanHistoryNum) : "null";
+    const domainIdArgExpr = useDomainScope ? String(domainNum) : "null";
 
     const renderIpSubdomainBadges = function (subdomainNames, row) {
       if (!Array.isArray(subdomainNames) || !subdomainNames.length) {
@@ -237,7 +255,9 @@
             "', '" +
             safeAddress +
             "', " +
-            scanHistoryId +
+            scanIdArgExpr +
+            ", " +
+            domainIdArgExpr +
             ')">' +
             safeName +
             "</span>"
@@ -245,6 +265,9 @@
         })
         .join("");
     };
+
+    const portBadgeScanId = useScanScope ? scanHistoryNum : null;
+    const portBadgeDomainId = useDomainScope ? domainNum : null;
 
     return [
       {
@@ -282,8 +305,8 @@
           return renderBadgeFn(data, {
             api_ips_url: listIPsUrl,
             api_subdomains_url: querySubdomainsUrl,
-            scan_id: scanHistoryId,
-            domain_id: null,
+            scan_id: portBadgeScanId,
+            domain_id: portBadgeDomainId,
             summaryWithPopover: true,
             rowId: row.id,
           });
@@ -314,7 +337,7 @@
           }
           return renderers.renderIpActions(row, {
             urls: window.RENGINE_DATATABLE_ACTION_URLS && window.RENGINE_DATATABLE_ACTION_URLS.ip,
-            scanHistoryId: scanHistoryId,
+            scanHistoryId: useScanScope ? scanHistoryNum : 0,
             projectSlug: projectSlug,
           });
         },

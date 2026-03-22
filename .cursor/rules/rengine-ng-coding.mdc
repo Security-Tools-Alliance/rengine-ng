@@ -38,9 +38,10 @@ Before writing code, perform this verification sequence:
 
 1. Locate existing shared abstractions/helpers for the target area and reuse them first.
 2. Avoid local duplication in templates/modules when a central helper already exists.
-3. For frontend DataTables changes, enforce central action rendering and URL wiring through shared datatable helpers; use lazy tab init where appropriate, define columns in `column_definitions.js` (`window.RENGINE_*_DATATABLE_COLUMNS`), and keep `DATATABLE_COLUMN_MAP_*` in `column_maps.py` aligned with the **column order** in that array.
-4. **Backend IP / XOR**: For “IP in scan” checks use `reNgine.services.scan_finding_metrics` (and `reNgine.utilities.scan_lookups` wrappers), not ad-hoc `IpAddress` filters. For API XOR / list parsing use `api.helpers.subdomain_ip_xor` and `api.helpers.secator_scan_target_request`.
-5. Update or add tests that protect the new/changed shared contract.
+3. For **tabbed entity UI** shared between **scan detail** (`startScan/detail_scan.html`) and **target summary** (`targetApp/target/summary.html`), put the tab body in `web/templates/base/_items/<feature>_tab_content.html` and include it from both pages (e.g. flags `detail_scan` / `target_summary`). Check existing partials before adding large HTML blocks to either page.
+4. For frontend DataTables changes, enforce central action rendering and URL wiring through shared datatable helpers; use lazy tab init where appropriate, define columns in `column_definitions.js` (`window.RENGINE_*_DATATABLE_COLUMNS`), and keep `DATATABLE_COLUMN_MAP_*` in `column_maps.py` aligned with the **column order** in that array. Reuse **`web/templates/base/_items/_datatable_advanced_search_block.html`** for the advanced-search bar (do not duplicate that markup); align `data-advanced-search` with `advanced_search_profiles.js` and `api/helpers/advanced_search.py` (see `rengine-ng-frontend.mdc`).
+5. **Backend IP / XOR**: For “IP in scan” checks use `reNgine.services.scan_finding_metrics` (and `reNgine.utilities.scan_lookups` wrappers), not ad-hoc `IpAddress` filters. For API XOR / list parsing use `api.helpers.subdomain_ip_xor` and `api.helpers.secator_scan_target_request`.
+6. Update or add tests that protect the new/changed shared contract.
 
 For Python/Django code quality and backend architecture, see the rule `rengine-ng-python-backend.mdc`.
 

@@ -1,5 +1,5 @@
 /**
- * Lazy initialization for the scan detail page IP DataTable (detail_scan.html).
+ * Lazy initialization for the IP DataTable (scan detail and target summary).
  * Requires jQuery, DataTable, initServerSideDataTable, getRengineDatatableConfig,
  * window.rengineApplyImportantRowHighlight (init.js),
  * selection_helpers.js (createRengineDatatableIdSelection), RENGINE_IP_DATATABLE_COLUMNS,
@@ -49,6 +49,7 @@
       getIpDetailsUrl: config.getIpDetailsUrl,
       querySubdomainsUrl: config.querySubdomainsUrl,
       scanHistoryId: config.scanHistoryId,
+      domainId: config.domainId,
       listIPsUrl: config.listIPsUrl,
       projectSlug: config.projectSlug,
     });

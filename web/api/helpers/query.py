@@ -307,6 +307,43 @@ def build_vulnerability_datatable_base_queryset(request: Any) -> QuerySet:
     return qs
 
 
+def build_ip_datatable_base_queryset(request: Any) -> QuerySet:
+    """
+    IP rows scoped like ListIPs (filters only, no prefetch).
+    Used by advanced-search distinct values and ListIPs to avoid diverging filters.
+
+    Query param ``port``: if present and parses to an integer in 1..65535, filter by
+    ``ports__number``; non-numeric or out-of-range values are ignored (no error response).
+    """
+    from startScan.models import IpAddress, ScanHistory, Subdomain
+
+    req = datatable_request_params(request)
+    scan_id = safe_int_cast(req.get("scan_id"))
+    target_id = safe_int_cast(req.get("target_id"))
+    port_num = safe_int_cast(req.get("port"))
+    port_ok = isinstance(port_num, int) and 1 <= port_num <= 65535
+
+    if target_id:
+        scan_ids = ScanHistory.objects.filter(target_id=target_id).values_list("id", flat=True)
+        ips = (
+            IpAddress.objects.filter(
+                Q(ip_addresses__scan_history_id__in=scan_ids)
+                | Q(ip_endpoints__scan_history_id__in=scan_ids)
+            )
+            .distinct()
+        )
+    elif scan_id:
+        ips = IpAddress.objects.filter(
+            Q(ip_addresses__scan_history_id=scan_id) | Q(ip_endpoints__scan_history_id=scan_id)
+        ).distinct()
+    else:
+        ips = IpAddress.objects.filter(ip_addresses__in=Subdomain.objects.all()).distinct()
+
+    if port_ok:
+        ips = ips.filter(ports__number=port_num)
+    return ips
+
+
 def get_ip_subdomain_data(ip_queryset: Union[QuerySet, list]) -> dict[int, dict[str, Any]]:
     """
     Precompute subdomain count and names per IP for IpSerializer context.

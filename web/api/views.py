@@ -95,6 +95,7 @@ from api.helpers.ip_action_response import (
     ip_action_error,
 )
 from api.helpers.query import (
+    build_ip_datatable_base_queryset,
     build_subdomain_datatable_queryset,
     build_vulnerability_datatable_base_queryset,
     get_ip_subdomain_data,
@@ -4178,34 +4179,46 @@ class ListMetadata(APIView):
             return Response({"metadata": serializer.data})
 
 
-class ListIPs(APIView):
+class ListIPs(AdvancedSearchMixin, APIView):
     """
     List IP addresses (plain or DataTables server-side when start/length are set).
 
-    Consuming template: startScan/detail_scan.html (IP tab, #ip_scan_results).
+    Consuming templates: startScan/detail_scan.html (IP tab, #ip_scan_results);
+    targetApp/target/summary.html (IP tab, aggregated by target_id).
     Column map: api.helpers.datatables.column_maps.DATATABLE_COLUMN_MAP_IPS (indices match RENGINE_IP_DATATABLE_COLUMNS).
     """
+
+    search_config = {
+        "general_fields": [
+            lambda sv: Q(address__icontains=sv),
+            lambda sv: Q(reverse_pointer__icontains=sv),
+            lambda sv: Q(protocol__icontains=sv),
+            lambda sv: Q(ip_addresses__name__icontains=sv),
+        ],
+        "special_fields": {
+            "address": "address__icontains",
+            "reverse_pointer": "reverse_pointer__icontains",
+            "protocol": "protocol__icontains",
+            "subdomain": "ip_addresses__name__icontains",
+        },
+        "numeric_fields": {
+            "port": "ports__number",
+            "version": "version",
+        },
+        "boolean_fields": {
+            "alive": ("alive", "true", "false"),
+            "is_cdn": ("is_cdn", "true", "false"),
+            "is_private": ("is_private", "true", "false"),
+            "is_important": ("is_important", "true", "false"),
+        },
+    }
 
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
         target_id = safe_int_cast(req.query_params.get("target_id"))
-        port = req.query_params.get("port")
 
-        if target_id:
-            scan_ids = ScanHistory.objects.filter(target_id=target_id).values_list("id", flat=True)
-            ips = IpAddress.objects.filter(
-                Q(ip_addresses__scan_history_id__in=scan_ids) | Q(ip_endpoints__scan_history_id__in=scan_ids)
-            ).distinct()
-        elif scan_id:
-            ips = IpAddress.objects.filter(
-                Q(ip_addresses__scan_history_id=scan_id) | Q(ip_endpoints__scan_history_id=scan_id)
-            ).distinct()
-        else:
-            ips = IpAddress.objects.filter(ip_addresses__in=Subdomain.objects.all()).distinct()
-
-        if port:
-            ips = ips.filter(ports__in=Port.objects.filter(number=port)).distinct()
+        ips = build_ip_datatable_base_queryset(request)
 
         pagination = parse_pagination_params(
             start=req.query_params.get("start"),
@@ -4214,12 +4227,15 @@ class ListIPs(APIView):
             page_size=req.query_params.get("page_size"),
         )
         if pagination:
+            ips = ips.distinct()
+            records_total = ips.count()
             search_value = (req.GET.get("search[value]") or "").strip()
             if search_value:
-                ips = ips.filter(address__icontains=search_value)
+                ips = self.apply_advanced_search(ips, search_value)
+            ips = ips.distinct()
+            records_filtered = ips.count()
             order_str = get_datatables_order_column(req, DATATABLE_COLUMN_MAP_IPS, default_order="address")
             ips = ips.order_by(order_str)
-            total_count = ips.count()
             paginated = list(ips[pagination["start"] : pagination["start"] + pagination["length"]])
             ip_subdomain_data = get_ip_subdomain_data(paginated)
             serializer = IpSerializer(
@@ -4231,7 +4247,9 @@ class ListIPs(APIView):
                     "target_id": target_id,
                 },
             )
-            return Response(build_datatables_serverside_response(req, total_count, total_count, serializer.data))
+            return Response(
+                build_datatables_serverside_response(req, records_total, records_filtered, serializer.data)
+            )
 
         ip_subdomain_data = get_ip_subdomain_data(ips)
         serializer = IpSerializer(

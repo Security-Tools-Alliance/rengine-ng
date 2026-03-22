@@ -379,6 +379,19 @@ _ADVANCED_SEARCH_FIELD_DEFS: dict[str, list[tuple[str, str, str, Optional[str]]]
         ("status", "text", "status", None),
         ("description", "text", "scalar", "description"),
     ],
+    "ips": [
+        ("address", "text", "scalar", "address"),
+        ("subdomain", "text", "m2m", "ip_addresses__name"),
+        ("port", "numeric", "scalar", "ports__number"),
+        ("alive", "boolean", "bool", "alive"),
+        ("is_cdn", "boolean", "bool", "is_cdn"),
+        ("is_private", "boolean", "bool", "is_private"),
+        ("is_important", "boolean", "bool", "is_important"),
+        ("reverse_pointer", "text", "scalar", "reverse_pointer"),
+        ("protocol", "text", "scalar", "protocol"),
+        # IpAddress.version is IntegerField (IP stack version, e.g. 4 or 6), not a free-form string.
+        ("version", "numeric", "scalar", "version"),
+    ],
 }
 
 ADVANCED_SEARCH_FIELD_CATALOG: dict[str, list[dict[str, str]]] = {
@@ -403,7 +416,7 @@ def validate_expression_for_context(expression: str, context: str) -> dict[str, 
             "valid": False,
             "error": "unknown_context",
             "parse_error": "unknown_context",
-            "error_detail": "Invalid context; use subdomains, endpoints, or vulnerabilities.",
+            "error_detail": "Invalid context; use subdomains, endpoints, vulnerabilities, or ips.",
         }
     allowed = {f["name"] for f in ADVANCED_SEARCH_FIELD_CATALOG[context]}
     warnings = list(base.get("warnings") or [])

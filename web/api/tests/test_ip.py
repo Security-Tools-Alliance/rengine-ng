@@ -71,12 +71,27 @@ class TestListIPs(BaseTestCase):
     def test_list_ips(self):
         """Test listing IP addresses for a target."""
         url = reverse("api:listIPs")
-        response = self.client.get(url, {"target_id": self.data_generator.domain.id})
+        response = self.client.get(url, {"target_id": self.data_generator.target.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("ips", response.data)
         # The API might return empty list if no IPs are associated with the domain
         # This is expected behavior, so we just check the structure
         self.assertIsInstance(response.data["ips"], list)
+
+    def test_list_ips_datatables_with_target_id_returns_linked_ip(self):
+        """Target summary IP table: DataTables mode with target_id returns scan-linked IPs."""
+        dg = self.data_generator
+        dg.subdomain.ip_addresses.add(dg.ip_address)
+        url = reverse("api:listIPs")
+        response = self.client.get(
+            url,
+            {"target_id": dg.target.id, "start": "0", "length": "100"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("data", response.data)
+        self.assertIn("recordsTotal", response.data)
+        addresses = {row["address"] for row in response.data["data"]}
+        self.assertIn(dg.ip_address.address, addresses)
 
     def test_list_ips_datatables_matches_metrics_when_ips_only_on_endpoints(self):
         """IPs linked via EndPoint.ip_address must appear like scan ip_address_count."""
@@ -102,6 +117,33 @@ class TestListIPs(BaseTestCase):
         self.assertEqual(response.data["recordsFiltered"], expected_total)
         addresses = {row["address"] for row in response.data["data"]}
         self.assertIn("203.0.113.55", addresses)
+
+    def test_list_ips_datatables_advanced_search_address_equals(self):
+        """DataTables search[value] supports field=value syntax for IPs (ListIPs + advanced search)."""
+        dg = self.data_generator
+        scan = dg.scan_history
+        orphan = IpAddress.objects.create(address="203.0.113.77", alive=True)
+        EndPoint.objects.create(
+            domain=dg.domain,
+            subdomain=None,
+            scan_history=scan,
+            http_url="http://203.0.113.77/",
+            discovered_date=timezone.now(),
+            ip_address=orphan,
+        )
+        url = reverse("api:listIPs")
+        response = self.client.get(
+            url,
+            {
+                "scan_id": scan.id,
+                "start": "0",
+                "length": "100",
+                "search[value]": "address=203.0.113.77",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        addresses = {row["address"] for row in response.data["data"]}
+        self.assertEqual(addresses, {"203.0.113.77"})
 
     def test_list_ips_datatables_order_column_index_matches_address_column(self):
         """DataTables order[0][column]=1 must sort by address (column 1), not alive."""

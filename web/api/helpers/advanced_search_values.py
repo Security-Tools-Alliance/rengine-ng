@@ -16,6 +16,7 @@ from api.helpers.advanced_search import (
 )
 from api.helpers.query import (
     build_endpoint_datatable_queryset,
+    build_ip_datatable_base_queryset,
     build_vulnerability_datatable_base_queryset,
     subdomain_datatable_from_request,
 )
@@ -60,6 +61,8 @@ def _base_queryset_for_context(request: Any, ctx: str) -> tuple[Optional[QuerySe
         return qs, None
     if ctx == "vulnerabilities":
         return build_vulnerability_datatable_base_queryset(request), None
+    if ctx == "ips":
+        return build_ip_datatable_base_queryset(request), None
     return None, "unknown_context"
 
 

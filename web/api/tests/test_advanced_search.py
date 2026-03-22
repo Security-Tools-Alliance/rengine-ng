@@ -191,6 +191,12 @@ class TestAdvancedSearchParser(BaseTestCase):
         sn = {f["name"] for f in r2.data["fields"]}
         self.assertNotIn("cname", sn)
         self.assertNotIn("http_url", sn)
+        r3 = self.client.get(url, {"context": "ips"})
+        self.assertEqual(r3.status_code, status.HTTP_200_OK)
+        ipn = {f["name"] for f in r3.data["fields"]}
+        self.assertIn("address", ipn)
+        self.assertIn("subdomain", ipn)
+        self.assertIn("port", ipn)
 
     def test_api_advanced_search_validate(self):
         url = reverse("api:advancedSearchValidate")

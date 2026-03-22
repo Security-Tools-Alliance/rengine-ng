@@ -44,6 +44,9 @@ Target Summary
 				<li class="nav-item">
 					<a class="nav-link" id="pills-endpoints-tab" data-bs-toggle="tab" aria-expanded="false" href="#endpoints-tab">URLs</a>
 				</li>
+				<li class="nav-item">
+					<a class="nav-link" id="pills-ip-tab" data-bs-toggle="tab" aria-expanded="false" href="#ip-tab">IP Addresses</a>
+				</li>
 				<li class="nav-item interesting-tab-show">
 					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" href="#interesting-tab">Interesting Recon</a>
 				</li>
@@ -449,6 +452,9 @@ Target Summary
 <div class="tab-pane" id="endpoints-tab">
 	{% include 'base/_items/endpoint_tab_content.html' with target_summary=True%}
 </div>
+<div class="tab-pane" id="ip-tab">
+	{% include 'base/_items/ip_address_tab_content.html' with target_summary=True %}
+</div>
 
 {% if exploit_count %}
 <div class="tab-pane" id="exploits-tab">
@@ -553,6 +559,7 @@ Target Summary
 
 {# for passing subdomain id and target id to subscan modal (launch uses target_id only) #}
 <input type="hidden" name="subtask_subdomain_id" id="subtask_subdomain_id" value="0">
+<input type="hidden" name="subtask_ip_address_id" id="subtask_ip_address_id" value="0">
 <input type="hidden" name="target_id" id="context_target_id" value="{{ target.id }}">
 
 {% endblock main_content %}
@@ -583,6 +590,9 @@ window.DETAIL_SCAN_API_CERTIFICATES_LIST = "{% url 'api:certificates_list' %}";
 <script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
 <script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
 <script src="{% static 'custom/secator_scan.js' %}"></script>
+<script src="{% static 'custom/datatables/ip_scan_table_handlers.js' %}"></script>
+<script src="{% static 'custom/datatables/selection_helpers.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_detail_ip_table.js' %}"></script>
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
 <script src="{% static 'plugins/j-map/jquery-jvectormap.min.js' %}"></script>
@@ -1158,6 +1168,27 @@ $(document).ready(function(){
 
 	$("#pills-endpoints-tab").click(function() {
 		get_endpoints('{% url "api:endpoints-list" %}', '{% url "api:subdomains-list" %}', project='{{current_project.slug}}', scan_history=null, domain_id={{target.id}}, gf_tags=null);
+	});
+
+	window.uncheckIps = window.uncheckIps || function () {};
+	$("#pills-ip-tab").off("click").on("click", function () {
+		var DT = window.DataTable;
+		if (DT && typeof DT.isDataTable === "function" && DT.isDataTable("#ip_scan_results")) {
+			return;
+		}
+		if (typeof window.initDetailScanIpDataTable === "function") {
+			window.initDetailScanIpDataTable({
+				tableSelector: "#ip_scan_results",
+				ajaxUrl: "{% url 'api:listIPs' %}?target_id={{ target.id }}",
+				scanHistoryId: 0,
+				domainId: {{ target.id }},
+				projectSlug: "{{ current_project.slug|escapejs }}",
+				getIpDetailsUrl: "{% url 'api:getIpDetails' %}",
+				querySubdomainsUrl: "{% url 'api:querySubdomains' %}",
+				listIPsUrl: "{% url 'api:listIPs' %}",
+				downloadFilename: "selected-ips-target-{{ target.id }}.txt",
+			});
+		}
 	});
 
 	{% if exploit_count %}
