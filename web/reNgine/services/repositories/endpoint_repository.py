@@ -1,10 +1,21 @@
 """
 Endpoint Repository - Data access for endpoint operations.
+
 Handles EndPoint database operations with enriched Secator integration.
+
+Host invariants (see also ``reNgine.services.scan_finding_metrics`` for “IP in scan”):
+- Each ``EndPoint`` has exactly one of ``subdomain`` or ``ip_address`` set (DB check constraint);
+  use ``startScan.services.host_assignment.apply_endpoint_host`` when building rows outside this module.
+- Name-based HTTP hosts resolve to a ``Subdomain`` for the scan when possible; URL hosts that are
+  literal IPs resolve to ``IpAddress`` rows scoped to the scan (via ``IpRepository`` / lookups).
+- Secator save paths (``save_from_secator``, ``add_gf_pattern_from_secator_tag``, ``get_or_create``,
+  bulk create, ``create_endpoint_for_ip``) all resolve or assign a host before persisting; unresolved
+  hosts skip new rows and log (see ``_resolve_endpoint_host_for_scan`` / ``EndpointHostResolution``).
 """
 
 from collections import defaultdict
 import contextlib
+from dataclasses import dataclass
 import hashlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
@@ -17,20 +28,52 @@ import validators
 
 from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.core.secator_target import parse_secator_target_value
-from reNgine.core.validators import is_valid_url
+from reNgine.core.validators import is_valid_ip, is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
+from reNgine.services.repositories.ip_repository import IpRepository, normalize_ip_address_string
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.distributed_lock import DistributedLock
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
+from reNgine.utilities.endpoint_ingest_logging import format_endpoint_host_unresolved_suffix
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
-from startScan.models import DirectoryFile, Domain, EndPoint, ScanHistory, Subdomain, Technology
+from startScan.models import DirectoryFile, Domain, EndPoint, IpAddress, ScanHistory, Subdomain, Technology
 from targetApp.models import Target
 from targetApp.services.scope_params import get_finding_scope_filter_host_for_target
 
 
 PREFIX_ENDPOINT_REPO = "[ENDPOINT_REPO]"
 logger = get_module_logger(__name__)
+
+_RESOLVE_HOST_OK = ""
+_RESOLVE_MISSING_HOSTNAME = "missing_hostname"
+_RESOLVE_MISSING_SCAN = "missing_scan"
+_RESOLVE_MISSING_TARGET = "missing_target"
+_RESOLVE_IP_NORMALIZE_FAILED = "ip_normalize_failed"
+_RESOLVE_IP_ROW_MISSING = "ip_row_not_created"
+_RESOLVE_UNACCEPTABLE_HOSTNAME = "unacceptable_hostname"
+_RESOLVE_SUBDOMAIN_NOT_IN_SCAN = "subdomain_not_in_scan"
+_RESOLVE_SUBDOMAIN_CREATE_FAILED = "subdomain_create_failed"
+_RESOLVE_OUT_OF_SCOPE = "out_of_scope"
+_RESOLVE_EXCEPTION = "resolver_exception"
+
+_RESOLVE_REASONS_INGEST_ALERT = frozenset({_RESOLVE_EXCEPTION, _RESOLVE_IP_ROW_MISSING})
+
+
+def _endpoint_host_unresolved_severity(reason: str) -> str:
+    return "error" if reason in _RESOLVE_REASONS_INGEST_ALERT else "warning"
+
+
+@dataclass(frozen=True)
+class EndpointHostResolution:
+    """URL host resolved to at most one of Subdomain or IpAddress; ``reason`` explains (None, None)."""
+
+    subdomain: Optional[Subdomain]
+    ip_address: Optional[IpAddress]
+    reason: str
+
+    def has_host(self) -> bool:
+        return self.subdomain is not None or self.ip_address is not None
 
 
 class EndpointRepository:
@@ -151,6 +194,35 @@ class EndpointRepository:
 
         scan_history = ScanHistory.objects.get(id=scan_history_id)
         defaults = self._build_secator_endpoint_defaults(item, domain)
+        hostname_override = (item.get("host") or "").strip() or None
+
+        host_res = self._resolve_endpoint_host_for_scan(
+            http_url,
+            scan_history_id,
+            hostname_override,
+            ctx,
+            auto_create_subdomain=True,
+        )
+        if host_res.subdomain is not None:
+            defaults["subdomain"] = host_res.subdomain
+            defaults["ip_address"] = None
+        elif host_res.ip_address is not None:
+            defaults["ip_address"] = host_res.ip_address
+            defaults["subdomain"] = None
+        elif not EndPoint.objects.filter(http_url=http_url, scan_history=scan_history).exists():
+            suffix = format_endpoint_host_unresolved_suffix(
+                scan_history_id,
+                http_url,
+                hostname_override=hostname_override,
+                reason=host_res.reason,
+            )
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "Skipped new endpoint (host unresolved; check ingestion if recurrent): " + suffix,
+                level=_endpoint_host_unresolved_severity(host_res.reason or ""),
+            )
+            return None
 
         endpoint, created = EndPoint.objects.update_or_create(
             http_url=http_url,
@@ -158,8 +230,13 @@ class EndpointRepository:
             defaults=defaults,
         )
 
-        hostname_override = (item.get("host") or "").strip() or None
-        self._associate_with_subdomain(endpoint, http_url, scan_history_id, hostname_override=hostname_override)
+        self._associate_with_subdomain(
+            endpoint,
+            http_url,
+            scan_history_id,
+            hostname_override=hostname_override,
+            rengine_context=ctx,
+        )
         self._mark_as_default_if_first(endpoint)
         self._associate_technologies(endpoint, item)
 
@@ -265,6 +342,33 @@ class EndpointRepository:
             "domain": domain,
             "discovered_date": timezone.now(),
         }
+        host_res = self._resolve_endpoint_host_for_scan(
+            http_url,
+            scan_history_id,
+            None,
+            {},
+            auto_create_subdomain=True,
+        )
+        if host_res.subdomain is not None:
+            defaults["subdomain"] = host_res.subdomain
+            defaults["ip_address"] = None
+        elif host_res.ip_address is not None:
+            defaults["ip_address"] = host_res.ip_address
+            defaults["subdomain"] = None
+        elif not EndPoint.objects.filter(http_url=http_url, scan_history=scan_history).exists():
+            suffix = format_endpoint_host_unresolved_suffix(
+                scan_history_id,
+                http_url,
+                reason=host_res.reason,
+            )
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "add_gf_pattern: skipped new endpoint (host unresolved; check ingestion if recurrent): " + suffix,
+                level=_endpoint_host_unresolved_severity(host_res.reason or ""),
+            )
+            return None
+
         endpoint, _ = EndPoint.objects.update_or_create(
             http_url=http_url,
             scan_history=scan_history,
@@ -442,6 +546,40 @@ class EndpointRepository:
                 "domain": domain,
                 "http_status": 0,
             } | kwargs
+            has_host = bool(
+                kwargs.get("subdomain")
+                or kwargs.get("subdomain_id")
+                or kwargs.get("ip_address")
+                or kwargs.get("ip_address_id")
+            )
+            if not has_host and scan_history.target_id:
+                host_res = self._resolve_endpoint_host_for_scan(
+                    http_url,
+                    scan_history_id,
+                    None,
+                    {},
+                    auto_create_subdomain=True,
+                )
+                if host_res.subdomain is not None:
+                    defaults["subdomain"] = host_res.subdomain
+                    defaults["ip_address"] = None
+                elif host_res.ip_address is not None:
+                    defaults["ip_address"] = host_res.ip_address
+                    defaults["subdomain"] = None
+                elif not EndPoint.objects.filter(http_url=http_url, scan_history=scan_history).exists():
+                    suffix = format_endpoint_host_unresolved_suffix(
+                        scan_history_id,
+                        http_url,
+                        reason=host_res.reason,
+                    )
+                    logger.log_line(
+                        PREFIX_ENDPOINT_REPO,
+                        "GET_OR_CREATE",
+                        "Skipped new endpoint (host unresolved; check ingestion if recurrent): " + suffix,
+                        level=_endpoint_host_unresolved_severity(host_res.reason or ""),
+                    )
+                    return None, False
+
             endpoint, created = EndPoint.objects.get_or_create(
                 http_url=http_url, scan_history=scan_history, defaults=defaults
             )
@@ -503,16 +641,57 @@ class EndpointRepository:
         domain = get_domain_by_id(domain_id)
         if domain is None:
             return []
+        if not scan_history.target_id:
+            return []
 
-        endpoint_objects = []
+        endpoint_objects: List[EndPoint] = []
+        empty_ctx: Dict[str, Any] = {}
         for endpoint_data in endpoints:
             http_url = endpoint_data.get("http_url")
-            if http_url and is_valid_url(http_url):
+            if not http_url or not is_valid_url(http_url):
+                continue
+            host_res = self._resolve_endpoint_host_for_scan(
+                http_url,
+                scan_history_id,
+                None,
+                empty_ctx,
+                auto_create_subdomain=True,
+            )
+            if not host_res.has_host():
+                if host_res.reason in _RESOLVE_REASONS_INGEST_ALERT:
+                    bulk_suffix = format_endpoint_host_unresolved_suffix(
+                        scan_history_id,
+                        http_url,
+                        reason=host_res.reason,
+                    )
+                    logger.log_line(
+                        PREFIX_ENDPOINT_REPO,
+                        "BULK_CREATE",
+                        "Skipped row (host unresolved; possible ingest issue): " + bulk_suffix,
+                        level="error",
+                    )
+                continue
+            if host_res.subdomain is not None:
                 endpoint_objects.append(
                     EndPoint(
                         http_url=http_url,
                         scan_history=scan_history,
                         domain=domain,
+                        subdomain=host_res.subdomain,
+                        ip_address=None,
+                        http_status=endpoint_data.get("http_status", 0),
+                        content_length=endpoint_data.get("content_length", 0),
+                        page_title=endpoint_data.get("page_title", ""),
+                    )
+                )
+            else:
+                endpoint_objects.append(
+                    EndPoint(
+                        http_url=http_url,
+                        scan_history=scan_history,
+                        domain=domain,
+                        subdomain=None,
+                        ip_address=host_res.ip_address,
                         http_status=endpoint_data.get("http_status", 0),
                         content_length=endpoint_data.get("content_length", 0),
                         page_title=endpoint_data.get("page_title", ""),
@@ -564,6 +743,105 @@ class EndpointRepository:
             )
             return False
 
+    def _resolve_endpoint_host_for_scan(
+        self,
+        http_url: str,
+        scan_history_id: int,
+        hostname_override: Optional[str],
+        rengine_context: Dict[str, Any],
+        auto_create_subdomain: bool = True,
+    ) -> EndpointHostResolution:
+        """
+        Resolve exactly one of Subdomain or IpAddress for the URL host (FQDN or literal IP).
+
+        On failure, both ``subdomain`` and ``ip_address`` are None and ``reason`` is a stable code
+        for logs and for callers that skip creating rows (DB requires exactly one host).
+        """
+        ctx = rengine_context or {}
+        hostname_raw = ""
+        try:
+            parsed_url = urlparse(http_url)
+            hostname_raw = (parsed_url.hostname or "").strip() or (hostname_override or "").strip()
+            if not hostname_raw:
+                return EndpointHostResolution(None, None, _RESOLVE_MISSING_HOSTNAME)
+            hn_lower = hostname_raw.strip().lower()
+            if hn_lower.startswith("[") and hn_lower.endswith("]"):
+                hn_lower = hn_lower[1:-1]
+
+            if is_valid_ip(hn_lower):
+                try:
+                    scan_history = ScanHistory.objects.get(id=scan_history_id)
+                    target_id = scan_history.target_id
+                except ObjectDoesNotExist:
+                    return EndpointHostResolution(None, None, _RESOLVE_MISSING_SCAN)
+                if not target_id:
+                    return EndpointHostResolution(None, None, _RESOLVE_MISSING_TARGET)
+                normalized_ip = normalize_ip_address_string(hn_lower)
+                if not normalized_ip:
+                    return EndpointHostResolution(None, None, _RESOLVE_IP_NORMALIZE_FAILED)
+                ip_obj, _ = IpRepository().get_or_create_for_scan(
+                    scan_history_id,
+                    target_id,
+                    normalized_ip,
+                    rengine_context=ctx,
+                )
+                if not ip_obj:
+                    return EndpointHostResolution(None, None, _RESOLVE_IP_ROW_MISSING)
+                return EndpointHostResolution(None, ip_obj, _RESOLVE_HOST_OK)
+
+            if not is_acceptable_subdomain_name(hostname_raw):
+                return EndpointHostResolution(None, None, _RESOLVE_UNACCEPTABLE_HOSTNAME)
+
+            if not auto_create_subdomain:
+                subdomain = Subdomain.objects.filter(
+                    name=hostname_raw.strip().lower(), scan_history_id=scan_history_id
+                ).first()
+                if not subdomain:
+                    logger.log_line(
+                        PREFIX_ENDPOINT_REPO,
+                        "RESOLVE_HOST",
+                        "Subdomain not found in scan (auto_create_subdomain=False), skipping: hostname=%s scan_id=%s"
+                        % (hostname_raw, scan_history_id),
+                        level="debug",
+                    )
+                    return EndpointHostResolution(None, None, _RESOLVE_SUBDOMAIN_NOT_IN_SCAN)
+            else:
+                try:
+                    scan_history = ScanHistory.objects.get(id=scan_history_id)
+                    target_id = scan_history.target_id
+                except ObjectDoesNotExist:
+                    return EndpointHostResolution(None, None, _RESOLVE_MISSING_SCAN)
+                if not target_id:
+                    return EndpointHostResolution(None, None, _RESOLVE_MISSING_TARGET)
+                subdomain = SubdomainRepository().get_or_create_from_host(
+                    scan_history_id, target_id, hostname_raw, rengine_context=ctx
+                )
+                if not subdomain:
+                    return EndpointHostResolution(None, None, _RESOLVE_SUBDOMAIN_CREATE_FAILED)
+                return EndpointHostResolution(subdomain, None, _RESOLVE_HOST_OK)
+
+            return EndpointHostResolution(subdomain, None, _RESOLVE_HOST_OK)
+
+        except FindingOutOfScopeError:
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "RESOLVE_HOST",
+                "Skipped (out of scope): hostname=%s | url=%s scan_id=%s"
+                % (hostname_raw or "?", http_url[:80] if http_url else "", scan_history_id),
+                level="info",
+            )
+            return EndpointHostResolution(None, None, _RESOLVE_OUT_OF_SCOPE)
+        except Exception as e:
+            reason = format_exception_for_log(e)
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "RESOLVE_HOST",
+                "Error resolving endpoint host: %s | url=%s scan_id=%s"
+                % (reason, http_url[:80] if http_url else "", scan_history_id),
+                level="error",
+            )
+            return EndpointHostResolution(None, None, _RESOLVE_EXCEPTION)
+
     def _associate_with_subdomain(
         self,
         endpoint: EndPoint,
@@ -571,74 +849,55 @@ class EndpointRepository:
         scan_history_id: int,
         auto_create_subdomain: bool = True,
         hostname_override: Optional[str] = None,
+        rengine_context: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
-        Associate endpoint with subdomain based on URL hostname (or IP).
+        Associate endpoint with a DNS Subdomain or an IpAddress from URL hostname.
 
-        Uses is_acceptable_subdomain_name and SubdomainRepository.get_or_create_from_host
-        so that IPs and .lan/.local hostnames get a Subdomain and the endpoint is linked.
+        Literal IPs use IpRepository; DNS names use SubdomainRepository.
         When URL parsing yields no hostname, hostname_override (e.g. item["host"]) is used.
         """
-        try:
-            if endpoint.subdomain_id:
-                return
-
-            parsed_url = urlparse(http_url)
-            hostname = (parsed_url.hostname or "").strip() or (hostname_override or "").strip() or None
-            if not hostname:
-                return
-            if not is_acceptable_subdomain_name(hostname):
-                return
-            if not auto_create_subdomain:
-                subdomain = Subdomain.objects.filter(
-                    name=hostname.strip().lower(), scan_history_id=scan_history_id
-                ).first()
-                if not subdomain:
-                    logger.log_line(
-                        PREFIX_ENDPOINT_REPO,
-                        "ASSOCIATE_ENDPOINT_TO_SUBDOMAIN",
-                        "Subdomain not found in scan (auto_create_subdomain=False), skipping: hostname=%s scan_id=%s"
-                        % (hostname, scan_history_id),
-                        level="debug",
-                    )
-                    return
-            else:
-                try:
-                    scan_history = ScanHistory.objects.get(id=scan_history_id)
-                    target_id = scan_history.target_id
-                except ObjectDoesNotExist:
-                    return
-                if not target_id:
-                    return
-                subdomain = SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, hostname)
-                if not subdomain:
-                    return
-
-            endpoint.subdomain = subdomain
-            endpoint.save(update_fields=["subdomain"])
+        if endpoint.subdomain_id or endpoint.ip_address_id:
+            return
+        ctx = rengine_context or {}
+        host_res = self._resolve_endpoint_host_for_scan(
+            http_url,
+            scan_history_id,
+            hostname_override,
+            ctx,
+            auto_create_subdomain=auto_create_subdomain,
+        )
+        if host_res.subdomain:
+            endpoint.subdomain = host_res.subdomain
+            endpoint.ip_address = None
+            endpoint.save(update_fields=["subdomain", "ip_address"])
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
                 "ASSOCIATE_ENDPOINT_TO_SUBDOMAIN",
-                "Endpoint %s linked to subdomain %s" % (http_url[:80] if http_url else "", hostname),
+                "Endpoint %s linked to subdomain %s" % (http_url[:80] if http_url else "", host_res.subdomain.name),
                 level="debug",
             )
-
-        except FindingOutOfScopeError:
+        elif host_res.ip_address:
+            endpoint.ip_address = host_res.ip_address
+            endpoint.subdomain = None
+            endpoint.save(update_fields=["ip_address", "subdomain"])
+            addr = host_res.ip_address.address or "?"
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
-                "ASSOCIATE_ENDPOINT_TO_SUBDOMAIN",
-                "Skipped (out of scope): hostname=%s | url=%s scan_id=%s"
-                % (hostname, http_url[:80] if http_url else "", scan_history_id),
-                level="info",
+                "ASSOCIATE_ENDPOINT_TO_HOST",
+                "Endpoint %s linked to IP %s" % (http_url[:80] if http_url else "", addr),
+                level="debug",
             )
-        except Exception as e:
-            reason = format_exception_for_log(e)
+        elif not host_res.has_host() and host_res.reason not in (
+            _RESOLVE_MISSING_HOSTNAME,
+            _RESOLVE_OUT_OF_SCOPE,
+        ):
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
-                "ASSOCIATE_ENDPOINT_TO_SUBDOMAIN",
-                "Error linking endpoint to subdomain: %s | url=%s scan_id=%s"
-                % (reason, http_url[:80] if http_url else "", scan_history_id),
-                level="error",
+                "ASSOCIATE_HOST",
+                "Could not attach host to existing endpoint: url=%s scan_id=%s reason=%s"
+                % (http_url[:120] if http_url else "", scan_history_id, host_res.reason),
+                level="debug",
             )
 
     def _get_port_from_url(self, http_url: str) -> int:
@@ -650,33 +909,33 @@ class EndpointRepository:
 
     def _mark_as_default_if_first(self, endpoint: EndPoint) -> None:
         """
-        Mark endpoint as default only if it is the first endpoint for (subdomain, port).
-        One default endpoint per (subdomain, port). First-wins policy: only the first
-        endpoint added for a given port gets default; later ones do not override.
-        Uses database locking to prevent race conditions in concurrent scenarios.
-
-        Args:
-            endpoint: Endpoint object
+        Mark endpoint as default only if it is the first endpoint for (host, port).
+        Host is either subdomain (DNS) or ip_address. First-wins per port.
         """
         try:
-            if not endpoint.subdomain:
+            if not endpoint.subdomain_id and not endpoint.ip_address_id:
                 logger.log_line(
                     PREFIX_ENDPOINT_REPO,
                     "DEFAULT",
-                    "Endpoint %s has no subdomain, skipping default marking" % (endpoint.http_url,),
+                    "Endpoint %s has no host, skipping default marking" % (endpoint.http_url,),
                     level="debug",
                 )
                 return
 
             port = self._get_port_from_url(endpoint.http_url)
+            host_label = (
+                endpoint.subdomain.name
+                if endpoint.subdomain_id
+                else (endpoint.ip_address.address if endpoint.ip_address_id else "?")
+            )
 
             def _has_other_default_for_port() -> bool:
-                other_urls = list(
-                    EndPoint.objects.filter(subdomain=endpoint.subdomain, is_default=True)
-                    .exclude(id=endpoint.id)
-                    .select_for_update()
-                    .values_list("http_url", flat=True)
-                )
+                qs = EndPoint.objects.filter(is_default=True).exclude(id=endpoint.id).select_for_update()
+                if endpoint.subdomain_id:
+                    qs = qs.filter(subdomain_id=endpoint.subdomain_id, ip_address__isnull=True)
+                else:
+                    qs = qs.filter(ip_address_id=endpoint.ip_address_id, subdomain__isnull=True)
+                other_urls = list(qs.values_list("http_url", flat=True))
                 return any(self._get_port_from_url(url) == port for url in other_urls)
 
             with transaction.atomic():
@@ -684,19 +943,18 @@ class EndpointRepository:
                     logger.log_line(
                         PREFIX_ENDPOINT_REPO,
                         "DEFAULT",
-                        "A default endpoint already exists for subdomain %s on port %s, "
-                        "skipping default for %s" % (endpoint.subdomain.name, port, endpoint.http_url),
+                        "A default endpoint already exists for host %s on port %s, skipping default for %s"
+                        % (host_label, port, endpoint.http_url),
                         level="debug",
                     )
                     return
 
                 endpoint.refresh_from_db()
-                # Re-check immediately before setting to avoid race with concurrent creations
                 if _has_other_default_for_port():
                     logger.log_line(
                         PREFIX_ENDPOINT_REPO,
                         "DEFAULT",
-                        "Default already set for (subdomain, port) by concurrent transaction, skipping %s"
+                        "Default already set for (host, port) by concurrent transaction, skipping %s"
                         % (endpoint.http_url,),
                         level="debug",
                     )
@@ -706,8 +964,7 @@ class EndpointRepository:
                 logger.log_line(
                     PREFIX_ENDPOINT_REPO,
                     "DEFAULT",
-                    "Marked endpoint %s as default for subdomain %s (port %s)"
-                    % (endpoint.http_url, endpoint.subdomain.name, port),
+                    "Marked endpoint %s as default for host %s (port %s)" % (endpoint.http_url, host_label, port),
                     level="info",
                 )
         except Exception as e:
@@ -778,18 +1035,30 @@ class EndpointRepository:
 
         http_url = f"http://[{ip_address}]" if validators.ipv6(ip_address) else f"http://{ip_address}"
 
+        ip_obj = None
+        if target_id := getattr(scan_history, "target_id", None):
+            if normalized := normalize_ip_address_string(ip_address):
+                ip_obj, _ = IpRepository().get_or_create_for_scan(scan_history_id, target_id, normalized)
+
         endpoint = EndPoint.objects.filter(http_url=http_url, scan_history=scan_history).order_by("id").first()
         created = False
         if endpoint is None:
+            if not ip_obj:
+                return None
             endpoint = EndPoint.objects.create(
                 http_url=http_url,
                 scan_history=scan_history,
                 domain=domain,
                 subdomain=None,
+                ip_address=ip_obj,
                 http_status=0,
                 discovered_date=timezone.now(),
             )
             created = True
+        elif ip_obj and (endpoint.ip_address_id != ip_obj.id or endpoint.subdomain_id):
+            endpoint.ip_address = ip_obj
+            endpoint.subdomain = None
+            endpoint.save(update_fields=["ip_address", "subdomain"])
         if created:
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,
@@ -797,12 +1066,6 @@ class EndpointRepository:
                 "Created endpoint for IP %s" % (ip_address,),
                 level="info",
             )
-        target_id = getattr(scan_history, "target_id", None)
-        if target_id and not endpoint.subdomain_id:
-            subdomain = SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, ip_address)
-            if subdomain:
-                endpoint.subdomain = subdomain
-                endpoint.save(update_fields=["subdomain"])
         return endpoint
 
     def _associate_technologies(self, endpoint: EndPoint, item: Dict[str, Any]) -> None:

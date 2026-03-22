@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 import validators
 
+from reNgine.core.ip_literal import normalize_ip_address_text
 from reNgine.utilities.logger import get_module_logger
 
 
@@ -57,23 +58,11 @@ def is_valid_url(url: str) -> bool:
 def is_valid_ip(ip_address: str) -> bool:
     """
     Validate if a string is a valid IP address (IPv4 or IPv6).
-    Uses ipaddress module for robust validation.
-
-    Args:
-        ip_address: IP address to validate
-
-    Returns:
-        bool: True if valid IP, False otherwise
+    Leading/trailing whitespace is ignored (same rules as normalize_ip_address_text).
     """
-    if not ip_address:
+    if not ip_address or not isinstance(ip_address, str):
         return False
-
-    try:
-        # Try to parse as either IPv4 or IPv6 address
-        ipaddress.ip_address(ip_address)
-        return True
-    except (ipaddress.AddressValueError, ValueError):
-        return False
+    return normalize_ip_address_text(ip_address) is not None
 
 
 def is_valid_email(email: str) -> bool:

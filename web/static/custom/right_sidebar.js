@@ -14,8 +14,9 @@ function getScanName(scan_object) {
  */
 function getScanTargetDisplayName(scan_object) {
   if (!scan_object) return '';
-  const fromDomain = scan_object.domain && typeof scan_object.domain.name !== 'undefined' ? scan_object.domain.name : null;
-  const fromTarget = scan_object.target && typeof scan_object.target.value !== 'undefined' ? scan_object.target.value : null;
+  const { domain, target } = scan_object;
+  const fromDomain = domain && typeof domain.name !== 'undefined' ? domain.name : null;
+  const fromTarget = target && typeof target.value !== 'undefined' ? target.value : null;
   return fromDomain || fromTarget || '';
 }
 
@@ -84,8 +85,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
 
     try {
     if (scans.pending.length > 0){
-      for (var scan in scans.pending) {
-        const scan_object = scans.pending[scan];
+      for (const scan_object of scans.pending) {
         const scan_name = getScanName(scan_object);
         $bar.find('#upcoming_scans').append(`
           <div class="alert alert-warning" role="alert">${htmlEncode(scan_name)} on ${htmlEncode(getScanTargetDisplayName(scan_object))}</div>
@@ -137,8 +137,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
 
     if (scans.scanning.length > 0){
       $bar.find('#current_scan_count').html(scans.scanning.length + ' Scans Currently Running');
-      for (var scan in scans.scanning) {
-        const scan_object = scans.scanning[scan];
+      for (const scan_object of scans.scanning) {
         
         // Format current task display
         let currentTaskDisplay = '';
@@ -170,6 +169,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
           </p>
           <div>
           <span class="badge-subdomain-count badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">&nbsp;&nbsp;${scan_object.subdomain_count}&nbsp;&nbsp;</span>
+          <span class="badge-ip-address-count badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="IP addresses">&nbsp;&nbsp;${scan_object.ip_address_count}&nbsp;&nbsp;</span>
           <span class="badge-endpoint-count badge badge-pills bg-warning mt-1" data-toggle="tooltip" data-placement="top" title="Endpoints">&nbsp;&nbsp;${scan_object.endpoint_count}&nbsp;&nbsp;</span>
           <span class="badge-vuln-count badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="Vulnerabilities">&nbsp;&nbsp;${scan_object.vulnerability_count}&nbsp;&nbsp;</span>
           </div>
@@ -188,8 +188,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
       }
 
       if (scans.completed.length > 0){
-        for (var scan in scans.completed) {
-          const scan_object = scans.completed[scan];
+        for (const scan_object of scans.completed) {
           let bg_color;
           let color;
           let status_badge;
@@ -231,6 +230,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
             </span>
             <div>
             <span class="badge-subdomain-count badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">&nbsp;&nbsp;${scan_object.subdomain_count}&nbsp;&nbsp;</span>
+            <span class="badge-ip-address-count badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="IP addresses">&nbsp;&nbsp;${scan_object.ip_address_count}&nbsp;&nbsp;</span>
             <span class="badge-endpoint-count badge badge-pills bg-warning mt-1" data-toggle="tooltip" data-placement="top" title="Endpoints">&nbsp;&nbsp;${scan_object.endpoint_count}&nbsp;&nbsp;</span>
             <span class="badge-vuln-count badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="Vulnerabilities">&nbsp;&nbsp;${scan_object.vulnerability_count}&nbsp;&nbsp;</span>
             </div>
@@ -347,8 +347,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
       }
 
       if (tasks.pending.length > 0){
-        for (var task in tasks.pending) {
-          const task_object = tasks.pending[task];
+        for (const task_object of tasks.pending) {
           const task_name = task_object.formatted_task_name || 'Unknown Task';
           $bar.find('#upcoming_tasks').append('<div class="alert alert-warning" role="alert">' + htmlEncode(task_name) + ' on ' + htmlEncode(task_object.subdomain_name || '') + '</div>');
         }
@@ -438,7 +437,7 @@ function ensureRightBarInBody() {
  * Use capture phase so this runs before the theme's body click handler, which would remove right-bar-enabled.
  */
 (function () {
-  function handleScanActivityBarClick(e) {
+  const handleScanActivityBarClick = function (e) {
     const target = e.target && (e.target.closest ? e.target.closest('.scan-activity-bar-toggle') : null);
     if (!target) return;
     e.preventDefault();
@@ -447,11 +446,11 @@ function ensureRightBarInBody() {
     if (typeof getScanStatusSidebar === 'function') {
       getScanStatusSidebar(null, null, null, null, { openBar: true });
     }
-  }
+  };
   document.addEventListener('click', handleScanActivityBarClick, true);
-  function initRightBarPosition() {
+  const initRightBarPosition = function () {
     ensureRightBarInBody();
-  }
+  };
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initRightBarPosition);
   } else {

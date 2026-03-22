@@ -32,6 +32,16 @@ The project must remain modular and respect these principles to avoid circular d
 
 Follow PEP8, and refer to the `pyproject.toml` file under `docker/web` for the exact Ruff rules to apply.
 
+## Mandatory implementation pre-flight
+
+Before writing code, perform this verification sequence:
+
+1. Locate existing shared abstractions/helpers for the target area and reuse them first.
+2. Avoid local duplication in templates/modules when a central helper already exists.
+3. For frontend DataTables changes, enforce central action rendering and URL wiring through shared datatable helpers; use lazy tab init where appropriate, define columns in `column_definitions.js` (`window.RENGINE_*_DATATABLE_COLUMNS`), and keep `DATATABLE_COLUMN_MAP_*` in `column_maps.py` aligned with the **column order** in that array.
+4. **Backend IP / XOR**: For “IP in scan” checks use `reNgine.services.scan_finding_metrics` (and `scan_lookups` wrappers), not ad-hoc `IpAddress` filters. For API XOR / list parsing use `api.helpers.subdomain_ip_xor` and `api.helpers.secator_scan_target_request`.
+5. Update or add tests that protect the new/changed shared contract.
+
 For Python/Django code quality and backend architecture, see the rule `rengine-ng-python-backend.mdc`.
 
 For JavaScript code quality, Datatables and the UI, see the rule `rengine-ng-frontend.mdc`.

@@ -47,14 +47,9 @@ from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.worker_ws_groups import worker_deploy_group, worker_refresh_group
 from startScan.models import (
     Command,
-    Domain,
-    EndPoint,
-    Exploit,
     ScanActivity,
     ScanHistory,
     SecatorRunner,
-    Secret,
-    Subdomain,
     SubScan,
     Vulnerability,
 )
@@ -344,25 +339,10 @@ def _add_secator_runners_to_message(scan: ScanHistory, message: dict) -> None:
 
 
 def _get_scan_counts(scan_history_id: int) -> dict:
-    """Return domain, subdomain, endpoint, vulnerability, secret and exploit counts for a scan in one pass."""
-    domain_count = Domain.objects.filter(scan_history_id=scan_history_id).count()
-    subdomain_count = Subdomain.objects.filter(scan_history__id=scan_history_id).count()
-    alive_count = Subdomain.objects.filter(scan_history__id=scan_history_id, http_status__gt=0).count()
-    endpoint_count = EndPoint.objects.filter(scan_history__id=scan_history_id).count()
-    endpoint_alive_count = EndPoint.objects.filter(scan_history__id=scan_history_id, http_status__gt=0).count()
-    vulnerability_count = Vulnerability.objects.filter(scan_history__id=scan_history_id).count()
-    secret_count = Secret.objects.filter(scan_history__id=scan_history_id).count()
-    exploit_count = Exploit.objects.filter(scan_history__id=scan_history_id).count()
-    return {
-        "domain_count": domain_count,
-        "subdomain_count": subdomain_count,
-        "alive_count": alive_count,
-        "endpoint_count": endpoint_count,
-        "endpoint_alive_count": endpoint_alive_count,
-        "vulnerability_count": vulnerability_count,
-        "secret_count": secret_count,
-        "exploit_count": exploit_count,
-    }
+    """Return domain, subdomain, endpoint, vulnerability, secret, exploit and IP counts for a scan."""
+    from reNgine.services.scan_finding_metrics import get_scan_finding_counts
+
+    return get_scan_finding_counts(scan_history_id)
 
 
 def _get_severity_counts(scan_history_id: int) -> dict:
@@ -404,6 +384,8 @@ def _build_base_status_message(
         "exploit_count": counts["exploit_count"],
         "alive_count": counts["alive_count"],
         "endpoint_alive_count": counts["endpoint_alive_count"],
+        "ip_address_count": counts["ip_address_count"],
+        "ip_alive_count": counts["ip_alive_count"],
         **severity_counts,
     }
 

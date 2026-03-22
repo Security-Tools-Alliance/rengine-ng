@@ -132,13 +132,13 @@ function getCookieFromDocument(name) {
 	return cookieValue;
 }
 
-var RENGINE_SESSION_PROJECT_KEY = 'rengine-current-project-slug';
+const RENGINE_SESSION_PROJECT_KEY = 'rengine-current-project-slug';
 
 function getTrimmedBodyAttr(name) {
 	if (!document.body) {
 		return '';
 	}
-	var value = document.body.getAttribute(name);
+	const value = document.body.getAttribute(name);
 	if (!value) {
 		return '';
 	}
@@ -146,13 +146,13 @@ function getTrimmedBodyAttr(name) {
 }
 
 function getTabProjectSlugForHeader() {
-	var fromUrl = getTrimmedBodyAttr('data-project-slug-from-url');
+	const fromUrl = getTrimmedBodyAttr('data-project-slug-from-url');
 	if (fromUrl) {
 		return fromUrl;
 	}
 
 	try {
-		var s = window.sessionStorage.getItem(RENGINE_SESSION_PROJECT_KEY);
+		const s = window.sessionStorage.getItem(RENGINE_SESSION_PROJECT_KEY);
 		if (s && String(s).trim()) {
 			return String(s).trim();
 		}
@@ -172,20 +172,20 @@ function applyProjectSlugHeaderToFetchOptions(url, options) {
 	if (isExternalUrl(url)) {
 		return;
 	}
-	var slug = getTabProjectSlugForHeader();
+	const slug = getTabProjectSlugForHeader();
 	if (!slug) {
 		return;
 	}
-	var headers = options.headers;
+	let { headers } = options;
 	if (typeof Headers !== 'undefined' && headers instanceof Headers) {
 		if (!headers.has('X-Project-Slug')) {
 			headers.set('X-Project-Slug', slug);
 		}
 		return;
 	}
-	var h = headers && typeof headers === 'object' && !Array.isArray(headers) ? headers : {};
-	var hasProjectSlugHeader = false;
-	for (var key in h) {
+	const h = headers && typeof headers === 'object' && !Array.isArray(headers) ? headers : {};
+	let hasProjectSlugHeader = false;
+	for (const key in h) {
 		if (!Object.prototype.hasOwnProperty.call(h, key)) {
 			continue;
 		}
@@ -217,7 +217,7 @@ function setupCSRFToken() {
 					xhr.setRequestHeader("X-CSRFToken", csrftoken);
 				}
 				if (!settings.crossDomain) {
-					var ps = getTabProjectSlugForHeader();
+					const ps = getTabProjectSlugForHeader();
 					if (ps) {
 						xhr.setRequestHeader("X-Project-Slug", ps);
 					}
@@ -1006,14 +1006,14 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 	}
 	const ro = renderOptions || {};
 	const querySubdomainsUrl = ro.querySubdomainsUrl || (window.RENGINE_API_URLS && window.RENGINE_API_URLS.querySubdomains) || "";
-	function interestingSubdomainsStatusBadge(d) {
+	const interestingSubdomainsStatusBadge = function (d) {
 		if (d == null || d === "") return "";
 		const n = Number(d);
 		if (n === 0) return "";
 		const display = (typeof window.safeText === "function" ? window.safeText(String(d)) : String(d));
 		const cls = (n >= 200 && n < 300) ? "badge badge-soft-success" : (n >= 300 && n < 400) ? "badge badge-soft-warning" : "badge badge-soft-danger";
 		return "<span class=\"" + (typeof window.safeAttr === "function" ? window.safeAttr(cls) : cls) + "\">" + display + "</span>";
-	}
+	};
 	const getStatusBadge = (window.RengineDatatableRenderers && typeof window.RengineDatatableRenderers.getHttpStatusBadge === "function")
 		? window.RengineDatatableRenderers.getHttpStatusBadge
 		: (typeof get_http_status_badge === "function" ? get_http_status_badge : interestingSubdomainsStatusBadge);
@@ -1088,9 +1088,9 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 				$('#interesting_subdomain_alert_count').html(total + ' Interesting Subdomains');
 				$('#interesting_subdomain_count_badge').empty().html('<span class="badge badge-soft-primary me-1">' + total + '</span>');
 			}
-			var tableEl = document.getElementById('interesting_subdomains');
+			const tableEl = document.getElementById('interesting_subdomains');
 			if (typeof Clipboard !== "undefined" && tableEl) {
-				var clipboard = new Clipboard(tableEl, { selector: '.copyable' });
+				const clipboard = new Clipboard(tableEl, { selector: '.copyable' });
 				clipboard.on("success", function (e) { if (typeof setTooltip === "function") setTooltip(e.trigger, "Copied!"); });
 			}
 		}
@@ -1118,14 +1118,14 @@ function get_interesting_endpoints(endpoint_url, project, target_id, scan_histor
 	}
 	const ro = renderOptions || {};
 	const endpointSubdomainUrl = ro.endpointSubdomainUrl || (window.RENGINE_API_URLS && window.RENGINE_API_URLS.endpointsList) || (window.RENGINE_API_URLS && window.RENGINE_API_URLS.querySubdomains) || "";
-	function interestingEndpointsStatusBadge(d) {
+	const interestingEndpointsStatusBadge = function (d) {
 		if (d == null || d === "") return "";
 		const n = Number(d);
 		if (n === 0) return "";
 		const display = (typeof window.safeText === "function" ? window.safeText(String(d)) : String(d));
 		const cls = (n >= 200 && n < 300) ? "badge badge-soft-success" : (n >= 300 && n < 400) ? "badge badge-soft-warning" : "badge badge-soft-danger";
 		return "<span class=\"" + (typeof window.safeAttr === "function" ? window.safeAttr(cls) : cls) + "\">" + display + "</span>";
-	}
+	};
 	const getStatusBadge = (window.RengineDatatableRenderers && typeof window.RengineDatatableRenderers.getHttpStatusBadge === "function")
 		? window.RengineDatatableRenderers.getHttpStatusBadge
 		: (typeof get_http_status_badge === "function" ? get_http_status_badge : interestingEndpointsStatusBadge);
@@ -1317,6 +1317,62 @@ function mark_important_subdomain(url, row, subdomain_id) {
 		},
 		body: JSON.stringify(data)
 	});
+}
+
+function mark_important_ip(url, row, ip_address_id) {
+	let tr = null;
+	if (row) {
+		tr = row.closest ? row.closest("tr") : null;
+		if (tr) {
+			tr.classList.toggle("table-danger");
+		}
+	}
+	const revertRowHighlight = function () {
+		if (tr) {
+			tr.classList.toggle("table-danger");
+		}
+	};
+	const data = { ip_address_id: ip_address_id };
+	const SwalFire = window.Swal && typeof window.Swal.fire === "function" ? window.Swal.fire : null;
+	return fetch(url, {
+		method: 'POST',
+		credentials: "same-origin",
+		headers: {
+			"X-CSRFToken": getCookie("csrftoken"),
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify(data)
+	})
+		.then(function (response) {
+			return response.json().then(function (body) {
+				return { response: response, body: body };
+			});
+		})
+		.then(function (result) {
+			if (!result.response.ok || !result.body || result.body.status !== true) {
+				const msg =
+					result.body && result.body.message
+						? String(result.body.message)
+						: !result.response.ok
+						  ? "HTTP " + result.response.status
+						  : "Request failed";
+				const ec = result.body && result.body.error_code ? String(result.body.error_code) : "";
+				throw new Error(ec ? msg + " [" + ec + "]" : msg);
+			}
+		})
+		.catch(function (err) {
+			revertRowHighlight();
+			if (window.console && typeof window.console.error === "function") {
+				window.console.error("mark_important_ip failed", err);
+			}
+			if (SwalFire) {
+				SwalFire({
+					icon: "error",
+					title: "Could not update IP",
+					text: err && err.message ? err.message : "Something went wrong.",
+				});
+			}
+		});
 }
 
 function delete_scan(url) {
@@ -1994,63 +2050,80 @@ function render_certificate_in_xl_modal(subdomain_id, subdomain_name, scan_id) {
 		ModalManager.setXlContent({ bodyHtml: "", footerHtml: "" });
 		ModalManager.showXlOnly();
 	} else {
-		var modalEl = document.getElementById("modal-xl-scroll-dialog");
+		const modalEl = document.getElementById("modal-xl-scroll-dialog");
 		if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-			var modalInst = bootstrap.Modal.getOrCreateInstance(modalEl);
+			const modalInst = bootstrap.Modal.getOrCreateInstance(modalEl);
 			modalInst.show();
 		}
 	}
 	$("#xl-modal-content").append("<p class=\"text-muted\"><i class=\"fas fa-spinner fa-spin\"></i> Loading certificate(s)...</p>");
-	var apiUrl = (typeof window.DETAIL_SCAN_API_CERTIFICATES_LIST !== "undefined" ? window.DETAIL_SCAN_API_CERTIFICATES_LIST : "") || "";
+	const apiUrl = (typeof window.DETAIL_SCAN_API_CERTIFICATES_LIST !== "undefined" ? window.DETAIL_SCAN_API_CERTIFICATES_LIST : "") || "";
 	if (!apiUrl) {
 		$("#xl-modal-content").empty().append("<p class=\"text-danger mb-0\">Certificate API URL not configured.</p>");
 		return;
 	}
-	var params = "subdomain_id=" + encodeURIComponent(String(subdomain_id));
+	let params = "subdomain_id=" + encodeURIComponent(String(subdomain_id));
 	if (scan_id != null && scan_id !== "") params += "&scan_id=" + encodeURIComponent(String(scan_id));
-	var url = apiUrl + (apiUrl.indexOf("?") !== -1 ? "&" : "?") + params;
+	const url = apiUrl + (apiUrl.indexOf("?") !== -1 ? "&" : "?") + params;
 	fetch(url, {
 		method: "GET",
 		credentials: "same-origin",
 		headers: { "X-CSRFToken": typeof getCookie === "function" ? getCookie("csrftoken") : "", "X-Requested-With": "XMLHttpRequest" }
-	}).then(function (resp) { return resp.ok ? resp.json() : Promise.reject(new Error("Request failed")); }).then(function (data) {
-		var certs = data && data.certificates ? data.certificates : [];
+	}).then(function (resp) { return resp.ok ? resp.json() : Promise.reject(new Error("Request failed")); 	}).then(function (data) {
+		const { certificates: certs = [] } = data || {};
 		$("#xl-modal-content").empty();
 		if (certs.length === 0) {
 			$("#xl-modal-content").append("<p class=\"text-muted mb-0\">No certificate(s) found for this subdomain.</p>");
 			return;
 		}
-		function formatCert(cert, index) {
-			var subjCn = cert.subject_cn != null ? enc(cert.subject_cn) : "—";
-			var issuerCn = cert.issuer_cn != null ? enc(cert.issuer_cn) : (cert.issuer != null ? enc(cert.issuer) : "—");
-			var notBefore = cert.not_before_display != null ? enc(cert.not_before_display) : (cert.not_before != null ? enc(cert.not_before) : "—");
-			var notAfter = cert.not_after_display != null ? enc(cert.not_after_display) : (cert.not_after != null ? enc(cert.not_after) : "—");
-			var host = cert.host != null ? enc(cert.host) : "—";
-			var fp = cert.fingerprint_sha256 ? enc(cert.fingerprint_sha256) : "";
-			var fpShort = fp.length > 24 ? fp.slice(0, 24) + "…" : fp;
-			var status = cert.status != null ? enc(cert.status) : "";
-			var keysize = cert.keysize != null ? String(cert.keysize) : "—";
-			var selfSigned = cert.self_signed === true ? "<span class=\"badge badge-soft-warning\">Self-signed</span>" : "";
-			var trusted = cert.trusted === true ? "<span class=\"badge badge-soft-success\">Trusted</span>" : "";
-			var expired = cert.is_expired === true ? "<span class=\"badge badge-soft-danger\">Expired</span>" : "";
-			var sans = "";
-			if (cert.subject_an && Array.isArray(cert.subject_an) && cert.subject_an.length > 0) {
-				sans = "<div class=\"mt-1\"><strong>Subject Alternative Names:</strong> <span class=\"text-break\">" + cert.subject_an.map(function (s) { return enc(s); }).join(", ") + "</span></div>";
+		const formatCert = function (cert, index) {
+			const {
+				subject_cn,
+				issuer_cn,
+				issuer,
+				not_before_display,
+				not_before,
+				not_after_display,
+				not_after,
+				host: certHost,
+				fingerprint_sha256,
+				status: certStatus,
+				keysize: certKeysize,
+				self_signed,
+				trusted,
+				is_expired,
+				subject_an,
+			} = cert;
+			const subjCn = subject_cn != null ? enc(subject_cn) : "—";
+			const issuerCn = issuer_cn != null ? enc(issuer_cn) : (issuer != null ? enc(issuer) : "—");
+			const notBefore = not_before_display != null ? enc(not_before_display) : (not_before != null ? enc(not_before) : "—");
+			const notAfter = not_after_display != null ? enc(not_after_display) : (not_after != null ? enc(not_after) : "—");
+			const host = certHost != null ? enc(certHost) : "—";
+			const fp = fingerprint_sha256 ? enc(fingerprint_sha256) : "";
+			const fpShort = fp.length > 24 ? fp.slice(0, 24) + "…" : fp;
+			const status = certStatus != null ? enc(certStatus) : "";
+			const keysize = certKeysize != null ? String(certKeysize) : "—";
+			const selfSigned = self_signed === true ? "<span class=\"badge badge-soft-warning\">Self-signed</span>" : "";
+			const trustedBadge = trusted === true ? "<span class=\"badge badge-soft-success\">Trusted</span>" : "";
+			const expired = is_expired === true ? "<span class=\"badge badge-soft-danger\">Expired</span>" : "";
+			let sans = "";
+			if (subject_an && Array.isArray(subject_an) && subject_an.length > 0) {
+				sans = "<div class=\"mt-1\"><strong>Subject Alternative Names:</strong> <span class=\"text-break\">" + subject_an.map(function (s) { return enc(s); }).join(", ") + "</span></div>";
 			}
-			var cardTitle = certs.length > 1 ? "Certificate #" + (index + 1) + " – " + host : "Certificate details";
-			var html = "<div class=\"card mb-3\"><div class=\"card-header\">" + cardTitle + "</div><div class=\"card-body\">" +
+			const cardTitle = certs.length > 1 ? "Certificate #" + (index + 1) + " – " + host : "Certificate details";
+			const html = "<div class=\"card mb-3\"><div class=\"card-header\">" + cardTitle + "</div><div class=\"card-body\">" +
 				"<div><strong>Subject CN:</strong> " + subjCn + "</div>" +
 				(sans ? sans : "") +
 				"<div class=\"mt-1\"><strong>Issuer:</strong> " + issuerCn + "</div>" +
 				"<div class=\"mt-1\"><strong>Valid from:</strong> " + notBefore + " <strong>to</strong> " + notAfter + " " + expired + "</div>" +
-				"<div class=\"mt-1\">" + selfSigned + " " + trusted + (status ? " <span class=\"badge badge-soft-info\">" + status + "</span>" : "") + " <span class=\"badge badge-outline-secondary\">" + keysize + " bits</span></div>" +
+				"<div class=\"mt-1\">" + selfSigned + " " + trustedBadge + (status ? " <span class=\"badge badge-soft-info\">" + status + "</span>" : "") + " <span class=\"badge badge-outline-secondary\">" + keysize + " bits</span></div>" +
 				(fp ? "<div class=\"mt-1 small text-muted\"><strong>Fingerprint (SHA256):</strong> <code title=\"" + fp + "\">" + fpShort + "</code></div>" : "") +
 				"</div></div>";
 			return html;
-		}
-		for (var i = 0; i < certs.length; i++) {
-			$("#xl-modal-content").append(formatCert(certs[i], i));
-		}
+		};
+		certs.forEach(function (certRow, i) {
+			$("#xl-modal-content").append(formatCert(certRow, i));
+		});
 	}).catch(function () {
 		$("#xl-modal-content").empty().append("<p class=\"text-danger mb-0\">Failed to load certificate(s).</p>");
 	});
@@ -2692,7 +2765,7 @@ function reloadPage(){
 	location.reload();
 }
 
-var reNgineVuln = (window.reNgineVuln = window.reNgineVuln || {});
+const reNgineVuln = (window.reNgineVuln = window.reNgineVuln || {});
 
 /**
  * Returns a safe href for vulnerability reference links. Aligns with backend; only http, https, or path-only allowed.
@@ -2759,9 +2832,9 @@ reNgineVuln.getVulnerabilityDetailUrl = function (vulnId) {
  * Returns true if the row has markdown content but is missing pre-rendered HTML (_display).
  */
 reNgineVuln.vulnRowNeedsDisplayFetch = function (row) {
-	function hasDisplay(val) {
+	const hasDisplay = function (val) {
 		return val != null && String(val).trim().length > 0;
-	}
+	};
 	return (
 		(row.description && !hasDisplay(row.description_display)) ||
 		(row.impact && !hasDisplay(row.impact_display)) ||
@@ -3531,54 +3604,120 @@ function endpoint_datatable_col_visibility(endpoint_table, columns){
 }
 
 
-async function send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate = false, check_only = false, llm_model = null) {
+const ATTACK_SURFACE_ENTITY_SUBDOMAIN = 'subdomain';
+const ATTACK_SURFACE_ENTITY_IP = 'ip';
+if (typeof window !== 'undefined') {
+    window.RENGINE_ATTACK_SURFACE_ENTITY_SUBDOMAIN = ATTACK_SURFACE_ENTITY_SUBDOMAIN;
+    window.RENGINE_ATTACK_SURFACE_ENTITY_IP = ATTACK_SURFACE_ENTITY_IP;
+}
+
+function requireAttackEntityForLlm(attackEntity) {
+    // API contract: only these two literals (not window.RENGINE_* aliases).
+    if (attackEntity === 'subdomain' || attackEntity === 'ip') {
+        return attackEntity;
+    }
+    throw new Error(
+        'Invalid attackEntity "' + String(attackEntity) + '". Expected "subdomain" or "ip".'
+    );
+}
+
+async function send_llm__attack_surface_api_request(options) {
+    const endpoint_url = options.endpoint_url;
+    const id = options.id;
+    const force_regenerate = options.force_regenerate === true;
+    const check_only = options.check_only === true;
+    const llm_model = options.llm_model != null ? options.llm_model : null;
+    const attackEntity = options.attackEntity;
+
+    const kind = requireAttackEntityForLlm(attackEntity);
+    const numericId = id != null && id !== '' ? Number(id) : NaN;
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+        throw new Error('Invalid entity id for attack surface request.');
+    }
+
     const params = new URLSearchParams({
-        subdomain_id: id,
-        force_regenerate: force_regenerate,
-        check_only: check_only
+        force_regenerate: String(force_regenerate),
+        check_only: String(check_only)
     });
-    
-    // Only add llm_model if it's not null
+    params.append(window.RengineTargetEntityKind.llmQueryParamForKind(kind), String(numericId));
     if (llm_model) {
         params.append('llm_model', llm_model);
     }
-    
     const response = await fetch(`${endpoint_url}?${params}`);
-    return await response.json();
+    const contentType = response.headers.get('content-type') || '';
+    let body = null;
+    if (contentType.indexOf('application/json') !== -1) {
+        try {
+            body = await response.json();
+        } catch (parseErr) {
+            const err = new Error('Attack surface API returned invalid JSON (HTTP ' + response.status + ').');
+            err.status = response.status;
+            throw err;
+        }
+    } else {
+        const text = await response.text();
+        const err = new Error(
+            'Attack surface API returned non-JSON (HTTP ' + response.status + ').'
+        );
+        err.status = response.status;
+        err.bodyPreview = text ? text.slice(0, 200) : '';
+        throw err;
+    }
+    if (!response.ok) {
+        const msg =
+            body && (body.error || body.detail || body.message)
+                ? String(body.error || body.detail || body.message)
+                : 'Request failed with HTTP ' + response.status;
+        const err = new Error(msg);
+        err.status = response.status;
+        err.body = body;
+        throw err;
+    }
+    return body;
 }
 
-async function regenerateAttackSurface(endpoint_url, id) {
+async function regenerateAttackSurface(endpoint_url, id, attackEntity = ATTACK_SURFACE_ENTITY_SUBDOMAIN) {
     try {
-        // Show model selection dialog with force_regenerate flag
-        await showModelSelectionDialog(endpoint_url, id, true);
+        const kind = requireAttackEntityForLlm(attackEntity);
+        await showModelSelectionDialog(endpoint_url, id, { force_regenerate: true, attackEntity: kind });
     } catch (error) {
         console.error(error);
+        const httpStatus = error && error.status != null ? ' (HTTP ' + error.status + ')' : '';
         Swal.fire({
             icon: 'error',
             title: 'Error',
-            text: 'Something went wrong while regenerating the analysis.',
+            text:
+                (error && error.message ? error.message : 'Something went wrong while regenerating the analysis.') +
+                httpStatus,
         });
     }
 }
 
-async function show_attack_surface_modal(endpoint_url, id) {
+async function show_attack_surface_modal(endpoint_url, id, attackEntity = ATTACK_SURFACE_ENTITY_SUBDOMAIN) {
     try {
-        // First check if we have cached results without triggering analysis
-        const initialResponse = await send_llm__attack_surface_api_request(endpoint_url, id, false, true);
+        const kind = requireAttackEntityForLlm(attackEntity);
+        const initialResponse = await send_llm__attack_surface_api_request({
+            endpoint_url: endpoint_url,
+            id: id,
+            force_regenerate: false,
+            check_only: true,
+            llm_model: null,
+            attackEntity: kind
+        });
         
         if (initialResponse.status && initialResponse.description) {
-            showAttackSurfaceModal(initialResponse, endpoint_url, id);
+            showAttackSurfaceModal(initialResponse, endpoint_url, id, kind);
             return;
         }
         
-        // If no cached results, show model selection
-        await showModelSelectionDialog(endpoint_url, id, { mode: 'attack' });
+        await showModelSelectionDialog(endpoint_url, id, { mode: 'attack', attackEntity: kind });
     } catch (error) {
         console.error(error);
+        const httpStatus = error && error.status != null ? ' (HTTP ' + error.status + ')' : '';
         Swal.fire({
             icon: 'error',
             title: 'Error',
-            text: 'Something went wrong!',
+            text: (error && error.message ? error.message : 'Something went wrong!') + httpStatus,
         });
     }
 }
@@ -3600,12 +3739,16 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
         let mode = 'attack';
         let force_regenerate = false;
         let vuln_title = '';
+        let attackEntity = ATTACK_SURFACE_ENTITY_SUBDOMAIN;
         if (typeof optsOrForce === 'boolean') {
             force_regenerate = optsOrForce;
         } else if (optsOrForce && typeof optsOrForce === 'object') {
             mode = optsOrForce.mode || 'attack';
             force_regenerate = !!optsOrForce.force_regenerate;
             vuln_title = optsOrForce.vuln_title || '';
+            attackEntity = requireAttackEntityForLlm(
+                optsOrForce.attackEntity === undefined ? ATTACK_SURFACE_ENTITY_SUBDOMAIN : optsOrForce.attackEntity
+            );
         }
 
         // Unified confirm handler
@@ -3641,16 +3784,23 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
                     const loader_title = 'Loading...';
                     const text = 'Please wait while the LLM is generating attack surface.';
                     showSwalLoader(loader_title, text);
-                    const result = await send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate, false, selectedModel);
+                    const result = await send_llm__attack_surface_api_request({
+                        endpoint_url: endpoint_url,
+                        id: id,
+                        force_regenerate: force_regenerate,
+                        check_only: false,
+                        llm_model: selectedModel,
+                        attackEntity: attackEntity
+                    });
                     Swal.close();
                     
                     if (result.status) {
-                        showAttackSurfaceModal(result, endpoint_url, id);
+                        showAttackSurfaceModal(result, endpoint_url, id, attackEntity);
                     } else {
                         Swal.fire({
                             icon: 'error',
                             title: 'Oops...',
-                            text: result.error,
+                            text: result.error || 'Attack surface request was not successful.',
                         });
                     }
                 } else {
@@ -3661,10 +3811,11 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
             } catch (error) {
                 console.error(error);
                 Swal.close();
+                const httpStatus = error && error.status != null ? ' (HTTP ' + error.status + ')' : '';
                 Swal.fire({
                     icon: 'error',
                     title: 'Oops...',
-                    text: 'Something went wrong!',
+                    text: (error && error.message ? error.message : 'Something went wrong!') + httpStatus,
                 });
             }
         };
@@ -3755,8 +3906,9 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
     }
 }
 
-async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
+async function deleteAttackSurfaceAnalysis(endpoint_url, id, attackEntity = ATTACK_SURFACE_ENTITY_SUBDOMAIN) {
     try {
+        const kind = requireAttackEntityForLlm(attackEntity);
         const result = await Swal.fire({
             title: 'Delete Analysis?',
             text: "This will permanently delete the current attack surface analysis. This action cannot be undone.",
@@ -3770,8 +3922,10 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
 
         if (result.isConfirmed) {
             showSwalLoader("Deleting...", "Please wait while the analysis is being deleted.");
-            
-            const response = await fetch(`${endpoint_url}?subdomain_id=${id}`, {
+            const idParam = window.RengineTargetEntityKind.isIp(kind)
+                ? `ip_address_id=${encodeURIComponent(id)}`
+                : `subdomain_id=${encodeURIComponent(id)}`;
+            const response = await fetch(`${endpoint_url}?${idParam}`, {
                 method: 'DELETE',
                 headers: {
                     'X-CSRFToken': getCookie('csrftoken')
@@ -3804,7 +3958,8 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
     }
 }
 
-function showAttackSurfaceModal(data, endpoint_url, id) {
+function showAttackSurfaceModal(data, endpoint_url, id, attackEntity = ATTACK_SURFACE_ENTITY_SUBDOMAIN) {
+    const kind = requireAttackEntityForLlm(attackEntity);
     const header = 'Attack Surface Suggestion for ' + data.subdomain_name;
     const bodyHtml =
         DOMPurify.sanitize(data.description) +
@@ -3841,7 +3996,7 @@ function showAttackSurfaceModal(data, endpoint_url, id) {
         $btn.prop('disabled', true);
         $otherBtn.prop('disabled', true);
         try {
-            await regenerateAttackSurface(endpoint_url, id);
+            await regenerateAttackSurface(endpoint_url, id, kind);
         } catch (error) {
             console.error(error);
             Swal.fire({
@@ -3868,7 +4023,7 @@ function showAttackSurfaceModal(data, endpoint_url, id) {
         $btn.prop('disabled', true);
         $otherBtn.prop('disabled', true);
         try {
-            await deleteAttackSurfaceAnalysis(endpoint_url, id);
+            await deleteAttackSurfaceAnalysis(endpoint_url, id, kind);
         } catch (error) {
             console.error(error);
             Swal.fire({

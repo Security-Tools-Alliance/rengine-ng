@@ -57,10 +57,10 @@ class TestDnsRepository(BaseTestCase):
             subdomain_for_name,
             "Subdomain for record name should be created via get_or_create_from_host",
         )
-        subdomain_for_host = Subdomain.objects.filter(scan_history=self.scan_history, name="192.168.1.2").first()
-        self.assertIsNotNone(
-            subdomain_for_host,
-            "Subdomain for record host (IP) should be created via get_or_create_from_host",
+        subdomain_for_ip_host = Subdomain.objects.filter(scan_history=self.scan_history, name="192.168.1.2").first()
+        self.assertIsNone(
+            subdomain_for_ip_host,
+            "Literal IP record values are not stored as Subdomain rows (use IpAddress / endpoints).",
         )
 
     def test_save_from_secator_valid_aaaa_record(self):

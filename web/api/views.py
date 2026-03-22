@@ -84,12 +84,35 @@ from api.helpers.datatables import (
     get_scan_status_filter_labels,
     get_task_status_filter_labels,
 )
+from api.helpers.ip_action_response import (
+    IP_ERR_INVALID_IP_ADDRESS_IDS,
+    IP_ERR_IP_NOT_FOUND,
+    IP_ERR_IP_NOT_IN_SCAN,
+    IP_ERR_MISSING_IP_ADDRESS_ID,
+    IP_ERR_MISSING_REQUIRED_FIELDS,
+    IP_ERR_SCAN_NOT_FOUND,
+    ip_action_error,
+)
 from api.helpers.query import (
     build_subdomain_datatable_queryset,
     build_vulnerability_datatable_base_queryset,
     get_ip_subdomain_data,
     get_scan_status_querysets,
     parse_subdomain_datatable_request,
+)
+
+# Request XOR / id-list parsing: ``api.helpers.subdomain_ip_xor`` (messages + rules) and
+# ``api.helpers.secator_scan_target_request`` (comma-separated GET lists, JSON ip_address_ids).
+from api.helpers.secator_scan_target_request import (
+    coerce_json_ip_address_ids,
+    parse_comma_separated_int_ids,
+    positive_ip_ids,
+)
+from api.helpers.subdomain_ip_xor import (
+    both_subdomain_and_ip_provided_error,
+    subdomain_ids_conflict_when_ip_address_ids_requested_error,
+    xor_subdomain_ids_or_ip_address_ids_error,
+    xor_subdomain_ip_single_ids_error,
 )
 from api.mixins import (
     AdvancedSearchMixin,
@@ -124,6 +147,9 @@ from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.secator.services.target_builder_service import TargetBuilderService
 from reNgine.secator.synthetic_id import synthetic_id_skipped_scope
+from reNgine.services.repositories.ip_repository import normalize_ip_address_string
+from reNgine.services.repositories.scan_lookups import filter_ports_queryset_by_scan_ids, get_ip_linked_to_scan_ids
+from reNgine.services.scan_finding_metrics import partition_ip_address_ids_for_scan_history  # IP PKs in-scan
 from reNgine.settings import (
     RENGINE_GF_PATTERNS_DIR,
     RENGINE_NUCLEI_TEMPLATES_DIR,
@@ -511,75 +537,163 @@ class LLMAttackSuggestion(APIView):
     def get(self, request):
         req = request
         subdomain_id = safe_int_cast(req.query_params.get("subdomain_id"))
+        ip_address_id = safe_int_cast(req.query_params.get("ip_address_id"))
         force_regenerate = req.query_params.get("force_regenerate") == "true"
         check_only = req.query_params.get("check_only") == "true"
         selected_model = req.query_params.get("llm_model")  # Get selected model from request
 
-        if not subdomain_id:
-            return Response({"status": False, "error": "Missing GET param Subdomain `subdomain_id`"})
+        # Exactly one of subdomain_id / ip_address_id (xor_subdomain_ip_single_ids_error).
+        if err := xor_subdomain_ip_single_ids_error(subdomain_id, ip_address_id):
+            return Response({"status": False, "error": err}, status=HTTP_400_BAD_REQUEST)
 
+        if subdomain_id:
+            return self._get_for_subdomain(subdomain_id, force_regenerate, check_only, selected_model)
+        return self._get_for_ip_address(ip_address_id, force_regenerate, check_only, selected_model)
+
+    def _get_for_subdomain(
+        self,
+        subdomain_id: int,
+        force_regenerate: bool,
+        check_only: bool,
+        selected_model: str | None,
+    ) -> Response:
         try:
             subdomain = Subdomain.objects.get(id=subdomain_id)
         except Subdomain.DoesNotExist:
-            return Response({"status": False, "error": f"Subdomain not found with id {subdomain_id}"})
+            return Response({"status": False, "error": "Subdomain not found with id %s" % (subdomain_id,)})
 
-        # Return cached result only if not forcing regeneration and not empty
         if subdomain.attack_surface and not force_regenerate and not is_empty_attack_surface(subdomain.attack_surface):
             sanitized_html = subdomain.formatted_attack_surface
             return Response(
                 {"status": True, "subdomain_name": subdomain.name, "description": sanitized_html, "cached": True}
             )
 
-        # If check_only, return without generating new analysis
         if check_only:
             return Response({"status": True, "subdomain_name": subdomain.name, "description": None})
 
-        # Generate new analysis
         ip_addrs = subdomain.ip_addresses.prefetch_related("ports").all()
-        open_ports = ", ".join(f"{port.number}/{port.service_name}" for ip in ip_addrs for port in ip.ports.all())
+        open_ports = ", ".join("%s/%s" % (port.number, port.service_name) for ip in ip_addrs for port in ip.ports.all())
         tech_used = ", ".join(tech.name for tech in subdomain.technologies.all())
 
-        input_data = f"""
-            Subdomain Name: {subdomain.name}
-            Subdomain Page Title: {subdomain.page_title}
-            Open Ports: {open_ports}
-            HTTP Status: {subdomain.http_status}
-            Technologies Used: {tech_used}
-            Content type: {subdomain.content_type}
-            Web Server: {subdomain.webserver}
-            Page Content Length: {subdomain.content_length}
-        """
+        input_data = """
+            Subdomain Name: %s
+            Subdomain Page Title: %s
+            Open Ports: %s
+            HTTP Status: %s
+            Technologies Used: %s
+            Content type: %s
+            Web Server: %s
+            Page Content Length: %s
+        """ % (
+            subdomain.name,
+            subdomain.page_title,
+            open_ports,
+            subdomain.http_status,
+            tech_used,
+            subdomain.content_type,
+            subdomain.webserver,
+            subdomain.content_length,
+        )
 
         llm = LLMAttackSuggestionGenerator()
-        response = llm.get_attack_suggestion(input_data, selected_model)  # Pass selected model to generator
+        response = llm.get_attack_suggestion(input_data, selected_model)
         response["subdomain_name"] = subdomain.name
 
         if response.get("status"):
             raw_desc = response.get("description")
             if isinstance(raw_desc, str) and raw_desc.strip():
-                # Use the actual selected model name
-                markdown_content = f"[LLM:{selected_model}]\n{raw_desc}"
+                markdown_content = "[LLM:%s]\n%s" % (selected_model, raw_desc)
                 subdomain.attack_surface = markdown_content
                 subdomain.save()
                 response["description"] = convert_markdown_to_html(markdown_content)
             else:
-                # Do not save empty content
+                response["description"] = ""
+
+        return Response(response)
+
+    def _get_for_ip_address(
+        self,
+        ip_address_id: int,
+        force_regenerate: bool,
+        check_only: bool,
+        selected_model: str | None,
+    ) -> Response:
+        try:
+            ip_row = IpAddress.objects.prefetch_related("ports", "ip_addresses").get(id=ip_address_id)
+        except IpAddress.DoesNotExist:
+            return Response({"status": False, "error": "IP address not found with id %s" % (ip_address_id,)})
+
+        display_name = ip_row.address or ("IP #%s" % ip_address_id)
+        if ip_row.attack_surface and not force_regenerate and not is_empty_attack_surface(ip_row.attack_surface):
+            sanitized_html = ip_row.formatted_attack_surface
+            return Response(
+                {
+                    "status": True,
+                    "subdomain_name": display_name,
+                    "description": sanitized_html,
+                    "cached": True,
+                }
+            )
+
+        if check_only:
+            return Response({"status": True, "subdomain_name": display_name, "description": None})
+
+        open_ports = ", ".join("%s/%s" % (port.number, port.service_name or "") for port in ip_row.ports.all())
+        hostnames = list(ip_row.ip_addresses.values_list("name", flat=True).distinct()[:50])
+        hostnames_str = ", ".join(h for h in hostnames if h)
+
+        input_data = """
+            Target type: IP address
+            IP Address: %s
+            Alive: %s
+            Is CDN: %s
+            Protocol: %s
+            Reverse DNS: %s
+            Open Ports: %s
+            Related hostnames (from recon): %s
+        """ % (
+            ip_row.address,
+            ip_row.alive,
+            ip_row.is_cdn,
+            ip_row.protocol or "",
+            ip_row.reverse_pointer or "",
+            open_ports,
+            hostnames_str,
+        )
+
+        llm = LLMAttackSuggestionGenerator()
+        response = llm.get_attack_suggestion(input_data, selected_model)
+        response["subdomain_name"] = display_name
+
+        if response.get("status"):
+            raw_desc = response.get("description")
+            if isinstance(raw_desc, str) and raw_desc.strip():
+                markdown_content = "[LLM:%s]\n%s" % (selected_model, raw_desc)
+                ip_row.attack_surface = markdown_content
+                ip_row.save()
+                response["description"] = convert_markdown_to_html(markdown_content)
+            else:
                 response["description"] = ""
 
         return Response(response)
 
     def delete(self, request):
-        subdomain_id = request.query_params.get("subdomain_id")
-        if not subdomain_id:
-            return Response({"status": False, "error": "Missing subdomain_id parameter"}, status=400)
-
+        subdomain_id = safe_int_cast(request.query_params.get("subdomain_id"))
+        ip_address_id = safe_int_cast(request.query_params.get("ip_address_id"))
+        if err := xor_subdomain_ip_single_ids_error(subdomain_id, ip_address_id):
+            return Response({"status": False, "error": err}, status=400)
         try:
-            subdomain = Subdomain.objects.get(id=subdomain_id)
-            subdomain.attack_surface = None
-            subdomain.save()
+            if subdomain_id:
+                subdomain = Subdomain.objects.get(id=subdomain_id)
+                subdomain.attack_surface = None
+                subdomain.save()
+            else:
+                ip_row = IpAddress.objects.get(id=ip_address_id)
+                ip_row.attack_surface = None
+                ip_row.save()
             return Response({"status": True, "message": "Attack surface analysis deleted successfully"})
-        except Subdomain.DoesNotExist:
-            return Response({"status": False, "error": f"Subdomain not found with id {subdomain_id}"}, status=404)
+        except (Subdomain.DoesNotExist, IpAddress.DoesNotExist):
+            return Response({"status": False, "error": "Entity not found"}, status=404)
         except Exception as e:
             logger.log_line(
                 PREFIX_API,
@@ -1160,6 +1274,7 @@ class AddReconNote(APIView):
         data = req.data
 
         subdomain_id = safe_int_cast(data.get("subdomain_id"))
+        ip_address_id = safe_int_cast(data.get("ip_address_id"))
         scan_history_id = safe_int_cast(data.get("scan_history_id"))
         title = data.get("title")
         description = data.get("description")
@@ -1169,6 +1284,9 @@ class AddReconNote(APIView):
             return Response({"status": False, "error": "Title is required."}, status=400)
         if not project:
             return Response({"status": False, "error": "Project is required."}, status=400)
+        # Recon notes: forbid both targets at once (both_subdomain_and_ip_provided_error).
+        if err := both_subdomain_and_ip_provided_error(subdomain_id, ip_address_id):
+            return Response({"status": False, "error": err}, status=400)
 
         try:
             project = Project.objects.get(slug=project)
@@ -1180,15 +1298,17 @@ class AddReconNote(APIView):
                 scan_history = ScanHistory.objects.get(id=scan_history_id)
                 note.scan_history = scan_history
 
-            # get scan history for subdomain_id
             if subdomain_id:
                 subdomain = Subdomain.objects.get(id=subdomain_id)
                 note.subdomain = subdomain
-
-                # also get scan history
                 scan_history_id = subdomain.scan_history.id
                 scan_history = ScanHistory.objects.get(id=scan_history_id)
                 note.scan_history = scan_history
+            elif ip_address_id:
+                ip_row = IpAddress.objects.get(id=ip_address_id)
+                note.ip_address = ip_row
+                if scan_history_id:
+                    note.scan_history = ScanHistory.objects.get(id=scan_history_id)
 
             note.project = project
             note.save()
@@ -1221,6 +1341,81 @@ class ToggleSubdomainImportantStatus(APIView):
         response = {"status": True}
 
         return Response(response)
+
+
+class ToggleIpAddressImportantStatus(APIView):
+    def post(self, request):
+        data = request.data
+        ip_id = safe_int_cast(data.get("ip_address_id"))
+        if not ip_id:
+            return ip_action_error("No ip_address_id provided", IP_ERR_MISSING_IP_ADDRESS_ID, status=400)
+
+        ip_row = IpAddress.objects.filter(id=ip_id).first()
+        if not ip_row:
+            return ip_action_error("IP address not found", IP_ERR_IP_NOT_FOUND, status=404)
+        ip_row.is_important = not bool(ip_row.is_important)
+        ip_row.save()
+        return Response({"status": True})
+
+
+class UnlinkScanIpAddresses(APIView):
+    """Remove IP–subdomain links for subdomains that belong to the given scan (row removed from scan IP table)."""
+
+    def post(self, request):
+        data = request.data
+        if "scan_history_id" not in data or data.get("scan_history_id") in (None, ""):
+            return ip_action_error(
+                "ip_address_ids and scan_history_id are required",
+                IP_ERR_MISSING_REQUIRED_FIELDS,
+                status=400,
+            )
+        scan_history_id = safe_int_cast(data.get("scan_history_id"), default=None)
+        if isinstance(scan_history_id, list):
+            scan_history_id = safe_int_cast(scan_history_id[0], default=None) if scan_history_id else None
+        if scan_history_id is None or scan_history_id < 1:
+            return ip_action_error(
+                "ip_address_ids and scan_history_id are required",
+                IP_ERR_MISSING_REQUIRED_FIELDS,
+                status=400,
+            )
+        if "ip_address_ids" not in data or data.get("ip_address_ids") is None:
+            return ip_action_error(
+                "ip_address_ids and scan_history_id are required",
+                IP_ERR_MISSING_REQUIRED_FIELDS,
+                status=400,
+            )
+        # Body list/string coercion: coerce_json_ip_address_ids + positive_ip_ids.
+        try:
+            ip_ids = positive_ip_ids(coerce_json_ip_address_ids(data.get("ip_address_ids")))
+        except ValueError:
+            return ip_action_error("Invalid ip_address_ids", IP_ERR_INVALID_IP_ADDRESS_IDS, status=400)
+        if not ip_ids:
+            return ip_action_error("No valid ip_address_ids provided", IP_ERR_INVALID_IP_ADDRESS_IDS, status=400)
+        # In-scan membership: partition_ip_address_ids_for_scan_history (scan_finding_metrics).
+        scan = ScanHistory.objects.filter(pk=scan_history_id).first()
+        if not scan:
+            return ip_action_error("Scan not found", IP_ERR_SCAN_NOT_FOUND, status=404)
+        validated_ids, invalid_ids = partition_ip_address_ids_for_scan_history(ip_ids, scan_history_id)
+        if not validated_ids:
+            return ip_action_error(
+                "None of the provided ip_address_ids are linked to this scan",
+                IP_ERR_IP_NOT_IN_SCAN,
+                status=400,
+            )
+        subdomains = Subdomain.objects.filter(scan_history_id=scan_history_id)
+        for ip_id in validated_ids:
+            ip_row = IpAddress.objects.filter(id=ip_id).first()
+            if not ip_row:
+                continue
+            for sd in subdomains.filter(ip_addresses=ip_row):
+                sd.ip_addresses.remove(ip_row)
+        response_data = {"status": True}
+        if invalid_ids:
+            response_data["warnings"] = {
+                "ignored_ip_address_ids": invalid_ids,
+                "message": "Some ip_address_ids are not linked to this scan and were ignored",
+            }
+        return Response(response_data)
 
 
 class AddTarget(APIView):
@@ -1905,6 +2100,7 @@ class InitiateSubTask(APIView):
     def post(self, request):
         data = request.data
         subdomain_ids = safe_int_cast(data.get("subdomain_ids", []))
+        ip_address_ids_raw = data.get("ip_address_ids")
         scan_history_id = safe_int_cast(data.get("scan_history_id"), default=None)
 
         # Secator parameters
@@ -1914,11 +2110,19 @@ class InitiateSubTask(APIView):
         secator_scan_type = data.get("secator_scan_type")
         secator_config = data.get("secator_config", {})
 
-        if not subdomain_ids:
-            return Response({"status": False, "error": "Missing subdomain_ids"}, status=400)
-
         if isinstance(subdomain_ids, int):
             subdomain_ids = [subdomain_ids]
+        # Target lists: secator_scan_target_request.coerce_json_ip_address_ids; XOR: xor_subdomain_ids_or_ip_address_ids_error.
+        try:
+            ip_address_ids = coerce_json_ip_address_ids(ip_address_ids_raw)
+        except ValueError:
+            return Response({"status": False, "error": "Invalid ip_address_ids"}, status=400)
+
+        if err := xor_subdomain_ids_or_ip_address_ids_error(subdomain_ids, ip_address_ids):
+            return Response({"status": False, "error": err}, status=400)
+
+        has_subdomains = bool(subdomain_ids)
+        has_ips = bool(ip_address_ids)
 
         # Determine execution mode
         execution_mode = None
@@ -1968,27 +2172,40 @@ class InitiateSubTask(APIView):
                 status=400,
             )
 
-        # Get subdomains and validate
+        subdomains = Subdomain.objects.none()
+        ip_scan_targets: list[IpAddress] = []
+        target_id_from_domain: int | None = None
+
         try:
-            subdomains = Subdomain.objects.filter(id__in=subdomain_ids)
-            if not subdomains.exists():
-                return Response({"status": False, "error": "No valid subdomains found"}, status=404)
+            if has_subdomains:
+                subdomains = Subdomain.objects.filter(id__in=subdomain_ids)
+                if not subdomains.exists():
+                    return Response({"status": False, "error": "No valid subdomains found"}, status=404)
 
-            # Require all subdomains to belong to the same target (they may span multiple Domain/scan)
-            target_ids = list(subdomains.values_list("scan_history__target_id", flat=True).distinct())
-            target_ids = [tid for tid in target_ids if tid is not None]
-            if not target_ids:
-                return Response(
-                    {"status": False, "error": "Could not resolve target from subdomains"},
-                    status=400,
+                target_ids = list(subdomains.values_list("scan_history__target_id", flat=True).distinct())
+                target_ids = [tid for tid in target_ids if tid is not None]
+                if not target_ids:
+                    return Response(
+                        {"status": False, "error": "Could not resolve target from subdomains"},
+                        status=400,
+                    )
+                if len(target_ids) > 1:
+                    return Response(
+                        {"status": False, "error": "All subdomains must belong to the same target"},
+                        status=400,
+                    )
+                target_id_from_domain = target_ids[0]
+            else:
+                if scan_history_id is None:
+                    return Response(
+                        {"status": False, "error": "scan_history_id is required for IP subscans"},
+                        status=400,
+                    )
+                ip_scan_targets, target_id_from_domain = _validate_ip_addresses_in_scan_context(
+                    ip_address_ids, scan_history_id=scan_history_id
                 )
-            if len(target_ids) > 1:
-                return Response(
-                    {"status": False, "error": "All subdomains must belong to the same target"},
-                    status=400,
-                )
-            target_id_from_domain = target_ids[0]
-
+        except ValueError as exc:
+            return Response({"status": False, "error": str(exc)}, status=400)
         except Exception as e:
             return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=400)
 
@@ -2022,6 +2239,7 @@ class InitiateSubTask(APIView):
                 secator_config=secator_config,
                 subdomain_ids=subdomain_ids,
                 scan_history_id=scan_history_id,
+                ip_address_id=ip_address_ids[0] if ip_address_ids else None,
             )
             for err in run_result["validation_errors"]:
                 scan_results.append({"task_type": err["task_type"], "status": "error", "error": err["detail"]})
@@ -2091,7 +2309,10 @@ class InitiateSubTask(APIView):
                     status=404,
                 )
 
-        for subdomain in subdomains:
+        iter_subdomains = list(subdomains) if has_subdomains else []
+        iter_ips = ip_scan_targets if has_ips else []
+
+        for subdomain in iter_subdomains:
             try:
                 subscan_id_arg = None
                 if scan is not None:
@@ -2183,10 +2404,116 @@ class InitiateSubTask(APIView):
                     }
                 )
 
+        for ip_row in iter_ips:
+            try:
+                addr = (ip_row.address or "").strip()
+                if not addr:
+                    scan_results.append(
+                        {
+                            "ip_address_id": ip_row.id,
+                            "ip_address": "",
+                            "status": "error",
+                            "error": "IP has no address value",
+                        }
+                    )
+                    continue
+                subscan_id_arg = None
+                if scan is not None:
+                    subscan = SubScan.objects.create(
+                        scan_history=scan,
+                        subdomain=None,
+                        ip_address=ip_row,
+                        type=subscan_type,
+                        start_scan_date=timezone.now(),
+                        status=RUNNING_TASK,
+                    )
+                    subscan_id_arg = subscan.id
+
+                worker_id = get_request_worker_id(request)
+                if target_id_from_domain is not None:
+                    try:
+                        target_for_scope = Target.objects.get(pk=target_id_from_domain)
+                    except (Target.DoesNotExist, TypeError, ValueError):
+                        target_for_scope = None
+                    if target_for_scope is not None:
+                        from targetApp.services.scope_params import (
+                            get_scope_for_target,
+                            resolve_worker_for_scope,
+                        )
+
+                        scope = get_scope_for_target(target_for_scope)
+                        worker_id = resolve_worker_for_scope(scope, worker_id)
+                result = start_secator_scan(
+                    target_id=target_id_from_domain,
+                    user_id=request.user.id,
+                    execution_mode=execution_mode,
+                    workflow_id=workflow_id_for_scan,
+                    task_ids=task_ids_for_scan,
+                    secator_scan_type=secator_scan_type,
+                    imported_subdomains=[addr],
+                    out_of_scope_subdomains=[],
+                    url_filter="",
+                    subdomain_ids=[],
+                    secator_config=secator_config,
+                    scan_history_id=scan_history_id if scan else None,
+                    subscan_id=subscan_id_arg,
+                    worker_id=worker_id,
+                    targets_override=[addr],
+                )
+
+                if result.get("status"):
+                    scan_results.append(
+                        {
+                            "ip_address_id": ip_row.id,
+                            "ip_address": addr,
+                            "scan_id": result.get("scan_id"),
+                            "status": "success",
+                        }
+                    )
+                    logger.log_line(
+                        PREFIX_API,
+                        "SECATOR_SUBSCAN",
+                        "Secator subscan initiated for IP %s (ID: %s)" % (addr, ip_row.id),
+                        level="info",
+                    )
+                else:
+                    scan_results.append(
+                        {
+                            "ip_address_id": ip_row.id,
+                            "ip_address": addr,
+                            "status": "error",
+                            "error": result.get("error", "Unknown error"),
+                        }
+                    )
+                    logger.log_line(
+                        PREFIX_API,
+                        "SECATOR_SUBSCAN",
+                        "Failed to start subscan for IP %s: %s" % (addr, result.get("error", "Unknown error")),
+                        level="error",
+                    )
+
+            except Exception as e:
+                logger.log_line(
+                    PREFIX_API,
+                    "SECATOR_SUBSCAN",
+                    "Error initiating subscan for IP id %s: %s" % (ip_row.id, e),
+                    level="error",
+                )
+                scan_results.append(
+                    {
+                        "ip_address_id": ip_row.id,
+                        "ip_address": (ip_row.address or ""),
+                        "status": "error",
+                        "error": get_safe_user_message(e, None),
+                    }
+                )
+
+        initiated_count = len(subdomain_ids) if has_subdomains else len(ip_address_ids)
+        entity_word = "subdomain(s)" if has_subdomains else "IP address(es)"
         return Response(
             {
                 "status": True,
-                "message": f"Subscans initiated for {len(subdomain_ids)} subdomain(s)",
+                "message": "Subscans initiated for %s %s" % (initiated_count, entity_word),
                 "results": scan_results,
             },
         )
@@ -2207,6 +2534,119 @@ def _build_secator_flat_targets_and_by_type(
     flat_targets = builder.build_flat_targets(input_types)
     targets_by_type = builder.build_targets_by_type(input_types)
     return (flat_targets, targets_by_type)
+
+
+def _validate_ip_addresses_in_scan_context(
+    ip_ids: list[int],
+    *,
+    scan_history_id: int | None = None,
+    target_id: int | None = None,
+) -> tuple[list[IpAddress], int]:
+    """
+    Ensure each IP is linked to at least one Subdomain in the given scan or target.
+
+    Returns:
+        (IpAddress rows in request order (unique ids preserved), resolved target_id).
+    """
+    if not ip_ids:
+        raise ValueError("No IP address ids provided")
+    ordered_unique: list[int] = []
+    seen: set[int] = set()
+    for i in ip_ids:
+        if i not in seen:
+            seen.add(i)
+            ordered_unique.append(i)
+    ips = list(IpAddress.objects.filter(id__in=ordered_unique).prefetch_related("ports"))
+    found_ids = {ip.id for ip in ips}
+    if found_ids != set(ordered_unique):
+        raise ValueError("One or more IP address ids are invalid")
+    id_to_ip = {ip.id: ip for ip in ips}
+    ordered_ips = [id_to_ip[i] for i in ordered_unique]
+    if scan_history_id is not None:
+        scan = ScanHistory.objects.filter(pk=scan_history_id).first()
+        if not scan:
+            raise ValueError("Scan not found")
+        sub_qs = Subdomain.objects.filter(scan_history_id=scan_history_id)
+        for ip in ordered_ips:
+            if not sub_qs.filter(ip_addresses=ip).exists():
+                raise ValueError("IP is not part of this scan")
+        if scan.target_id is None:
+            raise ValueError("Scan has no target")
+        return ordered_ips, int(scan.target_id)
+    if target_id is not None:
+        sub_qs = Subdomain.objects.filter(scan_history__target_id=target_id)
+        for ip in ordered_ips:
+            if not sub_qs.filter(ip_addresses=ip).exists():
+                raise ValueError("IP is not associated with this target")
+        return ordered_ips, int(target_id)
+    raise ValueError("scan_history_id or target_id is required for IP address scope validation")
+
+
+def _flat_targets_for_scan_ip_objects(
+    ip_objs: list[IpAddress],
+    input_types: list,
+) -> tuple[list, dict]:
+    """Build Secator flat target list and per-type map for explicit IP rows (subscan from IP table)."""
+    from targetApp.constants import TARGET_TYPE_IP
+
+    addrs: list[str] = []
+    seen_addr: set[str] = set()
+    for ip in ip_objs:
+        a = (ip.address or "").strip()
+        if a and a not in seen_addr:
+            seen_addr.add(a)
+            addrs.append(a)
+    targets_by_type: dict = {}
+    flat: list = []
+    seen_flat: set[str] = set()
+    norm_types = {str(t).strip().lower() for t in input_types}
+    for raw_t in input_types:
+        t = str(raw_t).strip()
+        tl = t.lower()
+        if tl in ("ip", TARGET_TYPE_IP):
+            targets_by_type[t] = list(addrs)
+        elif tl == "host":
+            targets_by_type[t] = list(addrs)
+        elif tl in ("host:port", "host_port"):
+            hp: list[str] = []
+            for ip in ip_objs:
+                addr = (ip.address or "").strip()
+                if not addr:
+                    continue
+                for port in ip.ports.all():
+                    num = port.number
+                    if num is not None and 1 <= int(num) <= 65535:
+                        hp.append("%s:%s" % (addr, num))
+            targets_by_type[t] = hp
+        elif tl == "url":
+            targets_by_type[t] = ["http://%s/" % a for a in addrs]
+        else:
+            targets_by_type[t] = []
+    for tl in norm_types:
+        if tl in ("ip", TARGET_TYPE_IP, "host"):
+            for a in addrs:
+                if a not in seen_flat:
+                    seen_flat.add(a)
+                    flat.append(a)
+        elif tl in ("host:port", "host_port"):
+            for ip in ip_objs:
+                addr = (ip.address or "").strip()
+                if not addr:
+                    continue
+                for port in ip.ports.all():
+                    num = port.number
+                    if num is not None and 1 <= int(num) <= 65535:
+                        s = "%s:%s" % (addr, num)
+                        if s not in seen_flat:
+                            seen_flat.add(s)
+                            flat.append(s)
+        elif tl == "url":
+            for a in addrs:
+                s = "http://%s/" % a
+                if s not in seen_flat:
+                    seen_flat.add(s)
+                    flat.append(s)
+    return flat, targets_by_type
 
 
 class GetSecatorInputTypesAndTargets(APIView):
@@ -2230,6 +2670,8 @@ class GetSecatorInputTypesAndTargets(APIView):
         target_ids_param = request.query_params.get("target_ids")
         domain_id_param = request.query_params.get("domain_id")
         subdomain_ids_param = request.query_params.get("subdomain_ids")
+        ip_address_ids_param = request.query_params.get("ip_address_ids")
+        scan_history_for_ips = safe_int_cast(request.query_params.get("scan_history_id"), default=None)
 
         subdomain_ids = []
         if subdomain_ids_param:
@@ -2240,23 +2682,39 @@ class GetSecatorInputTypesAndTargets(APIView):
             if isinstance(subdomain_ids, int):
                 subdomain_ids = [subdomain_ids]
 
+        ip_targets_mode_objs: list[IpAddress] = []
         target_id = None
         target_id_list = None
         if target_ids_param and isinstance(target_ids_param, str) and target_ids_param.strip():
-            raw = [x.strip() for x in target_ids_param.split(",") if x.strip()]
             try:
-                target_id_list = [int(x) for x in raw]
-            except (TypeError, ValueError):
-                return Response(
-                    {"error": "target_ids must be a comma-separated list of integers"},
-                    status=HTTP_400_BAD_REQUEST,
-                )
-            if not target_id_list:
-                return Response(
-                    {"error": "target_ids must contain at least one valid id"},
-                    status=HTTP_400_BAD_REQUEST,
-                )
+                target_id_list = parse_comma_separated_int_ids(target_ids_param, field_label="target_ids")
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=HTTP_400_BAD_REQUEST)
             target_id = target_id_list[0]
+        elif ip_address_ids_param and isinstance(ip_address_ids_param, str) and ip_address_ids_param.strip():
+            if err := subdomain_ids_conflict_when_ip_address_ids_requested_error(subdomain_ids):
+                return Response({"error": err}, status=HTTP_400_BAD_REQUEST)
+            try:
+                ip_ids = parse_comma_separated_int_ids(ip_address_ids_param, field_label="ip_address_ids")
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=HTTP_400_BAD_REQUEST)
+            try:
+                if scan_history_for_ips is not None:
+                    ip_targets_mode_objs, target_id = _validate_ip_addresses_in_scan_context(
+                        ip_ids, scan_history_id=scan_history_for_ips
+                    )
+                elif target_id_param:
+                    tid = int(target_id_param)
+                    ip_targets_mode_objs, target_id = _validate_ip_addresses_in_scan_context(ip_ids, target_id=tid)
+                else:
+                    return Response(
+                        {
+                            "error": "scan_history_id or target_id is required when ip_address_ids is set",
+                        },
+                        status=HTTP_400_BAD_REQUEST,
+                    )
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=HTTP_400_BAD_REQUEST)
         elif target_id_param:
             try:
                 target_id = int(target_id_param)
@@ -2300,7 +2758,7 @@ class GetSecatorInputTypesAndTargets(APIView):
             target_id = target_ids[0]
         else:
             return Response(
-                {"error": "target_id, domain_id, or subdomain_ids is required"},
+                {"error": "target_id, domain_id, subdomain_ids, or ip_address_ids is required"},
                 status=HTTP_400_BAD_REQUEST,
             )
 
@@ -2354,6 +2812,11 @@ class GetSecatorInputTypesAndTargets(APIView):
                 # For multi-target we do not compute a combined targets_by_type;
                 # return empty dict so the response shape stays consistent.
                 targets_by_type = {}
+                total_count = len(flat_targets)
+                proposed_targets = flat_targets[: self.TARGETS_DISPLAY_LIMIT]
+                truncated = total_count > self.TARGETS_DISPLAY_LIMIT
+            elif ip_targets_mode_objs:
+                flat_targets, targets_by_type = _flat_targets_for_scan_ip_objects(ip_targets_mode_objs, input_types)
                 total_count = len(flat_targets)
                 proposed_targets = flat_targets[: self.TARGETS_DISPLAY_LIMIT]
                 truncated = total_count > self.TARGETS_DISPLAY_LIMIT
@@ -2707,11 +3170,19 @@ class ScanStatus(APIView):
     def get(self, request):
         slug = self.request.GET.get("project", None)
         qs = get_scan_status_querysets(slug, max_running_tasks=self.MAX_RUNNING_TASKS)
+        from reNgine.services.scan_finding_metrics import attach_ip_metrics_to_scans
+
+        pending_scans = list(qs["pending_scans"])
+        current_scans = list(qs["current_scans"])
+        completed_scans = list(qs["recently_completed_scans"])
+        attach_ip_metrics_to_scans(pending_scans)
+        attach_ip_metrics_to_scans(current_scans)
+        attach_ip_metrics_to_scans(completed_scans)
         response = {
             "scans": {
-                "pending": ScanHistorySerializer(qs["pending_scans"], many=True).data,
-                "scanning": ScanHistorySerializer(qs["current_scans"], many=True).data,
-                "completed": ScanHistorySerializer(qs["recently_completed_scans"], many=True).data,
+                "pending": ScanHistorySerializer(pending_scans, many=True).data,
+                "scanning": ScanHistorySerializer(current_scans, many=True).data,
+                "completed": ScanHistorySerializer(completed_scans, many=True).data,
             },
             "tasks": {
                 "pending": SubScanSerializer(qs["pending_tasks"], many=True).data,
@@ -3465,13 +3936,12 @@ class ListPorts(APIView):
         # Build the base query
         port_query = Port.objects.all()
 
-        # Filter based on parameters
+        # Filter based on parameters (same IP-in-scan semantics as metrics: M2M or EndPoint.ip_address)
         if target_id:
-            port_query = port_query.filter(
-                ip_address__ip_addresses__domain__scan_history__target_id=target_id
-            ).distinct()
+            scan_ids = ScanHistory.objects.filter(target_id=target_id).values_list("id", flat=True)
+            port_query = filter_ports_queryset_by_scan_ids(port_query, scan_ids)
         elif scan_id:
-            port_query = port_query.filter(ip_address__ip_addresses__scan_history__id=scan_id).distinct()
+            port_query = filter_ports_queryset_by_scan_ids(port_query, [scan_id])
 
         if ip_address:
             port_query = port_query.filter(ip_address__address=ip_address)
@@ -3644,6 +4114,13 @@ class ListMetadata(APIView):
 
 
 class ListIPs(APIView):
+    """
+    List IP addresses (plain or DataTables server-side when start/length are set).
+
+    Consuming template: startScan/detail_scan.html (IP tab, #ip_scan_results).
+    Column map: api.helpers.datatables.column_maps.DATATABLE_COLUMN_MAP_IPS (indices match RENGINE_IP_DATATABLE_COLUMNS).
+    """
+
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
@@ -3651,12 +4128,13 @@ class ListIPs(APIView):
         port = req.query_params.get("port")
 
         if target_id:
+            scan_ids = ScanHistory.objects.filter(target_id=target_id).values_list("id", flat=True)
             ips = IpAddress.objects.filter(
-                ip_addresses__in=Subdomain.objects.filter(domain__scan_history__target_id=target_id)
+                Q(ip_addresses__scan_history_id__in=scan_ids) | Q(ip_endpoints__scan_history_id__in=scan_ids)
             ).distinct()
         elif scan_id:
             ips = IpAddress.objects.filter(
-                ip_addresses__in=Subdomain.objects.filter(scan_history__id=scan_id)
+                Q(ip_addresses__scan_history_id=scan_id) | Q(ip_endpoints__scan_history_id=scan_id)
             ).distinct()
         else:
             ips = IpAddress.objects.filter(ip_addresses__in=Subdomain.objects.all()).distinct()
@@ -4701,24 +5179,29 @@ class GetIpDetails(APIView):
         if not ip_address:
             return Response({"error": "IP address is required"}, status=400)
 
-        # Build the base query
-        ip_query = IpAddress.objects.filter(address=ip_address)
-
         if scan_id:
-            ip_query = ip_query.filter(ip_addresses__scan_history__id=scan_id)
+            ip_row = get_ip_linked_to_scan_ids(ip_address, [scan_id])
         elif target_id:
-            ip_query = ip_query.filter(ip_addresses__domain__scan_history__target_id=target_id)
+            scan_ids = ScanHistory.objects.filter(target_id=target_id).values_list("id", flat=True)
+            ip_row = get_ip_linked_to_scan_ids(ip_address, scan_ids)
+        else:
+            normalized = normalize_ip_address_string((ip_address or "").strip())
+            if not normalized:
+                return Response({"error": "IP address is required"}, status=400)
+            ip_row = IpAddress.objects.filter(address=normalized).first()
 
-        # Preloading relations to optimize performance
-        ip_query = ip_query.prefetch_related(
-            "ports",
-            "ip_addresses",
-        ).distinct()
-
-        if not ip_query.exists():
+        if not ip_row:
             return Response({"error": "IP not found"}, status=404)
 
-        serializer = IpSerializer(ip_query.first(), context={"scan_id": scan_id})
+        ip_obj = (
+            IpAddress.objects.filter(pk=ip_row.pk)
+            .prefetch_related(
+                "ports",
+                "ip_addresses",
+            )
+            .first()
+        )
+        serializer = IpSerializer(ip_obj, context={"scan_id": scan_id})
         return Response(serializer.data)
 
 

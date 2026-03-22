@@ -109,9 +109,9 @@ DATATABLE_COLUMN_MAP_EXPLOIT = {
 }
 
 DATATABLE_COLUMN_MAP_IPS = {
-    "0": "address",
-    "1": "alive",
-    "2": "is_cdn",
+    "1": "address",
+    "4": "alive",
+    "5": "is_cdn",
 }
 
 DATATABLE_COLUMN_MAP_DIRECTORY = {

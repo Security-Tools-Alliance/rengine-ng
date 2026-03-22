@@ -19,11 +19,11 @@
     'waf': 'shield-alt'
   };
 
-  function listCategoryIcon(category) {
+  const listCategoryIcon = function (category) {
     if (!category || typeof category !== 'string') return 'tag';
     const key = category.toLowerCase().split('/')[0];
     return LIST_CATEGORY_ICONS[key] || 'tag';
-  }
+  };
 
   Object.assign(window.SecatorScan, {
     /**
@@ -231,7 +231,29 @@
         $countText.hide();
       }
 
-      function applyListFilter() {
+      const updateListCount = function () {
+        if (!isTasks) return;
+        const $visible = $listContainer.find(itemSelector + ':visible');
+        const visibleCount = $visible.length;
+        const visibleChecked = $visible.filter('.active').length;
+        const totalCount = $listContainer.find(itemSelector).length;
+        const filterActive = ($search.val() || '').trim() !== '' || $categoryFilters.find('.secator-list-category-btn.active').length > 0;
+        let text = '';
+        if (typeof window.SecatorScan !== 'undefined' && window.SecatorScan.formatSelectedCountWithFilter) {
+          text = window.SecatorScan.formatSelectedCountWithFilter(
+            $listContainer.find(itemSelector + '.active').length,
+            totalCount,
+            filterActive,
+            visibleChecked,
+            visibleCount
+          );
+        } else {
+          text = visibleChecked + ' of ' + (filterActive ? visibleCount : totalCount) + ' selected';
+        }
+        $countText.text(text);
+      };
+
+      const applyListFilter = function () {
         const query = ($search.val() || '').trim().toLowerCase();
         const activeCategories = [];
         $categoryFilters.find('.secator-list-category-btn.active').each(function() {
@@ -256,29 +278,7 @@
           $header.toggle(anyVisible);
         });
         updateListCount();
-      }
-
-      function updateListCount() {
-        if (!isTasks) return;
-        const $visible = $listContainer.find(itemSelector + ':visible');
-        const visibleCount = $visible.length;
-        const visibleChecked = $visible.filter('.active').length;
-        const totalCount = $listContainer.find(itemSelector).length;
-        const filterActive = ($search.val() || '').trim() !== '' || $categoryFilters.find('.secator-list-category-btn.active').length > 0;
-        let text = '';
-        if (typeof window.SecatorScan !== 'undefined' && window.SecatorScan.formatSelectedCountWithFilter) {
-          text = window.SecatorScan.formatSelectedCountWithFilter(
-            $listContainer.find(itemSelector + '.active').length,
-            totalCount,
-            filterActive,
-            visibleChecked,
-            visibleCount
-          );
-        } else {
-          text = visibleChecked + ' of ' + (filterActive ? visibleCount : totalCount) + ' selected';
-        }
-        $countText.text(text);
-      }
+      };
 
       $search.off('input.seclist keyup.seclist').on('input.seclist keyup.seclist', function() { applyListFilter(); });
 

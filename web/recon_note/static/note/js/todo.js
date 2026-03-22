@@ -334,7 +334,7 @@ const populateScanHistory = function(project) {
     : '/api/listScanHistory/';
   const url = baseUrl + '?format=json&project=' + encodeURIComponent(project || '');
   $.getJSON(url, function(data) {
-    for (var history in data){
+    for (let history in data){
       const history_object = data[history];
       const option = document.createElement('option');
       option.value = history_object['id'];

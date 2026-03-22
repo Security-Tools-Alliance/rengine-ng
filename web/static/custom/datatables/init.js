@@ -19,7 +19,7 @@
     window.attachDatatableFilters = function () {};
   }
 
-  function requireDataTableGlobals() {
+  const requireDataTableGlobals = function () {
     const $ = window.jQuery;
     if (!$ || typeof $.fn !== "object" || typeof $.fn.DataTable !== "function") {
       if (typeof console !== "undefined" && console.warn) {
@@ -32,30 +32,30 @@
       console.warn("rengine DataTables init: getRengineDatatableLayoutFull / RENGINE_DATATABLE_LAYOUT_FULL missing. Load layout.js before init.js.");
     }
     return true;
-  }
+  };
 
-  function tableIdFromSelector(selector) {
+  const tableIdFromSelector = function (selector) {
     if (!selector || typeof selector !== "string") return null;
     const s = selector.trim().replace(/^#/, "");
     return s.length > 0 ? s : null;
-  }
+  };
 
-  function getCurrentProjectSlug() {
+  const getCurrentProjectSlug = function () {
     if (typeof window.getCurrentProjectSlug === "function") {
       return window.getCurrentProjectSlug() || "";
     }
     if (typeof document === "undefined" || !document.body) return "";
     return (document.body.getAttribute("data-project-slug") || "").trim();
-  }
+  };
 
-  function getProjectScopedStorageKey(baseKey, tableId) {
+  const getProjectScopedStorageKey = function (baseKey, tableId) {
     if (!tableId) return null;
     const projectSlug = getCurrentProjectSlug();
     const suffix = projectSlug ? ":" + projectSlug : "";
     return baseKey + "-" + tableId + suffix;
-  }
+  };
 
-  function getPersistedQuickSearchState(tableId) {
+  const getPersistedQuickSearchState = function (tableId) {
     const storage = window.rengineStorage;
     const storageKey = getProjectScopedStorageKey("rengine-datatable-search", tableId);
     if (!storageKey || !storage || typeof storage.getJson !== "function") return "";
@@ -65,9 +65,9 @@
     } catch (e) {
       return "";
     }
-  }
+  };
 
-  function getPersistedColumnSearchState(tableId) {
+  const getPersistedColumnSearchState = function (tableId) {
     const storage = window.rengineStorage;
     const storageKey = getProjectScopedStorageKey("rengine-datatable-columnSearch", tableId);
     if (!storageKey || !storage || typeof storage.getJson !== "function") return {};
@@ -77,9 +77,9 @@
     } catch (e) {
       return {};
     }
-  }
+  };
 
-  function buildInitialDatatableState(tableId, filterSelectToParam) {
+  const buildInitialDatatableState = function (tableId, filterSelectToParam) {
     const filterIds = filterSelectToParam ? Object.keys(filterSelectToParam) : [];
     const readFilters = typeof window.getPersistedDatatableFilterState === "function"
       ? window.getPersistedDatatableFilterState
@@ -89,9 +89,9 @@
       quickSearch: getPersistedQuickSearchState(tableId),
       columnSearch: getPersistedColumnSearchState(tableId),
     };
-  }
+  };
 
-  function buildFilterPayloadFromState(filterSelectToParam, persistedState) {
+  const buildFilterPayloadFromState = function (filterSelectToParam, persistedState) {
     if (!filterSelectToParam || typeof filterSelectToParam !== "object") return {};
     const payload = {};
     Object.keys(filterSelectToParam).forEach(function (selectId) {
@@ -103,7 +103,7 @@
       }
     });
     return payload;
-  }
+  };
 
   const getRengineDatatableConfig = function (tableSelector, options) {
     const opts = options || {};
@@ -400,7 +400,7 @@
       }
     }
     let timeoutId = null;
-    function triggerSearch() {
+    const triggerSearch = function () {
       const val = $input.val() || "";
       if (table.search() !== val) {
         table.search(val).draw();
@@ -408,7 +408,7 @@
           storage.setJson(storageKey, val);
         }
       }
-    }
+    };
     $input.off(".rengineQuickSearch").on("keyup.rengineQuickSearch change.rengineQuickSearch", function () {
       if (timeoutId !== null) {
         window.clearTimeout(timeoutId);
@@ -500,7 +500,7 @@
       }
     }
 
-    function debounce(fn, wait) {
+    const debounce = function (fn, wait) {
       let timeoutId = null;
       return function debounced() {
         const ctx = this;
@@ -513,10 +513,10 @@
           fn.apply(ctx, args);
         }, wait);
       };
-    }
+    };
 
     const hasPreloadedState = table && table._rengineInitialStateApplied === true;
-    function attachToInputs($container, baseState) {
+    const attachToInputs = function ($container, baseState) {
       if (!$container || !$container.length) {
         return;
       }
@@ -557,7 +557,7 @@
             }
           }
         });
-    }
+    };
 
     let initialState = null;
     if (restoreOnInit && storageKey && storage && typeof storage.getJson === "function") {

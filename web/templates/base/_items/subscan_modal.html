@@ -150,6 +150,16 @@
 		
 		function updateSubscanModalHeader() {
 			const multiple = $('#btn-initiate-subtask').attr('multiple-subscan') === 'true';
+			const $badges = $('#subscan-modal-subdomain-badges').empty();
+			const ipRaw = $('#subtask_ip_address_id').val();
+			const ipId = ipRaw ? parseInt(ipRaw, 10) : 0;
+			if (!multiple && ipId > 0) {
+				$('#subscan-modal-target-count').text('1');
+				const label = $('#subscan-modal').data('subscan-ip-label');
+				const text = (label && String(label).trim()) ? String(label).trim() : ('IP #' + ipId);
+				$badges.append($('<span class="badge badge-soft-primary m-1">').text(text));
+				return;
+			}
 			const ids = [];
 			if (multiple) {
 				document.querySelectorAll('.subdomain_checkbox:checked').forEach(function(el) {
@@ -158,10 +168,9 @@
 				});
 			} else {
 				const singleId = $('#subtask_subdomain_id').val();
-				if (singleId) ids.push(singleId);
+				if (singleId && String(singleId) !== '0') ids.push(singleId);
 			}
 			$('#subscan-modal-target-count').text(ids.length);
-			const $badges = $('#subscan-modal-subdomain-badges').empty();
 			if (ids.length === 0) return;
 			const apiUrl = window.SUBDOMAIN_NAMES_API_URL;
 			if (!apiUrl) return;
@@ -222,6 +231,7 @@
 			$('#btn-initiate-subtask').prop('disabled', true);
 			$('#subscan-modal-target-count').text('0');
 			$('#subscan-modal-subdomain-badges').empty();
+			$('#subscan-modal').removeData('subscan-ip-label');
 		});
 	}
 	
@@ -335,19 +345,31 @@
 		});
 	}
 	
-	function getSubscanContext() {
+		function getSubscanContext() {
 		const domainId = $('#subscan-modal').data('domain-id') || $('#subscan_domain_id').val() || '';
 		const multiple = $('#btn-initiate-subtask').attr('multiple-subscan') === 'true';
+		const ipRaw = $('#subtask_ip_address_id').val();
+		const ipId = ipRaw ? parseInt(ipRaw, 10) : 0;
 		let subdomainIds = [];
-		if (multiple) {
+		let ipAddressIds = [];
+		if (!multiple && ipId > 0) {
+			ipAddressIds = [String(ipId)];
+		} else if (multiple) {
 			document.querySelectorAll('.subdomain_checkbox:checked').forEach(function(el) {
 				subdomainIds.push($(el).val());
 			});
 		} else {
 			const singleId = $('#subtask_subdomain_id').val();
-			if (singleId) subdomainIds = [singleId];
+			if (singleId && String(singleId) !== '0') subdomainIds = [singleId];
 		}
-		return { domainId: domainId ? String(domainId).trim() : '', subdomainIds: subdomainIds };
+		const scanHistEl = document.getElementById('summary_identifier_val');
+		const scanHistoryId = (scanHistEl && scanHistEl.value) ? String(scanHistEl.value).trim() : '';
+		return {
+			domainId: domainId ? String(domainId).trim() : '',
+			subdomainIds: subdomainIds,
+			ipAddressIds: ipAddressIds,
+			scanHistoryId: scanHistoryId
+		};
 	}
 
 	function fetchInputTypesAndTargets() {
@@ -369,6 +391,8 @@
 				},
 				getDomainId: function() { return getSubscanContext().domainId; },
 				getSubdomainIds: function() { return getSubscanContext().subdomainIds; },
+				getIpAddressIds: function() { return getSubscanContext().ipAddressIds; },
+				getScanHistoryId: function() { return getSubscanContext().scanHistoryId; },
 				getWorkflowId: function() { return $container.find('input[name="workflow_id"]:checked').val(); },
 				getScanName: function() { return $container.find('input[name="secator_scan_type"]:checked').val(); },
 				getTaskIds: function() { return $container.find('input[name="task_ids"]:checked').map(function() { return $(this).val(); }).get(); },

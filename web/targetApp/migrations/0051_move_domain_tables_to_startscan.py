@@ -2,7 +2,8 @@
 # - Before: Tables targetapp_domain, targetapp_domaininfo, etc. Domain models live in targetApp state.
 # - This migration: renames tables to startScan_* (AlterModelTable); removes domain/WHOIS models from targetApp state (DeleteModel).
 #   Through tables renamed only if they exist. Organization.domains M2M removed.
-# - After: startScan 0101 adds the same models to startScan state (state only, no DB create). Order: 0049 -> 0050 -> 0051 -> startScan 0101.
+# - After: startScan 0101 adds the same models to startScan state (state only, no DB create). Order: 0049 -> 0050 -> startScan 0099 -> 0051 -> startScan 0101.
+# - targetApp 0051 must run after startScan 0099: older startScan migrations reference targetApp.domain in FK state; 0051 removes Domain from targetApp state.
 
 from django.db import migrations
 
@@ -49,6 +50,7 @@ def _op_rename_table_only(old_table: str, new_table: str):
 class Migration(migrations.Migration):
     dependencies = [
         ("targetApp", "0050_backfill_target_from_domain"),
+        ("startScan", "0099_add_scan_history_target_fk"),
     ]
 
     operations = [

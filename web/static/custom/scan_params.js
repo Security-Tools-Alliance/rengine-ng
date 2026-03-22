@@ -42,7 +42,7 @@
     network: 'network_custom_profile'
   };
 
-  function syncProfileHiddensFromVisibleUI($scope) {
+  const syncProfileHiddensFromVisibleUI = function ($scope) {
     Object.keys(CATEGORY_SWITCH_MAP).forEach(function (category) {
       const switchId = CATEGORY_SWITCH_MAP[category];
       const $switch = $scope.find('[id$="' + switchId + '"], #' + switchId).first();
@@ -65,7 +65,7 @@
         if ($hidden.length) $hidden.val(val);
       }
     });
-  }
+  };
 
   const toggleCategory = function (category, isEnabled, $scope, $container) {
     const $root = ($container && $container.length) ? $container : $scope;
@@ -310,16 +310,16 @@
   const PROFILE_HIDDEN_NAMES = ['speed_profile', 'stealth_profile', 'general_profile', 'network_profile'];
   const PROFILE_CATEGORY_MAP = { speed_profile: 'speed', stealth_profile: 'evasion', general_profile: 'general', network_profile: 'network' };
 
-  function getFieldPrefix(level) {
+  const getFieldPrefix = function (level) {
     if (level === 'target') return 'override_';
     return '';
-  }
+  };
 
   /**
    * Parse header text (one "name": "value" per line) into an object for preview/save.
    * Falls back to JSON.parse for legacy JSON input.
    */
-  function parseHeaderTextToObject(text) {
+  const parseHeaderTextToObject = function (text) {
     const v = (text || '').trim();
     if (!v) return null;
     const lines = v.split('\n');
@@ -350,9 +350,9 @@
       hasValidLine = true;
     }
     return hasValidLine ? obj : null;
-  }
+  };
 
-  function collectDraft($scope, level) {
+  const collectDraft = function ($scope, level) {
     const prefix = getFieldPrefix(level);
     const draft = {};
     SCALAR_PARAMS.forEach(function (param) {
@@ -407,7 +407,7 @@
       }
     }
     return draft;
-  }
+  };
 
   // ========== AJAX preview: block-root driven (no parent traversal) ==========
   /**
@@ -415,31 +415,31 @@
    * @param {Element} root - Block root element (data-scan-params-block-root).
    * @returns {Element|null} Form element or null.
    */
-  function getFormForRoot(root) {
+  const getFormForRoot = function (root) {
     const formId = root.getAttribute && root.getAttribute('data-scan-params-form-id');
     if (formId) {
       const form = document.getElementById(formId);
       if (form) return form;
     }
     return root.closest ? root.closest('form') : null;
-  }
+  };
 
   /**
    * Scope for draft collection and CSRF: the form if found, otherwise the block root.
    * @param {Element} root - Block root element.
    * @returns {jQuery} jQuery wrapper of form or root.
    */
-  function getScopeForRoot(root) {
+  const getScopeForRoot = function (root) {
     const form = getFormForRoot(root);
     return form ? $(form) : $(root);
-  }
+  };
 
   /**
    * Build preview payload from block root data attributes and draft collected from scope.
    * @param {Element} root - Block root element.
    * @returns {{ level: string, project_slug: string, organization_id: string|null, scope_id: string|null, target_id: string|null, draft: object }|null}
    */
-  function buildScanParamsPreviewPayloadFromRoot(root) {
+  const buildScanParamsPreviewPayloadFromRoot = function (root) {
     const level = (root.getAttribute('data-scan-params-level') || '').trim();
     if (!level) return null;
     const $scope = getScopeForRoot(root);
@@ -457,15 +457,15 @@
       target_id: root.getAttribute('data-scan-params-target-id') || $scope.find('input[name="target_id"]').val() || null,
       draft: draft
     };
-  }
+  };
 
-  function getCsrfToken($scope) {
+  const getCsrfToken = function ($scope) {
     const $tok = $scope.find('input[name="csrfmiddlewaretoken"]');
     if ($tok.length) return $tok.val();
     const $docTok = $(document).find('input[name="csrfmiddlewaretoken"]').first();
     if ($docTok.length) return $docTok.val();
     return typeof window.CSRF_TOKEN !== 'undefined' ? window.CSRF_TOKEN : '';
-  }
+  };
 
   const effectivePreviewRequestIdMap = new Map();
   const effectivePreviewDebounceMap = new Map();
@@ -479,14 +479,14 @@
    * @param {Element} root
    * @returns {string}
    */
-  function getRootKey(root) {
+  const getRootKey = function (root) {
     let key = root.getAttribute('data-scan-params-root-key');
     if (!key) {
       key = 'sp-root-' + (++_rootKeyCounter);
       root.setAttribute('data-scan-params-root-key', key);
     }
     return key;
-  }
+  };
 
   /**
    * Remove Map entries for a completed or removed root.
@@ -494,12 +494,12 @@
    * accumulate on pages where roots are rendered dynamically.
    * @param {string} rootKey
    */
-  function cleanupRootState(rootKey) {
+  const cleanupRootState = function (rootKey) {
     effectivePreviewRequestIdMap.delete(rootKey);
     effectivePreviewDebounceMap.delete(rootKey);
-  }
+  };
 
-  function triggerEffectivePreview(root) {
+  const triggerEffectivePreview = function (root) {
     if (!root || !root.querySelector) return;
     const container = root.querySelector('#scan-params-effective-container');
     if (!container) return;
@@ -548,9 +548,9 @@
         cleanupRootState(rootKey);
       }
     });
-  }
+  };
 
-  function scheduleEffectivePreview(root) {
+  const scheduleEffectivePreview = function (root) {
     if (!root) return;
     const rootKey = getRootKey(root);
     const entry = effectivePreviewDebounceMap.get(rootKey);
@@ -560,9 +560,9 @@
       triggerEffectivePreview(root);
     }, 350);
     effectivePreviewDebounceMap.set(rootKey, { timer: timer });
-  }
+  };
 
-  function bindEffectiveLiveUpdate() {
+  const bindEffectiveLiveUpdate = function () {
     const roots = document.querySelectorAll('[data-scan-params-block-root="true"]');
     roots.forEach(function (root) {
       const container = root.querySelector('#scan-params-effective-container');
@@ -584,7 +584,7 @@
         scheduleEffectivePreview(root);
       });
     });
-  }
+  };
 
   /**
    * Rebuild the "Run on worker" dropdown from scope form: Allow Local checkbox and
@@ -592,7 +592,7 @@
    * Show/hide the Default worker row when 2+ options. Call on load and on change of
    * Allow Local and Workers. Uses data-scope-worker-sync on the form as hook when present.
    */
-  function syncScopeWorkerDropdown(scopeForm) {
+  const syncScopeWorkerDropdown = function (scopeForm) {
     const form = scopeForm || document.querySelector('form[data-scope-worker-sync]');
     if (!form) return;
     const workersMulti = form.querySelector('[id="id_workers"]');
@@ -655,7 +655,7 @@
    * Bind sync of "Run on worker" dropdown to scope Allow Local checkbox and Workers multi-select.
    * Runs only when a form with data-scope-worker-sync exists; elements are resolved within that form.
    */
-  function initScopeWorkerSync() {
+  const initScopeWorkerSync = function () {
     const scopeForm = document.querySelector('form[data-scope-worker-sync]');
     if (!scopeForm) return;
     const workersMulti = scopeForm.querySelector('[id="id_workers"]');
@@ -678,7 +678,7 @@
         syncScopeWorkerDropdown(scopeForm);
       });
     }
-  }
+  };
 
   /**
    * Sync profile switch checkboxes from current hidden input values.

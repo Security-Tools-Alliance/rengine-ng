@@ -204,17 +204,18 @@ input_types:
             mock_call.assert_called_with("load_scans")
 
     def test_entrypoint_setup_calls_all_commands(self):
-        """Test entrypoint_setup invokes makemigrations, migrate, cron, load_secator_all, collectstatic."""
+        """Test entrypoint_setup invokes migrations, setup_oauth, cron, load_secator_all, collectstatic."""
         with patch("scanEngine.management.commands.entrypoint_setup.call_command") as mock_call:
             out = StringIO()
             call_command("entrypoint_setup", stdout=out)
-            self.assertGreaterEqual(mock_call.call_count, 5)
+            self.assertGreaterEqual(mock_call.call_count, 6)
             calls = [c[0][0] for c in mock_call.call_args_list]
             self.assertEqual(calls[0], "makemigrations")
             self.assertEqual(calls[1], "migrate")
-            self.assertEqual(calls[2], "ensure_scheduled_scans_cron")
-            self.assertEqual(calls[3], "load_secator_all")
-            self.assertEqual(calls[4], "collectstatic")
+            self.assertEqual(calls[2], "setup_oauth")
+            self.assertEqual(calls[3], "ensure_scheduled_scans_cron")
+            self.assertEqual(calls[4], "load_secator_all")
+            self.assertEqual(calls[5], "collectstatic")
             mock_call.assert_any_call("collectstatic", "--noinput")
 
     def test_entrypoint_setup_continues_when_optional_commands_fail(self):

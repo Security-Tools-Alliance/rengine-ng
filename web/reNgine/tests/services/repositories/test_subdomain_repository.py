@@ -68,12 +68,11 @@ class TestSubdomainRepository(BaseTestCase):
         self.assertEqual(sub.scan_history_id, self.scan_history.id)
 
     def test_get_or_create_from_host_with_ip(self):
-        """Test get_or_create_from_host creates subdomain for IP (CIDR-style scans)."""
+        """Literal IPs are not Subdomain rows; use IpRepository for IP hosts."""
         sub = self.subdomain_repo.get_or_create_from_host(
             self.scan_history.id, self.data_generator.target.id, "192.168.1.100"
         )
-        self.assertIsNotNone(sub)
-        self.assertEqual(sub.name, "192.168.1.100")
+        self.assertIsNone(sub)
 
     def test_get_or_create_from_host_with_local_hostname(self):
         """Test get_or_create_from_host accepts .lan hostname."""
@@ -425,14 +424,13 @@ class SubdomainRepositoryFindingScopeFilterTest(BaseTestCase):
             )
 
     def test_get_or_create_from_host_ip_allowed_when_restrict(self):
-        """IP is allowed as subdomain when scope restricts findings (web servers on IP)."""
+        """IP literals do not create Subdomain rows; scope check is not applied (early return)."""
         result = self.subdomain_repo.get_or_create_from_host(
             self.scan_history.id,
             self.target.id,
             "192.168.1.100",
         )
-        self.assertIsNotNone(result)
-        self.assertEqual(result.name, "192.168.1.100")
+        self.assertIsNone(result)
 
     def test_get_or_create_from_host_target_domain_succeeds(self):
         """Target domain host is allowed when scope restricts findings."""

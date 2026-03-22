@@ -14,6 +14,20 @@ Project context and technology stack for the reNgine-ng security assessment plat
 - Implementing or modifying scans, targets, API, or UI
 - Need to know where dependencies live (e.g. `docker/web/pyproject.toml`) or which versions (Django 5.x, Python 3.12, PostgreSQL 17)
 
+## Mandatory Prompt-Entry Checklist
+
+Apply this checklist at the start of every prompt when working in reNgine-ng:
+
+1. Identify the active domain (`backend`, `frontend`, `datatables`, `security`, `tests`) and load the matching project rules.
+2. Confirm whether shared helpers/services/renderers already exist before creating new local logic.
+3. For DataTables specifically:
+   - prefer shared renderers in `web/static/custom/datatables/actions.js`,
+   - prefer shared init helpers in `web/static/custom/datatables/init.js`,
+   - avoid inline action renderer duplication in templates.
+4. Confirm URL wiring is centralized (`web/api/helpers/datatables/actions.py` -> `datatable_action_urls` -> `window.RENGINE_DATATABLE_ACTION_URLS`). IP action buttons omit controls when optional URL keys are absent (`renderIpActions` in `actions.js`).
+5. For backend IP logic: `reNgine.services.scan_finding_metrics` (in-scan IP PKs), `api.helpers.subdomain_ip_xor` / `secator_scan_target_request` (XOR and id lists), `reNgine.core.ip_literal`, `startScan.services.host_assignment` (EndPoint/SubScan host FKs). Subdomain rows are not created for IP literals (`SubdomainRepository.get_or_create_from_host`).
+6. Add or update tests covering new shared contracts when behavior or wiring changes.
+
 ## Stack Summary
 
 | Layer        | Technology |

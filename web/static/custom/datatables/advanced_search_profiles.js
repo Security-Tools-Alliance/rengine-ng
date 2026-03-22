@@ -1,11 +1,11 @@
 (function () {
   "use strict";
   /** Field ids must stay lowercase; must match backend ADVANCED_SEARCH_FIELD_CATALOG. */
-  var R = (window.RengineAdvancedSearch = window.RengineAdvancedSearch || {});
+  const R = (window.RengineAdvancedSearch = window.RengineAdvancedSearch || {});
 
   R.BOUND_ATTR = "data-rengine-advanced-search-bound";
 
-  var ADVANCED_SEARCH_PROFILES = {
+  const ADVANCED_SEARCH_PROFILES = {
     subdomains: {
       wrapperId: "subdomain-search-input",
       inputId: "subdomains-search",
@@ -80,7 +80,7 @@
   };
 
   R.getDataTable = function (contextKey) {
-    var reg = window.RENGINE_TABLES || {};
+    const reg = window.RENGINE_TABLES || {};
     return contextKey ? reg[contextKey] : reg;
   };
 
@@ -95,7 +95,7 @@
   };
 
   R.getStorageKey = function (baseKey) {
-    var slug = R.getCurrentProjectSlug();
+    const slug = R.getCurrentProjectSlug();
     return slug ? baseKey + ":" + slug : baseKey;
   };
 
@@ -113,20 +113,31 @@
 
   R.profileToConfig = function (profile, contextKey) {
     if (!profile || !profile.tableGlobal) return null;
-    var tableGlobal = profile.tableGlobal;
-    var apiCtx = String(profile.contextApiKey || contextKey || "").trim();
+    const {
+      tableGlobal,
+      wrapperId,
+      inputId,
+      buttonId,
+      suggestionBoxId,
+      contextLabel,
+      tableId,
+      fields,
+      debounceMs,
+      contextApiKey,
+    } = profile;
+    const apiCtx = String(contextApiKey || contextKey || "").trim();
     return {
-      wrapperId: profile.wrapperId,
-      inputId: profile.inputId,
-      buttonId: profile.buttonId,
-      suggestionBoxId: profile.suggestionBoxId,
-      contextLabel: profile.contextLabel,
-      tableId: profile.tableId,
-      fields: profile.fields,
-      debounceMs: profile.debounceMs,
+      wrapperId,
+      inputId,
+      buttonId,
+      suggestionBoxId,
+      contextLabel,
+      tableId,
+      fields,
+      debounceMs,
       contextApiKey: apiCtx,
       getTableApi: function () {
-        var api = R.getDataTable(contextKey);
+        const api = R.getDataTable(contextKey);
         if (api) return api;
         return window[tableGlobal] || null;
       },

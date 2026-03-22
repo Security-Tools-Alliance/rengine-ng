@@ -1,11 +1,11 @@
 (function () {
   "use strict";
-  var R = window.RengineAdvancedSearch;
+  const R = window.RengineAdvancedSearch;
   if (!R) return;
 
   R.getCsrfToken = function () {
     if (typeof window.getCookie === "function") return window.getCookie("csrftoken") || "";
-    var m = document.cookie.match(/csrftoken=([^;]+)/);
+    const m = document.cookie.match(/csrftoken=([^;]+)/);
     return m ? m[1] : "";
   };
 
@@ -14,12 +14,12 @@
   };
 
   R.getAdvancedSearchScopeQuery = function (config) {
-    var api = R.resolveTableApi(config);
+    let api = R.resolveTableApi(config);
     if (!api || typeof api.settings !== "function") return "";
-    var st = api.settings()[0];
+    let st = api.settings()[0];
     if (!st || !st.ajax) return "";
-    var ajax = st.ajax;
-    var url = typeof ajax === "string" ? ajax : ajax.url;
+    let ajax = st.ajax;
+    let url = typeof ajax === "string" ? ajax : ajax.url;
     if (typeof url === "function") {
       try {
         url = url.call(st.oInstance || api);
@@ -29,8 +29,8 @@
     }
     if (!url || typeof url !== "string") return "";
     try {
-      var u = new URL(url, window.location.origin);
-      var sp = new URLSearchParams(u.search);
+      const u = new URL(url, window.location.origin);
+      const sp = new URLSearchParams(u.search);
       sp.delete("format");
       return sp.toString();
     } catch (_e2) {
@@ -40,7 +40,7 @@
 
   R.destroyBuilderValueSelect2 = function (valueEl) {
     if (!valueEl || !window.jQuery || !window.jQuery.fn.select2) return;
-    var $el = window.jQuery(valueEl);
+    let $el = window.jQuery(valueEl);
     if ($el.data("select2")) {
       $el.select2("destroy");
     }
@@ -48,8 +48,8 @@
 
   R.initBuilderValueSelect2 = function (valueEl, dropdownParent) {
     if (!valueEl || !window.jQuery || !window.jQuery.fn.select2) return;
-    var $el = window.jQuery(valueEl);
-    var parent =
+    let $el = window.jQuery(valueEl);
+    let parent =
       dropdownParent && window.jQuery(dropdownParent).length
         ? window.jQuery(dropdownParent)
         : window.jQuery(document.body);
@@ -62,40 +62,40 @@
     });
   };
 
-  function fillBuilderValueOptions(valueEl, vals) {
+  const fillBuilderValueOptions = function (valueEl, vals) {
     valueEl.innerHTML = "";
-    var emptyOpt = document.createElement("option");
+    let emptyOpt = document.createElement("option");
     emptyOpt.value = "";
     emptyOpt.textContent = "—";
     valueEl.appendChild(emptyOpt);
     vals.forEach(function (v) {
-      var o = document.createElement("option");
+      let o = document.createElement("option");
       o.value = String(v);
       o.textContent = String(v);
       valueEl.appendChild(o);
     });
-  }
+  };
 
-  function optionExists(valueEl, val) {
-    var s = String(val);
-    for (var i = 0; i < valueEl.options.length; i++) {
+  const optionExists = function (valueEl, val) {
+    let s = String(val);
+    for (let i = 0; i < valueEl.options.length; i++) {
       if (valueEl.options[i].value === s) return true;
     }
     return false;
-  }
+  };
 
   R.loadAdvancedSearchBuilderValues = function (config, fieldName, valueEl, builderHost) {
     if (!valueEl || !config || !config.contextApiKey || !fieldName) return;
-    var isInput = valueEl.tagName === "INPUT";
-    var datalistId = config.wrapperId + "-builder-datalist";
-    var datalistEl = document.getElementById(datalistId);
-    var $jq = !isInput && window.jQuery ? window.jQuery(valueEl) : null;
-    var hasSelect2 = $jq && $jq.data("select2");
+    let isInput = valueEl.tagName === "INPUT";
+    let datalistId = config.wrapperId + "-builder-datalist";
+    let datalistEl = document.getElementById(datalistId);
+    let $jq = !isInput && window.jQuery ? window.jQuery(valueEl) : null;
+    let hasSelect2 = $jq && $jq.data("select2");
 
     if (!isInput && !hasSelect2) {
       R.destroyBuilderValueSelect2(valueEl);
       valueEl.innerHTML = "";
-      var loading = document.createElement("option");
+      let loading = document.createElement("option");
       loading.value = "";
       loading.textContent = "Loading…";
       valueEl.appendChild(loading);
@@ -103,8 +103,8 @@
       valueEl.placeholder = "Loading…";
     }
 
-    var scopeQs = R.getAdvancedSearchScopeQuery(config);
-    var url =
+    let scopeQs = R.getAdvancedSearchScopeQuery(config);
+    let url =
       "/api/advancedSearch/values/?context=" +
       encodeURIComponent(config.contextApiKey) +
       "&field=" +
@@ -117,11 +117,11 @@
         return r.ok ? r.json() : { values: [] };
       })
       .then(function (data) {
-        var vals = data.values || [];
+        let vals = data.values || [];
         if (isInput && datalistEl) {
           datalistEl.innerHTML = "";
           vals.forEach(function (v) {
-            var o = document.createElement("option");
+            let o = document.createElement("option");
             o.value = String(v);
             datalistEl.appendChild(o);
           });
@@ -129,7 +129,7 @@
           return;
         }
         if (hasSelect2 && $jq) {
-          var prevVal = $jq.val();
+          let prevVal = $jq.val();
           fillBuilderValueOptions(valueEl, vals);
           if (prevVal != null && prevVal !== "" && optionExists(valueEl, prevVal)) {
             $jq.val(prevVal);
@@ -154,7 +154,7 @@
           return;
         }
         valueEl.innerHTML = "";
-        var errOpt = document.createElement("option");
+        let errOpt = document.createElement("option");
         errOpt.value = "";
         errOpt.textContent = "(load failed)";
         valueEl.appendChild(errOpt);
@@ -168,7 +168,7 @@
       return String(valueEl.value || "").trim();
     }
     if (window.jQuery && window.jQuery.fn.select2 && window.jQuery(valueEl).data("select2")) {
-      var v = window.jQuery(valueEl).val();
+      let v = window.jQuery(valueEl).val();
       return v != null ? String(v).trim() : "";
     }
     return String(valueEl.value || "").trim();
@@ -182,7 +182,7 @@
     }
     R.destroyBuilderValueSelect2(valueEl);
     valueEl.innerHTML = "";
-    var emptyOpt = document.createElement("option");
+    let emptyOpt = document.createElement("option");
     emptyOpt.value = "";
     emptyOpt.textContent = "—";
     valueEl.appendChild(emptyOpt);
@@ -190,22 +190,22 @@
   };
 
   R.refreshAdvancedSearchBuilderFieldSelects = function () {
-    var profiles = R.getProfiles();
+    let profiles = R.getProfiles();
     Object.keys(profiles).forEach(function (ctxKey) {
-      var p = profiles[ctxKey];
+      let p = profiles[ctxKey];
       if (!p || !p.wrapperId) return;
-      var fields = Array.isArray(p.fields) ? p.fields : [];
-      var host = document.getElementById(p.wrapperId + "-builder");
+      let fields = Array.isArray(p.fields) ? p.fields : [];
+      let host = document.getElementById(p.wrapperId + "-builder");
       if (!host) return;
-      var row = host.querySelector(".d-flex");
+      let row = host.querySelector(".d-flex");
       if (!row) return;
-      var selects = row.querySelectorAll("select.form-select-sm");
+      let selects = row.querySelectorAll("select.form-select-sm");
       if (!selects.length) return;
-      var fieldSel = selects[0];
-      var cur = fieldSel.value;
+      let fieldSel = selects[0];
+      let cur = fieldSel.value;
       fieldSel.innerHTML = "";
       fields.forEach(function (f) {
-        var o = document.createElement("option");
+        let o = document.createElement("option");
         o.value = f;
         o.textContent = f;
         fieldSel.appendChild(o);
@@ -215,9 +215,9 @@
       } else if (fields.length) {
         fieldSel.selectedIndex = 0;
       }
-      var valueEl = document.getElementById(p.wrapperId + "-builder-value");
+      let valueEl = document.getElementById(p.wrapperId + "-builder-value");
       if (valueEl) {
-        var cfg = R.profileToConfig(p, ctxKey);
+        let cfg = R.profileToConfig(p, ctxKey);
         if (cfg) {
           R.loadAdvancedSearchBuilderValues(cfg, fieldSel.value, valueEl, host);
         }
@@ -226,8 +226,8 @@
   };
 
   R.fetchAdvancedSearchFieldsCache = function (callback) {
-    var keys = Object.keys(R.getProfiles());
-    var pending = keys.length;
+    let keys = Object.keys(R.getProfiles());
+    let pending = keys.length;
     if (!pending) {
       if (typeof callback === "function") callback();
       return;

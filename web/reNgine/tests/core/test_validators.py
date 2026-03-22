@@ -48,6 +48,7 @@ class TestValidators(TestCase):
         """Test IP validation."""
         # IPv4 valid
         self.assertTrue(is_valid_ip("192.168.1.1"))
+        self.assertTrue(is_valid_ip("  192.168.1.1  "))
         # IPv6 valid
         self.assertTrue(is_valid_ip("::1"))
         # IPv6 shorthand notation

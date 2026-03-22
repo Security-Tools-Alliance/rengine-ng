@@ -68,6 +68,7 @@ def index(request, slug):
         "subdomains": Subdomain.get_project_timeline(project, date_range),
         "vulns": Vulnerability.get_project_timeline(project, date_range),
         "endpoints": EndPoint.get_project_timeline(project, date_range),
+        "ips": IpAddress.get_project_timeline(project, date_range),
         "scans": {
             "pending": ScanHistory.get_project_timeline(project, date_range, status=0),
             "running": ScanHistory.get_project_timeline(project, date_range, status=1),
@@ -97,6 +98,7 @@ def index(request, slug):
     endpoint_counts = EndPoint.get_project_counts(project)
     scan_history_counts = ScanHistory.get_project_counts(project)
     subscan_counts = SubScan.get_project_counts(project)
+    ip_counts = IpAddress.get_project_counts(project)
 
     context = {
         "dashboard_data_active": "active",
@@ -108,6 +110,8 @@ def index(request, slug):
         "alive_count": subdomain_counts["alive"],
         "endpoint_count": endpoint_counts["total"],
         "endpoint_alive_count": endpoint_counts["alive"],
+        "ip_address_count": ip_counts["total"],
+        "ip_alive_count": ip_counts["alive"],
         "info_count": subdomain_counts["vuln_info"],
         "low_count": subdomain_counts["vuln_low"],
         "medium_count": subdomain_counts["vuln_medium"],
@@ -127,6 +131,7 @@ def index(request, slug):
         "subdomains_in_last_week": timeline_data["subdomains"],
         "vulns_in_last_week": timeline_data["vulns"],
         "endpoints_in_last_week": timeline_data["endpoints"],
+        "ips_in_last_week": timeline_data["ips"],
         "scans_in_last_week": timeline_data["scans"],
         "subscans_in_last_week": timeline_data["subscans"],
         "most_common_cve": vulnerability_data["most_common_cve"],

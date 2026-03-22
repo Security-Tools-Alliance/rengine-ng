@@ -1,6 +1,9 @@
 """
 Port Repository - Data access for port operations.
+
 Handles Port database operations with IP dependency from Secator.
+Ports attach to IpAddress; scan visibility follows that IP's links (subdomain M2M or
+IP-backed endpoints in the same scan), matching IpRepository / scan_lookups semantics.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -10,6 +13,7 @@ from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.validators import is_valid_ip, is_valid_port
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
+from reNgine.services.repositories.ip_repository import IpRepository
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import get_module_logger
@@ -297,8 +301,11 @@ class PortRepository:
 
     def _create_ports_in_bulk(self, scan_history_id: int, domain_id: int, ports: List[Dict[str, Any]]) -> List[Port]:
         # Validate scan_history and domain exist
-        ScanHistory.objects.get(id=scan_history_id)
+        scan_history = ScanHistory.objects.get(id=scan_history_id)
         if get_domain_by_id(domain_id) is None:
+            return []
+        target_id = scan_history.target_id
+        if not target_id:
             return []
 
         port_objects = []
@@ -308,15 +315,9 @@ class PortRepository:
             ip_address = port_data.get("ip")
 
             if is_valid_port(port_number) and is_valid_ip(ip_address):
-                # Get or create IP address
-                ip_obj, _ = IpAddress.objects.get_or_create(
-                    address=ip_address,
-                    defaults={
-                        "is_cdn": False,
-                        "is_private": self._is_private_ip(ip_address),
-                        "version": self._get_ip_version(ip_address),
-                    },
-                )
+                ip_obj, _ = IpRepository().get_or_create_for_scan(scan_history_id, target_id, ip_address)
+                if not ip_obj:
+                    continue
                 if ip_address not in seen_ips:
                     seen_ips.add(ip_address)
                     EndpointRepository().create_endpoint_for_ip(ip_address, scan_history_id, domain_id)

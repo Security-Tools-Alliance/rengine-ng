@@ -1,5 +1,6 @@
 /**
- * DataTables action column renderers (subdomain, vulnerability, target) and confirmDeleteRow, renderScanSummaryBadges.
+ * DataTables action column renderers (subdomain, IP, vulnerability, target) and confirmDeleteRow, renderScanSummaryBadges.
+ * IP row actions: omit controls whose backend URL is missing from RENGINE_DATATABLE_ACTION_URLS.ip (see renderIpActions).
  */
 (function (window) {
   "use strict";
@@ -87,18 +88,66 @@
     const projectSlug = (options && options.projectSlug) || "";
     const useInlineNote = options && options.useInlineNote;
     const safeName = safeAttr(row.name || "");
-    const id = row.id;
+    const id = row && (row.id != null ? row.id : row.pk);
     const addNoteHtml = useInlineNote
       ? `<button type="button" class="btn btn-sm btn-soft-primary js-add-note-subdomain bs-tooltip" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" data-subdomain-id="${id}" data-subdomain-name="${safeName}"><i class="fe-file-plus"></i></button>`
       : `<a href="javascript:;" class="btn btn-sm btn-soft-primary bs-tooltip" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" onclick="add_note_for_subdomain(${id}, '${safeName}', '${safeAttr(projectSlug)}')"><i class="fe-file-plus"></i></a>`;
     return (
       '<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">' +
-      `<a href="javascript:;" class="btn btn-sm btn-soft-primary bs-tooltip" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" onclick="show_attack_surface_modal('${safeAttr(urls.attackSurface || "")}', ${id})"><i class="fe-eye"></i></a>` +
+      `<a href="javascript:;" class="btn btn-sm btn-soft-primary bs-tooltip" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" onclick="show_attack_surface_modal('${safeAttr(urls.attackSurface || "")}', ${id}, 'subdomain')"><i class="fe-eye"></i></a>` +
       `<button type="button" class="btn btn-sm btn-soft-primary btn-scan-subdomain bs-tooltip" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" id="${id}"><i class="fe-zap"></i></button>` +
       addNoteHtml +
       `<a href="javascript:;" class="btn btn-sm btn-soft-warning bs-tooltip" data-toggle="tooltip" data-placement="top" title="Mark Important Subdomain" onclick="mark_important_subdomain('${safeAttr(urls.toggleSubdomain || "")}', this, ${id})" id="${id}"><i class="mdi mdi-alert-rhombus-outline"></i></a>` +
       `<a href="javascript:;" class="btn btn-sm btn-soft-danger btn-delete-subdomain bs-tooltip" data-toggle="tooltip" data-placement="top" title="Delete Subdomain" id="${id}"><i class="fe-trash-2"></i></a>` +
       "</div>"
+    );
+  };
+
+  const resolveIpAddressRowId = function (row) {
+    return row && (row.id != null ? row.id : row.pk);
+  };
+
+  const renderIpActions = function (row, options) {
+    const urls = (options && options.urls) || {};
+    const projectSlug = (options && options.projectSlug) || "";
+    const scanHistoryRaw = options && options.scanHistoryId;
+    const safeAddress = safeAttr(String((row && row.address) || ""));
+    const id = resolveIpAddressRowId(row);
+    if (id == null || id === "") {
+      return "";
+    }
+    const scanHistoryNum =
+      scanHistoryRaw !== undefined && scanHistoryRaw !== null && scanHistoryRaw !== ""
+        ? Number(scanHistoryRaw)
+        : NaN;
+    const hasValidScanHistory = !Number.isNaN(scanHistoryNum) && scanHistoryNum > 0;
+    const parts = [];
+    if (urls.attackSurface) {
+      parts.push(
+        `<a href="javascript:;" class="btn btn-sm btn-soft-primary bs-tooltip" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" onclick="show_attack_surface_modal('${safeAttr(urls.attackSurface)}', ${id}, 'ip')"><i class="fe-eye"></i></a>`
+      );
+    }
+    parts.push(
+      `<button type="button" class="btn btn-sm btn-soft-primary btn-scan-ip bs-tooltip" data-toggle="tooltip" data-placement="top" title="Further Scan IP" data-ip-address="${safeAddress}" id="${id}"><i class="fe-zap"></i></button>`
+    );
+    parts.push(
+      `<button type="button" class="btn btn-sm btn-soft-primary js-add-note-ip bs-tooltip" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" data-ip-address-id="${id}" data-ip-address="${safeAddress}" data-project-slug="${safeAttr(projectSlug)}"><i class="fe-file-plus"></i></button>`
+    );
+    if (urls.toggleIpImportant) {
+      parts.push(
+        `<a href="javascript:;" class="btn btn-sm btn-soft-warning bs-tooltip" data-toggle="tooltip" data-placement="top" title="Mark Important IP" onclick="mark_important_ip('${safeAttr(urls.toggleIpImportant)}', this, ${id})" id="ip-important-${id}"><i class="mdi mdi-alert-rhombus-outline"></i></a>`
+      );
+    }
+    if (urls.unlinkScanIps && hasValidScanHistory) {
+      parts.push(
+        `<a href="javascript:;" class="btn btn-sm btn-soft-danger btn-delete-scan-ip bs-tooltip" data-toggle="tooltip" data-placement="top" title="Unlink IP from this scan (does not delete the IP globally)" data-ip-id="${id}" data-scan-history-id="${safeAttr(String(scanHistoryNum))}"><i class="fe-trash-2"></i></a>`
+      );
+    }
+    if (!parts.length) {
+      return "";
+    }
+    return (
+      '<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">' + parts.join("") + "</div>"
     );
   };
 
@@ -151,17 +200,35 @@
     const s = n(opts.subdomainCount);
     const e = n(opts.endpointCount);
     const v = n(opts.vulnerabilityCount);
+    const ipTotal = n(opts.ipAddressCount);
+    const ipAlive = n(opts.ipAliveCount);
     const sec = n(opts.secretCount);
     const expl = n(opts.exploitCount);
     const vulnTitleRaw = opts.vulnTooltip != null && opts.vulnTooltip !== "" ? String(opts.vulnTooltip) : "Vulnerabilities";
     const vulnTitle = safeAttr(vulnTitleRaw);
     const secretBadge = '<span class="badge badge-pills badge-soft-warning mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Secrets"><i class="fe-lock me-1"></i>' + sec + '</span> ';
     const exploitBadge = '<span class="badge badge-pills badge-soft-danger mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Exploits"><i class="fe-crosshair me-1"></i>' + expl + '</span> ';
+    const ipDiscoveredTitle = "IP addresses (distinct)";
+    const ipAliveTitle = "Alive IP addresses";
+    const ipTotalBadge =
+      '<span class="badge badge-pills badge-soft-dark mt-1 me-1" data-toggle="tooltip" data-placement="top" title="' +
+      safeAttr(ipDiscoveredTitle) +
+      '"><i class="fe-server me-1"></i>' +
+      ipTotal +
+      "</span> ";
+    const ipAliveBadge =
+      '<span class="badge badge-pills badge-soft-success mt-1 me-1" data-toggle="tooltip" data-placement="top" title="' +
+      safeAttr(ipAliveTitle) +
+      '"><i class="fe-check-circle me-1"></i>' +
+      ipAlive +
+      "</span> ";
     return (
       '<span class="badge badge-pills bg-secondary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Domains"><i class="fe-globe me-1"></i>' + d + '</span> ' +
       '<span class="badge badge-pills bg-info mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Subdomains"><i class="fe-layers me-1"></i>' + s + '</span> ' +
       '<span class="badge badge-pills bg-warning mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Endpoints"><i class="fe-link me-1"></i>' + e + '</span> ' +
       '<span class="badge badge-pills bg-danger mt-1 me-1" data-toggle="tooltip" data-placement="top" title="' + vulnTitle + '"><i class="fe-alert-triangle me-1"></i>' + v + "</span> " +
+      ipTotalBadge +
+      ipAliveBadge +
       secretBadge +
       exploitBadge
     );
@@ -171,6 +238,7 @@
   window.renderScanSummaryBadges = renderScanSummaryBadges;
   window.RengineDatatableActionRenderers = {
     renderSubdomainActions: renderSubdomainActions,
+    renderIpActions: renderIpActions,
     renderVulnerabilityActions: renderVulnerabilityActions,
     renderTargetActions: renderTargetActions,
   };

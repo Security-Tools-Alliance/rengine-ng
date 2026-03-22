@@ -948,7 +948,7 @@ function get_dorks(scan_id){
 // function get_dork_summary(scan_id){
 // 	$.getJSON(`/api/queryDorkTypes/?scan_id=${scan_id}&format=json`, function(data) {
 // 		$('#dork-category-count').empty();
-// 		for (var val in data['dorks']){
+// 		for (const val in data['dorks']){
 // 			dork = data['dorks'][val]
 // 			$("#osint-dork").append(`<span class='badge badge-soft-info  m-1' data-toggle="tooltip" title="${dork['count']} Results found in this dork category." onclick="get_dork_details('${dork['type']}', ${scan_id})">${dork['type']}</span>`);
 // 		}
@@ -1472,10 +1472,21 @@ function add_note_for_subdomain(subdomain_id, subdomain_name, current_project){
 	const projectSlug = current_project !== undefined && current_project !== null
 		? current_project
 		: (document.body.dataset.projectSlug || '');
-	$('#todo-modal-subdomain-name').html(subdomain_name);
+	$('#todo-modal-subdomain-name').text(subdomain_name);
 	$("#subdomainTodoTitle").val('');
 	$("#subdomainTodoDescription").val('');
-	$('#add-todo-subdomain-submit-button').data('subdomainId', subdomain_id).data('projectSlug', projectSlug);
+	$('#add-todo-subdomain-submit-button').data('subdomainId', subdomain_id).data('ipAddressId', null).data('projectSlug', projectSlug);
+	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_SUBDOMAIN_TASK);
+}
+
+function add_note_for_ip_address(ip_address_id, address, current_project){
+	const projectSlug = current_project !== undefined && current_project !== null
+		? current_project
+		: (document.body.dataset.projectSlug || '');
+	$('#todo-modal-subdomain-name').text(address || ('IP #' + ip_address_id));
+	$("#subdomainTodoTitle").val('');
+	$("#subdomainTodoDescription").val('');
+	$('#add-todo-subdomain-submit-button').data('ipAddressId', ip_address_id).data('subdomainId', null).data('projectSlug', projectSlug);
 	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_SUBDOMAIN_TASK);
 }
 
@@ -1508,11 +1519,27 @@ $(function() {
 			add_note_for_subdomain(subdomainId, subdomainName);
 		}
 	});
+	$(document.body).on('click', '.js-add-note-ip', function(e) {
+		e.preventDefault();
+		const el = e.currentTarget;
+		const ipAddressId = el.dataset.ipAddressId ? parseInt(el.dataset.ipAddressId, 10) : null;
+		const address = el.dataset.ipAddress || '';
+		const slugAttr = el.getAttribute('data-project-slug');
+		const projectSlug = slugAttr !== null ? slugAttr : undefined;
+		if (ipAddressId !== null && !isNaN(ipAddressId)) {
+			add_note_for_ip_address(ipAddressId, address, projectSlug);
+		}
+	});
 	$('#add-todo-subdomain-submit-button').on('click', function() {
 		const subdomainId = $(this).data('subdomainId');
+		const ipAddressId = $(this).data('ipAddressId');
 		const projectSlug = $(this).data('projectSlug');
-		if (subdomainId !== undefined && projectSlug !== undefined) {
-			add_note_for_subdomain_handler(subdomainId, projectSlug);
+		if (projectSlug !== undefined) {
+			if (ipAddressId !== undefined && ipAddressId !== null) {
+				add_note_for_ip_address_handler(ipAddressId, projectSlug);
+			} else if (subdomainId !== undefined && subdomainId !== null) {
+				add_note_for_subdomain_handler(subdomainId, projectSlug);
+			}
 		}
 	});
 });
@@ -1529,7 +1556,7 @@ function add_note_for_subdomain_handler(subdomain_id, current_project){
 		'subdomain_id': subdomain_id,
 		'project': current_project,
 		'scan_history_id': scan_id
-	}
+	};
 
 	fetch('/api/add/recon_note/', {
 		method: 'post',
@@ -1554,6 +1581,49 @@ function add_note_for_subdomain_handler(subdomain_id, current_project){
 			});
 		}
 		$('#subdomain_scan_results').DataTable().ajax.reload();
+		if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.ADD_SUBDOMAIN_TASK);
+	});
+
+}
+
+function add_note_for_ip_address_handler(ip_address_id, current_project){
+	const title = document.getElementById('subdomainTodoTitle').value;
+	const description = document.getElementById('subdomainTodoDescription').value;
+	const scan_id = parseInt(document.getElementById('summary_identifier_val').value);
+
+	const data = {
+		'title': title,
+		'description': description,
+		'ip_address_id': ip_address_id,
+		'project': current_project,
+		'scan_history_id': scan_id
+	};
+
+	fetch('/api/add/recon_note/', {
+		method: 'post',
+		headers: {
+			"X-CSRFToken": getCookie("csrftoken"),
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify(data)
+	}).then(res => res.json())
+	.then(function (response) {
+
+		if (response.status) {
+			Snackbar.show({
+				text: 'To-do Added.',
+				pos: 'top-right',
+				duration: 1500,
+			});
+		}
+		else{
+			Swal.fire("Error!", response.message, "warning", {
+				button: "Okay",
+			});
+		}
+		if ($('#ip_scan_results').length && $('#ip_scan_results').DataTable) {
+			try { $('#ip_scan_results').DataTable().ajax.reload(); } catch (e) {}
+		}
 		if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.ADD_SUBDOMAIN_TASK);
 	});
 
@@ -1680,9 +1750,14 @@ function download_endpoints(scan_id = null, domain_id = null, domain_name = '', 
 }
 
 function initiate_subscan(subdomain_ids){
-	const data = {
-		'subdomain_ids': subdomain_ids,
-	};
+	const data = {};
+	const ipRaw = $('#subtask_ip_address_id').val();
+	const ipId = ipRaw ? parseInt(ipRaw, 10) : 0;
+	if (ipId > 0) {
+		data.ip_address_ids = [ipId];
+	} else {
+		data.subdomain_ids = subdomain_ids;
+	}
 	
 	// Get execution mode from selected card in subscan modal
 	const executionMode = $('#subscan-modal .execution-mode-card.selected').data('mode');
@@ -1845,8 +1920,14 @@ $('#btn-initiate-subtask').on('click', function(){
 		initiate_subscan(subdomain_ids);
 	}
 	else{
-		const subdomain_id = $('#subtask_subdomain_id').val();
-		initiate_subscan([subdomain_id]);
+		const ipRaw = $('#subtask_ip_address_id').val();
+		const ipId = ipRaw ? parseInt(ipRaw, 10) : 0;
+		if (ipId > 0) {
+			initiate_subscan([]);
+		} else {
+			const subdomain_id = $('#subtask_subdomain_id').val();
+			initiate_subscan([subdomain_id]);
+		}
 	}
 });
 
@@ -1988,6 +2069,8 @@ function deleteMultipleSubdomains(){
 
 function initiateMultipleSubscan(){
 		$('#btn-initiate-subtask').attr('multiple-subscan', true);
+		$('#subtask_ip_address_id').val('0');
+		$('#subscan-modal').removeData('subscan-ip-label');
 		$('a[data-toggle="tooltip"]').tooltip("hide");
 		if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.SUBSCAN);
 }

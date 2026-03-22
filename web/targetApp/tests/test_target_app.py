@@ -221,6 +221,7 @@ class TestTargetAppViews(BaseTestCase):
         self.assertTemplateUsed(response, "target/summary.html")
         self.assertIn("domain_info", response.context)
         self.assertIn("domains", response.context)
+        self.assertContains(response, "Attack Surface Summary")
 
     def test_target_summary_includes_exploit_count_and_tab_when_exploits_exist(self):
         """

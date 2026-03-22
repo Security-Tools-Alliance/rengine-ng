@@ -84,10 +84,18 @@ class TestSecatorTasks(BaseTestCase):
     def test_build_enriched_targets_with_url_filter(self):
         """Test building enriched targets with URL filter (applied only when input_types include 'url')."""
         base_url = f"https://{self.domain_name}"
+        root_sub = Subdomain.objects.create(
+            name=self.domain_name,
+            domain=self.domain,
+            scan_history=self.scan_history,
+        )
         EndPoint.objects.create(
             domain=self.domain,
+            scan_history=self.scan_history,
             http_url=base_url,
             is_default=True,
+            subdomain=root_sub,
+            ip_address=None,
         )
         targets = build_enriched_targets(
             input_types=["url"],

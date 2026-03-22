@@ -59,15 +59,30 @@ class TestGetDatatableActionUrls(BaseTestCase):
     def setUp(self):
         super().setUp()
 
-    def test_returns_subdomain_vulnerability_target_keys(self):
-        """get_datatable_action_urls returns dict with subdomain, vulnerability, target."""
+    def test_returns_subdomain_ip_vulnerability_target_keys(self):
+        """get_datatable_action_urls returns dict with subdomain, ip, vulnerability, target."""
         from api.helpers.datatables import get_datatable_action_urls
 
         slug = self.data_generator.project.slug
         urls = get_datatable_action_urls(slug)
         self.assertIn("subdomain", urls)
+        self.assertIn("ip", urls)
         self.assertIn("vulnerability", urls)
         self.assertIn("target", urls)
+
+    def test_ip_urls_are_absolute_paths(self):
+        """IP action URLs are non-empty absolute paths."""
+        from api.helpers.datatables import get_datatable_action_urls
+
+        urls = get_datatable_action_urls(self.data_generator.project.slug)
+        ip_urls = urls["ip"]
+        self.assertIn("attackSurface", ip_urls)
+        self.assertIn("toggleIpImportant", ip_urls)
+        self.assertIn("unlinkScanIps", ip_urls)
+        self.assertIn("getIpDetails", ip_urls)
+        self.assertIn("querySubdomains", ip_urls)
+        for key, path in ip_urls.items():
+            self.assertTrue(path.startswith("/"), msg=f"ip.{key} should be absolute path")
 
     def test_subdomain_urls_are_absolute_paths(self):
         """Subdomain action URLs are non-empty paths."""

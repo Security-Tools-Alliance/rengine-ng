@@ -17,7 +17,7 @@
 (function (global) {
   "use strict";
 
-  var DEFAULT_IDS = {
+  const DEFAULT_IDS = {
     rawId: "scope-normalizer-raw",
     resultId: "scope-normalizer-result",
     errorId: "scope-normalizer-error",
@@ -30,26 +30,26 @@
     previewSummaryId: "scope-normalizer-pending-summary",
   };
 
-  var CSRF_ERROR_MSG = "CSRF token not found. Please reload the page and try again.";
+  const CSRF_ERROR_MSG = "CSRF token not found. Please reload the page and try again.";
 
-  function getCsrfToken() {
-    var name = "csrftoken";
-    var cookies = document.cookie ? document.cookie.split(";") : [];
-    for (var i = 0; i < cookies.length; i++) {
-      var c = cookies[i].trim();
+  const getCsrfToken = function () {
+    const name = "csrftoken";
+    const cookies = document.cookie ? document.cookie.split(";") : [];
+    for (const cRaw of cookies) {
+      const c = cRaw.trim();
       if (c.indexOf(name + "=") === 0) {
         return c.substring(name.length + 1);
       }
     }
-    var input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    const input = document.querySelector('input[name="csrfmiddlewaretoken"]');
     if (input && input.value) {
       return input.value;
     }
     throw new Error(CSRF_ERROR_MSG);
-  }
+  };
 
-  function postJson(url, data, onOk, onErr) {
-    var token;
+  const postJson = function (url, data, onOk, onErr) {
+    let token;
     try {
       token = getCsrfToken();
     } catch (e) {
@@ -57,7 +57,7 @@
       return;
     }
     if (typeof fetch === "undefined") {
-      var xhr = new XMLHttpRequest();
+      const xhr = new XMLHttpRequest();
       xhr.open("POST", url, true);
       xhr.setRequestHeader("Content-Type", "application/json");
       xhr.setRequestHeader("X-CSRFToken", token);
@@ -71,7 +71,7 @@
           }
         } else {
           try {
-            var j = JSON.parse(xhr.responseText);
+            const j = JSON.parse(xhr.responseText);
             onErr(j.error || xhr.statusText);
           } catch (err) {
             onErr(xhr.statusText || "Request failed");
@@ -84,7 +84,7 @@
       xhr.send(JSON.stringify(data));
       return;
     }
-    var responseHandled = {};
+    const responseHandled = {};
     fetch(url, {
       method: "POST",
       headers: {
@@ -118,14 +118,21 @@
         }
         onErr(err && err.message ? err.message : "Network error");
       });
-  }
+  };
 
-  function showResult(data, resultEl) {
-    var domainCount = (data.domain_targets && data.domain_targets.length) || 0;
-    var ipCount = (data.ip_targets && data.ip_targets.length) || 0;
-    var cidrCount = (data.cidr_targets && data.cidr_targets.length) || 0;
-    var urlCount = (data.url_targets && data.url_targets.length) || 0;
-    var hostCount = (data.allowed_finding_hosts && data.allowed_finding_hosts.length) || 0;
+  const showResult = function (data, resultEl) {
+    const {
+      domain_targets: domainTargetsList = [],
+      ip_targets: ipTargetsList = [],
+      cidr_targets: cidrTargetsList = [],
+      url_targets: urlTargetsList = [],
+      allowed_finding_hosts: allowedHostsList = [],
+    } = data || {};
+    const domainCount = (domainTargetsList && domainTargetsList.length) || 0;
+    const ipCount = (ipTargetsList && ipTargetsList.length) || 0;
+    const cidrCount = (cidrTargetsList && cidrTargetsList.length) || 0;
+    const urlCount = (urlTargetsList && urlTargetsList.length) || 0;
+    const hostCount = (allowedHostsList && allowedHostsList.length) || 0;
     resultEl.textContent =
       "Domain targets: " +
       domainCount +
@@ -138,46 +145,58 @@
       ", Allowed hosts: " +
       hostCount;
     resultEl.style.display = "block";
-  }
+  };
 
-  function createChangeEvent() {
+  const createChangeEvent = function () {
     if (typeof Event === "function") {
       return new Event("change", { bubbles: true });
     }
     try {
-      var e = document.createEvent("HTMLEvents");
+      const e = document.createEvent("HTMLEvents");
       e.initEvent("change", true, false);
       return e;
     } catch (err) {
       return null;
     }
-  }
+  };
 
   /**
    * Initialize the scope normalizer block.
    * Apply to form uses normalize only (no target creation); pending targets are stored and created when the scope is saved.
    * @param {Object} config - { normalizeUrl, [rawId], [resultId], ... } optional overrides for DEFAULT_IDS
    */
-  function initScopeNormalizer(config) {
-    var normalizeUrl = config.normalizeUrl;
-    var ids = Object.assign({}, DEFAULT_IDS, config);
-    var rawInput = document.getElementById(ids.rawId);
-    var resultDiv = document.getElementById(ids.resultId);
-    var errorDiv = document.getElementById(ids.errorId);
-    var btn = document.getElementById(ids.btnId);
-    var applyBtn = document.getElementById(ids.applyBtnId);
-    var restrictCb = document.getElementById(ids.restrictId);
-    var allowedHostsInput = document.getElementById(ids.allowedHostsId);
-    var pendingInput = document.getElementById(ids.pendingInputId);
-    var previewDiv = document.getElementById(ids.previewDivId);
-    var previewSummary = document.getElementById(ids.previewSummaryId);
+  const initScopeNormalizer = function (config) {
+    const { normalizeUrl } = config;
+    const ids = Object.assign({}, DEFAULT_IDS, config);
+    const {
+      rawId,
+      resultId,
+      errorId,
+      btnId,
+      applyBtnId,
+      restrictId,
+      allowedHostsId,
+      pendingInputId,
+      previewDivId,
+      previewSummaryId,
+    } = ids;
+    const rawInput = document.getElementById(rawId);
+    const resultDiv = document.getElementById(resultId);
+    const errorDiv = document.getElementById(errorId);
+    const btn = document.getElementById(btnId);
+    const applyBtn = document.getElementById(applyBtnId);
+    const restrictCb = document.getElementById(restrictId);
+    const allowedHostsInput = document.getElementById(allowedHostsId);
+    const pendingInput = document.getElementById(pendingInputId);
+    const previewDiv = document.getElementById(previewDivId);
+    const previewSummary = document.getElementById(previewSummaryId);
 
     if (!rawInput || !resultDiv || !errorDiv || !btn || !applyBtn) {
       return;
     }
 
     btn.addEventListener("click", function () {
-      var raw = rawInput.value ? rawInput.value.trim() : "";
+      const raw = rawInput.value ? rawInput.value.trim() : "";
       if (!raw) {
         errorDiv.textContent = "Paste some scope text first.";
         errorDiv.style.display = "block";
@@ -201,7 +220,7 @@
     });
 
     applyBtn.addEventListener("click", function () {
-      var raw = rawInput.value ? rawInput.value.trim() : "";
+      const raw = rawInput.value ? rawInput.value.trim() : "";
       if (!raw) {
         errorDiv.textContent = "Paste some scope text first.";
         errorDiv.style.display = "block";
@@ -215,24 +234,24 @@
           showResult(data, resultDiv);
           if (restrictCb) {
             restrictCb.checked = true;
-            var changeEvCb = createChangeEvent();
+            const changeEvCb = createChangeEvent();
             if (changeEvCb && restrictCb.dispatchEvent) {
               restrictCb.dispatchEvent(changeEvCb);
             }
           }
           if (data.allowed_finding_hosts && data.allowed_finding_hosts.length && allowedHostsInput) {
-            var existing = (allowedHostsInput.value || "")
+            const existing = (allowedHostsInput.value || "")
               .split(/\r?\n/)
               .map(function (s) {
                 return s.trim().toLowerCase();
               })
               .filter(Boolean);
-            var seen = {};
+            const seen = {};
             existing.forEach(function (h) {
               seen[h] = true;
             });
             data.allowed_finding_hosts.forEach(function (h) {
-              var key = (h && h.trim && h.trim()) ? h.trim().toLowerCase() : "";
+              const key = h && h.trim && h.trim() ? h.trim().toLowerCase() : "";
               if (key && !seen[key]) {
                 seen[key] = true;
                 existing.push(key);
@@ -240,11 +259,11 @@
             });
             allowedHostsInput.value = existing.join("\n");
           }
-          var domainTargets = data.domain_targets && data.domain_targets.length ? data.domain_targets : [];
-          var ipTargets = data.ip_targets && data.ip_targets.length ? data.ip_targets : [];
-          var cidrTargets = data.cidr_targets && data.cidr_targets.length ? data.cidr_targets : [];
-          var urlTargets = data.url_targets && data.url_targets.length ? data.url_targets : [];
-          var hasPending =
+          const domainTargets = data.domain_targets && data.domain_targets.length ? data.domain_targets : [];
+          const ipTargets = data.ip_targets && data.ip_targets.length ? data.ip_targets : [];
+          const cidrTargets = data.cidr_targets && data.cidr_targets.length ? data.cidr_targets : [];
+          const urlTargets = data.url_targets && data.url_targets.length ? data.url_targets : [];
+          const hasPending =
             domainTargets.length ||
             ipTargets.length ||
             cidrTargets.length ||
@@ -260,7 +279,7 @@
               : "";
           }
           if (previewDiv && previewSummary && hasPending) {
-            var parts = [];
+            const parts = [];
             if (domainTargets.length) {
               parts.push(domainTargets.length + " domain target(s): " + domainTargets.slice(0, 5).join(", ") + (domainTargets.length > 5 ? " …" : ""));
             }
@@ -285,7 +304,7 @@
         }
       );
     });
-  }
+  };
 
   global.initScopeNormalizer = initScopeNormalizer;
 })(this);

@@ -25,11 +25,11 @@
     const btnCheck = document.getElementById("btn-check-connection");
     const btnInstallKey = document.getElementById("btn-install-public-key");
 
-    function hasRequiredWorkerElements() {
+    const hasRequiredWorkerElements = function () {
         return !!apiAccessType;
-    }
+    };
 
-    function getWorkerFormState() {
+    const getWorkerFormState = function () {
         if (!hasRequiredWorkerElements()) {
             return {
                 isTunnel: false,
@@ -47,9 +47,9 @@
             pullOn: pullOn,
             hideSsh: apiMode === CLASSIC && pullOn,
         };
-    }
+    };
 
-    function getCsrfToken() {
+    const getCsrfToken = function () {
         const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
         if (csrfInput && csrfInput.value) {
             return csrfInput.value;
@@ -63,18 +63,18 @@
             }
         }
         return "";
-    }
+    };
 
-    function toggleAuth() {
+    const toggleAuth = function () {
         if (!authType || !keyRow || !pwdRow) {
             return;
         }
         const isKey = authType.value === "key";
         keyRow.style.display = isKey ? "" : "none";
         pwdRow.style.display = isKey ? "none" : "";
-    }
+    };
 
-    function applyApiAccessRows(state) {
+    const applyApiAccessRows = function (state) {
         if (!hasRequiredWorkerElements()) {
             return;
         }
@@ -90,9 +90,9 @@
         if (httpsPullVerifySslRow) {
             httpsPullVerifySslRow.style.display = state.isClassic && state.pullOn ? "" : "none";
         }
-    }
+    };
 
-    function applySshVisibility(state) {
+    const applySshVisibility = function (state) {
         if (sshSection) {
             sshSection.style.display = state.hideSsh ? "none" : "";
         }
@@ -104,9 +104,9 @@
                 ? "Required: reverse SSH tunnel from the worker to reNgine-ng. Also used to deploy and manage the container."
                 : "Optional for HTTPS classic without pull agent: use Deploy / Sync / Restart on the workers list. Hidden when pull agent is enabled.";
         }
-    }
+    };
 
-    function applyIntroText(state) {
+    const applyIntroText = function (state) {
         if (intro) {
             if (state.hideSsh) {
                 intro.textContent =
@@ -122,9 +122,9 @@
         if (apiHint) {
             apiHint.classList.toggle("d-none", !state.hideSsh);
         }
-    }
+    };
 
-    function applyActionButtons(state) {
+    const applyActionButtons = function (state) {
         if (btnCheck) {
             const showCheck = !state.hideSsh && (state.isTunnel || state.isClassic);
             btnCheck.style.display = showCheck ? "" : "none";
@@ -133,9 +133,9 @@
             btnInstallKey.style.display =
                 !state.hideSsh && authType && authType.value === "password" ? "" : "none";
         }
-    }
+    };
 
-    function updateLayout() {
+    const updateLayout = function () {
         if (!hasRequiredWorkerElements()) {
             return;
         }
@@ -145,9 +145,9 @@
         applyIntroText(state);
         applyActionButtons(state);
         toggleAuth();
-    }
+    };
 
-    function handleCheckConnection() {
+    const handleCheckConnection = function () {
         const resultDiv = document.getElementById("check-connection-result");
         if (!btnCheck || !resultDiv) {
             return;
@@ -192,9 +192,9 @@
                     btnCheck.disabled = false;
                 });
         });
-    }
+    };
 
-    function handleInstallPublicKey() {
+    const handleInstallPublicKey = function () {
         const installKeyResult = document.getElementById("install-key-result");
         if (!btnInstallKey || !installKeyResult) {
             return;
@@ -239,7 +239,7 @@
                     btnInstallKey.disabled = false;
                 });
         });
-    }
+    };
 
     if (authType) {
         authType.addEventListener("change", updateLayout);

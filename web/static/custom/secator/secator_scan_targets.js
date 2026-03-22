@@ -15,7 +15,7 @@
   const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
   const DOMAIN_RE = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$|^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
 
-  function inferTargetSchemeAndKind(value) {
+  const inferTargetSchemeAndKind = function (value) {
     const s = String(value).trim();
     if (!s) return { scheme: null, targetKind: 'str' };
     const lower = s.toLowerCase();
@@ -48,7 +48,7 @@
     if (UUID_RE.test(s)) return { scheme: null, targetKind: 'uuid' };
     if (SLUG_RE.test(lower)) return { scheme: null, targetKind: 'slug' };
     return { scheme: null, targetKind: 'url' };
-  }
+  };
 
   /**
    * Simple two-label domain heuristic used as a fallback when the backend
@@ -58,12 +58,12 @@
    * Public Suffix List and does NOT handle multi-part TLDs (e.g. co.uk, com.au).
    * Prefer apexHosts from the API (tldextract-based) when available.
    */
-  function isSimpleTwoLabelDomain(value) {
+  const isSimpleTwoLabelDomain = function (value) {
     const s = String(value).trim();
     if (!s) return false;
     const parts = s.split('.');
     return parts.length === 2 && parts[0].length > 0 && parts[1].length > 0;
-  }
+  };
 
   const QUICK_FILTER_ORDER = ['http', 'https', 'email', 'url', 'host', 'tld', 'host:port', 'ip', 'cidr_range', 'common_web_port', 'uncommon_web_port'];
   const INPUT_TYPES_TO_QUICK_FILTERS = {
@@ -89,7 +89,7 @@
     uncommon_web_port: { icon: 'fa-code-branch', title: 'Uncommon web ports', ariaLabel: 'Filter: Uncommon web ports' }
   };
 
-  function getWebPortType(value, commonWebPorts, uncommonWebPorts) {
+  const getWebPortType = function (value, commonWebPorts, uncommonWebPorts) {
     if (!value || typeof value !== 'string') return '';
     const m = value.trim().match(HOST_PORT_RE);
     if (!m) return '';
@@ -100,27 +100,27 @@
     if (common.indexOf(port) !== -1) return 'common';
     if (uncommon.indexOf(port) !== -1) return 'uncommon';
     return '';
-  }
+  };
 
-  function getQuickFilterKeysForInputTypes(inputTypes) {
+  const getQuickFilterKeysForInputTypes = function (inputTypes) {
     const show = new Set();
     (inputTypes || []).forEach(function(it) {
       const keys = INPUT_TYPES_TO_QUICK_FILTERS[it];
       if (keys) keys.forEach(function(k) { show.add(k); });
     });
     return QUICK_FILTER_ORDER.filter(function(k) { return show.has(k); });
-  }
+  };
 
-  function getQuickFilterButtonsHtml(inputTypes) {
+  const getQuickFilterButtonsHtml = function (inputTypes) {
     const keys = getQuickFilterKeysForInputTypes(inputTypes);
     return keys.map(function(k) {
       const c = QUICK_FILTER_BUTTONS[k];
       if (!c) return '';
       return '<button type="button" class="btn btn-outline-secondary btn-sm" data-quick-filter="' + k + '" title="' + c.title + '" aria-label="' + c.ariaLabel + '"><i class="fas ' + c.icon + '"></i></button>';
     }).join('');
-  }
+  };
 
-  function updateQuickFiltersVisibility($toolbar, prefix, inputTypes) {
+  const updateQuickFiltersVisibility = function ($toolbar, prefix, inputTypes) {
     if (!$toolbar || !$toolbar.length || !prefix) return;
     const keysToShow = getQuickFilterKeysForInputTypes(inputTypes);
     const $container = $toolbar.find('#' + prefix + '-targets-quick-filters');
@@ -129,7 +129,7 @@
       const key = $(this).attr('data-quick-filter');
       $(this).toggle(key && keysToShow.indexOf(key) !== -1);
     });
-  }
+  };
 
   Object.assign(window.SecatorScan, {
     inferTargetSchemeAndKind: inferTargetSchemeAndKind,

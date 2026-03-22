@@ -449,7 +449,12 @@
         }
       }
       const subdomainIds = typeof getSubdomainIds === 'function' ? getSubdomainIds() : [];
-      if (!targetId && (!targetIds || !targetIds.length) && (!subdomainIds || !subdomainIds.length)) {
+      const getIpAddressIds = context.getIpAddressIds;
+      const ipAddressIds = typeof getIpAddressIds === 'function' ? getIpAddressIds() : [];
+      const getScanHistoryId = context.getScanHistoryId;
+      const scanHistoryForIps = typeof getScanHistoryId === 'function' ? getScanHistoryId() : '';
+      const hasIpContext = ipAddressIds && ipAddressIds.length && scanHistoryForIps;
+      if (!targetId && (!targetIds || !targetIds.length) && (!subdomainIds || !subdomainIds.length) && !hasIpContext) {
         $block.show();
         $single.show();
         $tasksContainer.hide().empty();
@@ -468,7 +473,12 @@
       } else if (targetId) {
         params.target_id = targetId;
       }
-      if (subdomainIds && subdomainIds.length) params.subdomain_ids = subdomainIds.join(',');
+      if (hasIpContext) {
+        params.ip_address_ids = ipAddressIds.join(',');
+        params.scan_history_id = scanHistoryForIps;
+      } else if (subdomainIds && subdomainIds.length) {
+        params.subdomain_ids = subdomainIds.join(',');
+      }
       if (executionMode === 'workflow') params.workflow_id = workflowId;
       if (executionMode === 'scan') params.scan_name = scanName;
 
@@ -522,6 +532,10 @@
         return;
       }
       const subdomainIds = typeof getSubdomainIds === 'function' ? getSubdomainIds() : [];
+      const getIpAddressIds = context.getIpAddressIds;
+      const ipAddressIds = typeof getIpAddressIds === 'function' ? getIpAddressIds() : [];
+      const getScanHistoryId = context.getScanHistoryId;
+      const scanHistoryForIps = typeof getScanHistoryId === 'function' ? getScanHistoryId() : '';
       const $selectionContainer = typeof getSelectionContainer === 'function' ? getSelectionContainer() : $();
       const $block = $root.find('#' + prefix + '-input-types-targets');
       const $single = $root.find('#' + prefix + '-targets-single');
@@ -552,7 +566,12 @@
       const self = this;
       const targetIdForTasks = typeof context.getTargetId === 'function' ? context.getTargetId() : '';
       const baseParams = targetIdForTasks ? { target_id: targetIdForTasks } : {};
-      if (subdomainIds && subdomainIds.length) baseParams.subdomain_ids = subdomainIds.join(',');
+      if (ipAddressIds && ipAddressIds.length && scanHistoryForIps) {
+        baseParams.ip_address_ids = ipAddressIds.join(',');
+        baseParams.scan_history_id = scanHistoryForIps;
+      } else if (subdomainIds && subdomainIds.length) {
+        baseParams.subdomain_ids = subdomainIds.join(',');
+      }
       this.requestInputTypesTargetsForTasks(taskIds, baseParams)
         .done(function() {
           const results = taskIds.length === 1 ? [arguments[0]] : Array.prototype.slice.call(arguments).map(a => a[0]);
@@ -1114,7 +1133,7 @@
       const self = this;
       const categorySwitchMap = this.getCategorySwitchMap();
 
-      function initScope($scope) {
+      const initScope = function ($scope) {
         Object.keys(categorySwitchMap).forEach(function(category) {
           const switchId = categorySwitchMap[category];
           const $switch = $scope.find(`[id$="${switchId}"], #${switchId}`);
@@ -1123,7 +1142,7 @@
             self.toggleProfileCategory(category, isEnabled, $scope);
           }
         });
-      }
+      };
 
       $('form').each(function() {
         const $form = $(this);

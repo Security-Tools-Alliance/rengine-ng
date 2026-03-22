@@ -113,6 +113,7 @@
                                             <td class="text-left">
                                                 <span class="badge badge-pills bg-secondary mt-1 me-1" data-toggle="tooltip" title="Domains"><i class="fe-globe me-1"></i>{{ history.domain_count|default:0 }}</span>
                                                 <span class="badge badge-pills bg-info mt-1 me-1" data-toggle="tooltip" title="Subdomains"><i class="fe-layers me-1"></i>{{ history.subdomain_count|default:0 }}</span>
+                                                <span class="badge badge-pills badge-soft-dark mt-1 me-1" data-toggle="tooltip" title="IP addresses"><i class="fe-server me-1"></i>{{ history.ip_address_count|default:0 }}</span>
                                                 <span class="badge badge-pills bg-warning mt-1 me-1" data-toggle="tooltip" title="Endpoints"><i class="fe-link me-1"></i>{{ history.endpoint_count|default:0 }}</span>
                                                 <span class="badge badge-pills bg-danger mt-1 me-1" data-toggle="tooltip" title="Vulnerabilities"><i class="fe-alert-triangle me-1"></i>{{ history.vulnerability_count|default:0 }}</span>
                                                 <span class="badge badge-pills badge-soft-warning mt-1 me-1" data-toggle="tooltip" title="Secrets"><i class="fe-lock me-1"></i>{{ history.secret_count|default:0 }}</span>

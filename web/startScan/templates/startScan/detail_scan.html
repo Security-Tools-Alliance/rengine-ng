@@ -58,6 +58,9 @@ Scan Findings
 				<li class="nav-item">
 					<a class="nav-link" id="pills-subdomain-tab" data-bs-toggle="tab" aria-expanded="false" href="#subdomain-tab">Subdomains</a>
 				</li>
+				<li class="nav-item">
+					<a class="nav-link" id="pills-ip-tab" data-bs-toggle="tab" aria-expanded="false" href="#ip-tab">IP Addresses</a>
+				</li>
 				{% if history.buckets.all %}
 				<li class="nav-item">
 					<a class="nav-link" id="pills-buckets-tab" data-bs-toggle="tab" aria-expanded="false" href="#buckets-tab">S3 Buckets</a>
@@ -426,53 +429,58 @@ Scan Findings
 			</div>
 			<div class="col-xl-9 col-lg-8">
 				<div class="row">
-					<div class="col-xl-3 col-lg-3 col-6">
-						<div class="card" id="tooltip-container">
-							<div class="card-body" data-stats-panel="subdomains">
-								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Subdomains Discovered by reNgine during this scan"></i>
-								<h4 class="mt-0 font-16">Subdomains Discovered</h4>
-								<h2 class="text-primary my-3 text-center"><span data-plugin="counterup" data-stat="subdomain-count">{{subdomain_count|intcomma}}</span></h2>
-								<br>
-								<p class="mb-0"><span class="badge badge-soft-success" data-stat="alive-count">Alive Subdomains: {{alive_count}}</span></p>
-							</div>
-						</div>
-					</div>
-
-					<div class="col-xl-3 col-lg-3 col-6">
-						<div class="card" id="tooltip-container1">
-							<div class="card-body" data-stats-panel="endpoints">
-								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Endpoints discovered by reNgine during this scan. This includes any URLs discovered."></i>
-								<h4 class="mt-0 font-16">Endpoints Discovered</h4>
-								<h2 class="text-primary my-3 text-center"><span data-plugin="counterup" data-stat="endpoint-count">{{endpoint_count|intcomma}}</span></h2>
-								<br>
-								<p class="text-success mb-0"><span class="badge badge-soft-success" data-stat="endpoint-alive-count">Alive Endpoints: {{endpoint_alive_count}}</span></p>
-							</div>
-						</div>
-					</div>
-
-					<div class="col-xl-3 col-lg-3 col-6">
-						<div class="card" id="tooltip-container2">
-							<div class="card-body" data-stats-panel="vulnerabilities">
-								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container2" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Vulnerabilities discovered by reNgine. This will be populated only if vulnerability scan is performed during this scan."></i>
-								<h4 class="mt-0 font-16">Vulnerabilities Discovered</h4>
-								<h2 class="text-danger my-3 text-center"><span data-plugin="counterup" data-stat="vulnerability-count">{{total_vulnerability_count|intcomma}}</span></h2>
-								<div data-stat="vulnerability-severity">
-									{% if total_vulnerability_count > 0 %}
-									<p class="text-muted mb-0">
-										<span class="w-title text-danger" data-stat="critical-count">{{critical_count}}</span> Critical, <span class="w-title text-danger" data-stat="high-count">{{high_count}}</span> High, <span class="w-title text-danger" data-stat="medium-count">{{medium_count}}</span> Medium
-										<br>
-										<span class="w-title text-primary" data-stat="low-count">{{low_count}}</span> Low, <span class="w-title text-primary" data-stat="info-count">{{info_count}}</span> Info, and <span class="w-title text-primary" data-stat="unknown-count">{{unknown_count}}</span> Unknown Vulnerabilities
-									</p>
-									{% else %}
-									<p class="text-muted mb-0 small">No vulnerabilities found.</p>
-									<br>
-									{% endif %}
+					<div class="col-xl-8 col-lg-9 col-12">
+						<div class="card" id="tooltip-container-surface-summary">
+							<div class="card-body" data-stats-panel="attack-surface-summary">
+								<div class="d-flex align-items-center justify-content-between mb-3">
+									<h4 class="mt-0 mb-0 font-16">Attack Surface Summary</h4>
+									<i class="fa fa-info-circle text-muted" data-bs-container="#tooltip-container-surface-summary" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Consolidated metrics for discovered subdomains, endpoints, vulnerabilities and IP addresses."></i>
+								</div>
+								<div class="row g-2">
+									<div class="col-xl-3 col-lg-6 col-12 border-end">
+										<div data-stats-panel="subdomains">
+											<h5 class="font-14 mb-1">Subdomains</h5>
+											<h3 class="text-primary mb-1"><span data-plugin="counterup" data-stat="subdomain-count">{{subdomain_count|intcomma}}</span></h3>
+											<p class="mb-0"><span class="badge badge-soft-success" data-stat="alive-count">Alive: {{alive_count}}</span></p>
+										</div>
+									</div>
+									<div class="col-xl-3 col-lg-6 col-12 border-end">
+										<div data-stats-panel="endpoints">
+											<h5 class="font-14 mb-1">Endpoints</h5>
+											<h3 class="text-primary mb-1"><span data-plugin="counterup" data-stat="endpoint-count">{{endpoint_count|intcomma}}</span></h3>
+											<p class="mb-0"><span class="badge badge-soft-success" data-stat="endpoint-alive-count">Alive Endpoints: {{endpoint_alive_count}}</span></p>
+										</div>
+									</div>
+									<div class="col-xl-3 col-lg-6 col-12 border-end">
+										<div data-stats-panel="vulnerabilities">
+											<h5 class="font-14 mb-1">Vulnerabilities</h5>
+											<h3 class="text-danger mb-1"><span data-plugin="counterup" data-stat="vulnerability-count">{{total_vulnerability_count|intcomma}}</span></h3>
+											<div data-stat="vulnerability-severity">
+												{% if total_vulnerability_count > 0 %}
+												<p class="text-muted mb-0 small">
+													<span class="w-title text-danger" data-stat="critical-count">{{critical_count}}</span> Critical, <span class="w-title text-danger" data-stat="high-count">{{high_count}}</span> High, <span class="w-title text-danger" data-stat="medium-count">{{medium_count}}</span> Medium
+													<br>
+													<span class="w-title text-primary" data-stat="low-count">{{low_count}}</span> Low, <span class="w-title text-primary" data-stat="info-count">{{info_count}}</span> Info, <span class="w-title text-primary" data-stat="unknown-count">{{unknown_count}}</span> Unknown
+												</p>
+												{% else %}
+												<p class="text-muted mb-0 small">No vulnerabilities found.</p>
+												{% endif %}
+											</div>
+										</div>
+									</div>
+									<div class="col-xl-3 col-lg-6 col-12">
+										<div data-stats-panel="ips">
+											<h5 class="font-14 mb-1">IP Addresses</h5>
+											<h3 class="text-primary mb-1"><span data-plugin="counterup" data-stat="ip-address-count">{{ip_address_count|intcomma}}</span></h3>
+											<p class="mb-0"><span class="badge badge-soft-success" data-stat="ip-alive-count">Alive IPs: {{ip_alive_count}}</span></p>
+										</div>
+									</div>
 								</div>
 							</div>
 						</div>
 					</div>
 
-					<div class="col-xl-3 col-lg-3 col-6">
+					<div class="col-xl-4 col-lg-3 col-12">
 						<div class="card" id="tooltip-container3">
 							<div class="card-body">
 								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="OSINT Results"></i>
@@ -695,6 +703,125 @@ Scan Findings
 	</div>
 	<div class="tab-pane" id="subdomain-tab">
 		{% include 'base/_items/subdomain_tab_content.html' with detail_scan=True%}
+	</div>
+	<div class="tab-pane" id="ip-tab">
+		<div class="row justify-content-center">
+			<div class="col-xl-8 col-lg-8 col-sm-8">
+				<div class="wrapper">
+					<div class="search-input" id="ip-search-input" data-advanced-search="ips">
+						<a href="" target="_blank" hidden></a>
+						<div class="input-group input-group-sm">
+							<input type="text" class="form-control form-control-sm" placeholder="Filter IP Addresses" aria-label="Filter IP Addresses" id="ips-search">
+							<div class="input-group-append">
+								<button id="ip-search-button" class="btn btn-primary btn-sm" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search align-text-bottom me-1"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>Search</button>
+							</div>
+						</div>
+						<div class="autocom-box mt-container mx-auto" id="ips-autocom-box"></div>
+						<small class="text-muted d-block mt-1 px-3">
+							<code>field=value</code>, <code>field!=value</code> or <code>field!value</code>, <code>field&gt;</code> / <code>field&lt;</code>. Combine with <code>&amp;</code>, <code>|</code>, <code>AND</code>, <code>OR</code> (AND binds before OR; use parentheses to group).
+						</small>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-12">
+				<div class="card">
+					<div class="card-body">
+						<div class="row">
+							<div class="col-8 float-start d-flex align-items-center flex-wrap gap-1">
+								<span class="small text-muted me-1">Bulk actions:</span>
+								<div class="btn-group" role="group">
+									<a class="btn btn-sm btn-soft-primary disabled" data-button="ip_btns" data-toggle="tooltip" title="Initiate multiple subscans (not available for IP selection yet)" aria-label="Initiate multiple subscans"><i class="fe-zap"></i></a>
+									<a class="btn btn-sm btn-soft-info disabled" id="download_selected_ips_btn" data-button="ip_btns" data-toggle="tooltip" title="Download selected IPs" aria-label="Download selected IPs"><i class="fe-download"></i></a>
+									<a class="btn btn-sm btn-soft-danger disabled" data-button="ip_btns" data-toggle="tooltip" title="Delete multiple IPs (not available yet)" aria-label="Delete multiple IPs"><i class="fe-trash-2"></i></a>
+								</div>
+								<div class="ms-1">
+									<a href="#" class="badge badge-soft-primary" id="ip_selected_count" onclick="uncheckIps(); return false;" data-toggle="tooltip" data-placement="top" title="Clear IP selection" aria-label="Clear IP selection"></a>
+								</div>
+							</div>
+							<div class="col-4">
+								<div class="btn-group btn-group-sm mb-2 float-end dropstart">
+									<button class="btn btn-sm btn-soft-primary dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Filter Columns" aria-label="Filter columns">
+										<i class="fe-filter"></i>
+									</button>
+									<div class="dropdown-menu" style="">
+										<div class="dropdown-item">
+											<div class="form-check">
+												<input type="checkbox" class="form-check-input" id="ip_subdomains_filter_checkbox" name="ip_subdomains_filter_checkbox" checked>
+												<label class="form-check-label" for="ip_subdomains_filter_checkbox">Subdomains</label>
+											</div>
+										</div>
+										<div class="dropdown-item">
+											<div class="form-check">
+												<input type="checkbox" class="form-check-input" id="ip_ports_filter_checkbox" name="ip_ports_filter_checkbox" checked>
+												<label class="form-check-label" for="ip_ports_filter_checkbox">Ports</label>
+											</div>
+										</div>
+										<div class="dropdown-item">
+											<div class="form-check">
+												<input type="checkbox" class="form-check-input" id="ip_alive_filter_checkbox" name="ip_alive_filter_checkbox" checked>
+												<label class="form-check-label" for="ip_alive_filter_checkbox">Alive</label>
+											</div>
+										</div>
+										<div class="dropdown-item">
+											<div class="form-check">
+												<input type="checkbox" class="form-check-input" id="ip_cdn_filter_checkbox" name="ip_cdn_filter_checkbox" checked>
+												<label class="form-check-label" for="ip_cdn_filter_checkbox">CDN</label>
+											</div>
+										</div>
+									</div>
+									<a class="btn btn-sm btn-soft-primary ms-2 me-2" data-toggle="tooltip" data-placement="top" title="Reload IP Addresses" id="reload_ip_table_btn" aria-label="Reload"><i class="fe-refresh-cw"></i></a>
+								</div>
+								<div class="btn-group btn-group-sm mb-2 float-end dropstart">
+									<button class="btn btn-sm btn-soft-info dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="IP Grouping" aria-label="Grouping">
+										<i class="fe-layout"></i>
+									</button>
+									<div class="dropdown-menu" style="">
+										<div class="dropdown-item">
+											<div class="form-check">
+												<input type="radio" id="ip_group_none" name="grouping_ip_row" class="form-check-input" value="" checked>
+												<label class="form-check-label" for="ip_group_none">None</label>
+											</div>
+										</div>
+										<div class="dropdown-item">
+											<div class="form-check">
+												<input type="radio" id="ip_group_alive" name="grouping_ip_row" class="form-check-input" value="alive">
+												<label class="form-check-label" for="ip_group_alive">Alive</label>
+											</div>
+										</div>
+										<div class="dropdown-item">
+											<div class="form-check">
+												<input type="radio" id="ip_group_cdn" name="grouping_ip_row" class="form-check-input" value="is_cdn">
+												<label class="form-check-label" for="ip_group_cdn">CDN</label>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+						<div class="row mt-1">
+							<div class="col-12">
+								<table id="ip_scan_results" class="table dt-responsive w-100">
+									<thead>
+										<tr>
+											<th class="checkbox-column">Status</th>
+											<th>IP Address</th>
+											<th>Subdomains</th>
+											<th>Ports</th>
+											<th>Alive</th>
+											<th>CDN</th>
+											<th>Action</th>
+										</tr>
+									</thead>
+									<tbody></tbody>
+								</table>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
 	</div>
 	<div class="tab-pane" id="buckets-tab">
 		<div class="row">
@@ -1127,6 +1254,7 @@ Scan Findings
 
 {# for passing subdomain id, domain id, target id and scan_history_id to subscan modal and JS #}
 <input type="hidden" name="subtask_subdomain_id" id="subtask_subdomain_id" value="0">
+<input type="hidden" name="subtask_ip_address_id" id="subtask_ip_address_id" value="0">
 <input type="hidden" id="subscan_domain_id" value="{% if target_domain %}{{ target_domain.id }}{% else %}0{% endif %}">
 <input type="hidden" name="target_id" id="context_target_id" value="{{ context_target_id|default:'' }}">
 <input type="hidden" id="subscan_scan_history_id" value="{{ scan_history_id }}">
@@ -1160,6 +1288,9 @@ window.DETAIL_SCAN_API_LIST_SUBSCANS = "{% url 'api:listSubScans' %}";
 <script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
 <script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
 <script src="{% static 'custom/secator_scan.js' %}"></script>
+<script src="{% static 'custom/datatables/ip_scan_table_handlers.js' %}"></script>
+<script src="{% static 'custom/datatables/selection_helpers.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_detail_ip_table.js' %}"></script>
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
@@ -2297,6 +2428,8 @@ $(document).ready(function() {
 				$('input[type=checkbox]').prop('checked',false);
 				var subdomain_id = $(this).attr('id');
 				$('#subtask_subdomain_id').val(subdomain_id);
+				$('#subtask_ip_address_id').val('0');
+				$('#subscan-modal').removeData('subscan-ip-label');
 				$('#btn-initiate-subtask').attr('multiple-subscan', false);
 				$('a[data-toggle="tooltip"]').tooltip("hide");
 				if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.SUBSCAN);
@@ -2310,6 +2443,42 @@ $(document).ready(function() {
 			column.visible(false);
 			{% endif %}
 		});
+
+		window.uncheckIps = window.uncheckIps || function () {};
+		window.showIpEndpointsByAddress =
+			window.showIpEndpointsByAddress ||
+			function (address) {
+				const safeAddress = address || '';
+				$('#pills-endpoints-tab').trigger('click');
+				$('#endpoints-search').val(safeAddress);
+				$('#endpoints-search-button').trigger('click');
+			};
+
+		const detailScanIpTableConfig = {
+			tableSelector: '#ip_scan_results',
+			ajaxUrl: '{% url "api:listIPs" %}?scan_id={{ scan_history_id }}&format=datatables',
+			scanHistoryId: {{ scan_history_id }},
+			projectSlug: '{{ current_project.slug|escapejs }}',
+			getIpDetailsUrl: '{% url "api:getIpDetails" %}',
+			querySubdomainsUrl: '{% url "api:querySubdomains" %}',
+			listIPsUrl: '{% url "api:listIPs" %}',
+			downloadFilename: 'selected-ips-{{ scan_history_id }}.txt',
+		};
+		const initDetailScanIpTableIfNeeded = function () {
+			if (typeof DataTable !== 'undefined' && DataTable.isDataTable('#ip_scan_results')) {
+				return;
+			}
+			if (typeof window.initDetailScanIpDataTable === 'function') {
+				window.initDetailScanIpDataTable(detailScanIpTableConfig);
+			}
+		};
+		$('#pills-ip-tab').on('click', function () {
+			initDetailScanIpTableIfNeeded();
+		});
+		const ipTabPaneEl = document.getElementById('ip-tab');
+		if (ipTabPaneEl && ipTabPaneEl.classList.contains('active') && ipTabPaneEl.classList.contains('show')) {
+			initDetailScanIpTableIfNeeded();
+		}
 
 	// filters for checkbox
 	var filter_cols = [

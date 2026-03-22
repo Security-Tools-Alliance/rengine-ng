@@ -7,25 +7,51 @@ same filter patterns and avoid subtle inconsistencies.
 
 Expected model relations (startScan.models). Changes to these will break lookups;
 see tests in reNgine/tests/services/repositories/test_scan_lookups.py.
-- Subdomain: FK scan_history_id → ScanHistory; M2M ip_addresses (related_name
-  "ip_addresses" on IpAddress side) → IpAddress. So IpAddress is "in scan" via
-  IpAddress.objects.filter(ip_addresses__scan_history_id=scan_history_id).
-- EndPoint: FK scan_history_id → ScanHistory.
-- Port: FK ip_address → IpAddress. So Port is "in scan" via
-  Port → ip_address → ip_addresses (reverse M2M) → Subdomain.scan_history_id.
+- Subdomain: FK scan_history_id → ScanHistory; M2M ip_addresses → IpAddress.
+- EndPoint: FK scan_history_id → ScanHistory; optional FK ip_address → IpAddress (IP-only host).
+- IpAddress "in scan": linked from a Subdomain of the scan (M2M) or from an EndPoint of the scan
+  with ip_address set.
+- Port: FK ip_address → IpAddress; in-scan if that IpAddress is in the scan by the rules above.
 """
 
-from typing import Optional
+from typing import Iterable, Optional
 
+from django.db.models import Q
+
+from reNgine.services.repositories.ip_repository import normalize_ip_address_string
+from reNgine.services.scan_finding_metrics import ip_address_id_linked_to_scan
 from startScan.models import EndPoint, IpAddress, Port, Subdomain
 
 
+def get_ip_linked_to_scan_ids(address: str, scan_ids: Iterable[int]) -> Optional[IpAddress]:
+    """Return IpAddress with given address linked to any of the scans (M2M or IP-backed endpoints)."""
+    normalized = normalize_ip_address_string((address or "").strip())
+    if not normalized:
+        return None
+    sid = [int(x) for x in dict.fromkeys(scan_ids) if x]
+    if not sid:
+        return None
+    q = Q(ip_addresses__scan_history_id__in=sid) | Q(ip_endpoints__scan_history_id__in=sid)
+    return IpAddress.objects.filter(address=normalized).filter(q).order_by("id").first()
+
+
 def get_ip_in_scan(address: str, scan_history_id: int) -> Optional[IpAddress]:
-    """Return IpAddress with given address linked to the scan, or None."""
-    return IpAddress.objects.filter(
-        address=address.strip(),
-        ip_addresses__scan_history_id=scan_history_id,
-    ).first()
+    """Return IpAddress with given address linked to the scan (M2M or IP-backed endpoints), or None."""
+    return get_ip_linked_to_scan_ids(address, [scan_history_id])
+
+
+def _ports_linked_to_scan_ids_q(scan_ids: list[int]) -> Q:
+    return Q(ip_address__ip_addresses__scan_history_id__in=scan_ids) | Q(
+        ip_address__ip_endpoints__scan_history_id__in=scan_ids
+    )
+
+
+def filter_ports_queryset_by_scan_ids(queryset, scan_ids: Iterable[int]):
+    """Restrict a Port queryset to rows whose IpAddress is linked to any of the scans (M2M or endpoint)."""
+    sid = [int(x) for x in dict.fromkeys(scan_ids) if x]
+    if not sid:
+        return queryset.none()
+    return queryset.filter(_ports_linked_to_scan_ids_q(sid)).distinct()
 
 
 def get_endpoint_in_scan(http_url: str, scan_history_id: int) -> Optional[EndPoint]:
@@ -68,13 +94,10 @@ def endpoint_exists_in_scan(endpoint_id: Optional[int], scan_history_id: int) ->
 
 
 def ip_exists_in_scan(ip_address_id: Optional[int], scan_history_id: int) -> bool:
-    """Return True if ip_address_id is an IpAddress linked to the scan."""
+    """Return True if ip_address_id is an IpAddress linked to the scan (delegates to scan_finding_metrics)."""
     if ip_address_id is None:
         return False
-    return IpAddress.objects.filter(
-        id=ip_address_id,
-        ip_addresses__scan_history_id=scan_history_id,
-    ).exists()
+    return ip_address_id_linked_to_scan(int(ip_address_id), int(scan_history_id))
 
 
 def get_port_for_ip(ip_address: IpAddress, port_number: int) -> Optional[Port]:
@@ -89,7 +112,4 @@ def port_exists_in_scan(port_id: Optional[int], scan_history_id: int) -> bool:
     """Return True if port_id belongs to an IpAddress linked to the scan."""
     if port_id is None:
         return False
-    return Port.objects.filter(
-        id=port_id,
-        ip_address__ip_addresses__scan_history_id=scan_history_id,
-    ).exists()
+    return Port.objects.filter(id=port_id).filter(_ports_linked_to_scan_ids_q([scan_history_id])).exists()

@@ -5,20 +5,20 @@
 (function(global) {
     "use strict";
 
-    function escapeHtml(text) {
+    const escapeHtml = function (text) {
         if (text == null || text === "") return "";
         const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
-    }
+    };
 
-    function parseIsoDate(isoString) {
+    const parseIsoDate = function (isoString) {
         if (isoString == null || isoString === "") return null;
         const d = new Date(isoString);
         return isNaN(d.getTime()) ? null : d;
-    }
+    };
 
-    function formatRelativeTime(isoString) {
+    const formatRelativeTime = function (isoString) {
         const date = parseIsoDate(isoString);
         if (!date) return isoString || "";
         const now = new Date();
@@ -37,9 +37,9 @@
         if (diffDay === 1) return "yesterday";
         if (diffDay < 7) return diffDay + " days ago";
         return isoString;
-    }
+    };
 
-    function formatDuration(seconds) {
+    const formatDuration = function (seconds) {
         if (seconds == null || seconds < 0 || isNaN(seconds)) return "";
         if (seconds < 1) return (seconds * 1000).toFixed(0) + "ms";
         if (seconds < 60) return seconds.toFixed(1) + "s";
@@ -49,14 +49,14 @@
         const hour = Math.floor(min / 60);
         const m = min % 60;
         return (m > 0 ? hour + "h " + m + "m" : hour + "h");
-    }
+    };
 
     /**
      * Derive duration in seconds from a command payload.
      * Precedence: (1) cmd.elapsed if valid number; (2) end_time - time if both present;
      * (3) now - time if only time present (running duration); (4) null otherwise.
      */
-    function getDurationSeconds(cmd) {
+    const getDurationSeconds = function (cmd) {
         if (cmd.elapsed != null && typeof cmd.elapsed === "number" && !isNaN(cmd.elapsed)) {
             return cmd.elapsed;
         }
@@ -65,13 +65,13 @@
         const end = parseIsoDate(cmd.end_time);
         if (end) return (end.getTime() - start.getTime()) / 1000;
         return (Date.now() - start.getTime()) / 1000;
-    }
+    };
 
     /**
      * Return badge class and display text for a status string.
      * @returns {{ class: string, text: string }}
      */
-    function getStatusBadgeInfo(status) {
+    const getStatusBadgeInfo = function (status) {
         const s = (status || "").toUpperCase();
         if (s === "SUCCESS") return { class: "badge-soft-success", text: "SUCCESS" };
         if (s === "FAILURE" || s === "FAILED") return { class: "badge-soft-danger", text: "FAILED" };
@@ -79,14 +79,14 @@
         if (s === "REVOKED") return { class: "badge-soft-danger", text: "ABORTED" };
         if (s === "SKIPPED") return { class: "badge-soft-info", text: "SKIPPED" };
         return { class: "badge-soft-secondary", text: s || "PENDING" };
-    }
+    };
 
-    function getEffectiveCommandStatus(cmd) {
+    const getEffectiveCommandStatus = function (cmd) {
         const s = cmd.status_string;
         return s != null && s !== "" ? s : cmd.status;
-    }
+    };
 
-    function findDetailRow(cardBody, label) {
+    const findDetailRow = function (cardBody, label) {
         const blocks = cardBody.querySelectorAll(".mb-2");
         for (let i = 0; i < blocks.length; i++) {
             const strong = blocks[i].querySelector("strong");
@@ -95,9 +95,9 @@
             }
         }
         return null;
-    }
+    };
 
-    function setDetailRow(cardBody, label, value) {
+    const setDetailRow = function (cardBody, label, value) {
         if (value == null) return;
         const row = findDetailRow(cardBody, label);
         const valueStr = String(value);
@@ -111,9 +111,9 @@
             div.innerHTML = "<strong>" + escapeHtml(label) + "</strong> " + escapeHtml(valueStr);
             cardBody.appendChild(div);
         }
-    }
+    };
 
-    function setReturnCodeRow(cardBody, returnCode) {
+    const setReturnCodeRow = function (cardBody, returnCode) {
         if (returnCode == null) return;
         const row = findDetailRow(cardBody, "Return Code:");
         const badgeClass = returnCode === 0 ? "badge-soft-success" : "badge-soft-danger";
@@ -131,9 +131,9 @@
             div.innerHTML = html;
             cardBody.appendChild(div);
         }
-    }
+    };
 
-    function setDurationRow(cardBody, durationStr) {
+    const setDurationRow = function (cardBody, durationStr) {
         if (durationStr == null || durationStr === "") return;
         const row = findDetailRow(cardBody, "Duration:");
         const html = "<strong>Duration:</strong> " + escapeHtml(durationStr);
@@ -150,7 +150,7 @@
                 cardBody.appendChild(div);
             }
         }
-    }
+    };
 
     const CommandLogHelpers = {
         escapeHtml,

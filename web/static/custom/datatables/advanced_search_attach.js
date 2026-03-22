@@ -1,11 +1,11 @@
 (function (window) {
   "use strict";
-  var R = window.RengineAdvancedSearch;
+  let R = window.RengineAdvancedSearch;
   if (!R) return;
 
-  var applyTableSearch = function (config, inputEl, storageKey) {
-    var value = String((inputEl && inputEl.value) || "");
-    var tableApi = R.resolveTableApi(config);
+  let applyTableSearch = function (config, inputEl, storageKey) {
+    let value = String((inputEl && inputEl.value) || "");
+    let tableApi = R.resolveTableApi(config);
     if (!tableApi || typeof tableApi.search !== "function") return;
     if (tableApi.search() === value) return;
     tableApi.search(value).draw();
@@ -14,10 +14,10 @@
     }
   };
 
-  var restorePersistedValue = function (inputEl, storageKey) {
+  let restorePersistedValue = function (inputEl, storageKey) {
     if (!storageKey || !window.rengineStorage || typeof window.rengineStorage.getJson !== "function") return;
     try {
-      var saved = window.rengineStorage.getJson(storageKey);
+      let saved = window.rengineStorage.getJson(storageKey);
       if (typeof saved === "string" && saved.length) {
         inputEl.value = saved;
       }
@@ -26,21 +26,21 @@
     }
   };
 
-  var attachAdvancedDatatableSearch = function (config) {
+  let attachAdvancedDatatableSearch = function (config) {
     if (!config || !config.wrapperId || !config.inputId || !config.buttonId) return null;
-    var wrapper = document.getElementById(config.wrapperId);
-    var input = document.getElementById(config.inputId);
-    var button = document.getElementById(config.buttonId);
+    let wrapper = document.getElementById(config.wrapperId);
+    let input = document.getElementById(config.inputId);
+    let button = document.getElementById(config.buttonId);
     if (!wrapper || !input || !button) return null;
-    var suggestionBox = config.suggestionBoxId
+    let suggestionBox = config.suggestionBoxId
       ? document.getElementById(config.suggestionBoxId)
       : wrapper.querySelector(".autocom-box");
     if (!suggestionBox) return null;
 
-    var fields = Array.isArray(config.fields) ? config.fields : [];
-    var contextLabel = String(config.contextLabel || "results");
-    var debounceMs = Number.isFinite(config.debounceMs) ? config.debounceMs : 250;
-    var storageKey = config.tableId
+    let fields = Array.isArray(config.fields) ? config.fields : [];
+    let contextLabel = String(config.contextLabel || "results");
+    let debounceMs = Number.isFinite(config.debounceMs) ? config.debounceMs : 250;
+    let storageKey = config.tableId
       ? R.getDatatableSearchStorageKey(config.tableId)
       : config.storageKeyBase
         ? R.getStorageKey(config.storageKeyBase)
@@ -48,17 +48,17 @@
 
     restorePersistedValue(input, storageKey);
 
-    var suggestionIndex = -1;
-    var skipEnterKeyupApply = false;
+    let suggestionIndex = -1;
+    let skipEnterKeyupApply = false;
 
-    var clearSuggestionHighlight = function () {
+    let clearSuggestionHighlight = function () {
       suggestionBox.querySelectorAll(".rengine-advanced-search-suggestion").forEach(function (n) {
         n.classList.remove("rengine-advanced-search-suggestion-active");
       });
     };
 
-    var setSuggestionHighlight = function (idx) {
-      var items = suggestionBox.querySelectorAll(".rengine-advanced-search-suggestion");
+    let setSuggestionHighlight = function (idx) {
+      let items = suggestionBox.querySelectorAll(".rengine-advanced-search-suggestion");
       clearSuggestionHighlight();
       suggestionIndex = idx;
       if (idx >= 0 && idx < items.length) {
@@ -67,17 +67,17 @@
       }
     };
 
-    var renderSuggestions = function () {
+    let renderSuggestions = function () {
       suggestionIndex = -1;
-      var pool = R.getSuggestionPool(input.value, fields);
-      var html = pool.map(function (token) {
+      let pool = R.getSuggestionPool(input.value, fields);
+      let html = pool.map(function (token) {
         return R.renderSuggestionItem(token, contextLabel);
       });
       suggestionBox.innerHTML = html.join("");
       wrapper.classList.add("active");
       suggestionBox.querySelectorAll(".rengine-advanced-search-suggestion").forEach(function (node) {
         node.addEventListener("click", function () {
-          var token = node.getAttribute("data-token") || "";
+          let token = node.getAttribute("data-token") || "";
           input.value = String(input.value || "") + token;
           input.focus();
           renderSuggestions();
@@ -85,14 +85,14 @@
       });
     };
 
-    var hideSuggestions = function () {
+    let hideSuggestions = function () {
       suggestionIndex = -1;
       clearSuggestionHighlight();
       wrapper.classList.remove("active");
     };
 
-    var timer = null;
-    var queueSearch = function () {
+    let timer = null;
+    let queueSearch = function () {
       if (timer !== null) window.clearTimeout(timer);
       timer = window.setTimeout(function () {
         timer = null;
@@ -110,20 +110,20 @@
     });
 
     input.addEventListener("keydown", function (ev) {
-      var key = ev.key || "";
-      var active = wrapper.classList.contains("active");
-      var items = suggestionBox.querySelectorAll(".rengine-advanced-search-suggestion");
+      let key = ev.key || "";
+      let active = wrapper.classList.contains("active");
+      let items = suggestionBox.querySelectorAll(".rengine-advanced-search-suggestion");
       if (active && items.length) {
         if (key === "ArrowDown") {
           ev.preventDefault();
-          var nextDn =
+          let nextDn =
             suggestionIndex < 0 ? 0 : Math.min(suggestionIndex + 1, items.length - 1);
           setSuggestionHighlight(nextDn);
           return;
         }
         if (key === "ArrowUp") {
           ev.preventDefault();
-          var nextUp =
+          let nextUp =
             suggestionIndex <= 0 ? items.length - 1 : suggestionIndex - 1;
           setSuggestionHighlight(nextUp);
           return;
@@ -132,7 +132,7 @@
           if (suggestionIndex >= 0 && suggestionIndex < items.length) {
             ev.preventDefault();
             skipEnterKeyupApply = true;
-            var tok = items[suggestionIndex].getAttribute("data-token") || "";
+            let tok = items[suggestionIndex].getAttribute("data-token") || "";
             input.value = String(input.value || "") + tok;
             renderSuggestions();
             queueSearch();
@@ -148,7 +148,7 @@
     });
 
     input.addEventListener("keyup", function (event) {
-      var key = event.key || "";
+      let key = event.key || "";
       if (key === "ArrowDown" || key === "ArrowUp") {
         return;
       }
@@ -185,10 +185,10 @@
         if (typeof window.rengineAdvancedSearchCleanupTargets === "function") {
           window.rengineAdvancedSearchCleanupTargets();
         }
-        var targets = window.rengineAdvancedSearchClickTargets;
+        let targets = window.rengineAdvancedSearchClickTargets;
         if (!targets || !targets.length) return;
-        for (var ti = 0; ti < targets.length; ti++) {
-          var t = targets[ti];
+        for (let ti = 0; ti < targets.length; ti++) {
+          let t = targets[ti];
           if (!t || !t.wrapper || typeof t.hide !== "function") continue;
           if (!t.wrapper.contains(event.target)) {
             t.hide();
@@ -210,9 +210,9 @@
     });
 
     if (input.value) {
-      var retries = 25;
-      var applyWhenReady = function () {
-        var tableApi = R.resolveTableApi(config);
+      let retries = 25;
+      let applyWhenReady = function () {
+        let tableApi = R.resolveTableApi(config);
         if (tableApi && typeof tableApi.search === "function") {
           applyTableSearch(config, input, storageKey);
           return;
@@ -225,8 +225,8 @@
       window.setTimeout(applyWhenReady, 0);
     }
 
-    var contextApiKey = config.contextApiKey || "";
-    var feedbackEl = document.getElementById(config.wrapperId + "-validate");
+    let contextApiKey = config.contextApiKey || "";
+    let feedbackEl = document.getElementById(config.wrapperId + "-validate");
     if (!feedbackEl) {
       feedbackEl = document.createElement("div");
       feedbackEl.id = config.wrapperId + "-validate";
@@ -234,12 +234,12 @@
       feedbackEl.setAttribute("aria-live", "polite");
       wrapper.appendChild(feedbackEl);
     }
-    var validateTimer = null;
-    var validateAbortCtrl = null;
-    var validateSeq = 0;
-    var runValidate = function () {
+    let validateTimer = null;
+    let validateAbortCtrl = null;
+    let validateSeq = 0;
+    let runValidate = function () {
       if (!contextApiKey) return;
-      var expr = String(input.value || "").trim();
+      let expr = String(input.value || "").trim();
       if (!expr) {
         if (validateAbortCtrl && typeof validateAbortCtrl.abort === "function") {
           try {
@@ -258,8 +258,8 @@
       }
       validateAbortCtrl =
         typeof AbortController !== "undefined" ? new AbortController() : null;
-      var seq = (validateSeq += 1);
-      var signal = validateAbortCtrl ? validateAbortCtrl.signal : undefined;
+      let seq = (validateSeq += 1);
+      let signal = validateAbortCtrl ? validateAbortCtrl.signal : undefined;
       fetch("/api/advancedSearch/validate/", {
         method: "POST",
         credentials: "same-origin",
@@ -277,7 +277,7 @@
           if (seq !== validateSeq) return;
           if (!data) return;
           if (!data.valid) {
-            var msg =
+            let msg =
               data.error_detail && String(data.error_detail).trim()
                 ? String(data.error_detail)
                 : data.error
@@ -286,7 +286,7 @@
             feedbackEl.textContent = msg;
             feedbackEl.className = "small mt-1 px-3 text-danger rengine-advanced-search-validate";
           } else {
-            var w = data.warnings && data.warnings.length;
+            let w = data.warnings && data.warnings.length;
             feedbackEl.textContent = w ? "Note: " + data.warnings.join("; ") : "";
             feedbackEl.className = w
               ? "small mt-1 px-3 text-warning rengine-advanced-search-validate"
@@ -308,39 +308,39 @@
       validateTimer = window.setTimeout(runValidate, 450);
     });
 
-    var builderHost = document.getElementById(config.wrapperId + "-builder");
+    let builderHost = document.getElementById(config.wrapperId + "-builder");
     if (!builderHost && contextApiKey) {
       builderHost = document.createElement("details");
       builderHost.className = "mt-2 small px-3 rengine-advanced-search-builder";
-      var summ = document.createElement("summary");
+      let summ = document.createElement("summary");
       summ.textContent = "Build filter";
       builderHost.appendChild(summ);
-      var row = document.createElement("div");
+      let row = document.createElement("div");
       row.className = "d-flex flex-wrap align-items-center gap-2 mt-1 mb-0";
-      var selF = document.createElement("select");
+      let selF = document.createElement("select");
       selF.className = "form-select form-select-sm";
       selF.style.maxWidth = "10rem";
       fields.forEach(function (f) {
-        var o = document.createElement("option");
+        let o = document.createElement("option");
         o.value = f;
         o.textContent = f;
         selF.appendChild(o);
       });
-      var selO = document.createElement("select");
+      let selO = document.createElement("select");
       selO.className = "form-select form-select-sm";
       selO.style.maxWidth = "5rem";
       ["=", "!=", "!", ">", "<"].forEach(function (op) {
-        var o = document.createElement("option");
+        let o = document.createElement("option");
         o.value = op;
         o.textContent = op;
         selO.appendChild(o);
       });
-      var selV;
+      let selV;
       if (window.jQuery && window.jQuery.fn.select2) {
         selV = document.createElement("select");
         selV.className = "form-select form-select-sm rengine-advanced-search-builder-value";
       } else {
-        var dl = document.createElement("datalist");
+        let dl = document.createElement("datalist");
         dl.id = config.wrapperId + "-builder-datalist";
         row.appendChild(dl);
         selV = document.createElement("input");
@@ -353,12 +353,12 @@
       selV.setAttribute("aria-label", "Filter value");
       selV.style.width = "10rem";
       selV.style.maxWidth = "10rem";
-      var joinWrap = document.createElement("div");
+      let joinWrap = document.createElement("div");
       joinWrap.className = "d-flex align-items-center gap-1";
-      var joinLbl = document.createElement("span");
+      let joinLbl = document.createElement("span");
       joinLbl.className = "text-muted text-nowrap small";
       joinLbl.textContent = "Then";
-      var selJoin = document.createElement("select");
+      let selJoin = document.createElement("select");
       selJoin.className = "form-select form-select-sm";
       selJoin.setAttribute("aria-label", "Combine with AND or OR");
       selJoin.style.minWidth = "6.5rem";
@@ -367,32 +367,32 @@
         { value: "&", text: "AND (&)" },
         { value: "|", text: "OR (|)" },
       ].forEach(function (j) {
-        var jo = document.createElement("option");
+        let jo = document.createElement("option");
         jo.value = j.value;
         jo.textContent = j.text;
         selJoin.appendChild(jo);
       });
       joinWrap.appendChild(joinLbl);
       joinWrap.appendChild(selJoin);
-      var btn = document.createElement("button");
+      let btn = document.createElement("button");
       btn.type = "button";
       btn.className = "btn btn-sm btn-soft-primary mb-0";
       btn.textContent = "Append";
       btn.addEventListener("click", function () {
-        var f = selF.value;
-        var op = selO.value;
-        var v = R.readBuilderValueInput(selV);
+        let f = selF.value;
+        let op = selO.value;
+        let v = R.readBuilderValueInput(selV);
         if (!v) return;
-        var piece = f + op + R.formatBuilderValueLiteral(v);
-        var cur = String(input.value || "").trim();
-        var joiner = selJoin.value === "|" ? "|" : "&";
+        let piece = f + op + R.formatBuilderValueLiteral(v);
+        let cur = String(input.value || "").trim();
+        let joiner = selJoin.value === "|" ? "|" : "&";
         input.value = cur ? cur + joiner + piece : piece;
         R.clearBuilderValueInput(selV);
         R.loadAdvancedSearchBuilderValues(config, selF.value, selV, builderHost);
         runValidate();
         applyTableSearch(config, input, storageKey);
       });
-      var loadValuesTimer = null;
+      let loadValuesTimer = null;
       selF.addEventListener("change", function () {
         if (loadValuesTimer) window.clearTimeout(loadValuesTimer);
         loadValuesTimer = window.setTimeout(function () {
@@ -414,9 +414,9 @@
       R.loadAdvancedSearchBuilderValues(config, selF.value, selV, builderHost);
     }
 
-    var appendHost = button.parentElement;
+    let appendHost = button.parentElement;
     if (appendHost && !appendHost.querySelector(".rengine-advanced-search-clear")) {
-      var clearBtn = document.createElement("button");
+      let clearBtn = document.createElement("button");
       clearBtn.type = "button";
       clearBtn.className =
         "btn btn-sm rengine-advanced-search-clear d-inline-flex align-items-center justify-content-center px-2";
@@ -447,27 +447,27 @@
   };
 
   window.initRengineAdvancedDatatableSearch = function () {
-    var profiles = R.getProfiles();
+    let profiles = R.getProfiles();
     Object.keys(profiles).forEach(function (key) {
-      var profile = profiles[key];
-      var wrapper = profile && document.getElementById(profile.wrapperId);
+      let profile = profiles[key];
+      let wrapper = profile && document.getElementById(profile.wrapperId);
       if (!wrapper || wrapper.getAttribute(R.BOUND_ATTR) === "1") return;
-      var cfg = R.profileToConfig(profile, key);
+      let cfg = R.profileToConfig(profile, key);
       if (!cfg) return;
       attachAdvancedDatatableSearch(cfg);
       wrapper.setAttribute(R.BOUND_ATTR, "1");
     });
   };
 
-  var syncAdvancedSearchInputsToTables = function () {
-    var profiles = R.getProfiles();
+  let syncAdvancedSearchInputsToTables = function () {
+    let profiles = R.getProfiles();
     Object.keys(profiles).forEach(function (key) {
-      var profile = profiles[key];
+      let profile = profiles[key];
       if (!profile) return;
-      var inp = document.getElementById(profile.inputId);
-      var api = R.getDataTable(key) || window[profile.tableGlobal];
+      let inp = document.getElementById(profile.inputId);
+      let api = R.getDataTable(key) || window[profile.tableGlobal];
       if (!inp || !api || typeof api.search !== "function") return;
-      var val = String(inp.value || "");
+      let val = String(inp.value || "");
       if (!val.length) return;
       if (api.search() !== val) {
         api.search(val).draw();
@@ -477,9 +477,9 @@
 
   window.attachAdvancedDatatableSearch = attachAdvancedDatatableSearch;
 
-  var _advancedSearchInitOnce = false;
-  var scheduleInit = function () {
-    var runInitOnce = function () {
+  let _advancedSearchInitOnce = false;
+  let scheduleInit = function () {
+    let runInitOnce = function () {
       if (_advancedSearchInitOnce) return;
       _advancedSearchInitOnce = true;
       window.setTimeout(function () {

@@ -1,6 +1,12 @@
 """
 Subdomain Repository - Data access for subdomain operations.
+
 Handles Subdomain database operations with enriched Secator integration.
+Subdomains are FQDN-style hosts only: ``get_or_create_from_host`` returns None for IP literals so tools
+do not create parallel Subdomain rows for numeric hosts. IP-backed findings use ``IpAddress`` and
+``EndPoint.ip_address`` (see ``EndpointRepository``, ``reNgine.services.scan_finding_metrics``). Subdomains
+still expose related IPs via ``ip_addresses`` (M2M); migrations may fold legacy IP-named subdomain rows into
+``IpAddress`` hosts.
 """
 
 import contextlib
@@ -95,7 +101,7 @@ class SubdomainRepository:
             logger.log_line(
                 PREFIX_SUBDOMAIN_REPO,
                 "SAVE",
-                "Subdomain item missing name field" if not raw_name else "Subdomain name empty after normalization",
+                "Subdomain name empty after normalization" if raw_name else "Subdomain item missing name field",
                 level="warning",
             )
             return None
@@ -135,8 +141,7 @@ class SubdomainRepository:
             subdomain.is_imported_subdomain = True
             update_fields.append("is_imported_subdomain")
 
-        extra_data = item.get("extra_data", {}) or {}
-        if extra_data:
+        if extra_data := item.get("extra_data", {}) or {}:
             defaults: Dict[str, Any] = {}
             self._map_extra_data_to_subdomain_fields(extra_data, defaults)
             for key, value in defaults.items():
@@ -181,20 +186,21 @@ class SubdomainRepository:
         rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[Subdomain]:
         """
-        Get or create a Subdomain for the given scan and host (hostname or IP).
+        Get or create a Subdomain for the given scan and DNS host (FQDN / hostname).
 
-        Single entry point for "obtain subdomain for this host" used by Endpoint, Ip, Port,
-        Record, Certificate, and Vulnerability repositories. Uses is_acceptable_subdomain_name
-        (accepts FQDNs, .lan/.local, and IPs). When scope restricts findings, host filter
-        is applied; IPs are allowed for subdomains.
+        Literal IP addresses are not stored as Subdomain rows; use IpRepository.get_or_create_for_scan
+        and EndPoint.ip_address for IP hosts.
 
         Returns:
-            Subdomain or None if hostname is empty, invalid, out of scope, or domain resolution fails.
+            Subdomain or None if hostname is empty, invalid, an IP literal, out of scope,
+            or domain resolution fails.
         """
         if not hostname or not isinstance(hostname, str):
             return None
         normalized = hostname.strip().lower()
         if not normalized:
+            return None
+        if is_valid_ip(normalized):
             return None
         if not is_acceptable_subdomain_name(normalized):
             return None
@@ -216,8 +222,7 @@ class SubdomainRepository:
         except ObjectDoesNotExist:
             return None
 
-        existing = Subdomain.objects.filter(name=normalized, scan_history=scan_history).order_by("id").first()
-        if existing:
+        if existing := Subdomain.objects.filter(name=normalized, scan_history=scan_history).order_by("id").first():
             return existing
 
         defaults = {

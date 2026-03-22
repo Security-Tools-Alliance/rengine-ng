@@ -199,6 +199,8 @@ class TestScanStatusPayloadShape(BaseTestCase):
         self.assertIn("subdomain_count", result)
         self.assertIn("endpoint_count", result)
         self.assertIn("vulnerability_count", result)
+        self.assertIn("ip_address_count", result)
+        self.assertIn("ip_alive_count", result)
         self.assertNotIn("commands", result)
         self.assertNotIn("timeline", result)
         self.assertNotIn("runners", result)

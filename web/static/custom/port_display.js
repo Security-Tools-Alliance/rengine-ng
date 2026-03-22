@@ -167,13 +167,13 @@ function initPortsPopovers(tableSelector) {
             customClass: "ports-popover"
         });
 
-        function closeOnClickOutside(e) {
+        const closeOnClickOutside = function (e) {
             const tip = popover.getTipElement && popover.getTipElement();
             const target = e.target;
             if (target === trigger || (trigger && trigger.contains(target))) return;
             if (tip && tip.contains(target)) return;
             popover.hide();
-        }
+        };
 
         $(trigger).on("shown.bs.popover", function () {
             setTimeout(function () {
@@ -190,12 +190,12 @@ function initPortsPopovers(tableSelector) {
 function attachPortBadgeTriggerListener() {
     const $ = window.jQuery;
     if (!$ || typeof $.fn.on !== "function") return;
-    function parseOptionalId(val) {
+    const parseOptionalId = function (val) {
         if (val == null || val === "") return null;
         const n = parseInt(val, 10);
         return Number.isNaN(n) ? null : n;
-    }
-    function handlePortBadgeClick(el) {
+    };
+    const handlePortBadgeClick = function (el) {
         const isIp = el.getAttribute("data-is-ip") === "true";
         const portsUrl = el.getAttribute("data-api-ports-url") || "";
         const subdomainsUrl = el.getAttribute("data-api-subdomains-url") || "";
@@ -214,7 +214,7 @@ function attachPortBadgeTriggerListener() {
                 get_port_details(ipsUrl, subdomainsUrl, port, scanId, domainId);
             }
         }
-    }
+    };
     $(document.body).off("click.portBadge keydown.portBadge", ".js-port-badge-trigger").on("click.portBadge", ".js-port-badge-trigger", function (e) {
         e.preventDefault();
         handlePortBadgeClick(e.currentTarget);

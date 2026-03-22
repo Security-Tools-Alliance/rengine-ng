@@ -73,3 +73,10 @@ logger.log_line(
 - Do not add new dependencies without maintainer approval.
 - Do not change CI/CD configuration without understanding the whole pipeline.
 
+## IP hosts, scan membership, and API XOR parameters
+
+- **IP literals**: normalize/validate with `reNgine.core.ip_literal` where a single canonical definition is needed.
+- **No Subdomain row for numeric hosts**: `SubdomainRepository.get_or_create_from_host` returns `None` for IP literals; IP-backed assets use `IpAddress` and `EndPoint.ip_address` (see `EndpointRepository` / `_resolve_endpoint_host_for_scan`, `startScan.services.host_assignment` for manual FK assignment).
+- **“IP linked to this scan”**: use `reNgine.services.scan_finding_metrics` (`ip_address_id_linked_to_scan`, `partition_ip_address_ids_for_scan_history`, `ip_address_ids_in_scan`, etc.). `reNgine.services.repositories.scan_lookups.ip_exists_in_scan` delegates there—do not reintroduce parallel filter logic.
+- **Mutually exclusive `subdomain_id` / `ip_address_id` (or list forms) in APIs**: use `api.helpers.subdomain_ip_xor` and request parsing helpers in `api.helpers.secator_scan_target_request` (`coerce_json_ip_address_ids`, `parse_comma_separated_int_ids`, `positive_ip_ids`).
+

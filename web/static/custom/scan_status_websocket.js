@@ -694,7 +694,8 @@ const updateScanRowInTable = function(table, data) {
         // Update summary cell with findings counts (domain, subdomain, endpoint, vulnerability, secret, exploit)
         const hasCounts = data.domain_count !== undefined || data.subdomain_count !== undefined ||
             data.endpoint_count !== undefined || data.vulnerability_count !== undefined ||
-            data.secret_count !== undefined || data.exploit_count !== undefined;
+            data.secret_count !== undefined || data.exploit_count !== undefined ||
+            data.ip_address_count !== undefined || data.ip_alive_count !== undefined;
         if (hasCounts) {
             const summaryCell = $(rowNode).find('.scan-summary-cell');
             if (summaryCell.length && typeof window.renderScanSummaryBadges === 'function') {
@@ -707,6 +708,8 @@ const updateScanRowInTable = function(table, data) {
                     subdomainCount: data.subdomain_count !== undefined ? data.subdomain_count : 0,
                     endpointCount: data.endpoint_count !== undefined ? data.endpoint_count : 0,
                     vulnerabilityCount: data.vulnerability_count !== undefined ? data.vulnerability_count : 0,
+                    ipAddressCount: data.ip_address_count !== undefined ? data.ip_address_count : 0,
+                    ipAliveCount: data.ip_alive_count !== undefined ? data.ip_alive_count : 0,
                     secretCount: data.secret_count !== undefined ? data.secret_count : 0,
                     exploitCount: data.exploit_count !== undefined ? data.exploit_count : 0,
                     vulnTooltip: vulnTooltip
@@ -947,6 +950,20 @@ const updateScanDetailPage = function(data) {
                     } else {
                         severityContainer.innerHTML = '<p class="text-muted mb-0 small">No vulnerabilities found.</p><br>';
                     }
+                }
+            }
+        }
+
+        if (data.ip_address_count !== undefined || data.ip_alive_count !== undefined) {
+            const ipPanel = document.querySelector('[data-stats-panel="ips"]');
+            if (ipPanel) {
+                const ipCountElement = ipPanel.querySelector('[data-stat="ip-address-count"]');
+                if (ipCountElement && data.ip_address_count !== undefined) {
+                    updateCounterupElement(ipCountElement, data.ip_address_count);
+                }
+                const ipAliveElement = ipPanel.querySelector('[data-stat="ip-alive-count"]');
+                if (ipAliveElement && data.ip_alive_count !== undefined) {
+                    ipAliveElement.textContent = 'Alive IPs: ' + formatNumber(data.ip_alive_count);
                 }
             }
         }
@@ -1367,12 +1384,18 @@ const updateRightSidebar = function(data) {
                 }
                 
                 // Update findings counts (subdomains, endpoints, vulnerabilities)
-                if (data.subdomain_count !== undefined || data.endpoint_count !== undefined || data.vulnerability_count !== undefined) {
+                if (data.subdomain_count !== undefined || data.endpoint_count !== undefined || data.vulnerability_count !== undefined ||
+                    data.ip_address_count !== undefined) {
                     const subdomainBadge = scanCard.querySelector('.badge-subdomain-count');
                     if (subdomainBadge && data.subdomain_count !== undefined) {
                         subdomainBadge.textContent = '\u00A0\u00A0' + formatNumber(data.subdomain_count) + '\u00A0\u00A0';
                     }
-                    
+
+                    const ipAddrBadge = scanCard.querySelector('.badge-ip-address-count');
+                    if (ipAddrBadge && data.ip_address_count !== undefined) {
+                        ipAddrBadge.textContent = '\u00A0\u00A0' + formatNumber(data.ip_address_count) + '\u00A0\u00A0';
+                    }
+
                     const endpointBadge = scanCard.querySelector('.badge-endpoint-count');
                     if (endpointBadge && data.endpoint_count !== undefined) {
                         endpointBadge.textContent = '\u00A0\u00A0' + formatNumber(data.endpoint_count) + '\u00A0\u00A0';

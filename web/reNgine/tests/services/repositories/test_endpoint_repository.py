@@ -7,6 +7,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
+from reNgine.services.repositories.ip_repository import IpRepository, normalize_ip_address_string
 from startScan.models import DirectoryScan, EndPoint, Subdomain, SubScan
 from utils.test_base import BaseTestCase
 
@@ -149,32 +150,27 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         item = {"url": url, "status_code": 200} | overrides
         return self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
-    def test_endpoint_with_ip_url_gets_subdomain(self):
-        """Endpoint with IP URL (CIDR-style scan) is associated with a subdomain named after the IP."""
+    def test_endpoint_with_ip_url_gets_ip_address(self):
+        """Endpoint with IP URL (CIDR-style scan) is linked to IpAddress, not Subdomain."""
         endpoint = self._save_secator_endpoint("http://192.168.1.1/", status_code=200)
         self.assertIsNotNone(endpoint, "Endpoint should be created")
         endpoint.refresh_from_db()
-        self.assertIsNotNone(
-            endpoint.subdomain_id,
-            "Endpoint with IP host should be linked to a subdomain (get_or_create_from_host)",
-        )
-        self.assertEqual(endpoint.subdomain.name, "192.168.1.1")
+        self.assertIsNone(endpoint.subdomain_id)
+        self.assertIsNotNone(endpoint.ip_address_id)
+        self.assertEqual(endpoint.ip_address.address, "192.168.1.1")
 
-    def test_associate_with_subdomain_uses_hostname_override_when_url_has_no_host(self):
-        """When URL has no hostname, item['host'] (hostname_override) is used for subdomain association."""
-        endpoint = self._save_secator_endpoint("https://test.example.com/")
-        self.assertIsNotNone(endpoint)
-        endpoint.subdomain = None
-        endpoint.save(update_fields=["subdomain"])
-        self.repository._associate_with_subdomain(
-            endpoint,
+    def test_resolve_endpoint_host_uses_hostname_override_when_url_has_no_host(self):
+        """When URL has no hostname, hostname_override is used to resolve a Subdomain."""
+        res = self.repository._resolve_endpoint_host_for_scan(
             "http:///",
             self.scan_history.id,
-            hostname_override="override.example.com",
+            "override.example.com",
+            {},
+            auto_create_subdomain=True,
         )
-        endpoint.refresh_from_db()
-        self.assertIsNotNone(endpoint.subdomain_id)
-        self.assertEqual(endpoint.subdomain.name, "override.example.com")
+        self.assertIsNotNone(res.subdomain)
+        self.assertEqual(res.subdomain.name, "override.example.com")
+        self.assertIsNone(res.ip_address)
 
     def test_first_endpoint_becomes_default(self):
         """Test that the first endpoint for a subdomain becomes is_default=True."""
@@ -596,10 +592,20 @@ class EndpointRepositoryIpEndpointTestCase(BaseTestCase):
         """
         ip = "198.51.100.42"
         http_url = f"http://{ip}"
+        normalized = normalize_ip_address_string(ip)
+        self.assertIsNotNone(normalized)
+        ip_obj, _ = IpRepository().get_or_create_for_scan(
+            self.scan_history.id,
+            self.scan_history.target_id,
+            normalized,
+        )
+        self.assertIsNotNone(ip_obj)
         EndPoint.objects.create(
             http_url=http_url,
             scan_history=self.scan_history,
             domain=self.domain,
+            subdomain=None,
+            ip_address=ip_obj,
             http_status=0,
             discovered_date=timezone.now(),
         )
@@ -607,6 +613,8 @@ class EndpointRepositoryIpEndpointTestCase(BaseTestCase):
             http_url=http_url,
             scan_history=self.scan_history,
             domain=self.domain,
+            subdomain=None,
+            ip_address=ip_obj,
             http_status=0,
             discovered_date=timezone.now(),
         )

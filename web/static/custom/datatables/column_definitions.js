@@ -1,5 +1,5 @@
 /**
- * Shared DataTables column definitions for vulnerability and subdomain tables.
+ * Shared DataTables column definitions for vulnerability, subdomain, and scan-detail IP tables.
  * Single source of truth so column changes are made in one place only.
  * Must be loaded before any template that uses window.RengineDatatableColumnDefs.
  *
@@ -36,6 +36,12 @@
  * - RENGINE_SUBDOMAIN_DATATABLE_COLUMNS: startScan/subdomains.html, startScan/detail_scan.html (subdomain tab),
  *   targetApp/target/summary.html (subdomain tab). Backend: DATATABLE_COLUMN_MAP_SUBDOMAIN (and endpoint/dir maps as needed).
  * - RENGINE_DATATABLE_VULN_* / RENGINE_DATATABLE_SUBDOMAIN_*: default order and row-group options for the above templates.
+ * - RENGINE_IP_DATATABLE_COLUMNS / RENGINE_DATATABLE_IP_*: startScan/detail_scan.html (IP tab). Backend: DATATABLE_COLUMN_MAP_IPS in column_maps.py.
+ *
+ * RENGINE_IP_DATATABLE_COLUMNS (DATATABLE_COLUMN_MAP_IPS, ListIPs datatables mode):
+ *   0=id (checkbox)   1=address   2=subdomain_names   3=ports   4=alive   5=is_cdn   6=action
+ *   Orderable backend cols: 1=address, 4=alive, 5=is_cdn.
+ *   Consumer: startScan/detail_scan.html (IP tab). Use getScanIpTableColumnDefs() for columnDefs.
  */
 (function () {
   "use strict";
@@ -126,10 +132,21 @@
     { data: "action", name: "action", defaultContent: "", orderable: false, searchable: false },
   ];
 
+  const ipColumns = [
+    { data: "id", name: "id", orderable: false, searchable: false },
+    { data: "address", name: "address" },
+    { data: "subdomain_names", name: "subdomain_names", orderable: false, searchable: false },
+    { data: "ports", name: "ports", orderable: false, searchable: false },
+    { data: "alive", name: "alive" },
+    { data: "is_cdn", name: "is_cdn" },
+    { data: null, name: "action", orderable: false, searchable: false, defaultContent: "" },
+  ];
+
   window.RENGINE_VULN_DATATABLE_COLUMNS = vulnColumns;
   window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS = subdomainColumns;
   window.RENGINE_EXPLOIT_DATATABLE_COLUMNS = exploitColumns;
   window.RENGINE_SECRET_DATATABLE_COLUMNS = secretColumns;
+  window.RENGINE_IP_DATATABLE_COLUMNS = ipColumns;
 
   /** Default order for vulnerability tables (column name, dir). Used with getRengineDatatableOrderFromNames(columns, this). */
   window.RENGINE_DATATABLE_VULN_DEFAULT_ORDER = [["cvss_score", "desc"]];
@@ -154,6 +171,149 @@
     { value: "page_title", label: "Page Title", orderWhenActive: [["page_title", "asc"]] },
     { value: "http_status", label: "HTTP Status", orderWhenActive: [["http_status", "asc"]] },
   ];
+
+  window.RENGINE_DATATABLE_IP_DEFAULT_ORDER = [["address", "asc"]];
+  window.RENGINE_DATATABLE_IP_ROW_GROUP_GROUPS = [
+    { value: "alive", columnName: "alive", label: "Alive" },
+    { value: "is_cdn", columnName: "is_cdn", label: "CDN" },
+  ];
+
+  /**
+   * @param {object} options
+   * @param {string} options.getIpDetailsUrl - Absolute path for get_ip_details API.
+   * @param {string} options.querySubdomainsUrl - Absolute path for subdomain query API.
+   * @param {number} options.scanHistoryId - Current scan history id for get_ip_details.
+   * @param {string} options.listIPsUrl - Base list IPs API URL (same as DataTables ajax base path without query).
+   * @param {string} options.projectSlug - Current project slug for action URLs.
+   * @returns {object[]} DataTables columnDefs for the scan detail IP table.
+   */
+  const getScanIpTableColumnDefs = function (options) {
+    const opts = options || {};
+    const getIpDetailsUrl = opts.getIpDetailsUrl || "";
+    const querySubdomainsUrl = opts.querySubdomainsUrl || "";
+    const scanHistoryId = opts.scanHistoryId != null ? opts.scanHistoryId : 0;
+    const listIPsUrl = opts.listIPsUrl || "";
+    const projectSlug = opts.projectSlug || "";
+    const safeAttrFn = window.safeAttr;
+    const safeTextFn = window.safeText;
+    const renderBadgeFn =
+      typeof window.renderBadge === "function"
+        ? window.renderBadge
+        : function () {
+            return "";
+          };
+    const renderers = window.RengineDatatableActionRenderers;
+
+    const escapeFallback = function (s) {
+      const t = s == null ? "" : String(s);
+      return typeof safeTextFn === "function" ? safeTextFn(t) : t;
+    };
+
+    const renderIpSubdomainBadges = function (subdomainNames, row) {
+      if (!Array.isArray(subdomainNames) || !subdomainNames.length) {
+        return '<span class="text-muted">-</span>';
+      }
+      const safeAddress =
+        typeof safeAttrFn === "function"
+          ? safeAttrFn(String((row && row.address) || ""))
+          : String((row && row.address) || "");
+      const escDetails = typeof safeAttrFn === "function" ? safeAttrFn(getIpDetailsUrl) : getIpDetailsUrl;
+      const escSubQ = typeof safeAttrFn === "function" ? safeAttrFn(querySubdomainsUrl) : querySubdomainsUrl;
+      return subdomainNames
+        .map(function (name) {
+          const safeName = escapeFallback(name);
+          return (
+            '<span class="badge badge-soft-primary m-1 badge-link" title="Show IP details" onclick="get_ip_details(\'' +
+            escDetails +
+            "', '" +
+            escSubQ +
+            "', '" +
+            safeAddress +
+            "', " +
+            scanHistoryId +
+            ')">' +
+            safeName +
+            "</span>"
+          );
+        })
+        .join("");
+    };
+
+    return [
+      {
+        targets: "id:name",
+        width: "20px",
+        orderable: false,
+        render: function (data, type, row) {
+          const rid = row && row.id != null ? row.id : data;
+          const safeVal = typeof safeAttrFn === "function" ? safeAttrFn(String(rid)) : String(rid);
+          return (
+            '<div class="form-check ms-1 form-check-primary"><input type="checkbox" class="float-start form-check-input ip_checkbox" value="' +
+            safeVal +
+            '"><span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>'
+          );
+        },
+      },
+      {
+        targets: "address:name",
+        render: function (data) {
+          const safeData = escapeFallback(data || "");
+          return '<span class="text-primary fw-bold">' + safeData + "</span>";
+        },
+      },
+      {
+        targets: "subdomain_names:name",
+        orderable: false,
+        render: function (data, type, row) {
+          return renderIpSubdomainBadges(row.subdomain_names, row);
+        },
+      },
+      {
+        targets: "ports:name",
+        orderable: false,
+        render: function (data, type, row) {
+          return renderBadgeFn(data, {
+            api_ips_url: listIPsUrl,
+            api_subdomains_url: querySubdomainsUrl,
+            scan_id: scanHistoryId,
+            domain_id: null,
+            summaryWithPopover: true,
+            rowId: row.id,
+          });
+        },
+      },
+      {
+        targets: "alive:name",
+        render: function (data) {
+          return data
+            ? '<span class="badge bg-success">Alive</span>'
+            : '<span class="badge bg-secondary">Unknown/Down</span>';
+        },
+      },
+      {
+        targets: "is_cdn:name",
+        render: function (data) {
+          return data
+            ? '<span class="badge bg-warning">CDN</span>'
+            : '<span class="badge bg-primary">No</span>';
+        },
+      },
+      {
+        targets: "action:name",
+        orderable: false,
+        render: function (data, type, row) {
+          if (!renderers || typeof renderers.renderIpActions !== "function") {
+            return "";
+          }
+          return renderers.renderIpActions(row, {
+            urls: window.RENGINE_DATATABLE_ACTION_URLS && window.RENGINE_DATATABLE_ACTION_URLS.ip,
+            scanHistoryId: scanHistoryId,
+            projectSlug: projectSlug,
+          });
+        },
+      },
+    ];
+  };
 
   const getCheckboxColumnDef = function (targetName, renderFn) {
     return {
@@ -640,6 +800,7 @@
     getVulnEpssScoreBadgeColumnDef: getVulnEpssScoreBadgeColumnDef,
     getSubdomainVulnCountBadgesColumnDef: getSubdomainVulnCountBadgesColumnDef,
     getSubdomainVulnCountBadgesHtml: getSubdomainVulnCountBadgesHtml,
+    getScanIpTableColumnDefs: getScanIpTableColumnDefs,
   });
 
   if (window.jQuery && typeof window.jQuery.fn.on === "function") {

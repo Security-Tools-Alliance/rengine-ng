@@ -31,6 +31,7 @@ from reNgine.definitions import (
     PERM_MODIFY_SYSTEM_CONFIGURATIONS,
     PERM_MODIFY_WORDLISTS,
 )
+from reNgine.services.scan_finding_metrics import attach_ip_metrics_to_scans
 from reNgine.settings import (
     RENGINE_GF_PATTERNS_DIR,
     RENGINE_HOME,
@@ -882,7 +883,7 @@ def secator_scan_detail(request, scan_id):
         .annotate(c=Count("id"))
         .values("c")[:1]
     )
-    recent_scans = (
+    recent_scans_qs = (
         ScanHistory.objects.filter(
             scan_type__isnull=False,
             is_legacy_scan=False,
@@ -899,6 +900,8 @@ def secator_scan_detail(request, scan_id):
         )
         .order_by("-start_scan_date")[:10]
     )
+    recent_scans = list(recent_scans_qs)
+    attach_ip_metrics_to_scans(recent_scans)
 
     context = {
         "scan": scan,

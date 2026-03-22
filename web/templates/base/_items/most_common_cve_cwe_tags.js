@@ -1,11 +1,11 @@
-var colors = [
+{
+  const colors = [
   {% for cve in most_common_cve %}
   '#7E57C2',
   {% endfor %}
-];
+  ];
 
-// http_status chart
-var options = {
+  const options = {
   series: [{
     name: 'CVE IDs',
     data: [{% for cve in most_common_cve %}
@@ -49,17 +49,18 @@ var options = {
     }
   };
 
-var chart = new ApexCharts(document.querySelector("#most_common_cve"), options);
-chart.render();
+  const chart = new ApexCharts(document.querySelector("#most_common_cve"), options);
+  chart.render();
+}
 
-var colors = [
+{
+  const colors = [
   {% for cwe in most_common_cwe %}
   '#5C6BC0',
   {% endfor %}
-];
+  ];
 
-// http_status chart
-var options = {
+  const options = {
   series: [{
     name: 'CWE IDs',
     data: [{% for cwe in most_common_cwe %}
@@ -103,20 +104,20 @@ var options = {
     }
   };
 
-var chart = new ApexCharts(document.querySelector("#most_common_cwe"), options);
-chart.render();
+  const chart = new ApexCharts(document.querySelector("#most_common_cwe"), options);
+  chart.render();
+}
 
-
-var colors = [
+{
+  const colors = [
   {% for tag in most_common_tags %}
   '#EF5350',
   {% endfor %}
-];
+  ];
 
-// http_status chart
-var options = {
+  const options = {
   series: [{
-    name: 'CWE IDs',
+    name: 'Tags',
     data: [{% for tag in most_common_tags %}
       {{tag.nused}},
       {% endfor %}]
@@ -158,5 +159,6 @@ var options = {
     }
   };
 
-var chart = new ApexCharts(document.querySelector("#most_common_tags"), options);
-chart.render();
+  const chart = new ApexCharts(document.querySelector("#most_common_tags"), options);
+  chart.render();
+}

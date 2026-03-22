@@ -271,7 +271,12 @@ def get_scan_fields(engine, scan, subscan=None, status="RUNNING", tasks=None):
         tasks = []
     if subscan:
         tasks_h = f"`{subscan.type}`"
-        host = subscan.subdomain.name
+        if subscan.subdomain_id:
+            host = subscan.subdomain.name
+        elif subscan.ip_address_id:
+            host = subscan.ip_address.address or ""
+        else:
+            host = ""
         scan_obj = subscan
     else:
         tasks_h = "• " + "\n• ".join(f"`{task.name}`" for task in tasks) if tasks else ""

@@ -523,6 +523,7 @@ class ScanHistorySerializer(serializers.ModelSerializer):
     subdomain_count = serializers.SerializerMethodField("get_subdomain_count")
     endpoint_count = serializers.SerializerMethodField("get_endpoint_count")
     vulnerability_count = serializers.SerializerMethodField("get_vulnerability_count")
+    ip_address_count = serializers.SerializerMethodField("get_ip_address_count")
     current_progress = serializers.SerializerMethodField("get_progress")
     current_task = serializers.SerializerMethodField("get_current_task")
     completed_time = serializers.SerializerMethodField("get_total_scan_time_in_sec")
@@ -539,6 +540,7 @@ class ScanHistorySerializer(serializers.ModelSerializer):
             "subdomain_count",
             "endpoint_count",
             "vulnerability_count",
+            "ip_address_count",
             "current_progress",
             "current_task",
             "completed_time",
@@ -587,6 +589,14 @@ class ScanHistorySerializer(serializers.ModelSerializer):
             return val
         if scan_history.get_vulnerability_count:
             return scan_history.get_vulnerability_count()
+
+    def get_ip_address_count(self, scan_history):
+        val = getattr(scan_history, "ip_address_count", _CACHE_MISSING)
+        if val is not _CACHE_MISSING:
+            return val
+        from reNgine.services.scan_finding_metrics import get_ip_address_total_for_scan
+
+        return get_ip_address_total_for_scan(scan_history.id)
 
     def get_progress(self, scan_history):
         return scan_history.get_progress()
@@ -1888,6 +1898,7 @@ class IpSerializer(serializers.ModelSerializer):
             "version",
             "is_private",
             "alive",
+            "is_important",
             "ip_subscan_ids",
             "subdomain_count",
             "subdomain_names",

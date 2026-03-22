@@ -23,7 +23,7 @@ from reNgine.services.repositories.scan_repository import ScanRepository
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.websocket import send_scan_status_update
 from scanEngine.models import SecatorScan, SecatorTask
-from startScan.models import ScanHistory, Subdomain, SubScan
+from startScan.models import IpAddress, ScanHistory, Subdomain, SubScan
 from targetApp.models import Target
 from targetApp.services.scope_params import (
     apply_resolved_to_secator_config,
@@ -388,18 +388,30 @@ def _run_one_per_task_entry(
     secator_config: dict,
     *,
     worker_id: int | None = None,
+    subscan_ip_address: IpAddress | None = None,
 ) -> tuple[dict, bool]:
     """Run one per-task (task_type, targets) and return (result_dict, success)."""
     subscan = None
-    if subdomains and scan:
-        subscan = SubScan.objects.create(
-            scan_history=scan,
-            subdomain=subdomains[0],
-            type=task_type,
-            start_scan_date=timezone.now(),
-            status=RUNNING_TASK,
-        )
-        send_scan_status_update(scan.id)
+    if scan:
+        if subdomains:
+            subscan = SubScan.objects.create(
+                scan_history=scan,
+                subdomain=subdomains[0],
+                type=task_type,
+                start_scan_date=timezone.now(),
+                status=RUNNING_TASK,
+            )
+            send_scan_status_update(scan.id)
+        elif subscan_ip_address is not None:
+            subscan = SubScan.objects.create(
+                scan_history=scan,
+                subdomain=None,
+                ip_address=subscan_ip_address,
+                type=task_type,
+                start_scan_date=timezone.now(),
+                status=RUNNING_TASK,
+            )
+            send_scan_status_update(scan.id)
 
     try:
         result = start_secator_scan(
@@ -477,6 +489,7 @@ def run_per_task_secator_scans(
     subdomain_ids: list[int] | None = None,
     scan_history_id: int | None = None,
     worker_id: int | None = None,
+    ip_address_id: int | None = None,
 ) -> PerTaskRunResult:
     """
     Validate per-task targets and run one scan per (task_type, targets) under a single ScanHistory.
@@ -488,9 +501,10 @@ def run_per_task_secator_scans(
 
     When scan_history_id is provided and exists for the given target_id/domain_id, that ScanHistory is
     reused; otherwise a new one is created (e.g. when launching from target summary where there
-    is no single scan). When subdomain_ids is provided, only the first ID is used: one SubScan
+    is no single scan).     When subdomain_ids is provided, only the first ID is used: one SubScan
     per task is created and linked to that single subdomain; any additional subdomain_ids are
-    ignored. When task_type_to_id is None, it is loaded from SecatorTask.
+    ignored. When ip_address_id is set (and no subdomain for SubScan), SubScan is linked to that IP.
+    When task_type_to_id is None, it is loaded from SecatorTask.
     Validation errors (unknown_task_type, no_targets) are returned in validation_errors.
     """
     if task_type_to_id is None:
@@ -513,6 +527,9 @@ def run_per_task_secator_scans(
             level="warning",
         )
     subdomain_ids_for_subscan = subdomain_ids[:1] if subdomain_ids else []
+    ip_for_subscan = None
+    if ip_address_id is not None:
+        ip_for_subscan = IpAddress.objects.filter(pk=ip_address_id).first()
 
     if target_id is None:
         return {
@@ -584,6 +601,7 @@ def run_per_task_secator_scans(
             url_filter,
             secator_config,
             worker_id=worker_id,
+            subscan_ip_address=ip_for_subscan,
         )
         results.append(result_dict)
         if success:

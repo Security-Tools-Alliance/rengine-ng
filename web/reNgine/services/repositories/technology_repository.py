@@ -10,8 +10,9 @@ from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.exceptions import FindingOutOfScopeError
-from reNgine.core.validators import is_valid_url
+from reNgine.core.validators import is_valid_ip, is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
+from reNgine.services.repositories.ip_repository import IpRepository, normalize_ip_address_string
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
@@ -192,10 +193,7 @@ class TechnologyRepository:
 
         try:
             existing_technologies = list(Technology.objects.filter(name__in=normalized_names))
-            existing_names = {tech.name for tech in existing_technologies}
-            missing_names = normalized_names - existing_names
-
-            if missing_names:
+            if missing_names := normalized_names - {tech.name for tech in existing_technologies}:
                 new_instances = [Technology(name=name) for name in missing_names]
                 Technology.objects.bulk_create(new_instances)
                 logger.log_line(
@@ -458,8 +456,26 @@ class TechnologyRepository:
             )
 
     def _associate_with_subdomain_by_hostname(self, tech_obj: Technology, hostname: str, scan_history_id: int) -> None:
-        """Associate technology with subdomain by hostname (or IP). Uses get_or_create_from_host when needed."""
+        """Associate technology with subdomain (DNS) or endpoints tied to an IP host."""
         try:
+            hn = (hostname or "").strip().lower()
+            if is_valid_ip(hn):
+                normalized = normalize_ip_address_string(hn)
+                if not normalized:
+                    return
+                ip_obj = IpRepository().first_ip_in_scan(normalized, scan_history_id)
+                if not ip_obj:
+                    return
+                for ep in EndPoint.objects.filter(scan_history_id=scan_history_id, ip_address_id=ip_obj.id):
+                    ep.techs.add(tech_obj)
+                logger.log_line(
+                    PREFIX_TECH_REPO,
+                    "ASSOCIATE_TECH_TO_ENDPOINT",
+                    "Technology %s linked to IP %s endpoints in scan %s" % (tech_obj.name, normalized, scan_history_id),
+                    level="debug",
+                )
+                return
+
             subdomain = None
             try:
                 scan_history = ScanHistory.objects.get(id=scan_history_id)

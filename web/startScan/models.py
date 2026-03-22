@@ -1,3 +1,4 @@
+from collections import defaultdict
 import contextlib
 from datetime import timedelta
 from urllib.parse import urlparse
@@ -948,10 +949,14 @@ class Subdomain(models.Model):
 
     @property
     def get_endpoint_count(self):
-        endpoints = EndPoint.objects.filter(subdomain__name=self.name)
+        ip_ids = list(self.ip_addresses.values_list("id", flat=True))
+        q = Q(subdomain_id=self.id)
+        if ip_ids:
+            q |= Q(ip_address_id__in=ip_ids)
+        endpoints = EndPoint.objects.filter(q)
         if self.scan_history:
             endpoints = endpoints.filter(scan_history=self.scan_history)
-        return endpoints.count()
+        return endpoints.distinct().count()
 
     @property
     def get_unknown_vulnerability_count(self):
@@ -1240,6 +1245,13 @@ class SubScan(models.Model):
     status = models.IntegerField()
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE)
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
+    ip_address = models.ForeignKey(
+        "IpAddress",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="subscans",
+    )
     stop_scan_date = models.DateTimeField(null=True, blank=True)
     error_message = models.CharField(max_length=300, blank=True, null=True)
     engine = models.ForeignKey(EngineType, on_delete=models.CASCADE, blank=True, null=True)
@@ -1254,6 +1266,12 @@ class SubScan(models.Model):
     )
 
     class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(subdomain__isnull=False, ip_address__isnull=False),
+                name="subscan_subdomain_ip_xor",
+            ),
+        ]
         indexes = [
             models.Index(fields=["scan_history_id", "status"]),
             models.Index(fields=["scan_history_id", "stop_scan_date"], name="ss_subscan_scan_stop_idx"),
@@ -1459,6 +1477,13 @@ class EndPoint(models.Model):
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
+    ip_address = models.ForeignKey(
+        "IpAddress",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="ip_endpoints",
+    )
     source = models.CharField(max_length=200, null=True, blank=True)
     http_url = models.CharField(max_length=30000)
     content_length = models.IntegerField(default=0, null=True, blank=True)
@@ -1548,6 +1573,15 @@ class EndPoint(models.Model):
         return results[::-1]
 
     class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(subdomain__isnull=False, ip_address__isnull=True)
+                    | models.Q(subdomain__isnull=True, ip_address__isnull=False)
+                ),
+                name="endpoint_exactly_one_host",
+            ),
+        ]
         indexes = [
             models.Index(fields=["scan_history_id", "content_length"], name="ss_ep_scan_content_len"),
         ]
@@ -2101,9 +2135,15 @@ class IpAddress(models.Model):
         max_length=10, null=True, blank=True, choices=IP_PROTOCOL_CHOICES, help_text="IP protocol: IPv4 or IPv6"
     )
     extra_data = models.JSONField(null=True, blank=True, help_text="Optional data e.g. ASN from getasn")
+    is_important = models.BooleanField(default=False, null=True, blank=True)
+    attack_surface = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return str(self.address)
+
+    @property
+    def formatted_attack_surface(self):
+        return convert_markdown_to_html(self.attack_surface)
 
     @classmethod
     def get_project_data(cls, project):
@@ -2113,6 +2153,54 @@ class IpAddress(models.Model):
         base_query = cls.objects.filter(ip_addresses__in=subdomains).distinct()
 
         return {"total_count": base_query.count(), "most_used": cls.get_most_used(base_query)}
+
+    @classmethod
+    def get_counts(cls, queryset):
+        """Distinct IP rows in queryset; alive = rows with alive=True."""
+        return {"total": queryset.count(), "alive": queryset.filter(alive=True).count()}
+
+    @classmethod
+    def get_counts_for_scan_histories(cls, scan_ids):
+        """Distinct IPs linked to any of the given scans (subdomain M2M or endpoint FK)."""
+        scan_id_list = list(scan_ids)
+        if not scan_id_list:
+            return {"total": 0, "alive": 0}
+        queryset = cls.objects.filter(
+            Q(ip_addresses__scan_history_id__in=scan_id_list) | Q(ip_endpoints__scan_history_id__in=scan_id_list)
+        ).distinct()
+        return cls.get_counts(queryset)
+
+    @classmethod
+    def get_project_counts(cls, project):
+        """Distinct IP counts for all scans in the project (same semantics as EndPoint.get_project_counts)."""
+        scan_ids = ScanHistory.objects.filter(target__project=project).values_list("id", flat=True)
+        return cls.get_counts_for_scan_histories(scan_ids)
+
+    @classmethod
+    def get_project_timeline(cls, project, date_range):
+        """Per-day counts of distinct IPs linked to subdomains discovered that day (7-day window)."""
+        if not date_range:
+            return []
+        since = date_range[0]
+        qs = (
+            Subdomain.objects.filter(
+                scan_history__target__project=project,
+                discovered_date__gte=since,
+            )
+            .exclude(ip_addresses__isnull=True)
+            .annotate(day=TruncDay("discovered_date"))
+            .values_list("day", "ip_addresses__id")
+            .distinct()
+        )
+        counts_by_day: dict = defaultdict(int)
+        for day, _ip_id in qs.iterator(chunk_size=5000):
+            if day is not None:
+                counts_by_day[day] += 1
+        results = []
+        for date in date_range:
+            aware_date = date_to_aware_datetime(date)
+            results.append(counts_by_day.get(aware_date, 0))
+        return results[::-1]
 
     @classmethod
     def get_most_used(cls, queryset, subdomains=None, limit=7):

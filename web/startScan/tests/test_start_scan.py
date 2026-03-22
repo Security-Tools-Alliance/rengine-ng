@@ -222,8 +222,16 @@ class TestStartScanModels(BaseTestCase):
 
     def test_endpoint_model_with_missing_fields(self):
         """Test the EndPoint model with missing fields."""
+        sub = Subdomain.objects.create(
+            name="test.example.com",
+            domain=self.data_generator.domain,
+            scan_history=self.data_generator.scan_history,
+        )
         minimal_endpoint = EndPoint.objects.create(
-            domain=self.data_generator.domain, http_url="http://test.example.com"
+            domain=self.data_generator.domain,
+            http_url="http://test.example.com",
+            subdomain=sub,
+            ip_address=None,
         )
         self.assertIsInstance(minimal_endpoint, EndPoint)
         self.assertEqual(str(minimal_endpoint), "http://test.example.com")

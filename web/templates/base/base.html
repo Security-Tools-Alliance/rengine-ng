@@ -151,6 +151,7 @@
     <script>
       (function(){ var el = document.getElementById('rengine-dompurify-sanitize-config'); window.VULN_DOMPURIFY_CONFIG = el ? JSON.parse(el.textContent) : {}; })();
     </script>
+    <script src="{% static 'custom/target_entity_kind.js' %}"></script>
     <script src="{% static 'custom/custom.js' %}"></script>
     <script src="{% static 'custom/scan_params.js' %}"></script>
     {{ RENGINE_SCAN_STATUS|json_script:"rengine-scan-status" }}

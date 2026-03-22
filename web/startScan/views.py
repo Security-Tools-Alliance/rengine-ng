@@ -48,6 +48,7 @@ from reNgine.secator.selected_targets import (
 )
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.services.repositories import EndpointRepository
+from reNgine.services.scan_finding_metrics import get_scan_finding_counts
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.utilities.db import count_subquery
 from reNgine.utilities.domain import (
@@ -487,10 +488,8 @@ def build_command_hierarchy(commands):
             # Task - find parent workflow and add to it, or add directly to scan if no workflow found
             task_added = False
             if command.ancestor_id:
-                parent_workflow = workflow_by_name.get(command.ancestor_id)
-                if parent_workflow:
-                    workflow_entry = workflow_entries.get(parent_workflow)
-                    if workflow_entry:
+                if parent_workflow := workflow_by_name.get(command.ancestor_id):
+                    if workflow_entry := workflow_entries.get(parent_workflow):
                         workflow_entry["tasks"].append(command)
                         task_added = True
                     else:
@@ -734,19 +733,13 @@ def detail_scan(request, id, slug):
     # Countries
     asset_countries = geo_isos.annotate(count=Count("iso")).order_by("-count")
 
-    # Subdomains
-    subdomain_count = subdomains.values("name").distinct().count()
-    alive_count = subdomains.values("name").distinct().filter(http_status__gt=0).count()
+    scan_counts = get_scan_finding_counts(id)
+    subdomain_count = scan_counts["subdomain_count"]
+    alive_count = scan_counts["alive_count"]
     important_count = subdomains.values("name").distinct().filter(is_important=True).count()
 
-    # Endpoints
-    endpoint_count = endpoints.values("http_url").distinct().count()
-    endpoint_alive_count = (
-        endpoints.filter(http_status__gt=0)  # TODO: use is_alive() func as it's more precise
-        .values("http_url")
-        .distinct()
-        .count()
-    )
+    endpoint_count = scan_counts["endpoint_count"]
+    endpoint_alive_count = scan_counts["endpoint_alive_count"]
 
     # Vulnerabilities: single aggregation for severity counts
     severity_counts = dict(vulns.values("severity").annotate(c=Count("id")).values_list("severity", "c"))
@@ -793,6 +786,9 @@ def detail_scan(request, id, slug):
         }
     )
 
+    ip_address_count = scan_counts["ip_address_count"]
+    ip_alive_count = scan_counts["ip_alive_count"]
+
     # Build render context
     ctx = {
         "scan_history_id": id,
@@ -807,6 +803,8 @@ def detail_scan(request, id, slug):
         "subdomain_count": subdomain_count,
         "alive_count": alive_count,
         "important_count": important_count,
+        "ip_address_count": ip_address_count,
+        "ip_alive_count": ip_alive_count,
         "endpoint_count": endpoint_count,
         "endpoint_alive_count": endpoint_alive_count,
         "info_count": info_count,
@@ -1023,8 +1021,7 @@ def start_multiple_scan(request, slug):
     target_ids_str = ""
 
     if request.method == "POST":
-        raw_ids = request.POST.get("list_of_target_id") or ""
-        if raw_ids:
+        if raw_ids := request.POST.get("list_of_target_id") or "":
             # POST from start_multiple_scan_ui: start scans for selected targets
             try:
                 secator_kwargs = build_start_secator_scan_kwargs(request.POST)
@@ -1200,9 +1197,7 @@ def stop_scan(request, slug, id):
             from reNgine.secator.control import SecatorScanController
 
             controller = SecatorScanController(id)
-            success = controller.stop_scan()
-
-            if success:
+            if controller.stop_scan():
                 scan.refresh_from_db()
                 scan.aborted_by = request.user
                 scan.stop_scan_date = timezone.now()
@@ -1762,21 +1757,21 @@ def create_report(request, slug, id):
 
     scan = ScanHistory.objects.get(id=id)
     vulns = (
-        (Vulnerability.objects.filter(scan_history=scan).order_by("-severity"))
-        if not is_ignore_info_vuln
-        else (Vulnerability.objects.filter(scan_history=scan).exclude(severity=0).order_by("-severity"))
+        (Vulnerability.objects.filter(scan_history=scan).exclude(severity=0).order_by("-severity"))
+        if is_ignore_info_vuln
+        else (Vulnerability.objects.filter(scan_history=scan).order_by("-severity"))
     )
     unique_vulns = (
         (
             Vulnerability.objects.filter(scan_history=scan)
+            .exclude(severity=0)
             .values("name", "severity")
             .annotate(count=Count("name"))
             .order_by("-severity", "-count")
         )
-        if not is_ignore_info_vuln
+        if is_ignore_info_vuln
         else (
             Vulnerability.objects.filter(scan_history=scan)
-            .exclude(severity=0)
             .values("name", "severity")
             .annotate(count=Count("name"))
             .order_by("-severity", "-count")

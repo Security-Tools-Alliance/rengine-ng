@@ -1238,6 +1238,12 @@ def target_summary(request, slug, id):
     # Exploits (all scans for this target)
     context["exploit_count"] = Exploit.objects.filter(scan_history__target_id=id).count()
 
+    from reNgine.services.scan_finding_metrics import get_ip_metrics_for_target
+
+    ip_total, ip_alive = get_ip_metrics_for_target(id)
+    context["ip_address_count"] = ip_total
+    context["ip_alive_count"] = ip_alive
+
     # Vulnerability Tags
     context["most_common_tags"] = (
         VulnerabilityTags.objects.filter(vuln_tags__in=vulnerabilities)

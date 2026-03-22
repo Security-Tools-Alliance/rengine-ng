@@ -19,13 +19,24 @@ def get_datatable_action_urls(project_slug: str) -> dict:
     """
     Build the full dict of action URLs for RengineDatatableActionRenderers in custom/datatables/actions.js.
 
-    Returns dict with keys 'subdomain', 'vulnerability', 'target', each mapping to
+    Returns dict with keys 'subdomain', 'ip', 'vulnerability', 'target', each mapping to
     the URL dict expected by the corresponding renderer.
+
+    For the scan-detail IP table, ``ip['attackSurface']``, ``ip['toggleIpImportant']``, and
+    ``ip['unlinkScanIps']`` enable the matching action buttons; missing keys omit those controls
+    on the client (subtask scan and recon note do not require these URLs).
     """
     return {
         "subdomain": {
             "attackSurface": reverse("api:llm_get_possible_attacks"),
             "toggleSubdomain": reverse("api:toggle_subdomain"),
+        },
+        "ip": {
+            "attackSurface": reverse("api:llm_get_possible_attacks"),
+            "toggleIpImportant": reverse("api:toggle_ip_important"),
+            "unlinkScanIps": reverse("api:unlink_scan_ip_addresses"),
+            "getIpDetails": reverse("api:getIpDetails"),
+            "querySubdomains": reverse("api:querySubdomains"),
         },
         "vulnerability": {
             "llmReport": reverse("api:llm_vulnerability_report_generator"),

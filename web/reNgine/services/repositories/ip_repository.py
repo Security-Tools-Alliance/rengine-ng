@@ -1,19 +1,38 @@
 """
 IP Address Repository - Data access for IP address operations.
+
 Handles IpAddress database operations with Secator integration.
+
+Scan scoping and deduplication (aligned with reNgine.services.repositories.scan_lookups):
+- An IP row is considered in a scan when it is linked via Subdomain.ip_addresses (M2M) for
+  that scan_history, or via EndPoint.ip_address for that scan_history.
+- Multiple IpAddress rows with the same normalized address in one scan are merged with
+  merge_duplicate_into (lowest id kept). Prefer first_ip_in_scan / get_or_create_for_scan
+  instead of ad hoc queries.
 """
 
 from typing import Any, Dict, Optional, Tuple
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.db.models import Q
 
+from reNgine.core.ip_literal import normalize_ip_address_text
 from reNgine.core.validators import is_valid_ip
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
-from startScan.models import IpAddress, ScanHistory, Subdomain
+from startScan.models import (
+    Certificate,
+    EndPoint,
+    Exploit,
+    IpAddress,
+    Port,
+    ScanHistory,
+    Subdomain,
+    Vulnerability,
+)
 from targetApp.models import Target
 
 
@@ -21,8 +40,84 @@ PREFIX_IP_REPO = "[IP_REPO]"
 logger = get_module_logger(__name__)
 
 
+def normalize_ip_address_string(addr: str) -> Optional[str]:
+    """Return canonical string form of addr if it is a valid IPv4/IPv6 address."""
+    return normalize_ip_address_text(addr)
+
+
 class IpRepository:
     """Repository for IP address-related database operations."""
+
+    def merge_duplicate_into(self, canonical: IpAddress, duplicate: IpAddress) -> None:
+        """Repoint all relations from duplicate to canonical and delete duplicate."""
+        if canonical.pk == duplicate.pk:
+            return
+        with transaction.atomic():
+            for sub in Subdomain.objects.filter(ip_addresses=duplicate).distinct():
+                sub.ip_addresses.add(canonical)
+                sub.ip_addresses.remove(duplicate)
+            EndPoint.objects.filter(ip_address=duplicate).update(ip_address=canonical)
+            Port.objects.filter(ip_address=duplicate).update(ip_address=canonical)
+            Vulnerability.objects.filter(ip_address=duplicate).update(ip_address=canonical)
+            Certificate.objects.filter(ip_address=duplicate).update(ip_address=canonical)
+            Exploit.objects.filter(ip_address=duplicate).update(ip_address=canonical)
+            duplicate.delete()
+
+    def first_ip_in_scan(self, normalized_address: str, scan_history_id: int) -> Optional[IpAddress]:
+        """Return the canonical IpAddress row for this address in the scan, merging duplicates if needed."""
+        q = Q(ip_addresses__scan_history_id=scan_history_id) | Q(ip_endpoints__scan_history_id=scan_history_id)
+        rows = list(IpAddress.objects.filter(address=normalized_address).filter(q).distinct().order_by("id"))
+        if not rows:
+            return None
+        canon = rows[0]
+        for dup in rows[1:]:
+            self.merge_duplicate_into(canon, dup)
+        return IpAddress.objects.filter(pk=canon.pk).first()
+
+    def get_or_create_for_scan(
+        self,
+        scan_history_id: int,
+        target_id: int,
+        address: str,
+        *,
+        alive: Optional[bool] = None,
+        item_protocol: Optional[str] = None,
+        rengine_context: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Optional[IpAddress], bool]:
+        """
+        Return (IpAddress, created) for this address scoped to the scan.
+
+        Reuses an existing row linked via Subdomain M2M or EndPoint.ip_address for the same scan;
+        merges duplicate rows for the same address in that scan.
+        """
+        normalized = normalize_ip_address_string(address)
+        if not normalized:
+            return None, False
+
+        if existing := self.first_ip_in_scan(normalized, scan_history_id):
+            if alive is not None and existing.alive != alive:
+                existing.alive = alive
+                existing.save(update_fields=["alive"])
+            return existing, False
+
+        version = self._get_ip_version(normalized)
+        protocol = self._resolve_protocol(version, item_protocol)
+        ip_obj = IpAddress.objects.create(
+            address=normalized,
+            is_cdn=False,
+            is_private=self._is_private_ip(normalized),
+            version=version,
+            alive=alive if alive is not None else False,
+            protocol=protocol,
+        )
+        logger.log_line(
+            PREFIX_IP_REPO,
+            "GET_OR_CREATE_SCAN",
+            "Created IP address for scan: %s scan_id=%s" % (normalized, scan_history_id),
+            level="info",
+        )
+        self._collect_ip_for_geolocalization(normalized)
+        return ip_obj, True
 
     def save_from_secator(
         self,
@@ -91,54 +186,60 @@ class IpRepository:
 
         ScanHistory.objects.get(id=scan_history_id)
 
-        version = self._get_ip_version(ip_address)
-        protocol = self._resolve_protocol(version, item.get("protocol"))
-
-        # Get or create IP address
-        ip_obj, created = IpAddress.objects.get_or_create(
-            address=ip_address,
-            defaults={
-                "is_cdn": False,
-                "is_private": self._is_private_ip(ip_address),
-                "version": version,
-                "alive": item.get("alive", False),
-                "protocol": protocol,
-            },
+        ip_obj, created = self.get_or_create_for_scan(
+            scan_history_id,
+            target_id,
+            ip_address,
+            alive=item.get("alive", False),
+            item_protocol=item.get("protocol"),
+            rengine_context=rengine_context,
         )
+        if not ip_obj:
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "SAVE",
+                "Skipped Secator IP (invalid or unnormalizable address): scan_id=%s target_id=%s raw=%r"
+                % (scan_history_id, target_id, ip_address),
+                level="warning",
+            )
+            return None
 
         if created:
             logger.log_line(
                 PREFIX_IP_REPO,
                 "SAVE",
-                "Created IP address: %s" % (ip_address,),
+                "Created IP address for scan: %s" % (ip_obj.address,),
                 level="info",
             )
-            # Collect for batch geolocalization
-            self._collect_ip_for_geolocalization(ip_address)
         else:
             logger.log_line(
                 PREFIX_IP_REPO,
                 "SAVE",
-                "IP address already exists: %s" % (ip_address,),
+                "IP address already in scan: %s" % (ip_obj.address,),
                 level="debug",
             )
 
-        # Get or create subdomain for hostname (or IP) and associate IP to it
+        # Link this IpAddress to a DNS hostname on a Subdomain only (not IP literals; those use IpAddress + EndPoint).
         hostname = self._resolve_hostname_for_association(item, ip_address)
-        if not hostname:
-            hostname = ip_address
-        if hostname and is_acceptable_subdomain_name(hostname):
-            subdomain = SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, hostname)
+        if hostname and is_acceptable_subdomain_name(hostname) and not is_valid_ip(hostname):
+            subdomain = SubdomainRepository().get_or_create_from_host(
+                scan_history_id, target_id, hostname, rengine_context=rengine_context
+            )
             if subdomain:
-                self._associate_with_subdomain(ip_obj, hostname, scan_history_id)
+                subdomain.ip_addresses.add(ip_obj)
+                logger.log_line(
+                    PREFIX_IP_REPO,
+                    "ASSOCIATE_IP_TO_SUBDOMAIN",
+                    "IP %s linked to subdomain %s" % (ip_obj.address, hostname),
+                    level="debug",
+                )
 
         # Ensure an endpoint exists for this IP so it can be used as a Secator target (e.g. subscans)
         from reNgine.services.repositories.endpoint_repository import EndpointRepository
 
-        EndpointRepository().create_endpoint_for_ip(ip_address, scan_history_id, domain_id)
+        EndpointRepository().create_endpoint_for_ip(ip_obj.address, scan_history_id, domain_id)
 
-        subscan_id = rengine_context.get("subscan_id")
-        if subscan_id:
+        if subscan_id := rengine_context.get("subscan_id"):
             from startScan.models import SubScan
 
             try:

@@ -35,7 +35,7 @@ def _target_ids_queryset(organization: Organization):
 
 def _target_filter(target_ids: list[int]) -> Q:
     """Q filter for scan_history__target_id__in=target_ids; empty list => no match."""
-    return Q(pk=-1) if not target_ids else Q(scan_history__target_id__in=target_ids)
+    return Q(scan_history__target_id__in=target_ids) if target_ids else Q(pk=-1)
 
 
 def get_organization_dashboard_data(organization: Organization) -> dict[str, Any]:
@@ -173,6 +173,10 @@ def get_organization_dashboard_data(organization: Organization) -> dict[str, Any
     domain_total = domain_counts.get("total") or 0
     exploit_total = Exploit.objects.filter(scan_history__target_id__in=target_ids).count()
 
+    from reNgine.services.scan_finding_metrics import get_ip_metrics_for_target_ids
+
+    ip_total, ip_alive = get_ip_metrics_for_target_ids(target_ids)
+
     return {
         "organization": organization,
         "scope_count": scope_count,
@@ -186,6 +190,8 @@ def get_organization_dashboard_data(organization: Organization) -> dict[str, Any
         "alive_count": subdomain_counts.get("alive") or 0,
         "endpoint_count": endpoint_counts.get("total") or 0,
         "endpoint_alive_count": endpoint_counts.get("alive") or 0,
+        "ip_address_count": ip_total,
+        "ip_alive_count": ip_alive,
         "info_count": vuln_counts_direct.get("vuln_info") or 0,
         "low_count": vuln_counts_direct.get("vuln_low") or 0,
         "medium_count": vuln_counts_direct.get("vuln_medium") or 0,
@@ -241,6 +247,8 @@ def _empty_dashboard_context(
         "alive_count": 0,
         "endpoint_count": 0,
         "endpoint_alive_count": 0,
+        "ip_address_count": 0,
+        "ip_alive_count": 0,
         "info_count": 0,
         "low_count": 0,
         "medium_count": 0,

@@ -7,6 +7,8 @@ from .test_endpoint import (
     TestInterestingEndpointViewSet,
 )
 from .test_ip import (
+    TestGetIpDetails,
+    TestIpActionApiResponses,
     TestIpAddressViewSet,
     TestIPToDomain,
     TestListIPs,
@@ -69,6 +71,7 @@ from .test_subdomain import (
     TestSubdomainsViewSet,
     TestToggleSubdomainImportantStatus,
 )
+from .test_subdomain_ip_xor import SubdomainIpXorHelpersTests
 from .test_target import (
     TestAddTarget,
     TestListTargetsDatatableViewSet,
@@ -100,6 +103,8 @@ __all__ = [
     "TestEndPointViewSet",
     "TestInterestingEndpointViewSet",
     # test_ip
+    "TestGetIpDetails",
+    "TestIpActionApiResponses",
     "TestIpAddressViewSet",
     "TestIPToDomain",
     "TestListIPs",
@@ -137,6 +142,8 @@ __all__ = [
     "TestVisualiseData",
     # test_start_scan
     "TestStartScanAPI",
+    # test_subdomain_ip_xor
+    "SubdomainIpXorHelpersTests",
     # test_search
     "TestSearchHistoryView",
     "TestUniversalSearch",
