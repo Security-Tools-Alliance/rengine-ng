@@ -325,13 +325,9 @@ def build_ip_datatable_base_queryset(request: Any) -> QuerySet:
 
     if target_id:
         scan_ids = ScanHistory.objects.filter(target_id=target_id).values_list("id", flat=True)
-        ips = (
-            IpAddress.objects.filter(
-                Q(ip_addresses__scan_history_id__in=scan_ids)
-                | Q(ip_endpoints__scan_history_id__in=scan_ids)
-            )
-            .distinct()
-        )
+        ips = IpAddress.objects.filter(
+            Q(ip_addresses__scan_history_id__in=scan_ids) | Q(ip_endpoints__scan_history_id__in=scan_ids)
+        ).distinct()
     elif scan_id:
         ips = IpAddress.objects.filter(
             Q(ip_addresses__scan_history_id=scan_id) | Q(ip_endpoints__scan_history_id=scan_id)

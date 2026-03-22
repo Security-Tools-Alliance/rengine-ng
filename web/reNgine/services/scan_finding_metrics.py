@@ -14,6 +14,7 @@ Use these entry points to avoid drift:
 - List views with prefetch: attach_ip_metrics_to_scans sets SCAN_HISTORY_IP_COUNT_ATTR /
   SCAN_HISTORY_IP_ALIVE_ATTR on each ScanHistory (+ bulk_ip_metrics_for_scans).
 - APIs that filter client-supplied IP PKs by scan: partition_ip_address_ids_for_scan_history.
+- APIs that filter client-supplied IP PKs by target (all scans of that target): partition_ip_address_ids_for_target.
 - Single-PK membership check: ip_address_id_linked_to_scan (shared Q: ip_address_linked_to_scan_q).
 - Target / multi-target / project aggregates: get_ip_metrics_for_target,
   get_ip_metrics_for_target_ids, get_ip_metrics_for_project
@@ -90,6 +91,37 @@ def partition_ip_address_ids_for_scan_history(
     scan or ``EndPoint.ip_address`` on that scan.
     """
     allowed = ip_address_ids_in_scan(scan_history_id)
+    valid = [i for i in ip_ids if i in allowed]
+    invalid = [i for i in ip_ids if i not in allowed]
+    return valid, invalid
+
+
+def ip_address_ids_for_target(target_id: int) -> Set[int]:
+    """
+    Distinct IpAddress PKs tied to any scan of this target (Subdomain M2M or EndPoint.ip_address).
+
+    Same union semantics as ``ListIPs`` / ``build_ip_datatable_base_queryset`` for ``target_id``.
+    """
+    if not target_id or target_id < 1:
+        return set()
+    scan_ids = list(ScanHistory.objects.filter(target_id=target_id).values_list("id", flat=True))
+    if not scan_ids:
+        return set()
+    via_m2m = set(
+        IpAddress.objects.filter(ip_addresses__scan_history_id__in=scan_ids).values_list("id", flat=True).distinct()
+    )
+    via_ep = set(
+        IpAddress.objects.filter(ip_endpoints__scan_history_id__in=scan_ids).values_list("id", flat=True).distinct()
+    )
+    return via_m2m.union(via_ep)
+
+
+def partition_ip_address_ids_for_target(
+    ip_ids: Sequence[int],
+    target_id: int,
+) -> tuple[list[int], list[int]]:
+    """Split requested IP PKs into those linked to the target vs not."""
+    allowed = ip_address_ids_for_target(target_id)
     valid = [i for i in ip_ids if i in allowed]
     invalid = [i for i in ip_ids if i not in allowed]
     return valid, invalid

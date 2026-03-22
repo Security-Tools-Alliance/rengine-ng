@@ -79,6 +79,7 @@ class TestGetDatatableActionUrls(BaseTestCase):
         self.assertIn("attackSurface", ip_urls)
         self.assertIn("toggleIpImportant", ip_urls)
         self.assertIn("unlinkScanIps", ip_urls)
+        self.assertIn("unlinkTargetIps", ip_urls)
         self.assertIn("getIpDetails", ip_urls)
         self.assertIn("querySubdomains", ip_urls)
         for key, path in ip_urls.items():

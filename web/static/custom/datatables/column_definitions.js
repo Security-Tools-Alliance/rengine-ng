@@ -338,6 +338,7 @@
           return renderers.renderIpActions(row, {
             urls: window.RENGINE_DATATABLE_ACTION_URLS && window.RENGINE_DATATABLE_ACTION_URLS.ip,
             scanHistoryId: useScanScope ? scanHistoryNum : 0,
+            domainId: useDomainScope ? domainNum : 0,
             projectSlug: projectSlug,
           });
         },

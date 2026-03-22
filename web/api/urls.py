@@ -110,6 +110,7 @@ from .views import (
     UncommonWebPortsView,
     UniversalSearch,
     UnlinkScanIpAddresses,
+    UnlinkTargetIpAddresses,
     UpdateSecatorScan,
     UpdateSecatorTask,
     UpdateSecatorWorkflow,
@@ -232,6 +233,7 @@ urlpatterns = [
     path("toggle/subdomain/important/", ToggleSubdomainImportantStatus.as_view(), name="toggle_subdomain"),
     path("toggle/ip/important/", ToggleIpAddressImportantStatus.as_view(), name="toggle_ip_important"),
     path("action/scan/unlink_ips/", UnlinkScanIpAddresses.as_view(), name="unlink_scan_ip_addresses"),
+    path("action/target/unlink_ips/", UnlinkTargetIpAddresses.as_view(), name="unlink_target_ip_addresses"),
     path("action/initiate/subtask/", InitiateSubTask.as_view(), name="initiate_subscan"),
     path("subdomain/names/", GetSubdomainNames.as_view(), name="get_subdomain_names"),
     path(

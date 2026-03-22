@@ -1728,6 +1728,148 @@ function download_important_subdomains(scan_id = null, domain_id = null, domain_
 	});
 }
 
+/**
+ * Invoke SweetAlert without throwing if fireSweetAlert is missing or misconfigured.
+ * Falls back to swal / Swal with the same argument list.
+ */
+function tryFireSweetAlert() {
+	var args = Array.prototype.slice.call(arguments);
+	var fn = window.fireSweetAlert;
+	if (typeof fn === 'function') {
+		try {
+			return fn.apply(null, args);
+		} catch (e) {
+			// ignore broken overrides
+		}
+	}
+	if (window.swal && typeof window.swal.fire === 'function') {
+		try {
+			return window.swal.fire.apply(window.swal, args);
+		} catch (e) {
+			// ignore
+		}
+	}
+	if (window.Swal && typeof window.Swal.fire === 'function') {
+		try {
+			return window.Swal.fire.apply(window.Swal, args);
+		} catch (e) {
+			// ignore
+		}
+	}
+	return null;
+}
+
+function download_ips(scan_id = null, domain_id = null, domain_name = null) {
+	tryFireSweetAlert({
+		title: 'Querying IP Addresses...',
+		allowOutsideClick: false,
+		didOpen: function () {
+			if (window.Swal && typeof window.Swal.showLoading === 'function') {
+				window.Swal.showLoading();
+			} else if (window.swal && typeof window.swal.showLoading === 'function') {
+				window.swal.showLoading();
+			}
+		},
+	});
+	const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.listIPs) || '/api/queryIps/';
+	let url = baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?');
+	if (scan_id) {
+		url += 'scan_id=' + encodeURIComponent(scan_id);
+	} else if (domain_id) {
+		url += 'target_id=' + encodeURIComponent(domain_id);
+	}
+	$.getJSON(url, function (data) {
+		if (typeof window.closeSwalOverlays === 'function') {
+			window.closeSwalOverlays();
+		}
+		const list = (data && data.ips) || [];
+		if (list.length) {
+			const count = list.length;
+			const lines = list.map(function (ip) {
+				return ip && ip.address ? ip.address : '';
+			}).filter(Boolean).join('\n');
+			const title = (`<span class="modal_count">${count}</span> IP addresses for : <b>${domain_name || ''}</b>`).trim() || `<span class="modal_count">${count}</span> IP addresses`;
+			const bodyHtml = `<textarea class="form-control clipboard copy-txt" id="all_ips_text_area" rows="10" spellcheck="false">${lines}</textarea>`;
+			const footerHtml = `<a href="javascript:download('ips-${domain_name || 'all'}.txt', document.getElementById('all_ips_text_area').value);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download IP addresses as txt</a><a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy IP addresses!" data-clipboard-target="#all_ips_text_area"><i class="fe-copy me-1"></i> Copy IP addresses</a>`;
+			if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml });
+		} else {
+			tryFireSweetAlert({
+				icon: 'warning',
+				title: 'No IP Addresses',
+				text: 'Could not find any IP addresses.',
+				confirmButtonText: 'Okay',
+			});
+		}
+	}).fail(function () {
+		if (typeof window.closeSwalOverlays === 'function') {
+			window.closeSwalOverlays();
+		}
+		tryFireSweetAlert({
+			icon: 'warning',
+			title: 'No IP Addresses',
+			text: 'Could not find any IP addresses.',
+			confirmButtonText: 'Okay',
+		});
+	});
+}
+
+function download_important_ips(scan_id = null, domain_id = null, domain_name = null) {
+	tryFireSweetAlert({
+		title: 'Querying IP Addresses...',
+		allowOutsideClick: false,
+		didOpen: function () {
+			if (window.Swal && typeof window.Swal.showLoading === 'function') {
+				window.Swal.showLoading();
+			} else if (window.swal && typeof window.swal.showLoading === 'function') {
+				window.swal.showLoading();
+			}
+		},
+	});
+	const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.listIPs) || '/api/queryIps/';
+	let url = baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?');
+	if (scan_id) {
+		url += 'scan_id=' + encodeURIComponent(scan_id);
+	} else if (domain_id) {
+		url += 'target_id=' + encodeURIComponent(domain_id);
+	}
+	$.getJSON(url, function (data) {
+		if (typeof window.closeSwalOverlays === 'function') {
+			window.closeSwalOverlays();
+		}
+		const raw = (data && data.ips) || [];
+		const list = raw.filter(function (ip) {
+			return ip && ip.is_important;
+		});
+		if (list.length) {
+			const count = list.length;
+			const lines = list.map(function (ip) {
+				return ip.address || '';
+			}).filter(Boolean).join('\n');
+			const title = (`<span class="modal_count">${count}</span> IP addresses marked as important : <b>${domain_name || ''}</b>`).trim() || `<span class="modal_count">${count}</span> IP addresses marked as important`;
+			const bodyHtml = `<textarea class="form-control clipboard copy-txt" id="important_ips_text_area" rows="10" spellcheck="false">${lines}</textarea>`;
+			const footerHtml = `<a href="javascript:download('important-ips-${domain_name || 'all'}.txt', document.getElementById('important_ips_text_area').value);" class="m-1 btn btn-primary copyable float-end btn-md"><i class="fe-download me-1"></i> Download IP addresses as txt</a><a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-dark copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy IP addresses!" data-clipboard-target="#important_ips_text_area"><i class="fe-copy me-1"></i> Copy IP addresses</a>`;
+			if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml });
+		} else {
+			tryFireSweetAlert({
+				icon: 'warning',
+				title: 'No Important IP Addresses',
+				text: 'No IP addresses have been marked as important.',
+				confirmButtonText: 'Okay',
+			});
+		}
+	}).fail(function () {
+		if (typeof window.closeSwalOverlays === 'function') {
+			window.closeSwalOverlays();
+		}
+		tryFireSweetAlert({
+			icon: 'warning',
+			title: 'No Important IP Addresses',
+			text: 'No IP addresses have been marked as important.',
+			confirmButtonText: 'Okay',
+		});
+	});
+}
+
 function download_endpoints(scan_id = null, domain_id = null, domain_name = '', pattern = null) {
 	Swal.fire({ title: 'Querying Endpoints...' });
 	Swal.showLoading();
@@ -2010,9 +2152,12 @@ function deleteMultipleSubdomains(){
 		// atleast one target is selected
 		Swal.fire({
 			showCancelButton: true,
-			title: 'Are you sure you want to delete ' + checkedCount() + ' Subdomains?',
-			text: 'Do you really want to delete these subdomains? This action cannot be undone.',
-			icon: 'error',
+			title: 'Permanently delete selected subdomains?',
+			text:
+				'This permanently removes ' +
+				checkedCount() +
+				' subdomain record(s) from the database. Endpoints, vulnerability findings, and other recon data tied to those subdomains are removed as well. Parent domains and targets are not deleted. This cannot be undone.',
+			icon: 'warning',
 			confirmButtonText: 'Delete',
 		}).then((result) => {
 			if (result.isConfirmed) {

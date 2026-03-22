@@ -25,7 +25,7 @@
 							{% endif %}
 							<a class="btn btn-sm btn-soft-info disabled" data-button="subdomain_btns" data-toggle="tooltip" title="Download selected subdomains" aria-label="Download selected subdomains" onclick="downloadSelectedSubdomains('{% if target_summary %}{{ target.value|escapejs }}{% else %}{{ scan_display_name|escapejs }}{% endif %}'); return false;"><i class="fe-download"></i></a>
 							{% if user|can:'initiate_scans' %}
-							<a class="btn btn-sm btn-soft-danger disabled" data-button="subdomain_btns" data-toggle="tooltip" title="Delete multiple subdomains" aria-label="Delete multiple subdomains" onclick="deleteMultipleSubdomains(); return false;"><i class="fe-trash-2"></i></a>
+							<a class="btn btn-sm btn-soft-danger disabled" data-button="subdomain_btns" data-toggle="tooltip" title="Permanently delete selected subdomains and their dependent recon data" aria-label="Permanently delete selected subdomains and their dependent recon data" onclick="deleteMultipleSubdomains(); return false;"><i class="fe-trash-2"></i></a>
 							{% endif %}
 						</div>
 						<div class="ms-1">
@@ -77,7 +77,7 @@
 
 							</div>
 
-							<a class="btn btn-sm btn-soft-danger ms-1" data-toggle="tooltip" data-placement="top" title="Important Subdomains" id="load_important_subdomain_table_btn" aria-label="Important subdomains"><i class="mdi mdi-alert-rhombus-outline"></i></a>
+							<a class="btn btn-sm btn-soft-danger ms-1" data-toggle="tooltip" data-placement="top" title="Toggle important subdomains" id="load_important_subdomain_table_btn" aria-label="Toggle important subdomains" aria-pressed="false"><i class="mdi mdi-alert-rhombus-outline"></i></a>
 							<a class="btn btn-sm btn-soft-primary ms-2 me-2" data-toggle="tooltip" data-placement="top" title="Reload Subdomains" id="reload_subdomain_table_btn" aria-label="Reload"><i class="fe-refresh-cw"></i></a>
 							<button class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Download Subdomains" aria-label="Download">
 								<i class="fe-download"></i>

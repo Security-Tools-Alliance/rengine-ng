@@ -46,7 +46,14 @@
 									</div>
 								</div>
 							</div>
+							<a class="btn btn-sm btn-soft-danger ms-1" data-toggle="tooltip" data-placement="top" title="Toggle important IP addresses" id="load_important_ip_table_btn" aria-label="Toggle important IP addresses" aria-pressed="false"><i class="mdi mdi-alert-rhombus-outline"></i></a>
 							<a class="btn btn-sm btn-soft-primary ms-2 me-2" data-toggle="tooltip" data-placement="top" title="Reload IP Addresses" id="reload_ip_table_btn" aria-label="Reload"><i class="fe-refresh-cw"></i></a>
+							<button class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Download IP Addresses" aria-label="Download IP addresses">
+								<i class="fe-download"></i>
+							</button>
+							<div class="dropdown-menu" style="">
+								{% include 'base/_items/_ip_download_links.html' %}
+							</div>
 						</div>
 						<div class="btn-group btn-group-sm mb-2 float-end dropstart">
 							<button class="btn btn-sm btn-soft-info dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="IP Grouping" aria-label="Grouping">

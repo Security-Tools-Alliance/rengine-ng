@@ -15,6 +15,7 @@ from reNgine.services.scan_finding_metrics import (
     get_scan_finding_counts,
     ip_address_id_linked_to_scan,
     partition_ip_address_ids_for_scan_history,
+    partition_ip_address_ids_for_target,
 )
 from reNgine.utilities.websocket import build_light_scan_status_message
 from startScan.models import EndPoint, IpAddress, ScanHistory
@@ -76,6 +77,17 @@ class ScanFindingMetricsTestCase(BaseTestCase):
             self.scan.id,
         )
         self.assertEqual(valid, [ip_in.id, ip_in.id])
+        self.assertEqual(invalid, [ip_out.id])
+
+    def test_partition_ip_address_ids_for_target(self) -> None:
+        target = self.data_generator.target
+        self.assertIsNotNone(target)
+        sub = self.data_generator.create_subdomain(scan_history=self.scan, domain=self.domain)
+        ip_in = IpAddress.objects.create(address="192.0.2.60", version=4, alive=True)
+        ip_out = IpAddress.objects.create(address="192.0.2.61", version=4, alive=True)
+        sub.ip_addresses.add(ip_in)
+        valid, invalid = partition_ip_address_ids_for_target([ip_in.id, ip_out.id], target.id)
+        self.assertEqual(valid, [ip_in.id])
         self.assertEqual(invalid, [ip_out.id])
 
     def test_bulk_ip_metrics_for_scans(self) -> None:

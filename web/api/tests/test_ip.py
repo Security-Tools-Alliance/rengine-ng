@@ -11,8 +11,10 @@ from rest_framework import status
 from api.helpers.ip_action_response import (
     IP_ERR_INVALID_IP_ADDRESS_IDS,
     IP_ERR_IP_NOT_IN_SCAN,
+    IP_ERR_IP_NOT_IN_TARGET,
     IP_ERR_MISSING_IP_ADDRESS_ID,
     IP_ERR_MISSING_REQUIRED_FIELDS,
+    IP_ERR_TARGET_NOT_FOUND,
 )
 from reNgine.services.scan_finding_metrics import get_ip_address_metrics_for_scan
 from startScan.models import EndPoint, IpAddress, Port
@@ -144,6 +146,37 @@ class TestListIPs(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         addresses = {row["address"] for row in response.data["data"]}
         self.assertEqual(addresses, {"203.0.113.77"})
+
+    def test_list_ips_datatables_search_is_important_true(self) -> None:
+        """DataTables global search supports is_important=true (important-only toggle)."""
+        dg = self.data_generator
+        scan = dg.scan_history
+        now = timezone.now()
+        ip_important = IpAddress.objects.create(address="203.0.113.81", alive=True, is_important=True)
+        ip_normal = IpAddress.objects.create(address="203.0.113.82", alive=True, is_important=False)
+        for ip in (ip_important, ip_normal):
+            EndPoint.objects.create(
+                domain=dg.domain,
+                subdomain=None,
+                scan_history=scan,
+                http_url=f"http://{ip.address}/",
+                discovered_date=now,
+                ip_address=ip,
+            )
+        url = reverse("api:listIPs")
+        response = self.client.get(
+            url,
+            {
+                "scan_id": scan.id,
+                "start": "0",
+                "length": "100",
+                "search[value]": "is_important=true",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        addresses = {row["address"] for row in response.data["data"]}
+        self.assertIn(ip_important.address, addresses)
+        self.assertNotIn(ip_normal.address, addresses)
 
     def test_list_ips_datatables_order_column_index_matches_address_column(self):
         """DataTables order[0][column]=1 must sort by address (column 1), not alive."""
@@ -370,6 +403,73 @@ class TestIpActionApiResponses(BaseTestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data.get("error_code"), IP_ERR_INVALID_IP_ADDRESS_IDS)
+
+    def test_unlink_target_ips_returns_error_when_target_missing(self) -> None:
+        url = reverse("api:unlink_target_ip_addresses")
+        dg = self.data_generator
+        dg.subdomain.ip_addresses.add(dg.ip_address)
+        response = self._post_json(
+            url,
+            self.client,
+            {"ip_address_ids": [dg.ip_address.id], "target_id": 999999999},
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data.get("error_code"), IP_ERR_TARGET_NOT_FOUND)
+
+    def test_unlink_target_ips_rejects_ip_not_linked_to_target(self) -> None:
+        url = reverse("api:unlink_target_ip_addresses")
+        dg = self.data_generator
+        other_ip = IpAddress.objects.create(address="198.51.100.99", alive=True)
+        response = self._post_json(
+            url,
+            self.client,
+            {"ip_address_ids": [other_ip.id], "target_id": dg.scan_history.target_id},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get("error_code"), IP_ERR_IP_NOT_IN_TARGET)
+
+    def test_unlink_target_ips_unlinks_subdomain_m2m_and_warns_partial(self) -> None:
+        url = reverse("api:unlink_target_ip_addresses")
+        dg = self.data_generator
+        dg.subdomain.ip_addresses.add(dg.ip_address)
+        other_ip = IpAddress.objects.create(address="198.51.100.100", alive=True)
+        tid = dg.scan_history.target_id
+        response = self._post_json(
+            url,
+            self.client,
+            {"ip_address_ids": [dg.ip_address.id, other_ip.id], "target_id": tid},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data.get("status"))
+        warnings = response.data.get("warnings")
+        self.assertIsNotNone(warnings)
+        self.assertEqual(warnings.get("ignored_ip_address_ids"), [other_ip.id])
+        dg.subdomain.refresh_from_db()
+        self.assertFalse(dg.subdomain.ip_addresses.filter(pk=dg.ip_address.id).exists())
+
+    def test_unlink_target_ips_clears_endpoint_ip_address(self) -> None:
+        url = reverse("api:unlink_target_ip_addresses")
+        dg = self.data_generator
+        orphan = IpAddress.objects.create(address="203.0.113.120", alive=True)
+        EndPoint.objects.create(
+            domain=dg.domain,
+            subdomain=None,
+            scan_history=dg.scan_history,
+            http_url="http://203.0.113.120/",
+            discovered_date=timezone.now(),
+            ip_address=orphan,
+        )
+        tid = dg.scan_history.target_id
+        response = self._post_json(
+            url,
+            self.client,
+            {"ip_address_ids": [orphan.id], "target_id": tid},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data.get("status"))
+        self.assertFalse(
+            EndPoint.objects.filter(scan_history=dg.scan_history, http_url="http://203.0.113.120/").exists()
+        )
 
 
 # TestWhois removed - functionality migrated to Secator

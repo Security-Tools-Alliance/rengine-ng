@@ -23,8 +23,9 @@ def get_datatable_action_urls(project_slug: str) -> dict:
     the URL dict expected by the corresponding renderer.
 
     For the scan-detail IP table, ``ip['attackSurface']``, ``ip['toggleIpImportant']``, and
-    ``ip['unlinkScanIps']`` enable the matching action buttons; missing keys omit those controls
-    on the client (subtask scan and recon note do not require these URLs).
+    ``ip['unlinkScanIps']`` enable the matching action buttons; for the target-summary IP table,
+    ``ip['unlinkTargetIps']`` enables per-row removal from the target. Missing keys omit those
+    controls on the client (subtask scan and recon note do not require these URLs).
     """
     return {
         "subdomain": {
@@ -35,6 +36,7 @@ def get_datatable_action_urls(project_slug: str) -> dict:
             "attackSurface": reverse("api:llm_get_possible_attacks"),
             "toggleIpImportant": reverse("api:toggle_ip_important"),
             "unlinkScanIps": reverse("api:unlink_scan_ip_addresses"),
+            "unlinkTargetIps": reverse("api:unlink_target_ip_addresses"),
             "getIpDetails": reverse("api:getIpDetails"),
             "querySubdomains": reverse("api:querySubdomains"),
         },

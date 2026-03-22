@@ -9,6 +9,9 @@
 (function (window) {
   "use strict";
 
+  let ipImportantOnlyActive = false;
+  let savedIpSearchBeforeImportant = "";
+
   /**
    * @typedef {Object} DetailScanIpTableConfig
    * @property {string} [tableSelector]
@@ -154,14 +157,41 @@
     const ipTable = window.ipTable;
 
     $("#ips-search").on("keyup", function () {
+      if (ipImportantOnlyActive) {
+        ipImportantOnlyActive = false;
+        $("#load_important_ip_table_btn").removeClass("active").attr("aria-pressed", "false");
+      }
       ipTable.search(this.value).draw();
     });
     $("#ip-search-button").on("click", function () {
+      if (ipImportantOnlyActive) {
+        ipImportantOnlyActive = false;
+        $("#load_important_ip_table_btn").removeClass("active").attr("aria-pressed", "false");
+      }
       ipTable.search($("#ips-search").val()).draw();
     });
-    $("#reload_ip_table_btn").on("click", function () {
-      ipTable.ajax.reload();
-    });
+    $("#reload_ip_table_btn")
+      .off("click.ipDtReload")
+      .on("click.ipDtReload", function () {
+        ipTable.ajax.reload();
+      });
+    $("#load_important_ip_table_btn")
+      .off("click.ipDtImportant")
+      .on("click.ipDtImportant", function () {
+        const $btn = $(this);
+        if (!ipImportantOnlyActive) {
+          savedIpSearchBeforeImportant = ipTable.search();
+          ipImportantOnlyActive = true;
+          ipTable.search("is_important=true").draw();
+          $("#ips-search").val("");
+          $btn.addClass("active").attr("aria-pressed", "true");
+        } else {
+          ipImportantOnlyActive = false;
+          ipTable.search(savedIpSearchBeforeImportant).draw();
+          $("#ips-search").val(savedIpSearchBeforeImportant);
+          $btn.removeClass("active").attr("aria-pressed", "false");
+        }
+      });
     $(tableSelector).on("change", ".ip_checkbox", function () {
       const id = Number(this.value);
       if (this.checked) {
@@ -263,5 +293,61 @@
     });
 
     return ipTable;
+  };
+
+  /**
+   * Lazy-load IP DataTable when the IP tab is shown (scan detail or target summary).
+   * @param {DetailScanIpTableConfig} config same as initDetailScanIpDataTable
+   * @param {object} [opts]
+   * @param {string} [opts.tabSelector]
+   * @param {string} [opts.tabPaneId]
+   * @param {boolean} [opts.registerShowIpEndpointsNav] set window.showIpEndpointsByAddress for scan detail
+   */
+  window.registerDetailScanLazyIpTab = function (config, opts) {
+    const $ = window.jQuery;
+    if (!$ || !config) {
+      return;
+    }
+    const o = opts || {};
+    const tabSelector = o.tabSelector || "#pills-ip-tab";
+    const tabPaneId = o.tabPaneId || "ip-tab";
+    const tableSelector = config.tableSelector || "#ip_scan_results";
+    const DataTableLib = window.DataTable;
+
+    window.uncheckIps = window.uncheckIps || function () {};
+
+    if (o.registerShowIpEndpointsNav) {
+      window.showIpEndpointsByAddress =
+        window.showIpEndpointsByAddress ||
+        function (address) {
+          const safeAddress = address || "";
+          $("#pills-endpoints-tab").trigger("click");
+          $("#endpoints-search").val(safeAddress);
+          $("#endpoints-search-button").trigger("click");
+        };
+    }
+
+    const initDetailScanIpTableIfNeeded = function () {
+      if (
+        typeof DataTableLib !== "undefined" &&
+        DataTableLib &&
+        typeof DataTableLib.isDataTable === "function" &&
+        DataTableLib.isDataTable(tableSelector)
+      ) {
+        return;
+      }
+      if (typeof window.initDetailScanIpDataTable === "function") {
+        window.initDetailScanIpDataTable(config);
+      }
+    };
+
+    $(tabSelector)
+      .off("click.ipLazy")
+      .on("click.ipLazy", initDetailScanIpTableIfNeeded);
+
+    const ipTabPaneEl = document.getElementById(tabPaneId);
+    if (ipTabPaneEl && ipTabPaneEl.classList.contains("active") && ipTabPaneEl.classList.contains("show")) {
+      initDetailScanIpTableIfNeeded();
+    }
   };
 })(window);

@@ -1,6 +1,7 @@
 /**
  * DataTables action column renderers (subdomain, IP, vulnerability, target) and confirmDeleteRow, renderScanSummaryBadges.
- * IP row actions: omit controls whose backend URL is missing from RENGINE_DATATABLE_ACTION_URLS.ip (see renderIpActions).
+ * IP row actions: omit optional controls whose URL is missing from RENGINE_DATATABLE_ACTION_URLS.ip; scan/target
+ * unlink delete buttons fall back to default API paths when those keys are absent (see renderIpActions).
  */
 (function (window) {
   "use strict";
@@ -98,7 +99,7 @@
       `<button type="button" class="btn btn-sm btn-soft-primary btn-scan-subdomain bs-tooltip" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" id="${id}"><i class="fe-zap"></i></button>` +
       addNoteHtml +
       `<a href="javascript:;" class="btn btn-sm btn-soft-warning bs-tooltip" data-toggle="tooltip" data-placement="top" title="Mark Important Subdomain" onclick="mark_important_subdomain('${safeAttr(urls.toggleSubdomain || "")}', this, ${id})" id="${id}"><i class="mdi mdi-alert-rhombus-outline"></i></a>` +
-      `<a href="javascript:;" class="btn btn-sm btn-soft-danger btn-delete-subdomain bs-tooltip" data-toggle="tooltip" data-placement="top" title="Delete Subdomain" id="${id}"><i class="fe-trash-2"></i></a>` +
+      `<a href="javascript:;" class="btn btn-sm btn-soft-danger btn-delete-subdomain bs-tooltip" data-toggle="tooltip" data-placement="top" title="Permanently delete subdomain and dependent recon data" id="${id}"><i class="fe-trash-2"></i></a>` +
       "</div>"
     );
   };
@@ -121,6 +122,14 @@
         ? Number(scanHistoryRaw)
         : NaN;
     const hasValidScanHistory = !Number.isNaN(scanHistoryNum) && scanHistoryNum > 0;
+    const domainIdRaw = options && options.domainId;
+    const domainIdNum =
+      domainIdRaw !== undefined && domainIdRaw !== null && domainIdRaw !== ""
+        ? Number(domainIdRaw)
+        : NaN;
+    const hasValidDomain = !Number.isNaN(domainIdNum) && domainIdNum > 0;
+    const unlinkScanUrl = urls.unlinkScanIps || "/api/action/scan/unlink_ips/";
+    const unlinkTargetUrl = urls.unlinkTargetIps || "/api/action/target/unlink_ips/";
     const parts = [];
     if (urls.attackSurface) {
       parts.push(
@@ -138,9 +147,13 @@
         `<a href="javascript:;" class="btn btn-sm btn-soft-warning bs-tooltip" data-toggle="tooltip" data-placement="top" title="Mark Important IP" onclick="mark_important_ip('${safeAttr(urls.toggleIpImportant)}', this, ${id})" id="ip-important-${id}"><i class="mdi mdi-alert-rhombus-outline"></i></a>`
       );
     }
-    if (urls.unlinkScanIps && hasValidScanHistory) {
+    if (hasValidScanHistory && unlinkScanUrl) {
       parts.push(
         `<a href="javascript:;" class="btn btn-sm btn-soft-danger btn-delete-scan-ip bs-tooltip" data-toggle="tooltip" data-placement="top" title="Unlink IP from this scan (does not delete the IP globally)" data-ip-id="${id}" data-scan-history-id="${safeAttr(String(scanHistoryNum))}"><i class="fe-trash-2"></i></a>`
+      );
+    } else if (hasValidDomain && unlinkTargetUrl) {
+      parts.push(
+        `<a href="javascript:;" class="btn btn-sm btn-soft-danger btn-delete-target-ip bs-tooltip" data-toggle="tooltip" data-placement="top" title="Remove IP from this target (all scans; does not delete the IP record if still used elsewhere)" data-ip-id="${id}" data-target-id="${safeAttr(String(domainIdNum))}"><i class="fe-trash-2"></i></a>`
       );
     }
     if (!parts.length) {
@@ -161,7 +174,7 @@
       '<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">' +
       `<a href="javascript:fetch_llm_vuln_details('${safeAttr(urls.llmReport || "")}', ${id}, '${name}');" class="btn btn-sm btn-soft-info" data-toggle="tooltip" data-placement="top" title="Fetch LLM Vulnerability Details"><i class="fe-zap"></i></a>` +
       `<a href="javascript:report_hackerone('${safeAttr(urls.hackeroneReport || "")}', ${id}, '${severity}');" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="Report to Hackerone"><i class="fe-share"></i></a>` +
-      `<a href="#" class="btn btn-sm btn-soft-danger btn-delete-vulnerability" id="${id}" data-url="${safeAttr(urls.deleteVulnerability || "")}" data-toggle="tooltip" data-placement="top" title="Delete Vulnerability"><i class="fe-trash-2"></i></a>` +
+      `<a href="#" class="btn btn-sm btn-soft-danger btn-delete-vulnerability" id="${id}" data-url="${safeAttr(urls.deleteVulnerability || "")}" data-toggle="tooltip" data-placement="top" title="Permanently delete this vulnerability finding only"><i class="fe-trash-2"></i></a>` +
       "</div>"
     );
   };

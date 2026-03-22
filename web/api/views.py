@@ -89,9 +89,11 @@ from api.helpers.ip_action_response import (
     IP_ERR_INVALID_IP_ADDRESS_IDS,
     IP_ERR_IP_NOT_FOUND,
     IP_ERR_IP_NOT_IN_SCAN,
+    IP_ERR_IP_NOT_IN_TARGET,
     IP_ERR_MISSING_IP_ADDRESS_ID,
     IP_ERR_MISSING_REQUIRED_FIELDS,
     IP_ERR_SCAN_NOT_FOUND,
+    IP_ERR_TARGET_NOT_FOUND,
     ip_action_error,
 )
 from api.helpers.query import (
@@ -155,7 +157,9 @@ from reNgine.services.scan_finding_metrics import (  # IP PKs in-scan; bulk IP f
     attach_ip_metrics_to_scans,
     attach_ip_metrics_to_targets,
     partition_ip_address_ids_for_scan_history,
+    partition_ip_address_ids_for_target,
 )
+from reNgine.services.target_ip_unlink import unlink_ip_addresses_from_target
 from reNgine.settings import (
     RENGINE_GF_PATTERNS_DIR,
     RENGINE_NUCLEI_TEMPLATES_DIR,
@@ -1464,6 +1468,67 @@ class UnlinkScanIpAddresses(APIView):
             response_data["warnings"] = {
                 "ignored_ip_address_ids": invalid_ids,
                 "message": "Some ip_address_ids are not linked to this scan and were ignored",
+            }
+        return Response(response_data)
+
+
+class UnlinkTargetIpAddresses(APIView):
+    """
+    Remove IP–subdomain links across every scan of the target; detach IP from endpoints that also have a
+    subdomain host; delete IP-only endpoints (subdomain null) so DB check constraints stay valid.
+
+    Rows disappear from the aggregated target IP table when no scan of that target still references the IP.
+    """
+
+    def post(self, request):
+        data = request.data
+        if "target_id" not in data or data.get("target_id") in (None, ""):
+            return ip_action_error(
+                "ip_address_ids and target_id are required",
+                IP_ERR_MISSING_REQUIRED_FIELDS,
+                status=400,
+            )
+        target_id = safe_int_cast(data.get("target_id"), default=None)
+        if isinstance(target_id, list):
+            target_id = safe_int_cast(target_id[0], default=None) if target_id else None
+        if target_id is None or target_id < 1:
+            return ip_action_error(
+                "ip_address_ids and target_id are required",
+                IP_ERR_MISSING_REQUIRED_FIELDS,
+                status=400,
+            )
+        if "ip_address_ids" not in data or data.get("ip_address_ids") is None:
+            return ip_action_error(
+                "ip_address_ids and target_id are required",
+                IP_ERR_MISSING_REQUIRED_FIELDS,
+                status=400,
+            )
+        try:
+            ip_ids = positive_ip_ids(coerce_json_ip_address_ids(data.get("ip_address_ids")))
+        except ValueError:
+            return ip_action_error("Invalid ip_address_ids", IP_ERR_INVALID_IP_ADDRESS_IDS, status=400)
+        if not ip_ids:
+            return ip_action_error("No valid ip_address_ids provided", IP_ERR_INVALID_IP_ADDRESS_IDS, status=400)
+
+        target = Target.objects.filter(pk=target_id).first()
+        if not target:
+            return ip_action_error("Target not found", IP_ERR_TARGET_NOT_FOUND, status=404)
+
+        validated_ids, invalid_ids = partition_ip_address_ids_for_target(ip_ids, target_id)
+        if not validated_ids:
+            return ip_action_error(
+                "None of the provided ip_address_ids are linked to this target",
+                IP_ERR_IP_NOT_IN_TARGET,
+                status=400,
+            )
+
+        unlink_ip_addresses_from_target(target_id, validated_ids)
+
+        response_data: dict = {"status": True}
+        if invalid_ids:
+            response_data["warnings"] = {
+                "ignored_ip_address_ids": invalid_ids,
+                "message": "Some ip_address_ids are not linked to this target and were ignored",
             }
         return Response(response_data)
 
@@ -4247,9 +4312,7 @@ class ListIPs(AdvancedSearchMixin, APIView):
                     "target_id": target_id,
                 },
             )
-            return Response(
-                build_datatables_serverside_response(req, records_total, records_filtered, serializer.data)
-            )
+            return Response(build_datatables_serverside_response(req, records_total, records_filtered, serializer.data))
 
         ip_subdomain_data = get_ip_subdomain_data(ips)
         serializer = IpSerializer(

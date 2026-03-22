@@ -1005,7 +1005,7 @@ $(document).ready(function() {
 
 	var countriesData = {
 		{% for country in asset_countries %}
-			"{{country.iso}}": {{country.count}},
+			"{{country.iso}}": {{country.count}}{% if not forloop.last %},{% endif %}
 		{% endfor %}
 	};
 

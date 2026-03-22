@@ -36,6 +36,34 @@ window.rengineIsImportant = function (value) {
 };
 
 /**
+ * Close any open SweetAlert2 / legacy swal modal.
+ */
+window.closeSwalOverlays = function () {
+	if (window.Swal && typeof window.Swal.close === "function") {
+		window.Swal.close();
+	}
+	if (window.swal && typeof window.swal.close === "function") {
+		window.swal.close();
+	}
+};
+
+/**
+ * Open a SweetAlert modal; prefers legacy swal when present (target summary load order).
+ * SweetAlert2 requires calling fire on the namespace object; a bare extracted function loses `this`.
+ * Forwards all arguments (options object or positional title/text/icon signatures).
+ */
+window.fireSweetAlert = function () {
+	var args = Array.prototype.slice.call(arguments);
+	if (window.swal && typeof window.swal.fire === "function") {
+		return window.swal.fire.apply(window.swal, args);
+	}
+	if (window.Swal && typeof window.Swal.fire === "function") {
+		return window.Swal.fire.apply(window.Swal, args);
+	}
+	return null;
+};
+
+/**
  * Returns a safe link renderer (href, displayText, opts). Prefer window.safeLink (escape.js).
  * Fallback sanitizes href via window.sanitizeUrlForHref / window.normalizeSafeLinkUrl when available.
  * Ensure escape.js loads before this script for full URL sanitization.
@@ -322,7 +350,14 @@ $(document).ready(function() {
 	// do not stack duplicate bindings. Init order: this block runs once on document.ready.
 	$(document).off('click.vulnerability_results', '#vulnerability_results tbody tr');
 	$(document).on('click.vulnerability_results', '#vulnerability_results tbody tr', function(e) {
-		if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('th') || $(e.target).is('span')) {
+		// Use closest() so clicks on icons (e.g. <i>) inside action <a class="btn"> do not open the offcanvas.
+		if (
+			$(e.target).closest("a, button").length ||
+			$(e.target).is("input[type=\"checkbox\"]") ||
+			$(e.target).is("svg") ||
+			$(e.target).is("th") ||
+			$(e.target).is("span")
+		) {
 			return;
 		}
 		if (!$.fn.dataTable.isDataTable('#vulnerability_results')) {
@@ -846,9 +881,10 @@ $(document).on('click.vulnerability_results', '#vulnerability_results .btn-delet
 	const row = this;
 	Swal.fire({
 		showCancelButton: true,
-		title: 'Delete Vulnerability!',
-		text: 'Do you really want to delete this Vulnerability? This action cannot be undone.',
-		icon: 'error',
+		title: 'Permanently delete this finding?',
+		text:
+			'This removes only this vulnerability finding from the database. The related host, subdomain, endpoint, IP, port, or scan is not deleted. Tag, CVE, and CWE links on this finding are cleared with it. This cannot be undone.',
+		icon: 'warning',
 		confirmButtonText: 'Delete',
 	}).then((result) => {
 		if (result.isConfirmed) {
@@ -901,9 +937,10 @@ $("#bulk_delete_vulnerabilities").on('click', function () {
 	const data = {'vulnerability_ids': vulnerabilities_ids};
 	Swal.fire({
 		showCancelButton: true,
-		title: 'Bulk Delete Vulnerabilities!',
-		text: 'Do you really want to delete all those Vulnerabilities? This action cannot be undone.',
-		icon: 'error',
+		title: 'Permanently delete selected findings?',
+		text:
+			'This removes all selected vulnerability findings from the database. Related hosts, subdomains, endpoints, IPs, ports, and scans are not deleted. This cannot be undone.',
+		icon: 'warning',
 		confirmButtonText: 'Delete',
 	}).then((result) => {
 		if (result.isConfirmed) {
