@@ -25,7 +25,7 @@ class Command(SecatorLoaderBase):
         parser.add_argument(
             "--custom-only",
             action="store_true",
-            help="Load only custom profiles",
+            help="No-op: custom profiles are created in the UI only; ship-time YAML lives under config/ as built-in",
         )
 
     def handle(self, *args, **options):
@@ -268,9 +268,12 @@ class Command(SecatorLoaderBase):
             "Loaded %s new %s profiles from config, updated %s existing" % (created_count, label, updated_count)
         )
 
-    def load_custom_profiles(self):
-        """Load custom profiles from config/profiles/ directory."""
-        self._load_profiles_from_config_dir(profile_type="custom")
+    def load_custom_profiles(self) -> None:
+        """Custom profiles are user-defined in the UI; web/config/profiles is loaded as built-in only."""
+        self.stdout.write(
+            "Skipping filesystem custom profile load (custom profiles are managed in the UI; "
+            "reNgine-ng YAML under config/profiles is imported as built-in)."
+        )
 
     def _extract_all_opts(self):
         """

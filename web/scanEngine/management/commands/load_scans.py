@@ -25,7 +25,7 @@ class Command(SecatorLoaderBase):
         parser.add_argument(
             "--custom-only",
             action="store_true",
-            help="Load only custom scans",
+            help="No-op: custom scans are created in the UI only; ship-time YAML lives under config/ as built-in",
         )
 
     def handle(self, *args, **options):
@@ -235,6 +235,9 @@ class Command(SecatorLoaderBase):
             "Loaded %s new %s scans from config, updated %s existing" % (created_count, label, updated_count)
         )
 
-    def load_custom_scans(self):
-        """Load custom scans from config/scans/ directory."""
-        self._load_scans_from_config_dir(scan_config_type="custom")
+    def load_custom_scans(self) -> None:
+        """Custom scans are user-defined in the UI; web/config/scans is loaded as built-in only."""
+        self.stdout.write(
+            "Skipping filesystem custom scan load (custom scans are managed in the UI; "
+            "reNgine-ng YAML under config/scans is imported as built-in)."
+        )

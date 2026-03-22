@@ -5,8 +5,10 @@ This file contains unit tests for the Secator management commands.
 """
 
 import contextlib
-from io import StringIO
+import os
 import sys
+import tempfile
+from io import StringIO
 from unittest.mock import MagicMock, mock_open, patch
 
 from django.core.management import call_command
@@ -1001,6 +1003,53 @@ opts:
 
         # Verify no profiles were created
         self.assertEqual(SecatorProfile.objects.filter(profile_type="builtin").count(), 0)
+
+    def test_load_profiles_full_keeps_config_dir_profiles_builtin(self) -> None:
+        """Full CLI load must not reclassify reNgine-ng config/profiles YAML as custom (regression for load_secator_all)."""
+        secator_yaml = """type: profile
+name: secator_side_profile
+category: general
+description: Test secator-side profile
+enforce: false
+opts:
+  rate_limit: 1
+"""
+        extra_yaml = """type: profile
+name: extra_rengine_cfg_test
+category: general
+description: From reNgine config dir
+enforce: false
+opts:
+  rate_limit: 2
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            sec_path = os.path.join(tmp, "secator_p.yaml")
+            with open(sec_path, "w", encoding="utf-8") as f:
+                f.write(secator_yaml)
+            prof_dir = os.path.join(tmp, "config", "profiles")
+            os.makedirs(prof_dir, exist_ok=True)
+            with open(os.path.join(prof_dir, "extra.yaml"), "w", encoding="utf-8") as f:
+                f.write(extra_yaml)
+
+            mock_profile = MagicMock()
+            mock_profile.name = "secator_side_profile"
+            mock_profile.description = "Test secator-side profile"
+            mock_profile._path = sec_path
+
+            with patch(
+                "scanEngine.management.commands.load_profiles.get_configs_by_type",
+                return_value=[mock_profile],
+            ):
+                with patch("scanEngine.management.commands.load_profiles.settings.BASE_DIR", tmp):
+                    out = get_test_stdout()
+                    call_command("load_profiles", stdout=out)
+
+        extra = SecatorProfile.objects.filter(name="extra_rengine_cfg_test").first()
+        self.assertIsNotNone(extra)
+        self.assertEqual(extra.profile_type, "builtin")
+        sec = SecatorProfile.objects.filter(name="secator_side_profile").first()
+        self.assertIsNotNone(sec)
+        self.assertEqual(sec.profile_type, "builtin")
 
     @patch("scanEngine.management.commands.check_secator_prefix.get_secator_prefix_diagnostic")
     def test_check_secator_prefix_ok_exits_zero(self, mock_diagnostic):

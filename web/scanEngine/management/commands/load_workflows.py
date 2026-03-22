@@ -14,7 +14,7 @@ from .secator_loader_base import SecatorLoaderBase
 
 
 class Command(SecatorLoaderBase):
-    help = "Load Secator workflows (built-in and custom) into the database"
+    help = "Load Secator workflows (built-in Secator + reNgine-ng config/workflows; custom = UI only)"
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -255,6 +255,9 @@ class Command(SecatorLoaderBase):
             "Loaded %s new %s workflows from config, updated %s existing" % (created_count, label, updated_count)
         )
 
-    def load_custom_workflows(self):
-        """Load custom workflows from config/workflows/ directory."""
-        self._load_workflows_from_config_dir(workflow_type="custom")
+    def load_custom_workflows(self) -> None:
+        """Custom workflows are user-defined in the UI; web/config/workflows is loaded as built-in only."""
+        self.stdout.write(
+            "Skipping filesystem custom workflow load (custom workflows are managed in the UI; "
+            "reNgine-ng YAML under config/workflows is imported as built-in)."
+        )
