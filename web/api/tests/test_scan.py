@@ -9,7 +9,21 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 
-from startScan.models import Domain, ScanHistory, SecatorRunner, Subdomain, Technology
+from api.serializers import ScanHistoryDatatableSerializer, SubScanDatatableSerializer
+from reNgine.services.scan_finding_metrics import (
+    SCAN_FINDING_IP_ALIVE_KEY,
+    SCAN_FINDING_IP_COUNT_KEY,
+    get_scan_finding_counts,
+)
+from startScan.models import (
+    Domain,
+    IpAddress,
+    ScanHistory,
+    SecatorRunner,
+    Subdomain,
+    SubScan,
+    Technology,
+)
 from utils.test_base import BaseTestCase
 
 
@@ -48,6 +62,32 @@ class TestListScanHistory(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["id"], self.data_generator.scan_history.id)
+
+    def test_list_scan_history_datatable_summary_ip_counts_match_get_scan_finding_counts(self) -> None:
+        """DataTable summary IP fields align with get_scan_finding_counts (detail page / WebSocket)."""
+        scan = self.data_generator.scan_history
+        domain = self.data_generator.domain
+        sub = self.data_generator.create_subdomain(scan_history=scan, domain=domain)
+        ip = IpAddress.objects.create(address="192.0.2.88", version=4, alive=True)
+        sub.ip_addresses.add(ip)
+        expected = get_scan_finding_counts(scan.id)
+
+        url = reverse("api:listScanHistory")
+        response = self.client.get(
+            url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": 0,
+                "length": 50,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data", [])
+        row = next((r for r in rows if r.get("id") == scan.id), None)
+        self.assertIsNotNone(row, msg="Expected scan row in DataTable response")
+        summary = row.get("summary") or {}
+        self.assertEqual(summary.get("ip_address_count"), expected[SCAN_FINDING_IP_COUNT_KEY])
+        self.assertEqual(summary.get("ip_alive_count"), expected[SCAN_FINDING_IP_ALIVE_KEY])
 
 
 class TestScanHistoryFilterChoices(BaseTestCase):
@@ -321,6 +361,51 @@ class TestScanHistoryScanTypeFiltering(BaseTestCase):
         ids = [row.get("id") for row in rows]
         self.assertIn(httpx_scan.id, ids)
         self.assertNotIn(cariddi_scan.id, ids)
+
+
+class TestScanEngineUsedDisplay(BaseTestCase):
+    """Regression: unified Type: Name string for scan engine column (legacy prefix for engine-based subscans)."""
+
+    def test_legacy_scan_history_scan_engine_used_matches_datatable_serializer(self) -> None:
+        legacy_scan = self.data_generator.create_scan_history(is_legacy=True)
+        self.assertTrue(legacy_scan.scan_engine_used.startswith("Legacy: "))
+        self.assertIn(self.data_generator.engine_type.engine_name, legacy_scan.scan_engine_used)
+        row = ScanHistoryDatatableSerializer(legacy_scan).data
+        self.assertEqual(row["scan_engine_text"], legacy_scan.scan_engine_used)
+
+    def test_legacy_subscan_datatable_includes_legacy_prefix(self) -> None:
+        legacy_scan = self.data_generator.create_scan_history(is_legacy=True)
+        subdomain = self.data_generator.subdomain
+        subdomain.scan_history = legacy_scan
+        subdomain.save(update_fields=["scan_history_id"])
+        engine = self.data_generator.engine_type
+        subscan = SubScan.objects.create(
+            start_scan_date=timezone.now(),
+            scan_history=legacy_scan,
+            subdomain=subdomain,
+            status=1,
+            engine=engine,
+        )
+        row = SubScanDatatableSerializer(subscan).data
+        self.assertTrue(row["scan_engine_text"].startswith("Legacy: "))
+        self.assertIn(engine.engine_name, row["scan_engine_text"])
+
+    def test_scan_engine_used_shows_legacy_when_engine_type_without_backfill_flag(self) -> None:
+        """Pre-backfill rows: scan_type set but is_legacy_scan False must not show bare Secator."""
+        engine = self.data_generator.engine_type
+        scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=2,
+            target=self.data_generator.target,
+            is_legacy_scan=False,
+            scan_type=engine,
+            tasks=["fetch_url"],
+        )
+        self.assertTrue(scan.uses_legacy_engine_profile)
+        self.assertTrue(scan.scan_engine_used.startswith("Legacy: "))
+        self.assertIn(engine.engine_name, scan.scan_engine_used)
+        row = ScanHistoryDatatableSerializer(scan).data
+        self.assertEqual(row["scan_engine_text"], scan.scan_engine_used)
 
 
 class TestListS3BucketsDatatable(BaseTestCase):

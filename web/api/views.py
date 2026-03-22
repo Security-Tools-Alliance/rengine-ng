@@ -149,7 +149,10 @@ from reNgine.secator.services.target_builder_service import TargetBuilderService
 from reNgine.secator.synthetic_id import synthetic_id_skipped_scope
 from reNgine.services.repositories.ip_repository import normalize_ip_address_string
 from reNgine.services.repositories.scan_lookups import filter_ports_queryset_by_scan_ids, get_ip_linked_to_scan_ids
-from reNgine.services.scan_finding_metrics import partition_ip_address_ids_for_scan_history  # IP PKs in-scan
+from reNgine.services.scan_finding_metrics import (  # IP PKs in-scan; bulk IP for scan history DataTable
+    attach_ip_metrics_to_scans,
+    partition_ip_address_ids_for_scan_history,
+)
 from reNgine.settings import (
     RENGINE_GF_PATTERNS_DIR,
     RENGINE_NUCLEI_TEMPLATES_DIR,
@@ -3170,7 +3173,6 @@ class ScanStatus(APIView):
     def get(self, request):
         slug = self.request.GET.get("project", None)
         qs = get_scan_status_querysets(slug, max_running_tasks=self.MAX_RUNNING_TASKS)
-        from reNgine.services.scan_finding_metrics import attach_ip_metrics_to_scans
 
         pending_scans = list(qs["pending_scans"])
         current_scans = list(qs["current_scans"])
@@ -3642,7 +3644,11 @@ class ListScanHistory(APIView):
 
     def get(self, request, format=None):
         req = self.request
-        qs = ScanHistory.objects.all().select_related("target", "initiated_by").prefetch_related("target__scopes")
+        qs = (
+            ScanHistory.objects.all()
+            .select_related("target", "initiated_by", "scan_type")
+            .prefetch_related("target__scopes")
+        )
         project = req.query_params.get("project")
         if project:
             qs = qs.filter(target__project__slug=project)
@@ -3691,7 +3697,9 @@ class ListScanHistory(APIView):
             qs = qs.distinct()
             total_count = qs.count()
             page_qs = qs[pagination["start"] : pagination["start"] + pagination["length"]]
-            serializer = ScanHistoryDatatableSerializer(page_qs, many=True)
+            page_scans = list(page_qs)
+            attach_ip_metrics_to_scans(page_scans)
+            serializer = ScanHistoryDatatableSerializer(page_scans, many=True)
             return Response(build_datatables_serverside_response(req, total_count, total_count, serializer.data))
 
         qs = qs.order_by("-start_scan_date")

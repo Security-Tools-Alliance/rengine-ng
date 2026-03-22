@@ -14,6 +14,7 @@ from reNgine.utilities.websocket import (
     build_scan_status_message,
     send_scan_status_update,
 )
+from startScan.models import ScanHistory
 from utils.test_base import BaseTestCase
 
 
@@ -195,6 +196,8 @@ class TestScanStatusPayloadShape(BaseTestCase):
         self.assertIn("current_task", result)
         self.assertIn("scan_type", result)
         self.assertIn("scan_name", result)
+        scan = ScanHistory.objects.get(id=self.scan_id)
+        self.assertEqual(result["scan_name"], scan.scan_engine_used)
         self.assertIn("domain_count", result)
         self.assertIn("subdomain_count", result)
         self.assertIn("endpoint_count", result)

@@ -362,13 +362,22 @@ class ScanHistory(models.Model):
         """
         return value.replace("_", " ").strip()
 
+    @property
+    def uses_legacy_engine_profile(self) -> bool:
+        """
+        True when this scan is tied to an EngineType (legacy engine UI).
+
+        Includes rows where ``is_legacy_scan`` was not backfilled but ``scan_type_id`` is still set.
+        """
+        return bool(self.is_legacy_scan or self.scan_type_id)
+
     def _get_task_runner_display_names(self) -> list[str]:
         """
         Return the ordered, de-duplicated list of task names for Secator task-only scans.
 
         This is used only for display purposes when no workflow/scan runner exists.
         """
-        if self.is_legacy_scan:
+        if self.uses_legacy_engine_profile:
             return []
 
         cached = getattr(self, "_cached_task_runner_display_names", None)
@@ -407,11 +416,14 @@ class ScanHistory(models.Model):
     @property
     def scan_name(self):
         """Get scan name: engine_name for legacy scans, runner_name for Secator scans."""
-        if self.is_legacy_scan and self.scan_type:
-            return self.scan_type.engine_name
+        if self.uses_legacy_engine_profile:
+            engine_type = getattr(self, "scan_type", None)
+            if engine_type is not None:
+                return engine_type.engine_name
+            return ""
 
         main_runner = self._get_main_runner()
-        return main_runner.runner_name or "Secator" if main_runner else "Secator"
+        return (main_runner.runner_name or "Secator") if main_runner else "Secator"
 
     @property
     def runner_type(self):
@@ -430,7 +442,7 @@ class ScanHistory(models.Model):
         - For workflow/scan: use the main runner name.
         - For task-only: show the list of tasks (so UI renders `Task: task1, task2`).
         """
-        if self.is_legacy_scan:
+        if self.uses_legacy_engine_profile:
             scan_name = self.scan_name
             return self._format_display_label(scan_name) if scan_name else ""
 
@@ -452,7 +464,7 @@ class ScanHistory(models.Model):
         - For workflow/scan: use the main runner type.
         - For task-only: always return `Task`.
         """
-        if self.is_legacy_scan:
+        if self.uses_legacy_engine_profile:
             return "Legacy"
 
         main_runner = self._get_main_runner()
@@ -460,6 +472,16 @@ class ScanHistory(models.Model):
             return self._format_display_label(main_runner.runner_type)
 
         return "Task" if self._get_task_runner_display_names() else ""
+
+    @property
+    def scan_engine_used(self) -> str:
+        """
+        Unified display string for the "Scan engine used" column: "Type: Name"
+        (e.g. "Workflow: recon", "Legacy: EngineName"). Single source for DataTables and WebSocket.
+        """
+        runner = self.display_runner_type or ""
+        scan_name = self.display_scan_name or ""
+        return f"{runner}: {scan_name}" if runner or scan_name else ""
 
     @property
     def secator_worker_name(self) -> str:

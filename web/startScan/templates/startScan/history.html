@@ -277,6 +277,8 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
                 subdomainCount: data.subdomain_count || 0,
                 endpointCount: data.endpoint_count || 0,
                 vulnerabilityCount: data.vulnerability_count || 0,
+                ipAddressCount: data.ip_address_count != null ? data.ip_address_count : 0,
+                ipAliveCount: data.ip_alive_count != null ? data.ip_alive_count : 0,
                 secretCount: data.secret_count || 0,
                 exploitCount: data.exploit_count || 0,
                 vulnTooltip: 'Vulnerabilities'

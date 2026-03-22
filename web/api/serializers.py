@@ -1047,12 +1047,24 @@ class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
         return obj.id
 
     def get_summary(self, obj):
+        from reNgine.services.scan_finding_metrics import (
+            SCAN_HISTORY_IP_ALIVE_ATTR,
+            SCAN_HISTORY_IP_COUNT_ATTR,
+            get_ip_address_metrics_for_scan,
+        )
+
         domain_count = obj.get_domain_count() if callable(getattr(obj, "get_domain_count", None)) else 0
         subdomain_count = obj.get_subdomain_count() if callable(getattr(obj, "get_subdomain_count", None)) else 0
         endpoint_count = obj.get_endpoint_count() if callable(getattr(obj, "get_endpoint_count", None)) else 0
         vuln_count = obj.get_vulnerability_count() if callable(getattr(obj, "get_vulnerability_count", None)) else 0
         secret_count = obj.get_secret_count() if callable(getattr(obj, "get_secret_count", None)) else 0
         exploit_count = obj.get_exploit_count() if callable(getattr(obj, "get_exploit_count", None)) else 0
+        ip_total = getattr(obj, SCAN_HISTORY_IP_COUNT_ATTR, _CACHE_MISSING)
+        ip_alive = getattr(obj, SCAN_HISTORY_IP_ALIVE_ATTR, _CACHE_MISSING)
+        if ip_total is not _CACHE_MISSING and ip_alive is not _CACHE_MISSING:
+            ip_address_count, ip_alive_count = ip_total, ip_alive
+        else:
+            ip_address_count, ip_alive_count = get_ip_address_metrics_for_scan(obj.id)
         return {
             "domain_count": domain_count,
             "subdomain_count": subdomain_count,
@@ -1060,12 +1072,12 @@ class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
             "vulnerability_count": vuln_count,
             "secret_count": secret_count,
             "exploit_count": exploit_count,
+            "ip_address_count": ip_address_count,
+            "ip_alive_count": ip_alive_count,
         }
 
     def get_scan_engine_text(self, obj):
-        runner = getattr(obj, "display_runner_type", "") or ""
-        scan_name = getattr(obj, "display_scan_name", "") or ""
-        return f"{runner}: {scan_name}" if runner or scan_name else ""
+        return obj.scan_engine_used
 
     def get_worker_name(self, obj):
         return getattr(obj, "secator_worker_name", None) or "Local"
@@ -1127,11 +1139,7 @@ class SubScanDatatableSerializer(serializers.ModelSerializer):
         return ""
 
     def get_scan_engine_text(self, obj):
-        if obj.engine:
-            return obj.engine.engine_name
-        if obj.secator_runner and obj.secator_runner.runner_name:
-            return obj.secator_runner.runner_name
-        return obj.type or ""
+        return obj.scan_engine_used
 
     def get_worker_name(self, obj):
         return getattr(obj.scan_history, "secator_worker_name", None) or "Local"

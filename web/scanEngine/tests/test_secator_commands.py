@@ -5,10 +5,10 @@ This file contains unit tests for the Secator management commands.
 """
 
 import contextlib
+from io import StringIO
 import os
 import sys
 import tempfile
-from io import StringIO
 from unittest.mock import MagicMock, mock_open, patch
 
 from django.core.management import call_command

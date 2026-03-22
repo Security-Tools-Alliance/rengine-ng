@@ -208,7 +208,7 @@ def build_light_scan_status_message(
     """
     if scan is None:
         try:
-            scan = ScanHistory.objects.get(id=scan_history_id)
+            scan = ScanHistory.objects.select_related("scan_type").get(id=scan_history_id)
         except ScanHistory.DoesNotExist:
             logger.log_line(
                 PREFIX_WS,
@@ -226,13 +226,13 @@ def build_light_scan_status_message(
 
 def _build_scan_status_payload(scan_history_id: int) -> dict:
     """Assemble the full scan status payload (counts, severity, timeline, runners, commands, subscans)."""
-    scan = ScanHistory.objects.get(id=scan_history_id)
+    scan = ScanHistory.objects.select_related("scan_type").get(id=scan_history_id)
     counts = _get_scan_counts(scan_history_id)
     severity_counts = _get_severity_counts(scan_history_id)
 
     message = _build_base_status_message(scan, scan_history_id, counts, severity_counts)
 
-    if scan.is_legacy_scan:
+    if scan.uses_legacy_engine_profile:
         activities = ScanActivity.objects.filter(scan_of=scan).order_by("-time")[:10]
         message["timeline"] = ScanActivitySerializer(activities, many=True).data
         message["runners"] = []
@@ -372,7 +372,7 @@ def _build_base_status_message(
         "type": "scan_status_update",
         "scan_id": scan_history_id,
         "scan_type": "legacy" if scan.is_legacy_scan else "secator",
-        "scan_name": f"{scan.display_runner_type}: {scan.display_scan_name}",
+        "scan_name": scan.scan_engine_used,
         "status": scan.scan_status,
         "progress": scan.get_progress(),
         "current_task": scan.get_current_task(),
@@ -499,7 +499,7 @@ def send_scan_status_update(
                 )
                 return
 
-        scan = ScanHistory.objects.select_related("target__project").get(id=scan_history_id)
+        scan = ScanHistory.objects.select_related("target__project", "scan_type").get(id=scan_history_id)
         channel_layer = get_channel_layer()
         if not channel_layer:
             logger.log_line(
