@@ -64,7 +64,7 @@ $(document).ready(function() {
 		"rowGroup": vuln_initial_state.rowGroup,
 		"columns": vuln_datatable_columns,
 		"columnDefs": [
-			{ "orderable": false, "targets": "action:name" },
+			{ "orderable": false, "searchable": false, "targets": "id:name" },
 			{
 				"targets": [
 					"type:name", "cvss_metrics:name", "tags:name", "hackerone_report_id:name", "cvss_score:name",
@@ -77,7 +77,7 @@ $(document).ready(function() {
 			},
 			{"className": "text-center", "targets": []},
 			{
-				"targets": "id:name", "width": "15px", "className": "", "orderable": false,
+				"targets": "id:name", "width": "15px", "className": "",
 				"render": function (data) {
 					var safeId = window.safeAttr ? window.safeAttr(String(data)) : String(data);
 					return '<div class="form-check mb-1 form-check-primary"><input type="checkbox" name="targets_checkbox[' + safeId + ']" class="float-start form-check-input vulnerability_checkbox" onclick="toggleMultipleVulnerabilitiesButton()"><span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>';

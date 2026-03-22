@@ -559,6 +559,19 @@ function change_scheduled_task_status(endpoint_url, checkbox) {
 	})
 }
 
+function buildChangeVulnToggleUrl(templateOrUrl, vulnerabilityId) {
+	const idStr = String(vulnerabilityId);
+	let u = String(templateOrUrl || "").trim().replace(/\/+$/, "");
+	if (/\/0$/.test(u)) {
+		return u.replace(/\/0$/, "/" + idStr);
+	}
+	return u.replace(/\/\d+$/, "/" + idStr);
+}
+
+function escapeForSingleQuotedOnclickUrl(url) {
+	return String(url || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
 function change_vuln_status(endpoint_url) {
 	return fetch(endpoint_url, {
 		method: 'POST',
@@ -566,7 +579,16 @@ function change_vuln_status(endpoint_url) {
 		headers: {
 			"X-CSRFToken": getCookie("csrftoken")
 		}
-	})
+	}).then(function (response) {
+		if (!response.ok && typeof Snackbar !== "undefined") {
+			Snackbar.show({
+				text: "Could not update vulnerability status.",
+				pos: "top-right",
+				duration: 3000
+			});
+		}
+		return response;
+	});
 }
 // splits really long strings into multiple lines
 // Souce: https://stackoverflow.com/a/52395960
@@ -820,55 +842,113 @@ function download(filename, text) {
 }
 
 function updateVulnStatus(endpoint_url, element, id, status) {
-    const $element = $(element);
-    const $row = $element.closest("tr");
-
-    $row.toggleClass("table-success text-strike", status);
-    $element.text(status ? 'RESOLVED' : 'OPEN')
-        .toggleClass('badge badge-soft-danger', !status)
-        .toggleClass('badge badge-soft-success', status)
-        .attr('onclick', `vuln_status_change('${endpoint_url}', this, ${id}, ${!status})`);
+	const $wrap = $(element).closest("span[role=\"button\"]");
+	const $targetWrap = $wrap.length ? $wrap : $(element);
+	let $badge = $targetWrap.find(".vuln-status").first();
+	const $row = $targetWrap.closest("tr");
+	$row.toggleClass("table-success text-strike", status);
+	const label = status ? "RESOLVED" : "OPEN";
+	// Match getVulnOpenStatusBadgeColumnDef: &nbsp;&nbsp; + text + &nbsp;&nbsp;
+	const paddedLabel = "\u00A0\u00A0" + label + "\u00A0\u00A0";
+	const softTone = status ? "badge-soft-success" : "badge-soft-danger";
+	if ($badge.length) {
+		$badge
+			.text(paddedLabel)
+			.removeClass("badge-soft-danger badge-soft-success")
+			.addClass("badge")
+			.addClass(softTone);
+	} else {
+		$targetWrap
+			.text(paddedLabel)
+			.removeClass("badge-soft-danger badge-soft-success")
+			.addClass("badge")
+			.addClass(softTone);
+	}
+	const nextOpen = !status;
+	const idStr = String(id);
+	const safeUrl = escapeForSingleQuotedOnclickUrl(endpoint_url);
+	$targetWrap.attr(
+		"onclick",
+		"vuln_status_change('" + safeUrl + "', this, " + idStr + ", " + nextOpen + ")"
+	);
 }
 
 function vuln_status_change(endpoint_url, element, id, status) {
-	const updatedEndpointUrl = endpoint_url.replace(/\/0$/, `/${id}`);
-    updateVulnStatus(updatedEndpointUrl, element, id, status);
-    change_vuln_status(updatedEndpointUrl);
+	const updatedEndpointUrl = buildChangeVulnToggleUrl(endpoint_url, id);
+	updateVulnStatus(updatedEndpointUrl, element, id, status);
+	change_vuln_status(updatedEndpointUrl);
 }
 
+function getVulnerabilityToggleUrlTemplate() {
+	const cfg = document.getElementById("vuln-status-config");
+	return cfg && cfg.dataset && cfg.dataset.changeVulnStatusUrl
+		? cfg.dataset.changeVulnStatusUrl
+		: "";
+}
+
+/**
+ * Bulk open/resolve. Calls vuln_status_change once per selected row (no synthetic click —
+ * programmatic clicks on the inner badge could run the parent onclick twice and double-toggle).
+ * @param {boolean} status true = resolve selected OPEN rows; false = reopen selected RESOLVED rows
+ */
 function bulk_vuln_status_change(status) {
-    $('.vulnerability_checkbox:checked')
-        .parents("tr")
-        .find('.vuln-status')
-        .filter((_, el) => (status && $(el).text() === "OPEN") || (!status && $(el).text() === "RESOLVED"))
-        .trigger('click');
-}
-
-function toggleMultipleVulnerabilitiesButton(){
-	if($('.vulnerability_checkbox:checked').length >= 1){
-		if($('.vulnerability_checkbox:checked').length >= 2){
-			$('#select_all_checkbox').prop('checked','checked')
+	const template = getVulnerabilityToggleUrlTemplate();
+	if (!template) {
+		return;
+	}
+	$("#vulnerability_results .vulnerability_checkbox:checked").each(function () {
+		const $cb = $(this);
+		const $row = $cb.closest("tr");
+		const $badge = $row.find(".vuln-status").first();
+		if (!$badge.length) {
+			return;
 		}
-		$(".vulnerability_btns").removeClass("disabled")
-		$('#vulnaribilities_selected_count').show().text($('.vulnerability_checkbox:checked').length + ' Vulnerabilities Selected x');
-	}else{
-		$('#select_all_checkbox').prop('checked','')
-		$(".vulnerability_btns").addClass("disabled")
-		$('#vulnaribilities_selected_count').hide()
-
-	} 
+		const t = ($badge.text() || "").replace(/\s+/g, " ").trim();
+		const shouldAct =
+			(status && t === "OPEN") || (!status && t === "RESOLVED");
+		if (!shouldAct) {
+			return;
+		}
+		const nameAttr = $cb.attr("name") || "";
+		const m = nameAttr.match(/^targets_checkbox\[(\d+)\]$/);
+		const id = m ? m[1] : null;
+		if (!id) {
+			return;
+		}
+		const $btn = $badge.closest("span[role=\"button\"]");
+		const btnEl = $btn.length ? $btn[0] : $badge[0];
+		const currentOpen = t === "OPEN";
+		vuln_status_change(template, btnEl, id, currentOpen);
+	});
 }
 
-function uncheckVulnerabilities(){
-	$('.vulnerability_checkbox:checked').trigger('click')
+function toggleMultipleVulnerabilitiesButton() {
+	const n = $("#vulnerability_results .vulnerability_checkbox:checked").length;
+	if (n >= 1) {
+		if (n >= 2) {
+			$("#select_all_checkbox").prop("checked", true);
+		}
+		$(".vulnerability_btns").removeClass("disabled");
+		$("#vulnaribilities_selected_count").show().text(n + " Vulnerabilities Selected x");
+	} else {
+		$("#select_all_checkbox").prop("checked", false);
+		$(".vulnerability_btns").addClass("disabled");
+		$("#vulnaribilities_selected_count").hide();
+	}
+}
+
+function uncheckVulnerabilities() {
+	$("#vulnerability_results tbody input.vulnerability_checkbox").prop("checked", false);
+	$("#select_all_checkbox").prop("checked", false);
+	toggleMultipleVulnerabilitiesButton();
 }
 
 function countVulnerabilities (){
 
 }
 
-$('#select_all_checkbox').on('click', function() {
-    $("tr").find("[type=checkbox]").prop('checked', $(this).is(':checked'));
+$("#select_all_checkbox").on("click", function () {
+	$("#vulnerability_results tbody input.vulnerability_checkbox").prop("checked", $(this).is(":checked"));
 	toggleMultipleVulnerabilitiesButton();
 });
 
@@ -928,7 +1008,7 @@ $(document).on('click.vulnerability_results', '#vulnerability_results .btn-delet
 
 $("#bulk_delete_vulnerabilities").on('click', function () {
 	//btn-delete-vulnerability contains vuln id to delete
-	const vulnerabilities = $('.vulnerability_checkbox:checked').parents("tr").find('.btn-delete-vulnerability')
+	const vulnerabilities = $('#vulnerability_results .vulnerability_checkbox:checked').parents("tr").find('.btn-delete-vulnerability')
 	const vulnerabilities_ids = Array();
 	const endpoint_url = $(this).attr('data-url');
 	Array.from(vulnerabilities).forEach(vuln => {

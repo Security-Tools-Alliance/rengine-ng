@@ -16,7 +16,7 @@
  *   18=curl_command               19=matcher_name   20=cvss_vec     21=epss_score
  *   22=confidence_nb              23=severity_nb    24=ip           25=reference
  *   Orderable backend cols (DATATABLE_COLUMN_MAP_VULNERABILITY): 1=source, 3=name,
- *     7=severity, 11=http_url, 15=open_status.
+ *     7=severity, 11=http_url, 15=open_status. Column 0 (id/checkbox) is not orderable.
  *
  * RENGINE_SUBDOMAIN_DATATABLE_COLUMNS (DATATABLE_COLUMN_MAP_SUBDOMAIN):
  *   0=id          1=name          2=endpoint_count  3=vuln_count    4=http_status
@@ -47,7 +47,7 @@
   "use strict";
 
   const vulnColumns = [
-    { data: "id", name: "id" },
+    { data: "id", name: "id", orderable: false, searchable: false },
     { data: "source", name: "source", defaultContent: "" },
     { data: "type", name: "type", defaultContent: "" },
     { data: "name", name: "name" },

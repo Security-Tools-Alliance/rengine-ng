@@ -44,7 +44,6 @@ Scan Findings
 })();
 </script>
 <span aria-current="page" style="display: none">{{ scan_display_name }}</span>
-<span id="vuln-status-config" data-change-vuln-status-url="{% url 'change_vuln_status' current_project.slug 0 %}" aria-hidden="true" class="d-none"></span>
 <div class="row">
 	<div class="col-12">
 		<div class="card">
@@ -82,18 +81,8 @@ Scan Findings
 					<a class="nav-link" id="pills-directories-tab" data-bs-toggle="tab" aria-expanded="false" href="#directories-tab">Directories</a>
 				</li>
 				{% endif %}
-				<li class="nav-item dropdown">
-					<a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">URLs&nbsp;<i class="fe-chevron-down"></i></a>
-					<ul class="dropdown-menu" style="width: 240px;">
-						<li><a class="dropdown-item" id="pills-endpoints-tab" href="#endpoints-tab" data-bs-toggle="tab" aria-expanded="false">All Endpoints</a></li>
-						{% if 'fetch_url' in history.tasks and history.used_gf_patterns %}
-						{% for key,value in matched_gf_count.items %}
-							{% if value > 0 %}
-							<li><a class="dropdown-item" id="pills-{{key}}-tab" href="#endpoints-tab" data-bs-toggle="tab" aria-expanded="false">{{key|upper}}<span class="badge-soft-danger float-end ms-1 ps-1 pe-1">{{value}}</span></a></li>
-							{% endif %}
-						{% endfor %}
-						{% endif %}
-					</ul>
+				<li class="nav-item">
+					<a class="nav-link" id="pills-endpoints-tab" data-bs-toggle="tab" aria-expanded="false" href="#endpoints-tab">URLs</a>
 				</li>
 				{% if history.get_exploit_count %}
 				<li class="nav-item">
@@ -1388,6 +1377,7 @@ $(document).ready(function() {
 		window.registerDetailScanVulnerabilityTab({
 			ajaxUrl: '{% url "api:vulnerabilities-list" %}?scan_history={{scan_history_id}}&format=datatables',
 			columns: vuln_datatable_columns,
+			changeVulnStatusUrlTemplate: '{% url "change_vuln_status" current_project.slug 0 %}',
 		});
 
 	{% endif %}
@@ -1527,14 +1517,6 @@ $(document).ready(function() {
 	$("#pills-endpoints-tab").click(function() {
 		get_endpoints('{% url "api:endpoints-list" %}', '{% url "api:subdomains-list" %}', project='{{current_project.slug}}', scan_history={{scan_history_id}}, null, gf_tags=null);
 	});
-
-	{% if 'fetch_url' in history.tasks and history.used_gf_patterns %}
-		{% for pattern in history.used_gf_patterns|split:"," %}
-			$("#pills-{{pattern}}-tab").click(function() {
-				get_endpoints('{% url "api:endpoints-list" %}', '{% url "api:subdomains-list" %}', project='{{current_project.slug}}', scan_history={{scan_history_id}}, domain_id=contextDomainId, gf_tags='{{pattern}}');
-			});
-		{% endfor %}
-	{% endif %}
 
 	$("#domain-tab-related-btn, #domain-tab-tlds-btn").on("click", function(e) {
 		e.preventDefault();
