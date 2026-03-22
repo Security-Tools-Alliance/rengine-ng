@@ -89,6 +89,33 @@ class TestListScanHistory(BaseTestCase):
         self.assertEqual(summary.get("ip_address_count"), expected[SCAN_FINDING_IP_COUNT_KEY])
         self.assertEqual(summary.get("ip_alive_count"), expected[SCAN_FINDING_IP_ALIVE_KEY])
 
+    def test_list_scan_history_datatable_filter_by_scope(self):
+        """DataTable filter_scope keeps only scans whose target is linked to the selected scope name(s)."""
+        scan_with_scope = self.data_generator.scan_history
+        scope_name = "Scope-Filter-Test-203.0.113"
+        self.data_generator.create_scope(name=scope_name)
+        self.data_generator.create_target()
+        other_target = self.data_generator.target
+        scan_no_scope = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=1,
+            target=other_target,
+        )
+        url = reverse("api:listScanHistory")
+        response = self.client.get(
+            url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": 0,
+                "length": 50,
+                "filter_scope": scope_name,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {row["id"] for row in response.data.get("data", [])}
+        self.assertIn(scan_with_scope.id, ids)
+        self.assertNotIn(scan_no_scope.id, ids)
+
 
 class TestScanHistoryFilterChoices(BaseTestCase):
     """Tests for ScanHistoryFilterChoices API (filter dropdowns for scan/subscan history)."""
@@ -109,11 +136,13 @@ class TestScanHistoryFilterChoices(BaseTestCase):
         response = self.client.get(url, {"project": self.data_generator.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("organizations", response.data)
+        self.assertIn("scopes", response.data)
         self.assertIn("scan_status_labels", response.data)
         self.assertIn("task_status_labels", response.data)
         self.assertIn("targets", response.data)
         self.assertIn("scan_engines", response.data)
         self.assertIsInstance(response.data["organizations"], list)
+        self.assertIsInstance(response.data["scopes"], list)
         self.assertIsInstance(response.data["scan_status_labels"], list)
         self.assertIsInstance(response.data["task_status_labels"], list)
         self.assertIsInstance(response.data["targets"], list)

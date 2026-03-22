@@ -488,7 +488,7 @@
 
   /**
    * Populate scan-history / subscan-history filter selects from a single API call.
-   * Fills filterByOrganization, filterByScanStatus, filterByTarget, filterByScanType.
+   * Fills filterByOrganization, filterByScope, filterByScanStatus, filterByTarget, filterByScanType.
    *
    * @param {string} projectSlug - Current project slug.
    * @param {string} filterChoicesUrl - URL for scanHistoryFilterChoices API (e.g. /api/scanHistoryFilterChoices/).
@@ -516,6 +516,7 @@
           });
         };
         appendOptions("filterByOrganization", data.organizations || []);
+        appendOptions("filterByScope", data.scopes || []);
         const statusLabels = context === "subscan_history"
           ? (data.task_status_labels || [])
           : (data.scan_status_labels || []);

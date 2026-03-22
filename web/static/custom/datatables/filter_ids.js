@@ -17,12 +17,14 @@
 
   const SCAN_HISTORY = [
     "filterByOrganization",
+    "filterByScope",
     "filterByScanStatus",
     "filterByTarget",
     "filterByScanType",
   ];
   const SUBSCAN_HISTORY = [
     "filterByOrganization",
+    "filterByScope",
     "filterByScanStatus",
     "filterByTarget",
     "filterByScanType",

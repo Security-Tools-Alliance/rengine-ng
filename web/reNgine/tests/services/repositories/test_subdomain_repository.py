@@ -152,6 +152,23 @@ class TestSubdomainRepository(BaseTestCase):
         self.assertEqual(result.webserver, "nginx")
         self.assertEqual(result.response_time, 0.5)
 
+    def test_save_from_secator_extra_data_ip_addresses_syncs_alive_from_http(self):
+        """M2M IPs get alive=True when subdomain carries HTTP evidence (http_status > 0)."""
+        item = {
+            "_type": "subdomain",
+            "host": "alive-dns.example.com",
+            "extra_data": {
+                "ip_addresses": ["203.0.113.30"],
+                "http_status": 200,
+            },
+        }
+        result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        ip = result.ip_addresses.first()
+        self.assertIsNotNone(ip)
+        self.assertEqual(ip.address, "203.0.113.30")
+        self.assertTrue(ip.alive)
+
     def test_save_from_secator_with_imported_flag(self):
         """Test saving subdomain with imported flag from context."""
         rengine_context = {

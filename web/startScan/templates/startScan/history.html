@@ -382,7 +382,7 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
     });
     multiCheck(table);
 
-    // Populate all four filter selects from a single API call (organizations, status, target, scan type)
+    // Populate filter selects from a single API call (organizations, scopes, status, target, scan type)
     if (typeof window.populateScanHistoryFilterChoices === 'function') {
       window.populateScanHistoryFilterChoices(window.SCAN_HISTORY_PROJECT_SLUG || '', "{% url 'api:scanHistoryFilterChoices' %}", 'scan_history');
     }
@@ -403,6 +403,7 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
     }
     if (!window.attachDatatableFilters) {
       document.getElementById('filterByOrganization').addEventListener('change', function() { table.draw(); }, false);
+      document.getElementById('filterByScope').addEventListener('change', function() { table.draw(); }, false);
       document.getElementById('filterByScanStatus').addEventListener('change', function() { table.draw(); }, false);
       document.getElementById('filterByScanType').addEventListener('change', function() { table.draw(); }, false);
       document.getElementById('filterByTarget').addEventListener('change', function() { table.draw(); }, false);

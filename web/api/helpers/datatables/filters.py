@@ -47,6 +47,7 @@ FILTER_PARAM_BUCKET_NAME = "filter_bucket_name"
 # Template: startScan/history.html | Filter partial: filters_scan_history.html
 FILTER_CONTEXT_SCAN_HISTORY: dict[str, str] = {
     "filterByOrganization": FILTER_PARAM_ORGANIZATION,
+    "filterByScope": FILTER_PARAM_SCOPE,
     "filterByScanStatus": FILTER_PARAM_STATUS,
     "filterByTarget": FILTER_PARAM_TARGET,
     "filterByScanType": FILTER_PARAM_SCAN_ENGINE,
@@ -55,6 +56,7 @@ FILTER_CONTEXT_SCAN_HISTORY: dict[str, str] = {
 # Template: startScan/subscan_history.html | Filter partial: filters_scan_history.html
 FILTER_CONTEXT_SUBSCAN_HISTORY: dict[str, str] = {
     "filterByOrganization": FILTER_PARAM_ORGANIZATION,
+    "filterByScope": FILTER_PARAM_SCOPE,
     "filterByScanStatus": FILTER_PARAM_STATUS,
     "filterByTarget": FILTER_PARAM_TARGET,
     "filterByScanType": FILTER_PARAM_SCAN_ENGINE,

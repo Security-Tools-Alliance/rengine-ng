@@ -21,7 +21,7 @@ from reNgine.core.validators import is_valid_domain, is_valid_ip
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name, normalize_subdomain_host
-from startScan.models import Domain, IpAddress, ScanHistory, Subdomain, Technology
+from startScan.models import Domain, ScanHistory, Subdomain, Technology
 from targetApp.models import Target
 from targetApp.services.scope_params import get_finding_scope_filter_host_for_target
 
@@ -152,7 +152,8 @@ class SubdomainRepository:
         if update_fields:
             subdomain.save(update_fields=list(dict.fromkeys(update_fields)))
 
-        self._associate_ip_addresses(subdomain, item, scan_history_id)
+        self._associate_ip_addresses(subdomain, item, scan_history_id, target_id)
+        self._sync_alive_for_subdomain_linked_ips(subdomain)
         self._associate_technologies(subdomain, item)
 
         logger.log_line(
@@ -421,7 +422,9 @@ class SubdomainRepository:
 
         return subdomain_clean in imported_clean
 
-    def _associate_ip_addresses(self, subdomain: Subdomain, item: Dict[str, Any], scan_history_id: int) -> None:
+    def _associate_ip_addresses(
+        self, subdomain: Subdomain, item: Dict[str, Any], scan_history_id: int, target_id: int
+    ) -> None:
         """
         Associate IP addresses with subdomain and ensure an endpoint exists for each IP.
         Endpoint creation is idempotent (get_or_create); we avoid duplicate calls for
@@ -435,22 +438,22 @@ class SubdomainRepository:
                 return
 
             from reNgine.services.repositories.endpoint_repository import EndpointRepository
+            from reNgine.services.repositories.ip_repository import IpRepository
 
             endpoint_repo = EndpointRepository()
+            ip_repo = IpRepository()
             created_endpoints_cache: set[tuple[str, int, int]] = set()
             sid = subdomain.scan_history_id
             did = subdomain.domain_id
 
             for ip_address in ip_addresses:
                 if is_valid_ip(ip_address):
-                    ip_obj, _ = IpAddress.objects.get_or_create(
-                        address=ip_address,
-                        defaults={
-                            "is_cdn": False,
-                            "is_private": self._is_private_ip(ip_address),
-                            "version": self._get_ip_version(ip_address),
-                        },
-                    )
+                    if target_id:
+                        ip_obj, _ = ip_repo.get_or_create_for_scan(sid, target_id, ip_address)
+                    else:
+                        ip_obj, _ = ip_repo.get_or_create(ip_address)
+                    if not ip_obj:
+                        continue
                     subdomain.ip_addresses.add(ip_obj)
                     logger.log_line(
                         PREFIX_SUBDOMAIN_REPO,
@@ -472,6 +475,17 @@ class SubdomainRepository:
                 % (reason, subdomain.name if subdomain else "", scan_history_id),
                 level="error",
             )
+
+    def _sync_alive_for_subdomain_linked_ips(self, subdomain: Subdomain) -> None:
+        """Promote IpAddress.alive from HTTP evidence for all IPs linked to this subdomain."""
+        sid = subdomain.scan_history_id
+        if not sid:
+            return
+        from reNgine.services.repositories.ip_repository import IpRepository
+
+        ip_repo = IpRepository()
+        for ip in subdomain.ip_addresses.all().only("id"):
+            ip_repo.sync_alive_from_http_evidence(ip.pk, sid)
 
     def _associate_technologies(self, subdomain: Subdomain, item: Dict[str, Any]) -> None:
         """

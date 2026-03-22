@@ -17,6 +17,8 @@ Use these entry points to avoid drift:
 - Single-PK membership check: ip_address_id_linked_to_scan (shared Q: ip_address_linked_to_scan_q).
 - Target / multi-target / project aggregates: get_ip_metrics_for_target,
   get_ip_metrics_for_target_ids, get_ip_metrics_for_project
+- Target list views: attach_ip_metrics_to_targets sets TARGET_IP_COUNT_ATTR /
+  TARGET_IP_ALIVE_ATTR on each Target (+ bulk_ip_metrics_for_targets).
 """
 
 from __future__ import annotations
@@ -44,6 +46,10 @@ SCAN_FINDING_IP_ALIVE_KEY = "ip_alive_count"
 # Dynamic attributes set on ScanHistory by attach_ip_metrics_to_scans (same names as payload keys).
 SCAN_HISTORY_IP_COUNT_ATTR = "ip_address_count"
 SCAN_HISTORY_IP_ALIVE_ATTR = "ip_alive_count"
+
+# Dynamic attributes set on Target by attach_ip_metrics_to_targets (same string values as above).
+TARGET_IP_COUNT_ATTR = "ip_address_count"
+TARGET_IP_ALIVE_ATTR = "ip_alive_count"
 
 
 def ip_address_linked_to_scan_q(scan_history_id: int) -> Q:
@@ -89,9 +95,81 @@ def partition_ip_address_ids_for_scan_history(
     return valid, invalid
 
 
+def bulk_ip_metrics_for_targets(target_ids: Iterable[int]) -> Dict[int, tuple[int, int]]:
+    """
+    Map target_id -> (distinct_ip_count, alive_ip_count) across all scans of that target.
+
+    Same semantics as ``IpAddress.get_counts_for_scan_histories`` over the union of that
+    target's scan IDs (Subdomain M2M or EndPoint.ip_address), computed in bulk.
+    """
+    tid_list: List[int] = list(dict.fromkeys(int(x) for x in target_ids if x))
+    if not tid_list:
+        return {}
+    target_to_ips: Dict[int, Set[int]] = {t: set() for t in tid_list}
+
+    subdomain_pairs = (
+        Subdomain.objects.filter(
+            scan_history__target_id__in=tid_list,
+            ip_addresses__isnull=False,
+        )
+        .values_list("scan_history__target_id", "ip_addresses__id")
+        .distinct()
+        .iterator(chunk_size=2000)
+    )
+    for target_id, ip_id in subdomain_pairs:
+        if target_id in target_to_ips and ip_id:
+            target_to_ips[target_id].add(ip_id)
+
+    endpoint_pairs = (
+        EndPoint.objects.filter(
+            scan_history__target_id__in=tid_list,
+            ip_address_id__isnull=False,
+        )
+        .values_list("scan_history__target_id", "ip_address_id")
+        .distinct()
+        .iterator(chunk_size=2000)
+    )
+    for target_id, ip_id in endpoint_pairs:
+        if target_id in target_to_ips and ip_id:
+            target_to_ips[target_id].add(ip_id)
+
+    all_ip_ids: Set[int] = set()
+    for s in target_to_ips.values():
+        all_ip_ids.update(s)
+
+    alive_map: Dict[int, bool] = {}
+    if all_ip_ids:
+        for pk, alive in (
+            IpAddress.objects.filter(id__in=all_ip_ids).values_list("id", "alive").iterator(chunk_size=2000)
+        ):
+            alive_map[pk] = bool(alive)
+
+    out: Dict[int, tuple[int, int]] = {}
+    for tid in tid_list:
+        ip_ids = target_to_ips[tid]
+        if not ip_ids:
+            out[tid] = (0, 0)
+            continue
+        alive_n = sum(1 for i in ip_ids if alive_map.get(i))
+        out[tid] = (len(ip_ids), alive_n)
+    return out
+
+
+def attach_ip_metrics_to_targets(targets: List[Any]) -> None:
+    """Set distinct IP totals on each Target instance (bulk lookup)."""
+    if not targets:
+        return
+    metrics = bulk_ip_metrics_for_targets(t.id for t in targets)
+    for t in targets:
+        c, a = metrics.get(t.id, (0, 0))
+        setattr(t, TARGET_IP_COUNT_ATTR, c)
+        setattr(t, TARGET_IP_ALIVE_ATTR, a)
+
+
 def get_ip_metrics_for_target(target_id: int) -> tuple[int, int]:
     """Distinct IP count and alive count across all scans of the target."""
-    return get_ip_metrics_for_target_ids([target_id])
+    metrics = bulk_ip_metrics_for_targets([target_id])
+    return metrics.get(int(target_id), (0, 0))
 
 
 def get_ip_metrics_for_target_ids(target_ids: Iterable[int]) -> tuple[int, int]:

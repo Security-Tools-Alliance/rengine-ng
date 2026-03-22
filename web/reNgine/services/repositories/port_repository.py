@@ -26,6 +26,27 @@ PREFIX_PORT_REPO = "[PORT_REPO]"
 logger = get_module_logger(__name__)
 
 
+_SECATOR_PORT_OPEN_LIKE_STATES = frozenset(
+    {
+        "open",
+        "open|filtered",
+        "open|unfiltered",
+        "unfiltered",
+    }
+)
+
+
+def secator_port_data_implies_alive_host(data: Dict[str, Any]) -> bool:
+    """
+    Return True if a Secator Port dict indicates a reachable service (host should be alive).
+
+    Only known open-style states imply reachability; ambiguous or negative states
+    (closed, filtered, timeout, unknown, etc.) do not.
+    """
+    state = (data.get("state") or "").strip().lower()
+    return state in _SECATOR_PORT_OPEN_LIKE_STATES
+
+
 class PortRepository:
     """Repository for port-related database operations."""
 
@@ -89,7 +110,6 @@ class PortRepository:
         )
         if not domain:
             return None
-        domain_id = domain.id
 
         raw_port = item.get("port")
         raw_ip = item.get("ip")
@@ -162,8 +182,16 @@ class PortRepository:
                 )
             return None
 
-        # Get or create IP address first
-        ip_obj = self._get_or_create_ip(ip_address, scan_history_id, domain_id)
+        EndpointRepository().create_endpoint_for_ip(ip_address, scan_history_id, domain.id)
+
+        implies_alive = secator_port_data_implies_alive_host(item)
+        alive_kw: Optional[bool] = True if implies_alive else None
+        ip_obj, _ = IpRepository().get_or_create_for_scan(
+            scan_history_id,
+            target_id,
+            ip_address,
+            alive=alive_kw,
+        )
         if not ip_obj:
             logger.log_line(
                 PREFIX_PORT_REPO,
@@ -315,12 +343,18 @@ class PortRepository:
             ip_address = port_data.get("ip")
 
             if is_valid_port(port_number) and is_valid_ip(ip_address):
-                ip_obj, _ = IpRepository().get_or_create_for_scan(scan_history_id, target_id, ip_address)
-                if not ip_obj:
-                    continue
                 if ip_address not in seen_ips:
                     seen_ips.add(ip_address)
                     EndpointRepository().create_endpoint_for_ip(ip_address, scan_history_id, domain_id)
+                alive_kw: Optional[bool] = True if secator_port_data_implies_alive_host(port_data) else None
+                ip_obj, _ = IpRepository().get_or_create_for_scan(
+                    scan_history_id,
+                    target_id,
+                    ip_address,
+                    alive=alive_kw,
+                )
+                if not ip_obj:
+                    continue
 
                 port_objects.append(
                     Port(
@@ -383,47 +417,6 @@ class PortRepository:
                 level="error",
             )
             return False
-
-    def _get_or_create_ip(self, ip_address: str, scan_history_id: int, domain_id: int) -> Optional[IpAddress]:
-        """
-        Get or create IP address for port association.
-
-        Args:
-            ip_address: IP address string
-            scan_history_id: Scan history ID
-            domain_id: Domain ID
-
-        Returns:
-            IpAddress: IP address object or None
-        """
-        try:
-            ip_obj, created = IpAddress.objects.get_or_create(
-                address=ip_address,
-                defaults={
-                    "is_cdn": False,
-                    "is_private": self._is_private_ip(ip_address),
-                    "version": self._get_ip_version(ip_address),
-                },
-            )
-
-            if created:
-                logger.log_line(
-                    PREFIX_PORT_REPO,
-                    "GET_OR_CREATE_IP",
-                    "Created IP address for port: %s" % (ip_address,),
-                    level="info",
-                )
-
-            return ip_obj
-
-        except (IntegrityError, DatabaseError) as e:
-            logger.log_line(
-                PREFIX_PORT_REPO,
-                "GET_OR_CREATE_IP",
-                "Error getting or creating IP for port: %s" % (e,),
-                level="error",
-            )
-            return None
 
     def _validate_confidence(self, confidence: str) -> str:
         """

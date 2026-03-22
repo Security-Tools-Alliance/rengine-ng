@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 
 from reNgine.core.ip_literal import normalize_ip_address_text
 from reNgine.core.validators import is_valid_ip
@@ -118,6 +118,37 @@ class IpRepository:
         )
         self._collect_ip_for_geolocalization(normalized)
         return ip_obj, True
+
+    def sync_alive_from_http_evidence(self, ip_id: int, scan_history_id: int) -> bool:
+        """
+        Set alive=True when this IP has HTTP response evidence in the scan.
+
+        Evidence: any EndPoint on this scan with http_status > 0 linked directly to the IP,
+        or linked to a Subdomain that lists this IP in ip_addresses (subdomain.http_status > 0
+        or any EndPoint for that subdomain on this scan with http_status > 0).
+
+        Never sets alive=False (ingestion order and partial scans).
+
+        Returns:
+            True if this call saved alive=True; False if unchanged or IP missing.
+        """
+        try:
+            ip_obj = IpAddress.objects.get(pk=ip_id)
+        except IpAddress.DoesNotExist:
+            return False
+        if ip_obj.alive:
+            return False
+        if not self._ip_has_http_alive_evidence(ip_id, scan_history_id):
+            return False
+        ip_obj.alive = True
+        ip_obj.save(update_fields=["alive"])
+        logger.log_line(
+            PREFIX_IP_REPO,
+            "SYNC_ALIVE_HTTP",
+            "Set alive=True from HTTP evidence ip_id=%s scan_id=%s" % (ip_id, scan_history_id),
+            level="debug",
+        )
+        return True
 
     def save_from_secator(
         self,
@@ -536,6 +567,28 @@ class IpRepository:
                 "Error linking IP to subdomain: %s | hostname=%s scan_id=%s" % (reason, hostname, scan_history_id),
                 level="error",
             )
+
+    def _ip_has_http_alive_evidence(self, ip_id: int, scan_history_id: int) -> bool:
+        if EndPoint.objects.filter(
+            scan_history_id=scan_history_id,
+            http_status__gt=0,
+            ip_address_id=ip_id,
+        ).exists():
+            return True
+        subdomain_http_or_endpoint = Subdomain.objects.filter(
+            scan_history_id=scan_history_id,
+            ip_addresses__id=ip_id,
+        ).filter(
+            Q(http_status__gt=0)
+            | Exists(
+                EndPoint.objects.filter(
+                    scan_history_id=scan_history_id,
+                    subdomain_id=OuterRef("pk"),
+                    http_status__gt=0,
+                )
+            )
+        )
+        return subdomain_http_or_endpoint.exists()
 
     def _collect_ip_for_geolocalization(self, ip_address: str) -> None:
         """

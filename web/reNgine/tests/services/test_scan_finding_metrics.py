@@ -7,15 +7,17 @@ from reNgine.services.scan_finding_metrics import (
     SCAN_FINDING_IP_COUNT_KEY,
     attach_ip_metrics_to_scans,
     bulk_ip_metrics_for_scans,
+    bulk_ip_metrics_for_targets,
     get_ip_address_metrics_for_scan,
     get_ip_address_total_for_scan,
     get_ip_metrics_for_project,
+    get_ip_metrics_for_target,
     get_scan_finding_counts,
     ip_address_id_linked_to_scan,
     partition_ip_address_ids_for_scan_history,
 )
 from reNgine.utilities.websocket import build_light_scan_status_message
-from startScan.models import EndPoint, IpAddress
+from startScan.models import EndPoint, IpAddress, ScanHistory
 from utils.test_base import BaseTestCase
 
 
@@ -97,6 +99,30 @@ class ScanFindingMetricsTestCase(BaseTestCase):
         attach_ip_metrics_to_scans(scans)
         self.assertEqual(getattr(self.scan, "ip_address_count"), 1)
         self.assertEqual(getattr(self.scan, "ip_alive_count"), 1)
+
+    def test_bulk_ip_metrics_for_targets_matches_union_across_scans(self) -> None:
+        target = self.data_generator.target
+        scan_a = self.scan
+        sub_a = self.data_generator.create_subdomain(scan_history=scan_a, domain=self.domain)
+        ip_a = IpAddress.objects.create(address="192.0.2.50", version=4, alive=True)
+        sub_a.ip_addresses.add(ip_a)
+
+        scan_b = ScanHistory.objects.create(
+            target=target,
+            start_scan_date=timezone.now(),
+            scan_status=2,
+            is_legacy_scan=False,
+            tasks=["httpx"],
+        )
+        domain_b = self.data_generator.create_domain(scan_history=scan_b)
+        sub_b = self.data_generator.create_subdomain(scan_history=scan_b, domain=domain_b)
+        ip_b = IpAddress.objects.create(address="192.0.2.51", version=4, alive=False)
+        sub_b.ip_addresses.add(ip_b)
+
+        bulk = bulk_ip_metrics_for_targets([target.id])
+        legacy = IpAddress.get_counts_for_scan_histories([scan_a.id, scan_b.id])
+        self.assertEqual(bulk[target.id], (legacy["total"], legacy["alive"]))
+        self.assertEqual(get_ip_metrics_for_target(target.id), bulk[target.id])
 
     def test_ip_address_get_project_counts_matches_service(self) -> None:
         project = self.data_generator.project

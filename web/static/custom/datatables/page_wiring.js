@@ -14,6 +14,7 @@
 
   const SCAN_HISTORY_BADGES = [
     { selectId: "filterByOrganization", label: "Organization", badgeClass: "badge-soft-primary" },
+    { selectId: "filterByScope", label: "Scope", badgeClass: "badge-soft-info" },
     { selectId: "filterByScanStatus", label: "Status", badgeClass: "badge-soft-info" },
     { selectId: "filterByTarget", label: "Target", badgeClass: "badge-soft-primary" },
     { selectId: "filterByScanType", label: "Engine", badgeClass: "badge-soft-primary" },

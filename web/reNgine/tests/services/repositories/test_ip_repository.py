@@ -2,7 +2,12 @@
 Tests for IP repository functionality.
 """
 
+import json
+
+from django.utils import timezone
+
 from reNgine.services.repositories.ip_repository import IpRepository
+from startScan.models import EndPoint
 from utils.test_base import BaseTestCase
 
 
@@ -307,3 +312,80 @@ class TestIpRepository(BaseTestCase):
         self.assertIsNotNone(result)
         subdomain.refresh_from_db()
         self.assertIn(result, subdomain.ip_addresses.all())
+
+    def test_sync_alive_from_http_subdomain_http_status(self):
+        """Subdomain with http_status > 0 promotes linked IP alive."""
+        subdomain = self.data_generator.create_subdomain(
+            name="sync.example.com",
+            scan_history=self.scan_history,
+            domain=self.domain,
+        )
+        ip_obj, _ = self.ip_repo.get_or_create_for_scan(
+            self.scan_history.id,
+            self.data_generator.target.id,
+            "203.0.113.20",
+            alive=False,
+        )
+        self.assertIsNotNone(ip_obj)
+        self.assertFalse(ip_obj.alive)
+        subdomain.ip_addresses.add(ip_obj)
+        subdomain.http_status = 200
+        subdomain.save(update_fields=["http_status"])
+        self.assertTrue(self.ip_repo.sync_alive_from_http_evidence(ip_obj.id, self.scan_history.id))
+        ip_obj.refresh_from_db()
+        self.assertTrue(ip_obj.alive)
+
+    def test_sync_alive_from_http_endpoint_on_subdomain(self):
+        """EndPoint with http_status > 0 for linked subdomain promotes IP alive."""
+        subdomain = self.data_generator.create_subdomain(
+            name="ep.example.com",
+            scan_history=self.scan_history,
+            domain=self.domain,
+        )
+        ip_obj, _ = self.ip_repo.get_or_create_for_scan(
+            self.scan_history.id,
+            self.data_generator.target.id,
+            "203.0.113.21",
+            alive=False,
+        )
+        subdomain.ip_addresses.add(ip_obj)
+        subdomain.http_status = 0
+        subdomain.save(update_fields=["http_status"])
+        self.data_generator.create_endpoint(
+            subdomain=subdomain,
+            scan_history=self.scan_history,
+            domain=self.domain,
+            http_status=200,
+        )
+        self.assertTrue(self.ip_repo.sync_alive_from_http_evidence(ip_obj.id, self.scan_history.id))
+        ip_obj.refresh_from_db()
+        self.assertTrue(ip_obj.alive)
+
+    def test_sync_alive_from_http_direct_ip_endpoint(self):
+        """EndPoint linked to IpAddress (literal host) with http_status > 0 promotes alive."""
+        ip_obj, _ = self.ip_repo.get_or_create_for_scan(
+            self.scan_history.id,
+            self.data_generator.target.id,
+            "203.0.113.22",
+            alive=False,
+        )
+        EndPoint.objects.create(
+            domain=self.domain,
+            scan_history=self.scan_history,
+            subdomain=None,
+            ip_address=ip_obj,
+            http_url="http://203.0.113.22",
+            http_status=200,
+            discovered_date=timezone.now(),
+        )
+        self.assertTrue(self.ip_repo.sync_alive_from_http_evidence(ip_obj.id, self.scan_history.id))
+        ip_obj.refresh_from_db()
+        self.assertTrue(ip_obj.alive)
+
+    def test_save_from_secator_preserves_alive_from_json_bool(self):
+        """JSON-style dict (e.g. API body) keeps boolean alive for Secator IP items."""
+        raw = '{"_type": "ip", "ip": "192.0.2.60", "alive": true}'
+        item = json.loads(raw)
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertTrue(result.alive)

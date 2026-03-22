@@ -153,6 +153,8 @@ class TargetSerializer(serializers.ModelSerializer):
     vulnerability_count = serializers.IntegerField(read_only=True, default=0)
     secret_count = serializers.IntegerField(read_only=True, default=0)
     exploit_count = serializers.IntegerField(read_only=True, default=0)
+    ip_address_count = serializers.SerializerMethodField()
+    ip_alive_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Target
@@ -176,6 +178,8 @@ class TargetSerializer(serializers.ModelSerializer):
             "vulnerability_count",
             "secret_count",
             "exploit_count",
+            "ip_address_count",
+            "ip_alive_count",
             "has_scan",
         ]
         datatables_always_serialize = (
@@ -185,6 +189,8 @@ class TargetSerializer(serializers.ModelSerializer):
             "vulnerability_count",
             "secret_count",
             "exploit_count",
+            "ip_address_count",
+            "ip_alive_count",
         )
 
     has_scan = serializers.SerializerMethodField()
@@ -221,6 +227,30 @@ class TargetSerializer(serializers.ModelSerializer):
 
     def get_has_scan(self, obj):
         return bool(obj.start_scan_date)
+
+    def _target_ip_counts_for_serialization(self, obj):
+        from reNgine.services.scan_finding_metrics import (
+            TARGET_IP_ALIVE_ATTR,
+            TARGET_IP_COUNT_ATTR,
+            get_ip_metrics_for_target,
+        )
+
+        total = getattr(obj, TARGET_IP_COUNT_ATTR, _CACHE_MISSING)
+        alive = getattr(obj, TARGET_IP_ALIVE_ATTR, _CACHE_MISSING)
+        if total is not _CACHE_MISSING and alive is not _CACHE_MISSING:
+            return total, alive
+        cache = self.context.setdefault("_target_ip_metrics_fallback", {})
+        if obj.id not in cache:
+            cache[obj.id] = get_ip_metrics_for_target(obj.id)
+        return cache[obj.id]
+
+    def get_ip_address_count(self, obj):
+        total, _alive = self._target_ip_counts_for_serialization(obj)
+        return total
+
+    def get_ip_alive_count(self, obj):
+        _total, alive = self._target_ip_counts_for_serialization(obj)
+        return alive
 
 
 class SubScanResultSerializer(serializers.ModelSerializer):

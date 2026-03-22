@@ -2,7 +2,7 @@
 Tests for Port repository functionality.
 """
 
-from reNgine.services.repositories.port_repository import PortRepository
+from reNgine.services.repositories.port_repository import PortRepository, secator_port_data_implies_alive_host
 from startScan.models import Subdomain
 from utils.test_base import BaseTestCase
 
@@ -386,3 +386,50 @@ class TestPortRepository(BaseTestCase):
         subdomain = Subdomain.objects.filter(scan_history=self.scan_history, name="server.example.lan").first()
         self.assertIsNotNone(subdomain, "Subdomain should be created via get_or_create_from_host")
         self.assertEqual(subdomain.name, "server.example.lan")
+
+    def test_secator_port_data_implies_alive_host(self):
+        """Only explicit open-style states imply host alive; empty or negative states do not."""
+        self.assertFalse(secator_port_data_implies_alive_host({"state": ""}))
+        self.assertFalse(secator_port_data_implies_alive_host({"state": "unknown"}))
+        self.assertFalse(secator_port_data_implies_alive_host({"state": "timeout"}))
+        self.assertTrue(secator_port_data_implies_alive_host({"state": "open"}))
+        self.assertTrue(secator_port_data_implies_alive_host({"state": "open|filtered"}))
+        self.assertFalse(secator_port_data_implies_alive_host({"state": "closed"}))
+        self.assertFalse(secator_port_data_implies_alive_host({"state": "filtered"}))
+
+    def test_save_from_secator_open_port_sets_ip_alive(self):
+        """Reachable port finding promotes scan-scoped IP alive."""
+        item = {
+            "_type": "port",
+            "port": 8443,
+            "ip": "203.0.113.50",
+            "service_name": "https-alt",
+            "state": "open",
+        }
+        result = self.port_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertTrue(result.ip_address.alive)
+
+    def test_save_from_secator_closed_port_does_not_set_ip_alive(self):
+        """Closed port must not set alive=True on the IP row."""
+        item = {
+            "_type": "port",
+            "port": 999,
+            "ip": "203.0.113.51",
+            "state": "closed",
+        }
+        result = self.port_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertFalse(result.ip_address.alive)
+
+    def test_bulk_create_sets_ip_alive_for_open_style_rows(self):
+        """Bulk port import sets alive on IPs only for explicit open-style states."""
+        ports_data = [
+            {"port": 80, "ip": "198.51.100.77", "service_name": "http", "state": "open"},
+            {"port": 443, "ip": "198.51.100.78", "service_name": "https", "state": "closed"},
+        ]
+        created = self.port_repo.bulk_create(ports_data, self.scan_history.id, self.data_generator.domain.id)
+        self.assertEqual(len(created), 2)
+        by_number = {p.number: p for p in created}
+        self.assertTrue(by_number[80].ip_address.alive)
+        self.assertFalse(by_number[443].ip_address.alive)

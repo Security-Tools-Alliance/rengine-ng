@@ -149,8 +149,9 @@ from reNgine.secator.services.target_builder_service import TargetBuilderService
 from reNgine.secator.synthetic_id import synthetic_id_skipped_scope
 from reNgine.services.repositories.ip_repository import normalize_ip_address_string
 from reNgine.services.repositories.scan_lookups import filter_ports_queryset_by_scan_ids, get_ip_linked_to_scan_ids
-from reNgine.services.scan_finding_metrics import (  # IP PKs in-scan; bulk IP for scan history DataTable
+from reNgine.services.scan_finding_metrics import (  # IP PKs in-scan; bulk IP for scan/target DataTables
     attach_ip_metrics_to_scans,
+    attach_ip_metrics_to_targets,
     partition_ip_address_ids_for_scan_history,
 )
 from reNgine.settings import (
@@ -955,6 +956,46 @@ class ListTargetsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, 
             nulls_last_fields=DATATABLE_NULLS_LAST_FIELDS,
         )
 
+    def list(self, request, *args, **kwargs):
+        base_queryset = self.get_queryset()
+        filtered_queryset = self.filter_queryset(base_queryset)
+        context: dict = {"request": request}
+
+        if pagination := parse_pagination_params(
+            start=request.query_params.get("start"),
+            length=request.query_params.get("length"),
+            page=request.query_params.get("page"),
+            page_size=request.query_params.get("page_size"),
+        ):
+            records_total = base_queryset.count()
+            records_filtered = filtered_queryset.count()
+            slice_qs = filtered_queryset[pagination["start"] : pagination["start"] + pagination["length"]]
+            page_targets = list(slice_qs)
+            attach_ip_metrics_to_targets(page_targets)
+            if hasattr(self, "get_list_serializer_context") and callable(self.get_list_serializer_context):
+                context = {**context, **self.get_list_serializer_context(page_targets)}
+            serializer = self.get_serializer(page_targets, many=True, context=context)
+            return Response(
+                build_datatables_serverside_response(request, records_total, records_filtered, serializer.data)
+            )
+
+        queryset = filtered_queryset
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            page_list = list(page)
+            attach_ip_metrics_to_targets(page_list)
+            if hasattr(self, "get_list_serializer_context") and callable(self.get_list_serializer_context):
+                context = {**context, **self.get_list_serializer_context(page_list)}
+            serializer = self.get_serializer(page_list, many=True, context=context)
+            return self.get_paginated_response(serializer.data)
+
+        all_targets = list(queryset)
+        attach_ip_metrics_to_targets(all_targets)
+        if hasattr(self, "get_list_serializer_context") and callable(self.get_list_serializer_context):
+            context = {**context, **self.get_list_serializer_context(all_targets)}
+        serializer = self.get_serializer(all_targets, many=True, context=context)
+        return Response(serializer.data)
+
 
 class ListScopesDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.GenericViewSet):
     """DataTables list API for scopes, filtered by project slug. Filter params: filter_organization, filter_scope_type. See wiki datatables-api-filters.md."""
@@ -1611,7 +1652,7 @@ class ListSubScans(APIView):
 
 
 class ListSubScansDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, viewsets.GenericViewSet):
-    """DataTables list API for subscans, filtered by project slug. Filter params: filter_organization, filter_status, filter_target, filter_scan_engine. See wiki datatables-api-filters.md."""
+    """DataTables list API for subscans, filtered by project slug. Filter params: filter_organization, filter_scope, filter_status, filter_target, filter_scan_engine. See wiki datatables-api-filters.md."""
 
     serializer_class = SubScanDatatableSerializer
     datatable_column_map = DATATABLE_COLUMN_MAP_SUBSCAN_HISTORY
@@ -1623,6 +1664,7 @@ class ListSubScansDatatableViewSet(DatatableListMixin, DatatablePaginationMixin,
         return (
             SubScan.objects.filter(scan_history__target__project__slug=project)
             .select_related("scan_history", "scan_history__target", "subdomain", "engine", "secator_runner")
+            .prefetch_related("scan_history__target__scopes")
             .order_by("-start_scan_date")
         )
 
@@ -1635,6 +1677,9 @@ class ListSubScansDatatableViewSet(DatatableListMixin, DatatablePaginationMixin,
             ).distinct()
         qs = apply_filter_list_in_by_param(
             qs, req, FILTER_PARAM_ORGANIZATION, "scan_history__target__organizations__name__in", distinct=True
+        )
+        qs = apply_filter_list_in_by_param(
+            qs, req, FILTER_PARAM_SCOPE, "scan_history__target__scopes__name__in", distinct=True
         )
         qs = apply_filter_task_status(qs, req)
         qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_TARGET, "scan_history__target__value__in")
@@ -3423,10 +3468,10 @@ class ScanHistoryFilterChoices(APIView):
     """
     GET ?project=<slug> - Return filter dropdown choices for scan-history and subscan-history pages.
 
-    Response: organizations (list of org names), scan_status_labels (for scan history),
-    task_status_labels (for subscan history), targets, scan_engines.
-    Used by history.html and subscan_history.html to populate all four filter selects
-    (filterByOrganization, filterByScanStatus, filterByTarget, filterByScanType) from a single
+    Response: organizations, scopes (scope names for targets that have scan history in the project),
+    scan_status_labels (for scan history), task_status_labels (for subscan history), targets,
+    scan_engines.
+    Used by history.html and subscan_history.html to populate filter selects from a single
     API call. Requires project query param. See wiki datatables-api-filters.md.
     """
 
@@ -3466,9 +3511,15 @@ class ScanHistoryFilterChoices(APIView):
         orgs = list(
             Organization.objects.for_project(project_slug).order_by("name").values_list("name", flat=True).distinct()
         )
+        target_ids = [tid for tid in scan_qs.values_list("target_id", flat=True).distinct() if tid]
+        scope_names = sorted(
+            Scope.objects.filter(targets__id__in=target_ids).values_list("name", flat=True).distinct(),
+            key=str.lower,
+        )
         return Response(
             {
                 "organizations": orgs,
+                "scopes": list(scope_names),
                 "scan_status_labels": get_scan_status_filter_labels(),
                 "task_status_labels": get_task_status_filter_labels(),
                 "targets": targets,
@@ -3484,14 +3535,14 @@ class ListScanHistory(APIView):
 
     - With pagination (start + length, or page + page_size): returns DataTables
       server-side format via build_datatables_serverside_response, with optional
-      search, order, and filters (organization, status, target, scan_engine).
+      search, order, and filters (organization, scope, status, target, scan_engine).
       Used by the Scan History DataTable (startScan/history.html).
 
     - Without pagination: returns full list as JSON array using ScanHistorySerializer
       (id, domain.name, start_scan_date, etc.). Used by the Recon note "Add Task"
       modal dropdown (recon_note/note/index.html) to populate "Select Scan History".
 
-    Filter query params: filter_organization, filter_status, filter_target, filter_scan_engine.
+    Filter query params: filter_organization, filter_scope, filter_status, filter_target, filter_scan_engine.
     See wiki datatables-api-filters.md and api.helpers.datatables FILTER_PARAM_*.
     """
 
@@ -3684,6 +3735,7 @@ class ListScanHistory(APIView):
             qs = apply_filter_list_in_by_param(
                 qs, req, FILTER_PARAM_ORGANIZATION, "target__organizations__name__in", distinct=True
             )
+            qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_SCOPE, "target__scopes__name__in", distinct=True)
             qs = apply_filter_scan_status(qs, req)
             qs = apply_filter_list_in_by_param(qs, req, FILTER_PARAM_TARGET, "target__value__in")
             qs = self._apply_scan_engine_filter(qs, req)

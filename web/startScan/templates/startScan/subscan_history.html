@@ -245,7 +245,7 @@ $(document).ready(function() {
       window.attachDatatableColumnSearch(table, { tableSelector: '#subscan_history_table', delayMs: 400, tableId: 'subscan_history', restoreOnInit: true });
     }
     if (!window.attachDatatableFilters) {
-      ['filterByOrganization', 'filterByScanStatus', 'filterByScanType', 'filterByTarget'].forEach(function(id) {
+      ['filterByOrganization', 'filterByScope', 'filterByScanStatus', 'filterByScanType', 'filterByTarget'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('change', function() { table.draw(); }, false);
       });

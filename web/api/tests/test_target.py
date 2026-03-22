@@ -6,7 +6,8 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 
-from startScan.models import Domain, EndPoint, ScanHistory, Subdomain, Vulnerability
+from reNgine.services.scan_finding_metrics import get_ip_metrics_for_target
+from startScan.models import Domain, EndPoint, IpAddress, ScanHistory, Subdomain, Vulnerability
 from targetApp.models import Organization, Scope, Target
 from utils.test_base import BaseTestCase
 
@@ -71,6 +72,31 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
             response.data["results"][0]["name"],
             self.data_generator.target.value,
         )
+
+    def test_list_targets_datatable_ip_counts_match_get_ip_metrics_for_target(self) -> None:
+        """Target list DataTable exposes centralized per-target IP counts."""
+        target = self.data_generator.target
+        scan = self.data_generator.scan_history
+        sub = self.data_generator.create_subdomain(scan_history=scan, domain=self.data_generator.domain)
+        ip = IpAddress.objects.create(address="192.0.2.99", version=4, alive=True)
+        sub.ip_addresses.add(ip)
+        expected_total, expected_alive = get_ip_metrics_for_target(target.id)
+
+        api_url = reverse("api:targets-list")
+        response = self.client.get(
+            api_url,
+            {
+                "slug": self.data_generator.project.slug,
+                "start": 0,
+                "length": 50,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data", [])
+        row = next((r for r in rows if r.get("id") == target.id), None)
+        self.assertIsNotNone(row, msg="Expected target row in DataTable response")
+        self.assertEqual(row.get("ip_address_count"), expected_total)
+        self.assertEqual(row.get("ip_alive_count"), expected_alive)
 
     def test_list_targets_order_by_name_asc(self):
         """List targets with order column 2 (value) ascending uses centralised map."""

@@ -139,8 +139,20 @@ DATATABLE_TABLE_CONFIGS: dict[str, dict[str, Any]] = {
 }
 
 EXPECTED_FILTER_SELECT_IDS: dict[str, set[str]] = {
-    TABLE_ID_SCAN_HISTORY: {"filterByOrganization", "filterByScanStatus", "filterByTarget", "filterByScanType"},
-    TABLE_ID_SUBSCAN_HISTORY: {"filterByOrganization", "filterByScanStatus", "filterByTarget", "filterByScanType"},
+    TABLE_ID_SCAN_HISTORY: {
+        "filterByOrganization",
+        "filterByScope",
+        "filterByScanStatus",
+        "filterByTarget",
+        "filterByScanType",
+    },
+    TABLE_ID_SUBSCAN_HISTORY: {
+        "filterByOrganization",
+        "filterByScope",
+        "filterByScanStatus",
+        "filterByTarget",
+        "filterByScanType",
+    },
     TABLE_ID_TARGET_LIST: {"filterByOrganization", "filterByScope", "filterByScanPresence"},
     TABLE_ID_SCOPE_LIST: {"filterByOrganization", "filterByScopeType"},
     TABLE_ID_ORGANIZATION_LIST: {"filterByName"},
@@ -149,8 +161,20 @@ EXPECTED_FILTER_SELECT_IDS: dict[str, set[str]] = {
     TABLE_ID_S3_BUCKETS: {"filterByBucketName"},
 }
 EXPECTED_FILTER_PARAM_NAMES: dict[str, set[str]] = {
-    TABLE_ID_SCAN_HISTORY: {"filter_organization", "filter_status", "filter_target", "filter_scan_engine"},
-    TABLE_ID_SUBSCAN_HISTORY: {"filter_organization", "filter_status", "filter_target", "filter_scan_engine"},
+    TABLE_ID_SCAN_HISTORY: {
+        "filter_organization",
+        "filter_scope",
+        "filter_status",
+        "filter_target",
+        "filter_scan_engine",
+    },
+    TABLE_ID_SUBSCAN_HISTORY: {
+        "filter_organization",
+        "filter_scope",
+        "filter_status",
+        "filter_target",
+        "filter_scan_engine",
+    },
     TABLE_ID_TARGET_LIST: {"filter_organization", "filter_scope", "filter_has_scan"},
     TABLE_ID_SCOPE_LIST: {"filter_organization", "filter_scope_type"},
     TABLE_ID_ORGANIZATION_LIST: {"filter_name"},
