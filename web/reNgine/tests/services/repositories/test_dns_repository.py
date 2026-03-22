@@ -2,6 +2,8 @@
 Tests for DNS repository functionality.
 """
 
+from unittest.mock import patch
+
 from reNgine.services.repositories.dns_repository import DnsRepository
 from startScan.models import Subdomain
 from utils.test_base import BaseTestCase
@@ -41,6 +43,20 @@ class TestDnsRepository(BaseTestCase):
         # name field stores the domain name (record_name), not the value
         self.assertEqual(result.name, "www.example.com")
         self.assertEqual(result.type, "A")
+        self.assertEqual(result.extra_data.get("secator_host"), "192.168.1.1")
+
+    def test_save_from_secator_ptr_record_stores_secator_host(self):
+        """Secator Record host (e.g. IP for PTR) must persist in extra_data."""
+        item = {
+            "_type": "record",
+            "name": "ptr-target.example.com",
+            "type": "PTR",
+            "host": "192.0.2.1",
+        }
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.type, "PTR")
+        self.assertEqual(result.extra_data.get("secator_host"), "192.0.2.1")
 
     def test_save_from_secator_record_creates_subdomain_via_get_or_create_from_host(self):
         """Record item with name/host creates Subdomains via same process (get_or_create_from_host)."""
@@ -345,6 +361,91 @@ class TestDnsRepository(BaseTestCase):
         self.assertEqual(result.name, "www.example.com")
         self.assertEqual(result.type, "A")
 
+    @patch("reNgine.services.repositories.dns_repository.logger")
+    def test_save_from_secator_non_dict_extra_data_logs_warning(self, mock_logger):
+        """Non-dict extra_data triggers a warning; extra_data_raw stores a JSON-safe repr preview."""
+        item = {
+            "_type": "record",
+            "name": "www.example.com",
+            "type": "A",
+            "host": "192.168.1.1",
+            "extra_data": ["unexpected", "list"],
+        }
+        tid = self.data_generator.target.id
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, tid)
+
+        self.assertIsNotNone(result)
+        self.assertNotIn("ttl", result.extra_data)
+        self.assertEqual(result.extra_data.get("extra_data_raw"), "['unexpected', 'list']")
+        warned = any(
+            c.kwargs.get("level") == "warning"
+            and len(c.args) >= 3
+            and "Non-dict extra_data" in c.args[2]
+            and "raw_type=list" in c.args[2]
+            for c in mock_logger.log_line.call_args_list
+        )
+        self.assertTrue(warned, "Expected warning log_line for non-dict extra_data")
+
+    @patch("reNgine.services.repositories.dns_repository.logger")
+    def test_save_from_secator_extra_data_json_string_parsed_as_dict(self, mock_logger):
+        """JSON object string in extra_data is decoded to a dict; warning still notes non-dict input type."""
+        item = {
+            "_type": "record",
+            "name": "www.example.com",
+            "type": "A",
+            "host": "192.168.1.1",
+            "extra_data": '{"ttl": 120, "priority": 1}',
+        }
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.extra_data.get("ttl"), 120)
+        self.assertEqual(result.extra_data.get("priority"), 1)
+        self.assertNotIn("extra_data_raw", result.extra_data)
+        warned = any(
+            c.kwargs.get("level") == "warning"
+            and len(c.args) >= 3
+            and "Non-dict extra_data" in c.args[2]
+            and "raw_type=str" in c.args[2]
+            for c in mock_logger.log_line.call_args_list
+        )
+        self.assertTrue(warned)
+
+    @patch("reNgine.services.repositories.dns_repository.merge_extra_data_payload_into_model")
+    def test_update_dns_record_extra_data_empty_dict_passed_to_merge(self, mock_merge) -> None:
+        """Empty dict must be forwarded to the merge helper, not collapsed to None."""
+        dns_record = self.data_generator.create_dns_record()
+        dns_record.extra_data = {"keep": True}
+        dns_record.save(update_fields=["extra_data"])
+
+        self.dns_repo._update_dns_record_extra_data({}, dns_record)
+
+        mock_merge.assert_called_once_with(dns_record, {})
+
+    @patch("reNgine.services.repositories.dns_repository.merge_extra_data_payload_into_model")
+    def test_update_dns_record_extra_data_none_skips_merge(self, mock_merge) -> None:
+        dns_record = self.data_generator.create_dns_record()
+        self.dns_repo._update_dns_record_extra_data(None, dns_record)
+        mock_merge.assert_not_called()
+
+    @patch("reNgine.services.repositories.dns_repository.logger")
+    def test_merge_dns_extra_payload_logs_when_record_host_conflicts_with_stored_secator_host(self, mock_logger):
+        """When secator_host is already set, a differing Record host is logged and not applied."""
+        merged = DnsRepository._merge_dns_extra_payload(
+            {"secator_host": "stored.example.invalid"},
+            {},
+            "incoming.example.invalid",
+        )
+        self.assertEqual(merged.get("secator_host"), "stored.example.invalid")
+        logged = any(
+            c.kwargs.get("level") == "info"
+            and len(c.args) >= 3
+            and "Keeping existing secator_host" in c.args[2]
+            and "stored.example.invalid" in c.args[2]
+            and "incoming.example.invalid" in c.args[2]
+            for c in mock_logger.log_line.call_args_list
+        )
+        self.assertTrue(logged)
+
     def test_save_from_secator_duplicate_record(self):
         """Test handling duplicate DNS record creation."""
         # Create first record
@@ -464,7 +565,10 @@ class TestDnsRepository(BaseTestCase):
         }
         result1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.data_generator.target.id)
         self.assertIsNotNone(result1)
-        self.assertEqual(result1.extra_data, {"ttl": 3600})
+        self.assertEqual(
+            result1.extra_data,
+            {"ttl": 3600, "secator_host": "192.168.1.1"},
+        )
 
         # Update with new extra_data
         item2 = {
@@ -479,18 +583,42 @@ class TestDnsRepository(BaseTestCase):
         # Should update existing record
         self.assertIsNotNone(result2)
         self.assertEqual(result1.id, result2.id)  # Same record
-        self.assertEqual(result2.extra_data, {"ttl": 7200, "priority": 10})
+        self.assertEqual(
+            result2.extra_data,
+            {"ttl": 7200, "priority": 10, "secator_host": "192.168.1.1"},
+        )
 
     def test_update_dns_record_extra_data(self):
-        """Test _update_dns_record_extra_data method."""
+        """Test _update_dns_record_extra_data merges into existing JSON."""
 
         dns_record = self.data_generator.create_dns_record()
+        dns_record.extra_data = {"keep": True}
+        dns_record.save(update_fields=["extra_data"])
         new_extra_data = {"ttl": 3600, "priority": 10, "value": "192.168.1.1"}
 
         self.dns_repo._update_dns_record_extra_data(new_extra_data, dns_record)
 
         dns_record.refresh_from_db()
-        self.assertEqual(dns_record.extra_data, new_extra_data)
+        self.assertTrue(dns_record.extra_data.get("keep"))
+        self.assertEqual(dns_record.extra_data.get("ttl"), 3600)
+        self.assertEqual(dns_record.extra_data.get("priority"), 10)
+
+    @patch("reNgine.services.repositories.dns_repository.logger")
+    def test_update_dns_record_extra_data_non_dict_logs_and_skips_merge(self, mock_logger):
+        """Non-dict extra_data triggers a warning and leaves existing JSON unchanged."""
+        dns_record = self.data_generator.create_dns_record()
+        dns_record.extra_data = {"keep": True}
+        dns_record.save(update_fields=["extra_data"])
+
+        self.dns_repo._update_dns_record_extra_data(["not", "a", "dict"], dns_record)
+
+        dns_record.refresh_from_db()
+        self.assertEqual(dns_record.extra_data, {"keep": True})
+        warned = any(
+            c.kwargs.get("level") == "warning" and len(c.args) >= 3 and "Ignoring non-dict extra_data" in c.args[2]
+            for c in mock_logger.log_line.call_args_list
+        )
+        self.assertTrue(warned)
 
     def test_validate_dns_record_type_valid(self):
         """Test validate_dns_record_type with valid types."""
@@ -509,6 +637,9 @@ class TestDnsRepository(BaseTestCase):
         self.assertTrue(self.dns_repo.validate_dns_record_type("NSEC"))
         self.assertTrue(self.dns_repo.validate_dns_record_type("NSEC3"))
         self.assertTrue(self.dns_repo.validate_dns_record_type("AXFR"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("HTTPS"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("TLSA"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("HINFO"))
 
     def test_validate_dns_record_type_invalid(self):
         """Test validate_dns_record_type with invalid types."""
@@ -541,7 +672,8 @@ class TestDnsRepository(BaseTestCase):
         self.assertIn("NSEC", valid_types)
         self.assertIn("NSEC3", valid_types)
         self.assertIn("AXFR", valid_types)
-        self.assertEqual(len(valid_types), 15)
+        self.assertIn("HTTPS", valid_types)
+        self.assertEqual(len(valid_types), 21)
 
     def test_get_valid_dns_types_returns_copy(self):
         """Test that get_valid_dns_types returns a copy, not the original set."""
@@ -595,6 +727,72 @@ class TestDnsRepository(BaseTestCase):
         parsed = self.dns_repo.parse_extra_data(None)
 
         self.assertEqual(parsed, {})
+
+    @patch("reNgine.services.repositories.dns_repository.logger")
+    def test_parse_extra_data_non_dict_returns_empty(self, mock_logger):
+        """Non-dict extra_data is normalized to an empty dict and logged."""
+        self.assertEqual(self.dns_repo.parse_extra_data("not-a-dict"), {})
+        self.assertEqual(self.dns_repo.parse_extra_data(["x"]), {})
+        self.assertEqual(self.dns_repo.parse_extra_data(0), {})
+        self.assertEqual(self.dns_repo.parse_extra_data(False), {})
+        warn_non_dict = sum(
+            1
+            for c in mock_logger.log_line.call_args_list
+            if c.kwargs.get("level") == "warning"
+            and len(c.args) >= 3
+            and "Non-dict extra_data in parse_extra_data" in c.args[2]
+        )
+        self.assertEqual(warn_non_dict, 4)
+
+    def test_merge_dns_extra_payload_omits_secator_host_when_host_empty(self):
+        """Do not persist secator_host when the host value is missing or empty."""
+        merged = DnsRepository._merge_dns_extra_payload(
+            {"secator_host": "192.0.2.1", "ttl": 1},
+            {"foo": "bar"},
+            "",
+        )
+        self.assertEqual(merged.get("foo"), "bar")
+        self.assertEqual(merged.get("ttl"), 1)
+        self.assertEqual(merged.get("secator_host"), "192.0.2.1")
+
+        merged_none = DnsRepository._merge_dns_extra_payload(None, {"a": 1}, None)
+        self.assertEqual(merged_none, {"a": 1})
+        self.assertNotIn("secator_host", merged_none)
+
+        preserved = DnsRepository._merge_dns_extra_payload(
+            {"secator_host": "first-host.example.com", "ttl": 1},
+            {"ttl": 2},
+            "second-host.example.com",
+        )
+        self.assertEqual(preserved.get("secator_host"), "first-host.example.com")
+        self.assertEqual(preserved.get("ttl"), 2)
+
+    def test_merge_dns_extra_payload_non_dict_existing_treated_as_empty(self) -> None:
+        """Legacy or corrupted non-dict stored ``existing`` must not break the merge."""
+        merged = DnsRepository._merge_dns_extra_payload([1, 2], {"a": 1}, None)
+        self.assertEqual(merged, {"a": 1})
+
+    @patch("reNgine.services.repositories.dns_repository.logger")
+    def test_save_from_secator_non_dict_extra_data_logs_bounded_preview(self, mock_logger) -> None:
+        """Malformed ``extra_data`` should log a truncated string preview for diagnostics."""
+        item = {
+            "_type": "record",
+            "name": "www.example.com",
+            "type": "A",
+            "host": "192.168.1.1",
+            "extra_data": 42,
+        }
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.extra_data.get("extra_data_raw"), "42")
+        warned = any(
+            c.kwargs.get("level") == "warning"
+            and len(c.args) >= 3
+            and "raw_preview=" in c.args[2]
+            and "42" in c.args[2]
+            for c in mock_logger.log_line.call_args_list
+        )
+        self.assertTrue(warned, "Expected warning with raw_preview for non-dict extra_data")
 
     def test_get_or_create_empty_name(self):
         """Test get_or_create with empty name."""

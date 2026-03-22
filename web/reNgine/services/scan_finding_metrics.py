@@ -2,7 +2,7 @@
 Centralized per-scan finding counts for dashboards, APIs, and WebSocket payloads.
 
 Keeps subdomain, endpoint, vulnerability, and IP metrics consistent across surfaces.
-IP-in-scan sets (e.g. ip_address_ids_in_scan) follow the same rules as scan_lookups:
+IP-in-scan sets (e.g. ip_address_ids_in_scan) follow the same rules as ``reNgine.utilities.scan_lookups``:
 Subdomain M2M to IpAddress for the scan, or EndPoint.ip_address on that scan.
 (Subdomain rows are not created for IP literals; see SubdomainRepository.get_or_create_from_host.)
 
@@ -59,7 +59,7 @@ def ip_address_linked_to_scan_q(scan_history_id: int) -> Q:
 
 def ip_address_id_linked_to_scan(ip_address_id: int, scan_history_id: int) -> bool:
     """
-    True if the IpAddress PK is tied to the scan (same rules as ``ip_address_ids_in_scan`` / scan_lookups).
+    True if the IpAddress PK is tied to the scan (same rules as ``ip_address_ids_in_scan`` / ``reNgine.utilities.scan_lookups``).
 
     Prefer this or ``partition_ip_address_ids_for_scan_history`` over ad-hoc IpAddress filters.
     """
@@ -86,7 +86,7 @@ def partition_ip_address_ids_for_scan_history(
     """
     Split requested IP PKs into those linked to the scan vs not (same order as ``ip_ids``).
 
-    “Linked” matches ``ip_address_ids_in_scan`` / scan_lookups: Subdomain.ip_addresses M2M for the
+    “Linked” matches ``ip_address_ids_in_scan`` / ``reNgine.utilities.scan_lookups``: Subdomain.ip_addresses M2M for the
     scan or ``EndPoint.ip_address`` on that scan.
     """
     allowed = ip_address_ids_in_scan(scan_history_id)

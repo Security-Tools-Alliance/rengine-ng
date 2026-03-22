@@ -3,7 +3,7 @@ Port Repository - Data access for port operations.
 
 Handles Port database operations with IP dependency from Secator.
 Ports attach to IpAddress; scan visibility follows that IP's links (subdomain M2M or
-IP-backed endpoints in the same scan), matching IpRepository / scan_lookups semantics.
+IP-backed endpoints in the same scan), matching IpRepository / scan_lookups utilities.
 """
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -13,6 +13,10 @@ from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.validators import is_valid_ip, is_valid_port
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
+from reNgine.utilities.extra_data_merge import (
+    bounded_diagnostic_preview,
+    merge_extra_data_payload_into_model,
+)
 from reNgine.services.repositories.ip_repository import IpRepository
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
@@ -130,7 +134,7 @@ class PortRepository:
             logger.log_line(
                 PREFIX_PORT_REPO,
                 "SAVE",
-                "Invalid port number type/value: %s" % (repr(raw_port),),
+                "Invalid port number type/value: %s" % (bounded_diagnostic_preview(raw_port, use_repr=True),),
                 level="warning",
             )
             return None
@@ -201,20 +205,24 @@ class PortRepository:
             )
             return None
 
-        # Get or create port
+        extra_init = self._secator_port_extra_data_dict(item)
+        port_defaults: Dict[str, Any] = {
+            "service_name": item.get("service_name", ""),
+            "description": item.get("description", ""),
+            "is_uncommon": self._is_uncommon_port(port_number),
+            "state": item.get("state", ""),
+            "cpes": item.get("cpes", []),
+            "protocol": item.get("protocol", ""),
+            "host": item.get("host", ""),
+            "confidence": self._validate_confidence(item.get("confidence", "")),
+        }
+        if extra_init is not None:
+            port_defaults["extra_data"] = extra_init
+
         port_obj, created = Port.objects.get_or_create(
             number=port_number,
             ip_address=ip_obj,
-            defaults={
-                "service_name": item.get("service_name", ""),
-                "description": item.get("description", ""),
-                "is_uncommon": self._is_uncommon_port(port_number),
-                "state": item.get("state", ""),
-                "cpes": item.get("cpes", []),
-                "protocol": item.get("protocol", ""),
-                "host": item.get("host", ""),
-                "confidence": self._validate_confidence(item.get("confidence", "")),
-            },
+            defaults=port_defaults,
         )
 
         if created:
@@ -231,6 +239,8 @@ class PortRepository:
                 "Port already exists: %s on %s" % (port_number, ip_address),
                 level="debug",
             )
+
+        self._apply_secator_port_followup(port_obj, item, created, ip_address, raw_host, extra_init)
 
         if raw_host and raw_host.strip().lower() != ip_address and is_acceptable_subdomain_name(raw_host):
             SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, raw_host)
@@ -418,6 +428,111 @@ class PortRepository:
             )
             return False
 
+    @staticmethod
+    def _secator_port_extra_data_dict(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        raw = item.get("extra_data")
+        if isinstance(raw, dict) and raw:
+            return dict(raw)
+        return None
+
+    def _apply_secator_port_followup(
+        self,
+        port_obj: Port,
+        item: Dict[str, Any],
+        created: bool,
+        ip_literal: str,
+        raw_host: Optional[str],
+        normalized_extra: Optional[Dict[str, Any]],
+    ) -> None:
+        """Merge Secator extra_data; enrich empty scalar fields when the port row already existed."""
+        update_fields: List[str] = []
+        if normalized_extra is not None and merge_extra_data_payload_into_model(
+            port_obj, normalized_extra, persist=False
+        ):
+            update_fields.append("extra_data")
+        if not created:
+            update_fields.extend(self._fill_empty_port_fields_from_secator(port_obj, item, ip_literal, raw_host))
+        if update_fields:
+            port_obj.save(update_fields=sorted(set(update_fields)))
+
+    @staticmethod
+    def _fill_empty_port_string_field_if_blank(
+        port_obj: Port,
+        item: Dict[str, Any],
+        field: str,
+        fields: List[str],
+    ) -> None:
+        val = (item.get(field) or "").strip()
+        if val and not (getattr(port_obj, field) or "").strip():
+            setattr(port_obj, field, val)
+            fields.append(field)
+
+    @staticmethod
+    def _merge_secator_cpes_into_port(
+        port_obj: Port,
+        item: Dict[str, Any],
+        fields: List[str],
+    ) -> None:
+        cpes = item.get("cpes")
+        if not isinstance(cpes, list) or not cpes:
+            return
+        existing_cpes = [c for c in (port_obj.cpes or []) if isinstance(c, str)]
+        seen_str = set(existing_cpes)
+        appended = False
+        for cpe in cpes:
+            if not isinstance(cpe, str):
+                continue
+            if cpe not in seen_str:
+                seen_str.add(cpe)
+                existing_cpes.append(cpe)
+                appended = True
+        if appended:
+            port_obj.cpes = existing_cpes
+            fields.append("cpes")
+
+    @staticmethod
+    def _secator_raw_host_is_hostname_candidate(raw_host: str, ip_literal: str) -> bool:
+        rh = raw_host.strip()
+        return bool(rh) and rh.lower() != ip_literal.lower() and not is_valid_ip(rh)
+
+    @staticmethod
+    def _fill_port_host_from_secator_raw(
+        port_obj: Port,
+        raw_host: Optional[str],
+        ip_literal: str,
+        fields: List[str],
+    ) -> None:
+        if not raw_host:
+            return
+        if not PortRepository._secator_raw_host_is_hostname_candidate(raw_host, ip_literal):
+            return
+        rh = raw_host.strip()
+        cur = (port_obj.host or "").strip()
+        if not cur or cur == ip_literal or is_valid_ip(cur):
+            port_obj.host = rh
+            fields.append("host")
+
+    def _fill_empty_port_fields_from_secator(
+        self,
+        port_obj: Port,
+        item: Dict[str, Any],
+        ip_literal: str,
+        raw_host: Optional[str],
+    ) -> List[str]:
+        """Populate empty columns from a newer Secator port item (e.g. naabu then nmap)."""
+        fields: List[str] = []
+        self._fill_empty_port_string_field_if_blank(port_obj, item, "service_name", fields)
+        self._fill_empty_port_string_field_if_blank(port_obj, item, "description", fields)
+        self._fill_empty_port_string_field_if_blank(port_obj, item, "state", fields)
+        self._fill_empty_port_string_field_if_blank(port_obj, item, "protocol", fields)
+        conf = self._validate_confidence(item.get("confidence", ""))
+        if conf and not (port_obj.confidence or "").strip():
+            port_obj.confidence = conf
+            fields.append("confidence")
+        self._merge_secator_cpes_into_port(port_obj, item, fields)
+        self._fill_port_host_from_secator_raw(port_obj, raw_host, ip_literal, fields)
+        return fields
+
     def _validate_confidence(self, confidence: str) -> str:
         """
         Validate and normalize confidence level.
@@ -431,7 +546,7 @@ class PortRepository:
         from reNgine.core.validators import validate_confidence
 
         validated = validate_confidence(confidence)
-        return validated if validated else ""
+        return validated or ""
 
     def _is_uncommon_port(self, port_number: int) -> bool:
         """

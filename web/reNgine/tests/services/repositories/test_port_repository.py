@@ -3,7 +3,7 @@ Tests for Port repository functionality.
 """
 
 from reNgine.services.repositories.port_repository import PortRepository, secator_port_data_implies_alive_host
-from startScan.models import Subdomain
+from startScan.models import Port, Subdomain
 from utils.test_base import BaseTestCase
 
 
@@ -38,6 +38,7 @@ class TestPortRepository(BaseTestCase):
         self.assertEqual(result.ip_address.address, "192.168.1.1")
         self.assertEqual(result.service_name, "http")
         self.assertEqual(result.description, "HTTP service")
+        self.assertEqual(result.extra_data, {})
 
     def test_save_from_secator_invalid_port(self):
         """Test handling invalid port number."""
@@ -207,6 +208,106 @@ class TestPortRepository(BaseTestCase):
         self.assertEqual(result.service_name, "http-alt")
         self.assertEqual(result.description, "Alternative HTTP service")
         self.assertTrue(result.is_uncommon)  # 8080 is uncommon
+        self.assertEqual(result.extra_data.get("banner"), "Apache/2.4.41")
+        self.assertEqual(result.extra_data.get("version"), "2.4.41")
+
+    def test_save_from_secator_enriches_existing_port_after_naabu_style_then_nmap(self):
+        """Empty service_name from first tool is filled when a richer Secator port item arrives."""
+        ip_lit = "192.0.2.50"
+        item_naabu = {
+            "_type": "port",
+            "port": 443,
+            "ip": ip_lit,
+            "host": ip_lit,
+            "state": "open",
+            "protocol": "tcp",
+            "service_name": "",
+            "cpes": [],
+            "confidence": "",
+        }
+        first = self.port_repo.save_from_secator(item_naabu, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(first)
+        self.assertEqual((first.service_name or "").strip(), "")
+
+        item_nmap = {
+            "_type": "port",
+            "port": 443,
+            "ip": ip_lit,
+            "host": "www.example.com",
+            "state": "open",
+            "protocol": "tcp",
+            "service_name": "https",
+            "cpes": [],
+            "confidence": "low",
+            "extra_data": {"method": "table", "conf": "3"},
+        }
+        second = self.port_repo.save_from_secator(item_nmap, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(second)
+        self.assertEqual(second.id, first.id)
+        second.refresh_from_db()
+        self.assertEqual(second.service_name, "https")
+        self.assertEqual(second.confidence, "low")
+        self.assertEqual(second.host, "www.example.com")
+        self.assertEqual(second.extra_data.get("method"), "table")
+
+    def test_save_from_secator_merges_cpes_ordered_dedup_on_followup(self):
+        """Later Secator items append new CPE strings without dropping existing ones."""
+        ip_lit = "192.0.2.51"
+        item_first = {
+            "_type": "port",
+            "port": 22,
+            "ip": ip_lit,
+            "host": ip_lit,
+            "cpes": ["cpe:/a:openssh:openssh:8.0"],
+        }
+        first = self.port_repo.save_from_secator(item_first, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(first)
+        self.assertEqual(first.cpes, ["cpe:/a:openssh:openssh:8.0"])
+
+        item_second = {
+            "_type": "port",
+            "port": 22,
+            "ip": ip_lit,
+            "host": ip_lit,
+            "cpes": [
+                "cpe:/a:openssh:openssh:8.0",
+                "cpe:/o:linux:linux_kernel:5.4",
+            ],
+        }
+        second = self.port_repo.save_from_secator(item_second, self.scan_history.id, self.data_generator.target.id)
+        self.assertEqual(second.id, first.id)
+        second.refresh_from_db()
+        self.assertEqual(
+            second.cpes,
+            ["cpe:/a:openssh:openssh:8.0", "cpe:/o:linux:linux_kernel:5.4"],
+        )
+
+    def test_fill_empty_port_fields_cpes_keeps_string_order_and_drops_non_strings(self):
+        """In-memory CPE merge filters non-strings from existing values then appends new strings."""
+        port = Port()
+        port.service_name = "https"
+        port.description = ""
+        port.state = ""
+        port.protocol = ""
+        port.confidence = ""
+        port.host = ""
+        port.cpes = ["cpe:/a:first:first:1", 42, "cpe:/a:second:second:2"]
+        item = {"cpes": ["cpe:/a:third:third:3"]}
+        fields = self.port_repo._fill_empty_port_fields_from_secator(
+            port,
+            item,
+            "192.0.2.52",
+            None,
+        )
+        self.assertIn("cpes", fields)
+        self.assertEqual(
+            port.cpes,
+            [
+                "cpe:/a:first:first:1",
+                "cpe:/a:second:second:2",
+                "cpe:/a:third:third:3",
+            ],
+        )
 
     def test_save_from_secator_duplicate_port(self):
         """Test handling duplicate port creation."""

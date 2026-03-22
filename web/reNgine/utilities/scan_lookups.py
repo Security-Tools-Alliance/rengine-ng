@@ -6,7 +6,7 @@ a scan_history so that Vulnerability and Exploit association helpers share the
 same filter patterns and avoid subtle inconsistencies.
 
 Expected model relations (startScan.models). Changes to these will break lookups;
-see tests in reNgine/tests/services/repositories/test_scan_lookups.py.
+see tests in reNgine/tests/utilities/test_scan_lookups.py.
 - Subdomain: FK scan_history_id → ScanHistory; M2M ip_addresses → IpAddress.
 - EndPoint: FK scan_history_id → ScanHistory; optional FK ip_address → IpAddress (IP-only host).
 - IpAddress "in scan": linked from a Subdomain of the scan (M2M) or from an EndPoint of the scan
@@ -18,14 +18,14 @@ from typing import Iterable, Optional
 
 from django.db.models import Q
 
-from reNgine.services.repositories.ip_repository import normalize_ip_address_string
+from reNgine.core.ip_literal import normalize_ip_address_text
 from reNgine.services.scan_finding_metrics import ip_address_id_linked_to_scan
 from startScan.models import EndPoint, IpAddress, Port, Subdomain
 
 
 def get_ip_linked_to_scan_ids(address: str, scan_ids: Iterable[int]) -> Optional[IpAddress]:
     """Return IpAddress with given address linked to any of the scans (M2M or IP-backed endpoints)."""
-    normalized = normalize_ip_address_string((address or "").strip())
+    normalized = normalize_ip_address_text((address or "").strip())
     if not normalized:
         return None
     sid = [int(x) for x in dict.fromkeys(scan_ids) if x]

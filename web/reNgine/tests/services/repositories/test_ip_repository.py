@@ -408,6 +408,32 @@ class TestIpRepository(BaseTestCase):
         subdomain.refresh_from_db()
         self.assertIn(result, subdomain.ip_addresses.all())
 
+    def test_save_from_secator_merges_extra_data(self):
+        """Secator Ip.extra_data is merged into IpAddress.extra_data on repeat ingestion."""
+        item = {
+            "_type": "ip",
+            "ip": "192.0.2.88",
+            "host": "host.example.com",
+            "extra_data": {"mac": "00:11:22:33:44:55", "vendor": "TestCo"},
+        }
+        first = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(first)
+        first.refresh_from_db()
+        self.assertEqual(first.extra_data.get("mac"), "00:11:22:33:44:55")
+
+        item2 = {
+            "_type": "ip",
+            "ip": "192.0.2.88",
+            "host": "host.example.com",
+            "extra_data": {"asn": "AS64496"},
+        }
+        second = self.ip_repo.save_from_secator(item2, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(second)
+        second.refresh_from_db()
+        self.assertEqual(second.id, first.id)
+        self.assertEqual(second.extra_data.get("mac"), "00:11:22:33:44:55")
+        self.assertEqual(second.extra_data.get("asn"), "AS64496")
+
     def test_sync_alive_from_http_subdomain_http_status(self):
         """Subdomain with http_status > 0 promotes linked IP alive."""
         subdomain = self.data_generator.create_subdomain(

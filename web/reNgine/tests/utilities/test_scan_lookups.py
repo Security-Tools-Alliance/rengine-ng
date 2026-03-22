@@ -2,14 +2,14 @@
 Tests for scan_lookups module.
 
 Asserts the ORM relations required by scan_lookups (Subdomain, EndPoint, IpAddress, Port)
-exist so that model changes break these tests and are noticed. See scan_lookups module
-docstring for the documented relations.
+exist so that model changes break these tests and are noticed. See reNgine.utilities.scan_lookups
+module docstring for the documented relations.
 """
 
 from django.db import models
 from django.utils import timezone
 
-from reNgine.services.repositories.scan_lookups import (
+from reNgine.utilities.scan_lookups import (
     filter_ports_queryset_by_scan_ids,
     get_ip_linked_to_scan_ids,
 )

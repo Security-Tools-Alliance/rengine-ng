@@ -2250,6 +2250,11 @@ class Port(models.Model):
         choices=CONFIDENCE_CHOICES,
         help_text="Confidence level: low, medium, high",
     )
+    extra_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Secator tool-specific port metadata (e.g. nmap service block)",
+    )
 
     class Meta:
         unique_together = ("ip_address", "number")

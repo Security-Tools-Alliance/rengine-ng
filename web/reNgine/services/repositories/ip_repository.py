@@ -3,7 +3,7 @@ IP Address Repository - Data access for IP address operations.
 
 Handles IpAddress database operations with Secator integration.
 
-Scan scoping and deduplication (aligned with reNgine.services.repositories.scan_lookups):
+Scan scoping and deduplication (aligned with reNgine.utilities.scan_lookups):
 - An IP row is considered in a scan when it is linked via Subdomain.ip_addresses (M2M) for
   that scan_history, or via EndPoint.ip_address for that scan_history.
 - Multiple IpAddress rows with the same normalized address in one scan are merged with
@@ -19,6 +19,7 @@ from django.db.models import Exists, OuterRef, Q
 
 from reNgine.core.ip_literal import normalize_ip_address_text
 from reNgine.core.validators import is_valid_ip
+from reNgine.utilities.extra_data_merge import merge_secator_item_extra_data_into_model
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
@@ -254,6 +255,7 @@ class IpRepository:
             )
 
         self._apply_reverse_pointer_from_secator_item(ip_obj, item, ip_address)
+        self._merge_ip_extra_data_from_secator(ip_obj, item)
 
         # Link this IpAddress to a DNS hostname on a Subdomain only (not IP literals; those use IpAddress + EndPoint).
         hostname = self._resolve_hostname_for_association(item, ip_address)
@@ -572,6 +574,9 @@ class IpRepository:
                 "Error linking IP to subdomain: %s | hostname=%s scan_id=%s" % (reason, hostname, scan_history_id),
                 level="error",
             )
+
+    def _merge_ip_extra_data_from_secator(self, ip_obj: IpAddress, item: Dict[str, Any]) -> None:
+        merge_secator_item_extra_data_into_model(ip_obj, item)
 
     def _apply_reverse_pointer_from_secator_item(
         self, ip_obj: IpAddress, item: Dict[str, Any], normalized_ip: str
