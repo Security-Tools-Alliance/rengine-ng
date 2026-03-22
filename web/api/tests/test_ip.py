@@ -230,6 +230,42 @@ class TestIpActionApiResponses(BaseTestCase):
         self.assertFalse(response.data.get("status"))
         self.assertEqual(response.data.get("error_code"), IP_ERR_MISSING_IP_ADDRESS_ID)
 
+    def test_toggle_ip_important_persists_and_returns_is_important(self) -> None:
+        url = reverse("api:toggle_ip_important")
+        dg = self.data_generator
+        ip = dg.ip_address
+        ip.is_important = False
+        ip.save(update_fields=["is_important"])
+        r1 = self._post_json(url, self.client, {"ip_address_id": ip.id})
+        self.assertEqual(r1.status_code, status.HTTP_200_OK)
+        self.assertTrue(r1.data.get("status"))
+        self.assertTrue(r1.data.get("is_important"))
+        ip.refresh_from_db()
+        self.assertTrue(ip.is_important)
+        r2 = self._post_json(url, self.client, {"ip_address_id": ip.id})
+        self.assertEqual(r2.status_code, status.HTTP_200_OK)
+        self.assertTrue(r2.data.get("status"))
+        self.assertFalse(r2.data.get("is_important"))
+        ip.refresh_from_db()
+        self.assertFalse(ip.is_important)
+
+    def test_toggle_ip_important_returns_json_when_accept_prefers_html(self) -> None:
+        """Regression: browser-style Accept must not yield Browsable API HTML (breaks fetch().json())."""
+        url = reverse("api:toggle_ip_important")
+        dg = self.data_generator
+        response = self.client.post(
+            url,
+            data=json.dumps({"ip_address_id": dg.ip_address.id}),
+            content_type="application/json",
+            HTTP_ACCEPT="text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ct = response.get("Content-Type", "")
+        self.assertIn("application/json", ct)
+        payload = json.loads(response.content.decode())
+        self.assertTrue(payload.get("status"))
+        self.assertIsInstance(payload.get("is_important"), bool)
+
     def test_unlink_scan_ips_returns_error_code_when_missing_fields(self) -> None:
         url = reverse("api:unlink_scan_ip_addresses")
         response = self._post_json(url, self.client, {})

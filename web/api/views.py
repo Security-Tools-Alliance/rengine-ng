@@ -23,6 +23,7 @@ from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.status import (
     HTTP_200_OK,
@@ -1388,6 +1389,10 @@ class ToggleSubdomainImportantStatus(APIView):
 
 
 class ToggleIpAddressImportantStatus(APIView):
+    """Toggle ``IpAddress.is_important``. JSON-only responses (no Browsable API HTML for browser Accept headers)."""
+
+    renderer_classes = [JSONRenderer]
+
     def post(self, request):
         data = request.data
         ip_id = safe_int_cast(data.get("ip_address_id"))
@@ -1399,7 +1404,7 @@ class ToggleIpAddressImportantStatus(APIView):
             return ip_action_error("IP address not found", IP_ERR_IP_NOT_FOUND, status=404)
         ip_row.is_important = not bool(ip_row.is_important)
         ip_row.save()
-        return Response({"status": True})
+        return Response({"status": True, "is_important": bool(ip_row.is_important)})
 
 
 class UnlinkScanIpAddresses(APIView):

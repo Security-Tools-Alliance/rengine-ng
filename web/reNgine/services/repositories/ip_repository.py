@@ -39,6 +39,9 @@ from targetApp.models import Target
 PREFIX_IP_REPO = "[IP_REPO]"
 logger = get_module_logger(__name__)
 
+# Must match startScan.models.IpAddress.reverse_pointer max_length
+_REVERSE_POINTER_MAX_LEN = 100
+
 
 def normalize_ip_address_string(addr: str) -> Optional[str]:
     """Return canonical string form of addr if it is a valid IPv4/IPv6 address."""
@@ -249,6 +252,8 @@ class IpRepository:
                 "IP address already in scan: %s" % (ip_obj.address,),
                 level="debug",
             )
+
+        self._apply_reverse_pointer_from_secator_item(ip_obj, item, ip_address)
 
         # Link this IpAddress to a DNS hostname on a Subdomain only (not IP literals; those use IpAddress + EndPoint).
         hostname = self._resolve_hostname_for_association(item, ip_address)
@@ -567,6 +572,94 @@ class IpRepository:
                 "Error linking IP to subdomain: %s | hostname=%s scan_id=%s" % (reason, hostname, scan_history_id),
                 level="error",
             )
+
+    def _apply_reverse_pointer_from_secator_item(
+        self, ip_obj: IpAddress, item: Dict[str, Any], normalized_ip: str
+    ) -> None:
+        """Fill or refresh IpAddress.reverse_pointer from Secator Ip payload (PTR-aware)."""
+        candidate, from_ptr = self._reverse_pointer_candidate_from_secator_item(item, normalized_ip)
+        if not candidate:
+            return
+        current = (ip_obj.reverse_pointer or "").strip()
+        if not from_ptr and current:
+            return
+        if current == candidate:
+            return
+        ip_obj.reverse_pointer = candidate
+        ip_obj.save(update_fields=["reverse_pointer"])
+
+    @staticmethod
+    def _secator_item_tag_set(item: Dict[str, Any]) -> set[str]:
+        raw = item.get("tags")
+        if raw is None:
+            return set()
+        if isinstance(raw, str):
+            return {raw.lower()}
+        if isinstance(raw, (list, tuple)):
+            return {str(t).lower() for t in raw if t is not None}
+        return set()
+
+    def _normalize_reverse_pointer_candidate(self, value: str, normalized_ip: str) -> Optional[str]:
+        """Normalize a candidate reverse pointer hostname.
+
+        The returned hostname is always lowercased so callers can use case-sensitive
+        equality without treating DNS case-only differences as changes. Internal
+        comparisons use the same lowercased form.
+        """
+        s = value.strip().rstrip(".").strip()
+        if not s:
+            return None
+        s = s.lower()
+        if is_valid_ip(s):
+            return None
+        if s == normalized_ip:
+            return None
+        equiv = normalize_ip_address_string(s)
+        if equiv and equiv == normalized_ip:
+            return None
+        if len(s) > _REVERSE_POINTER_MAX_LEN:
+            s = s[:_REVERSE_POINTER_MAX_LEN]
+        return s
+
+    def _reverse_pointer_candidate_from_secator_item(
+        self, item: Dict[str, Any], normalized_ip: str
+    ) -> Tuple[Optional[str], bool]:
+        """
+        Return (hostname, from_ptr_record).
+
+        dnsx A/AAAA uses host as forward DNS name — do not store as reverse_pointer.
+        dnsx PTR stores the PTR target in item['ip'] when host holds the address.
+        """
+        tags = self._secator_item_tag_set(item)
+        if "ptr" in tags:
+            raw = item.get("ip")
+            if raw is not None:
+                text = raw if isinstance(raw, str) else str(raw)
+                cand = self._normalize_reverse_pointer_candidate(text, normalized_ip)
+                if cand:
+                    return cand, True
+            return None, False
+        if "a" in tags or "aaaa" in tags:
+            return None, False
+        host_raw = item.get("host")
+        ip_raw = item.get("ip")
+        if (
+            isinstance(ip_raw, str)
+            and isinstance(host_raw, str)
+            and is_valid_ip(host_raw)
+            and not is_valid_ip(ip_raw)
+            and normalize_ip_address_string(host_raw) == normalized_ip
+        ):
+            cand = self._normalize_reverse_pointer_candidate(ip_raw, normalized_ip)
+            if cand:
+                return cand, True
+        host = host_raw
+        if host is None or not isinstance(host, str):
+            return None, False
+        cand = self._normalize_reverse_pointer_candidate(host, normalized_ip)
+        if cand:
+            return cand, False
+        return None, False
 
     def _ip_has_http_alive_evidence(self, ip_id: int, scan_history_id: int) -> bool:
         if EndPoint.objects.filter(

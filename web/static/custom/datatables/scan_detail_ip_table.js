@@ -1,6 +1,7 @@
 /**
  * Lazy initialization for the scan detail page IP DataTable (detail_scan.html).
  * Requires jQuery, DataTable, initServerSideDataTable, getRengineDatatableConfig,
+ * window.rengineApplyImportantRowHighlight (init.js),
  * selection_helpers.js (createRengineDatatableIdSelection), RENGINE_IP_DATATABLE_COLUMNS,
  * RengineDatatableColumnDefs.getScanIpTableColumnDefs, rengineColumnByName (columns.js),
  * and global renderBadge (port_display.js).
@@ -115,8 +116,8 @@
         columns: ipColumns,
         columnDefs: columnDefs,
         createdRow: function (row, data) {
-          if (data && data.is_important) {
-            $(row).addClass("table-danger");
+          if (typeof window.rengineApplyImportantRowHighlight === "function") {
+            window.rengineApplyImportantRowHighlight(row, data);
           }
         },
         drawCallback: function (settings) {

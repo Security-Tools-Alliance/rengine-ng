@@ -811,6 +811,7 @@ Scan Findings
 											<th>Ports</th>
 											<th>Alive</th>
 											<th>CDN</th>
+											<th class="d-none">Important</th>
 											<th>Action</th>
 										</tr>
 									</thead>
@@ -1904,8 +1905,8 @@ $(document).ready(function() {
 				initComplete: function( settings, json ) {
 				},
 				'createdRow': function( row, data, dataIndex ) {
-					if (data['is_important']){
-						$(row).addClass('table-danger');
+					if (typeof window.rengineApplyImportantRowHighlight === 'function') {
+						window.rengineApplyImportantRowHighlight(row, data);
 					}
 				},
 				"rowCallback": function( row, data, index ) {
@@ -2339,8 +2340,8 @@ $(document).ready(function() {
 					setTimeout(function() { $(".dtrg-group th:contains('No group')").remove(); }, 1);
 				},
 				"rowCallback": function( row, data, dataIndex ) {
-					if (data['is_important']){
-						$(row).addClass('table-danger');
+					if (typeof window.rengineApplyImportantRowHighlight === 'function') {
+						window.rengineApplyImportantRowHighlight(row, data);
 					}
 				},
 			}, subdomainScrollerOpts)));

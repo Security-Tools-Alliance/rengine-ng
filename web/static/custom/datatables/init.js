@@ -6,6 +6,7 @@
  * filters.js (buildDatatableFilterPayload, getRengineDatatableFilterParams), rowgroup.js (getRengineRowGroupInitialState,
  * attachRengineDatatableRowGroupSelector), columns.js (getRengineDatatableOrderFromNames), tooltips.js (getRengineDatatableDrawCallbackTooltips).
  * Requires: window.jQuery and jQuery.fn.DataTable. If these are missing, init helpers no-op and log a warning.
+ * rengineApplyImportantRowHighlight uses window.rengineIsImportant from custom.js (load custom.js before this file).
  * Backend mapping: filterParamsElId / filterSelectToParam come from FILTER_CONTEXT_* (filters.py); buildDatatableFilterPayload
  * sends selected values as API params. See README "Backend → frontend mapping".
  */
@@ -587,5 +588,31 @@
       table._rengineNeedsInitialSearchDraw = false;
       table.draw();
     }
+  };
+
+  /**
+   * DataTables createdRow / rowCallback: sync table-danger from row data (subdomains, IPs, etc.).
+   * Single entry point so reload and toggle stay aligned across tables.
+   *
+   * @param {HTMLTableRowElement} row
+   * @param {object} data - Row payload from the server (expects is_important when applicable)
+   */
+  window.rengineApplyImportantRowHighlight = function (row, data) {
+    if (!row || !row.classList || data == null || typeof data !== "object") {
+      return;
+    }
+    row.classList.toggle("table-danger", window.rengineIsImportant(data.is_important));
+  };
+
+  /**
+   * Set or clear the important-row highlight (optimistic toggle or server sync).
+   * @param {HTMLTableRowElement} row
+   * @param {boolean} isImportant
+   */
+  window.rengineSetImportantRowHighlightState = function (row, isImportant) {
+    if (!row || !row.classList) {
+      return;
+    }
+    row.classList.toggle("table-danger", !!isImportant);
   };
 })(window);

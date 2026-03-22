@@ -329,8 +329,8 @@ $(document).ready(function() {
 				}, 1);
 			},
 			"rowCallback": function( row, data, dataIndex ) {
-				if (data['is_important']){
-					$(row).addClass('table-danger');
+				if (typeof window.rengineApplyImportantRowHighlight === 'function') {
+					window.rengineApplyImportantRowHighlight(row, data);
 				}
 			},
 		}));

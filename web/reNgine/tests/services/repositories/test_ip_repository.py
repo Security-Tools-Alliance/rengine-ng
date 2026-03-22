@@ -36,6 +36,7 @@ class TestIpRepository(BaseTestCase):
         self.assertEqual(result.address, "192.168.1.1")
         self.assertEqual(result.version, 4)
         self.assertTrue(result.is_private)
+        self.assertEqual(result.reverse_pointer, "example.com")
 
     def test_save_from_secator_valid_ipv6(self):
         """Test saving valid IPv6 address from Secator."""
@@ -51,6 +52,7 @@ class TestIpRepository(BaseTestCase):
         self.assertEqual(result.address, "2001:4860:4860::8888")
         self.assertEqual(result.version, 6)
         self.assertFalse(result.is_private)
+        self.assertEqual(result.reverse_pointer, "example.com")
 
     def test_save_from_secator_invalid_ip(self):
         """Test handling invalid IP address."""
@@ -87,6 +89,7 @@ class TestIpRepository(BaseTestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result.address, "192.0.2.1")
+        self.assertEqual(result.reverse_pointer, "ptr-result.example.com")
 
     def test_get_or_create_valid_ip(self):
         """Test get_or_create with valid IP."""
@@ -223,10 +226,100 @@ class TestIpRepository(BaseTestCase):
         result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
+        self.assertEqual(result.reverse_pointer, "test.example.com")
 
         # Verify association was made
         subdomain.refresh_from_db()
         self.assertIn(result, subdomain.ip_addresses.all())
+
+    def test_save_from_secator_dnsx_a_does_not_set_reverse_pointer(self):
+        """Forward dnsx A record: host is the subdomain, not rDNS — leave reverse_pointer empty."""
+        item = {
+            "_type": "ip",
+            "ip": "192.0.2.10",
+            "host": "www.example.com",
+            "tags": ["dns", "a"],
+        }
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.address, "192.0.2.10")
+        self.assertIsNone(result.reverse_pointer)
+
+    def test_save_from_secator_dnsx_ptr_tag_sets_reverse_pointer(self):
+        item = {
+            "_type": "ip",
+            "ip": "ptr-target.example.com",
+            "host": "192.0.2.11",
+            "tags": ["dns", "ptr"],
+        }
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.address, "192.0.2.11")
+        self.assertEqual(result.reverse_pointer, "ptr-target.example.com")
+
+    def test_save_from_secator_reverse_pointer_hostname_lowercased(self):
+        item = {
+            "_type": "ip",
+            "ip": "HoSt.EXAMPLE.CoM",
+            "host": "192.0.2.19",
+            "tags": ["dns", "ptr"],
+        }
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.reverse_pointer, "host.example.com")
+
+    def test_save_from_secator_ptr_overwrites_existing_reverse_pointer(self):
+        item_nmap = {
+            "_type": "ip",
+            "ip": "192.0.2.12",
+            "host": "nmap-name.example.com",
+        }
+        first = self.ip_repo.save_from_secator(item_nmap, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(first)
+        self.assertEqual(first.reverse_pointer, "nmap-name.example.com")
+
+        item_ptr = {
+            "_type": "ip",
+            "ip": "ptr-authoritative.example.com",
+            "host": "192.0.2.12",
+            "tags": ["dns", "ptr"],
+        }
+        second = self.ip_repo.save_from_secator(item_ptr, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(second)
+        self.assertEqual(second.id, first.id)
+        second.refresh_from_db()
+        self.assertEqual(second.reverse_pointer, "ptr-authoritative.example.com")
+
+    def test_save_from_secator_heuristic_does_not_overwrite_existing_reverse_pointer(self):
+        item_first = {
+            "_type": "ip",
+            "ip": "192.0.2.13",
+            "host": "first-name.example.com",
+        }
+        ip_row = self.ip_repo.save_from_secator(item_first, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(ip_row)
+
+        item_second = {
+            "_type": "ip",
+            "ip": "192.0.2.13",
+            "host": "second-name.example.com",
+        }
+        again = self.ip_repo.save_from_secator(item_second, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(again)
+        again.refresh_from_db()
+        self.assertEqual(again.reverse_pointer, "first-name.example.com")
+
+    def test_save_from_secator_reverse_pointer_truncated_to_max_length(self):
+        long_host = "a" * 120
+        item = {
+            "_type": "ip",
+            "ip": "192.0.2.14",
+            "host": long_host,
+        }
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result.reverse_pointer or ""), 100)
+        self.assertEqual(result.reverse_pointer, long_host[:100])
 
     def test_process_secator_ip_item_valid(self):
         """Test _process_secator_ip_item with valid data."""
@@ -242,6 +335,7 @@ class TestIpRepository(BaseTestCase):
         self.assertEqual(result.address, "192.168.1.1")
         self.assertTrue(result.alive)
         self.assertTrue(result.is_private)
+        self.assertEqual(result.reverse_pointer, "test.example.com")
 
     def test_process_secator_ip_item_missing_ip(self):
         """Test _process_secator_ip_item with missing IP."""
@@ -310,6 +404,7 @@ class TestIpRepository(BaseTestCase):
         result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.data_generator.target.id)
 
         self.assertIsNotNone(result)
+        self.assertEqual(result.reverse_pointer, "test.example.com")
         subdomain.refresh_from_db()
         self.assertIn(result, subdomain.ip_addresses.all())
 

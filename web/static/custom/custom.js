@@ -17,6 +17,25 @@ function escapeHtml(str) {
 }
 
 /**
+ * Normalize "is_important" payloads from the server to a boolean.
+ *
+ * Shared by DataTables row highlights and toggle handlers so all UI paths agree.
+ *
+ * Truthy: true, 1, "1", "true" (case-insensitive). Everything else is false.
+ *
+ * @param {*} value
+ * @returns {boolean}
+ */
+window.rengineIsImportant = function (value) {
+	return (
+		value === true ||
+		value === 1 ||
+		value === "1" ||
+		(typeof value === "string" && value.toLowerCase() === "true")
+	);
+};
+
+/**
  * Returns a safe link renderer (href, displayText, opts). Prefer window.safeLink (escape.js).
  * Fallback sanitizes href via window.sanitizeUrlForHref / window.normalizeSafeLinkUrl when available.
  * Ensure escape.js loads before this script for full URL sanitization.
@@ -1290,7 +1309,9 @@ function get_important_subdomains(endpoint_url, target_id, scan_history_id) {
 function mark_important_subdomain(url, row, subdomain_id) {
 	if (row) {
 		const tr = row.closest ? row.closest("tr") : (row.parentNode && row.parentNode.parentNode && row.parentNode.parentNode.parentNode) || null;
-		if (tr) {
+		if (tr && typeof window.rengineSetImportantRowHighlightState === "function") {
+			window.rengineSetImportantRowHighlightState(tr, !tr.classList.contains("table-danger"));
+		} else if (tr) {
 			if (tr.classList.contains("table-danger")) {
 				tr.classList.remove("table-danger");
 			} else {
@@ -1321,16 +1342,54 @@ function mark_important_subdomain(url, row, subdomain_id) {
 
 function mark_important_ip(url, row, ip_address_id) {
 	let tr = null;
+	let previousImportantHighlight = false;
 	if (row) {
 		tr = row.closest ? row.closest("tr") : null;
 		if (tr) {
-			tr.classList.toggle("table-danger");
+			previousImportantHighlight = tr.classList.contains("table-danger");
+			if (typeof window.rengineSetImportantRowHighlightState === "function") {
+				window.rengineSetImportantRowHighlightState(tr, !previousImportantHighlight);
+			} else {
+				tr.classList.toggle("table-danger");
+			}
 		}
 	}
 	const revertRowHighlight = function () {
-		if (tr) {
+		if (tr && typeof window.rengineSetImportantRowHighlightState === "function") {
+			window.rengineSetImportantRowHighlightState(tr, previousImportantHighlight);
+		} else if (tr) {
 			tr.classList.toggle("table-danger");
 		}
+	};
+	const applyImportantFromServer = function (isImportant) {
+		if (tr && typeof window.rengineSetImportantRowHighlightState === "function") {
+			window.rengineSetImportantRowHighlightState(tr, !!isImportant);
+		} else if (tr) {
+			tr.classList.toggle("table-danger", !!isImportant);
+		}
+		try {
+			if (window.ipTable && tr && typeof window.ipTable.row === "function") {
+				const dtRow = window.ipTable.row(tr);
+				if (dtRow && dtRow.length && typeof dtRow.data === "function") {
+					const d = dtRow.data();
+					if (d && typeof d === "object") {
+						d.is_important = !!isImportant;
+						dtRow.data(d);
+					}
+				}
+			}
+		} catch (e) {
+			if (window.console && typeof window.console.warn === "function") {
+				window.console.warn("Failed to sync is_important to DataTables row", e);
+			}
+		}
+	};
+	const isToggleSuccessBody = function (body) {
+		if (!body || typeof body !== "object") {
+			return false;
+		}
+		const st = body.status;
+		return st === true || st === "true";
 	};
 	const data = { ip_address_id: ip_address_id };
 	const SwalFire = window.Swal && typeof window.Swal.fire === "function" ? window.Swal.fire : null;
@@ -1339,7 +1398,8 @@ function mark_important_ip(url, row, ip_address_id) {
 		credentials: "same-origin",
 		headers: {
 			"X-CSRFToken": getCookie("csrftoken"),
-			'Content-Type': 'application/json'
+			"Content-Type": "application/json",
+			Accept: "application/json",
 		},
 		body: JSON.stringify(data)
 	})
@@ -1349,7 +1409,7 @@ function mark_important_ip(url, row, ip_address_id) {
 			});
 		})
 		.then(function (result) {
-			if (!result.response.ok || !result.body || result.body.status !== true) {
+			if (!result.response.ok || !isToggleSuccessBody(result.body)) {
 				const msg =
 					result.body && result.body.message
 						? String(result.body.message)
@@ -1358,6 +1418,9 @@ function mark_important_ip(url, row, ip_address_id) {
 						  : "Request failed";
 				const ec = result.body && result.body.error_code ? String(result.body.error_code) : "";
 				throw new Error(ec ? msg + " [" + ec + "]" : msg);
+			}
+			if (result.body && Object.prototype.hasOwnProperty.call(result.body, "is_important")) {
+				applyImportantFromServer(result.body.is_important);
 			}
 		})
 		.catch(function (err) {

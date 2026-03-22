@@ -108,6 +108,7 @@ DATATABLE_COLUMN_MAP_EXPLOIT = {
     "10": "id",
 }
 
+# Indices match RENGINE_IP_DATATABLE_COLUMNS (hidden is_important is column 6; action is 7).
 DATATABLE_COLUMN_MAP_IPS = {
     "1": "address",
     "4": "alive",

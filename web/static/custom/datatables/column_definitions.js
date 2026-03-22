@@ -39,8 +39,8 @@
  * - RENGINE_IP_DATATABLE_COLUMNS / RENGINE_DATATABLE_IP_*: startScan/detail_scan.html (IP tab). Backend: DATATABLE_COLUMN_MAP_IPS in column_maps.py.
  *
  * RENGINE_IP_DATATABLE_COLUMNS (DATATABLE_COLUMN_MAP_IPS, ListIPs datatables mode):
- *   0=id (checkbox)   1=address   2=subdomain_names   3=ports   4=alive   5=is_cdn   6=action
- *   Orderable backend cols: 1=address, 4=alive, 5=is_cdn.
+ *   0=id (checkbox)   1=address   2=subdomain_names   3=ports   4=alive   5=is_cdn   6=is_important (hidden)   7=action
+ *   Orderable backend cols: 1=address, 4=alive, 5=is_cdn. Hidden is_important keeps server field in row data for highlights.
  *   Consumer: startScan/detail_scan.html (IP tab). Use getScanIpTableColumnDefs() for columnDefs.
  */
 (function () {
@@ -139,6 +139,13 @@
     { data: "ports", name: "ports", orderable: false, searchable: false },
     { data: "alive", name: "alive" },
     { data: "is_cdn", name: "is_cdn" },
+    {
+      data: "is_important",
+      name: "is_important",
+      visible: false,
+      searchable: false,
+      orderable: false,
+    },
     { data: null, name: "action", orderable: false, searchable: false, defaultContent: "" },
   ];
 
@@ -287,7 +294,7 @@
         render: function (data) {
           return data
             ? '<span class="badge bg-success">Alive</span>'
-            : '<span class="badge bg-secondary">Unknown/Down</span>';
+            : '<span class="badge bg-secondary">Down</span>';
         },
       },
       {
