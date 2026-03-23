@@ -1,5 +1,5 @@
-import ipaddress
 from contextlib import suppress
+import ipaddress
 
 from django.db import migrations
 
@@ -57,11 +57,7 @@ def _is_ip_range(value: str) -> bool:
 
 def cleanup_ip_domains(apps, schema_editor):
     Domain = apps.get_model("startScan", "Domain")
-    ip_domain_ids = [
-        domain_id
-        for domain_id, name in Domain.objects.values_list("id", "name")
-        if _is_ip_literal(name)
-    ]
+    ip_domain_ids = [domain_id for domain_id, name in Domain.objects.values_list("id", "name") if _is_ip_literal(name)]
     if not ip_domain_ids:
         return
 
