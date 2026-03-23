@@ -2,9 +2,9 @@
 Unit tests for TargetBuilderService.
 """
 
-from reNgine.secator.services.target_builder_service import TargetBuilderService
 from django.utils import timezone
 
+from reNgine.secator.services.target_builder_service import TargetBuilderService
 from startScan.models import Domain, Port, ScanHistory
 from utils.test_base import BaseTestCase
 
@@ -105,7 +105,9 @@ class TestTargetBuilderService(BaseTestCase):
         ip1 = self.data_generator.create_ip_address(address="10.0.0.1", scan_history=self.scan_history)
         self.subdomain.ip_addresses.add(ip1)
         scan2 = self.data_generator.create_scan_history()
-        domain2 = Domain.objects.create(name=f"other-{self.domain.name}", scan_history=scan2, insert_date=timezone.now())
+        domain2 = Domain.objects.create(
+            name=f"other-{self.domain.name}", scan_history=scan2, insert_date=timezone.now()
+        )
         subdomain2 = self.data_generator.create_subdomain(
             name=f"other.{domain2.name}",
             domain=domain2,
@@ -134,7 +136,9 @@ class TestTargetBuilderService(BaseTestCase):
             is_legacy_scan=False,
             tasks=["subdomain_discovery"],
         )
-        other_domain = Domain.objects.create(name=f"other-{self.domain.name}", scan_history=other_scan, insert_date=timezone.now())
+        other_domain = Domain.objects.create(
+            name=f"other-{self.domain.name}", scan_history=other_scan, insert_date=timezone.now()
+        )
         other_subdomain = self.data_generator.create_subdomain(
             name=f"outside.{other_domain.name}",
             domain=other_domain,

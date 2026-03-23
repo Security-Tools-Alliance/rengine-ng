@@ -70,10 +70,14 @@ class IpRepository:
 
     def first_ip_in_scan(self, normalized_address: str, scan_history_id: int) -> Optional[IpAddress]:
         """Return the canonical IpAddress row for this address in the scan, merging duplicates if needed."""
-        rows = list(IpAddress.objects.filter(address=normalized_address, scan_history_id=scan_history_id).order_by("id"))
+        rows = list(
+            IpAddress.objects.filter(address=normalized_address, scan_history_id=scan_history_id).order_by("id")
+        )
         # Transitional fallback while old rows may still be linked only through subdomain/endpoint relations.
         if not rows:
-            legacy_q = Q(ip_addresses__scan_history_id=scan_history_id) | Q(ip_endpoints__scan_history_id=scan_history_id)
+            legacy_q = Q(ip_addresses__scan_history_id=scan_history_id) | Q(
+                ip_endpoints__scan_history_id=scan_history_id
+            )
             rows = list(IpAddress.objects.filter(address=normalized_address).filter(legacy_q).distinct().order_by("id"))
         if not rows:
             return None

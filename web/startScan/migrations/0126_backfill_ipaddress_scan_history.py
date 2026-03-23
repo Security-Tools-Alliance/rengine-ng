@@ -33,7 +33,9 @@ def _migrate_relations_for_scan(subdomain_model, endpoint_model, subscan_model, 
             subdomain.ip_addresses.add(target_ip)
             subdomain.ip_addresses.remove(source_ip)
 
-        endpoint_model.objects.filter(scan_history_id=scan_history_id, ip_address_id=source_ip.id).update(ip_address_id=target_ip.id)
+        endpoint_model.objects.filter(scan_history_id=scan_history_id, ip_address_id=source_ip.id).update(
+            ip_address_id=target_ip.id
+        )
 
         subscans = subscan_model.objects.filter(scan_history_id=scan_history_id, ip_subscan_ids=source_ip).distinct()
         for subscan in subscans:
@@ -50,9 +52,9 @@ def backfill_scan_history(apps, schema_editor):
 
     address_scan_to_id = {
         (address, scan_history_id): ip_id
-        for ip_id, address, scan_history_id in ip_model.objects.exclude(address__isnull=True).exclude(scan_history_id__isnull=True).values_list(
-            "id", "address", "scan_history_id"
-        )
+        for ip_id, address, scan_history_id in ip_model.objects.exclude(address__isnull=True)
+        .exclude(scan_history_id__isnull=True)
+        .values_list("id", "address", "scan_history_id")
     }
     ip_to_subdomain_scan_ids = {}
     for ip_id, scan_history_id in (
@@ -136,4 +138,3 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(backfill_scan_history, migrations.RunPython.noop),
     ]
-

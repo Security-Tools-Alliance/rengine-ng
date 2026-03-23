@@ -1,8 +1,9 @@
+import re
+
 from django import forms
 from django.contrib.postgres.forms import SimpleArrayField
 from django.core.exceptions import ValidationError
 from django_ace import AceWidget
-import re
 import yaml
 
 from reNgine.validators import validate_short_name
@@ -750,7 +751,16 @@ class SecatorWorkflowForm(forms.ModelForm):
 
     class Meta:
         model = SecatorWorkflow
-        fields = ["name", "display_name", "alias", "description", "tags", "scan_type", "yaml_configuration", "is_active"]
+        fields = [
+            "name",
+            "display_name",
+            "alias",
+            "description",
+            "tags",
+            "scan_type",
+            "yaml_configuration",
+            "is_active",
+        ]
 
     name = forms.CharField(
         required=True,

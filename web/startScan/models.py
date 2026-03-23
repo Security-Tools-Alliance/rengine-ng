@@ -2179,7 +2179,9 @@ class CountryISO(models.Model):
 
 class IpAddress(models.Model):
     id = models.AutoField(primary_key=True)
-    scan_history = models.ForeignKey(ScanHistory, on_delete=models.SET_NULL, null=True, blank=True, related_name="ip_rows")
+    scan_history = models.ForeignKey(
+        ScanHistory, on_delete=models.SET_NULL, null=True, blank=True, related_name="ip_rows"
+    )
     address = models.CharField(max_length=100, blank=True, null=True)
     is_cdn = models.BooleanField(default=False)
     geo_iso = models.ForeignKey(CountryISO, on_delete=models.CASCADE, null=True, blank=True)
