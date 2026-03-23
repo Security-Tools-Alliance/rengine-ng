@@ -113,6 +113,27 @@ class TestDomainRepository(BaseTestCase):
         self.assertIsNotNone(self.domain.domain_info)
         self.assertEqual(self.domain.domain_info.id, result.id)
 
+    def test_save_from_secator_sets_domain_info_source(self) -> None:
+        """Secator ``_source`` on Domain payload is stored on DomainInfo.source."""
+        whois = self._build_whois_payload(statuses=["ACTIVE"])
+        item = {
+            "_type": "domain",
+            "domain": self.domain.name,
+            "registrar": "Example Registrar Ltd",
+            "registrant": "Test Organization",
+            "creation_date": "2020-01-15 10:30:00",
+            "expiration_date": "2026-01-15 10:30:00",
+            "alive": False,
+            "_source": "whois_go",
+            "extra_data": {
+                "whois": whois,
+            },
+        }
+        result = self.domain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        result.refresh_from_db()
+        self.assertEqual(result.source, "whois_go")
+
     def test_save_from_secator_with_whois_v2_schema(self):
         """Secator WHOIS v2 payload should be stored and processed."""
         whois = self._build_whois_payload(

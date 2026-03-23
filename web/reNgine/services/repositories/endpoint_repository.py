@@ -30,6 +30,7 @@ from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.core.secator_target import parse_secator_target_value
 from reNgine.core.validators import is_valid_ip, is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
+from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.services.repositories.ip_repository import IpRepository, normalize_ip_address_string
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.distributed_lock import DistributedLock
@@ -388,18 +389,6 @@ class EndpointRepository:
         return endpoint
 
     @staticmethod
-    def _extract_secator_source(item: Dict[str, Any], max_length: int = 200) -> Optional[str]:
-        """Extract source from Secator finding (_source or _context.node_id). Returns truncated string or None."""
-        source = item.get("_source")
-        if not source and "_context" in item:
-            ctx = item["_context"]
-            if isinstance(ctx, dict):
-                source = ctx.get("node_id")
-        if not source or not isinstance(source, str):
-            return None
-        return source[:max_length] if len(source) > max_length else source
-
-    @staticmethod
     def _parse_response_time(item: Dict[str, Any]) -> Optional[float]:
         """Parse response time from item (ms string or seconds number). Returns seconds or None."""
         raw = item.get("time")
@@ -414,7 +403,7 @@ class EndpointRepository:
 
     def _build_secator_endpoint_defaults(self, item: Dict[str, Any], domain) -> Dict[str, Any]:
         """Build defaults dict for EndPoint from Secator item."""
-        source = self._extract_secator_source(item)
+        source = extract_secator_tool_source(item, max_length=200)
         defaults = {
             "domain": domain,
             "source": source,

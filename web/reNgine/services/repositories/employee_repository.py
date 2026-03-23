@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from reNgine.core.validators import is_valid_email, is_valid_url
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
+from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.utilities.domain import get_domain_by_id, get_or_create_domain_for_target
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
@@ -107,19 +108,27 @@ class EmployeeRepository:
 
         scan_history = ScanHistory.objects.get(id=scan_history_id)
 
-        # Get or create employee
+        task_source = extract_secator_tool_source(item, include_provider=False, max_length=200)
+        emp_defaults: Dict[str, Any] = {
+            "name": username or email or "Unknown",
+            "site_name": site_name or "",
+            "url": url or "",
+            "domain": domain,
+            "discovered_date": timezone.now(),
+            "extra_data": item.get("extra_data", {}),
+        }
+        if task_source:
+            emp_defaults["source"] = task_source
+
         employee, created = Employee.objects.get_or_create(
             username=username or "",
             scan_history=scan_history,
-            defaults={
-                "name": username or email or "Unknown",
-                "site_name": site_name or "",
-                "url": url or "",
-                "domain": domain,
-                "discovered_date": timezone.now(),
-                "extra_data": item.get("extra_data", {}),
-            },
+            defaults=emp_defaults,
         )
+
+        if not created and task_source and employee.source != task_source:
+            employee.source = task_source
+            employee.save(update_fields=["source"])
 
         # Associate email if provided
         if email and is_valid_email(email):
@@ -254,19 +263,25 @@ class EmployeeRepository:
                 email_addresses = [employee_data["email"]]
 
             if username or email_addresses:
-                # Get or create employee (username is unique per domain)
+                bulk_task_source = extract_secator_tool_source(employee_data, include_provider=False, max_length=200)
+                bulk_defaults: Dict[str, Any] = {
+                    "name": username or (email_addresses[0] if email_addresses else "Unknown"),
+                    "site_name": employee_data.get("site_name", ""),
+                    "url": employee_data.get("url", ""),
+                    "scan_history": scan_history,
+                    "discovered_date": timezone.now(),
+                    "extra_data": employee_data.get("extra_data", {}),
+                }
+                if bulk_task_source:
+                    bulk_defaults["source"] = bulk_task_source
                 employee, created = Employee.objects.get_or_create(
                     username=username,
                     domain=domain,
-                    defaults={
-                        "name": username or (email_addresses[0] if email_addresses else "Unknown"),
-                        "site_name": employee_data.get("site_name", ""),
-                        "url": employee_data.get("url", ""),
-                        "scan_history": scan_history,
-                        "discovered_date": timezone.now(),
-                        "extra_data": employee_data.get("extra_data", {}),
-                    },
+                    defaults=bulk_defaults,
                 )
+                if not created and bulk_task_source and employee.source != bulk_task_source:
+                    employee.source = bulk_task_source
+                    employee.save(update_fields=["source"])
 
                 # Associate emails (ManyToMany)
                 if email_addresses:

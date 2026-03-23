@@ -47,6 +47,7 @@ from startScan.models import (
     SecatorRunner,
     Secret,
     Subdomain,
+    SubdomainTechnology,
     SubScan,
     Technology,
     Vulnerability,
@@ -294,10 +295,20 @@ class SubScanAdmin(admin.ModelAdmin):
     ]
 
 
+class SubdomainTechnologyInline(admin.TabularInline):
+    """Technologies linked to a subdomain (M2M through with Secator source)."""
+
+    model = SubdomainTechnology
+    extra = 0
+    fields = ("technology", "source")
+    raw_id_fields = ("technology",)
+
+
 @admin.register(Subdomain)
 class SubdomainAdmin(admin.ModelAdmin):
     """Admin interface for Subdomain model."""
 
+    inlines = [SubdomainTechnologyInline]
     list_display = [
         "name",
         "domain",
@@ -366,11 +377,10 @@ class SubdomainAdmin(admin.ModelAdmin):
         ),
         (
             "Relations",
-            {"fields": ("technologies", "ip_addresses", "directories", "waf"), "classes": ("collapse",)},
+            {"fields": ("ip_addresses", "directories", "waf"), "classes": ("collapse",)},
         ),
     )
     filter_horizontal = [
-        "technologies",
         "ip_addresses",
         "directories",
         "waf",

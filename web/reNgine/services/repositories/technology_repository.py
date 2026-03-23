@@ -12,6 +12,8 @@ from django.db import DatabaseError, IntegrityError
 from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.core.validators import is_valid_ip, is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
+from reNgine.secator.source_extraction import extract_secator_tool_source
+from reNgine.secator.subdomain_technology_link import upsert_subdomain_technology_link
 from reNgine.services.repositories.ip_repository import IpRepository, normalize_ip_address_string
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
@@ -128,8 +130,8 @@ class TechnologyRepository:
                 level="debug",
             )
 
-        # Associate with subdomain or endpoint based on match target
-        self._associate_technology(tech_obj, match_target, scan_history_id)
+        tool_source = extract_secator_tool_source(item, include_provider=False, max_length=200)
+        self._associate_technology(tech_obj, match_target, scan_history_id, tool_source)
 
         return tech_obj
 
@@ -215,7 +217,9 @@ class TechnologyRepository:
             )
             return []
 
-    def associate_with_subdomain(self, tech_name: str, subdomain_name: str, scan_history_id: int) -> bool:
+    def associate_with_subdomain(
+        self, tech_name: str, subdomain_name: str, scan_history_id: int, source: Optional[str] = None
+    ) -> bool:
         """
         Associate technology with a specific subdomain.
 
@@ -231,7 +235,7 @@ class TechnologyRepository:
             tech_obj, _ = Technology.objects.get_or_create(name=tech_name)
 
             if subdomain := Subdomain.objects.filter(name=subdomain_name, scan_history_id=scan_history_id).first():
-                subdomain.technologies.add(tech_obj)
+                upsert_subdomain_technology_link(subdomain, tech_obj, source)
                 logger.log_line(
                     PREFIX_TECH_REPO,
                     "ASSOCIATE_TECH_TO_SUBDOMAIN",
@@ -388,7 +392,13 @@ class TechnologyRepository:
             )
             return []
 
-    def _associate_technology(self, tech_obj: Technology, match_target: str, scan_history_id: int) -> None:
+    def _associate_technology(
+        self,
+        tech_obj: Technology,
+        match_target: str,
+        scan_history_id: int,
+        source: Optional[str] = None,
+    ) -> None:
         """
         Associate technology with subdomain or endpoint based on match target.
 
@@ -434,9 +444,9 @@ class TechnologyRepository:
                         return
 
                     if hostname := urlparse(match_target).hostname:
-                        self._associate_with_subdomain_by_hostname(tech_obj, hostname, scan_history_id)
+                        self._associate_with_subdomain_by_hostname(tech_obj, hostname, scan_history_id, source)
             elif is_acceptable_subdomain_name(match_target):
-                self._associate_with_subdomain_by_hostname(tech_obj, match_target, scan_history_id)
+                self._associate_with_subdomain_by_hostname(tech_obj, match_target, scan_history_id, source)
             else:
                 logger.log_line(
                     PREFIX_TECH_REPO,
@@ -455,7 +465,13 @@ class TechnologyRepository:
                 level="error",
             )
 
-    def _associate_with_subdomain_by_hostname(self, tech_obj: Technology, hostname: str, scan_history_id: int) -> None:
+    def _associate_with_subdomain_by_hostname(
+        self,
+        tech_obj: Technology,
+        hostname: str,
+        scan_history_id: int,
+        source: Optional[str] = None,
+    ) -> None:
         """Associate technology with subdomain (DNS) or endpoints tied to an IP host."""
         try:
             hn = (hostname or "").strip().lower()
@@ -489,7 +505,7 @@ class TechnologyRepository:
                     name=hostname.strip().lower(), scan_history_id=scan_history_id
                 ).first()
             if subdomain:
-                subdomain.technologies.add(tech_obj)
+                upsert_subdomain_technology_link(subdomain, tech_obj, source)
                 logger.log_line(
                     PREFIX_TECH_REPO,
                     "ASSOCIATE_TECH_TO_SUBDOMAIN",

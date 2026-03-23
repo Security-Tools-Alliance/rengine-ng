@@ -684,6 +684,7 @@ class DNSRecord(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.TextField()
     type = models.CharField(max_length=50)
+    source = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     extra_data = models.JSONField(null=True, blank=True)
 
     class Meta:
@@ -829,6 +830,7 @@ class DomainInfo(models.Model):
         related_name="similar_domains",
         through=DomainInfoHistoricalIpsThrough,
     )
+    source = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     extra_data = models.JSONField(null=True, blank=True)
 
     class Meta:
@@ -958,7 +960,12 @@ class Subdomain(models.Model):
     webserver = models.CharField(max_length=1000, blank=True, null=True)
     content_length = models.IntegerField(default=0, blank=True, null=True)
     page_title = models.CharField(max_length=1000, blank=True, null=True)
-    technologies = models.ManyToManyField("Technology", related_name="technologies", blank=True)
+    technologies = models.ManyToManyField(
+        "Technology",
+        through="SubdomainTechnology",
+        related_name="technologies",
+        blank=True,
+    )
     ip_addresses = models.ManyToManyField("IPAddress", related_name="ip_addresses", blank=True)
     directories = models.ManyToManyField("DirectoryScan", related_name="directories", blank=True)
     waf = models.ManyToManyField("Waf", related_name="waf", blank=True)
@@ -2119,6 +2126,34 @@ class Technology(models.Model):
         )
 
 
+class SubdomainTechnology(models.Model):
+    """
+    Through model for Subdomain.technologies M2M.
+
+    At most one row per (subdomain, technology); optional ``source`` records which Secator
+    task last attributed the link. Re-ingestion with a different non-empty source overwrites
+    ``source`` (see ``upsert_subdomain_technology_link``). Multiple concurrent sources are not
+    stored as separate rows.
+    """
+
+    id = models.AutoField(primary_key=True)
+    subdomain = models.ForeignKey("Subdomain", on_delete=models.CASCADE)
+    technology = models.ForeignKey("Technology", on_delete=models.CASCADE)
+    source = models.CharField(max_length=200, null=True, blank=True, db_index=True)
+
+    class Meta:
+        db_table = "startScan_subdomaintechnology"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["subdomain", "technology"],
+                name="ss_subdom_tech_sub_tech_uniq",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return "%s -> %s" % (self.subdomain_id, self.technology_id)
+
+
 class CountryISO(models.Model):
     id = models.AutoField(primary_key=True)
     iso = models.CharField(max_length=10, blank=True)
@@ -2157,6 +2192,7 @@ class IpAddress(models.Model):
         max_length=10, null=True, blank=True, choices=IP_PROTOCOL_CHOICES, help_text="IP protocol: IPv4 or IPv6"
     )
     extra_data = models.JSONField(null=True, blank=True, help_text="Optional data e.g. ASN from getasn")
+    source = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     is_important = models.BooleanField(default=False, null=True, blank=True)
     attack_surface = models.TextField(null=True, blank=True)
 
@@ -2250,6 +2286,7 @@ class Port(models.Model):
         choices=CONFIDENCE_CHOICES,
         help_text="Confidence level: low, medium, high",
     )
+    source = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     extra_data = models.JSONField(
         default=dict,
         blank=True,
@@ -2350,6 +2387,7 @@ class Employee(models.Model):
     endpoint = models.ForeignKey(EndPoint, on_delete=models.CASCADE, null=True, blank=True)
     discovered_date = models.DateTimeField(null=True, blank=True)
     extra_data = models.JSONField(null=True, blank=True)
+    source = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     # Email association
     emails = models.ManyToManyField(Email, related_name="employees", blank=True)
 
@@ -2364,6 +2402,7 @@ class Exploit(models.Model):
     name = models.CharField(max_length=1000)
     exploit_id = models.CharField(max_length=200, null=True, blank=True)
     provider = models.CharField(max_length=200, null=True, blank=True)
+    source = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     matched_at = models.CharField(max_length=10000, null=True, blank=True)
     reference = models.CharField(max_length=10000, null=True, blank=True)
     # Associations - primary link to IP as per Secator design
@@ -2505,6 +2544,13 @@ class Certificate(models.Model):
     serial_number = models.CharField(max_length=200, null=True, blank=True, help_text="Certificate serial number")
     ciphers = ArrayField(models.CharField(max_length=200), null=True, blank=True, help_text="Supported ciphers")
 
+    source = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Secator task/tool that produced this finding (_source)",
+    )
     discovered_date = models.DateTimeField(auto_now_add=True, help_text="Date when certificate was discovered")
 
     class Meta:

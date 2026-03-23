@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 
+from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.utilities.extra_data_merge import (
     bounded_diagnostic_preview,
     coerce_extra_data_field_to_plain_dict,
@@ -159,6 +160,7 @@ class DnsRepository:
             SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, host)
 
         name_value = record_name
+        task_source = extract_secator_tool_source(item, include_provider=False, max_length=200)
         incoming_extra = item.get("extra_data", {}) or {}
         if not isinstance(incoming_extra, dict):
             raw_extra = incoming_extra
@@ -234,12 +236,17 @@ class DnsRepository:
                     update_fields.append("name")
                 if new_extra != old_extra:
                     update_fields.append("extra_data")
+                if task_source and existing_record.source != task_source:
+                    existing_record.source = task_source
+                    update_fields.append("source")
                 if update_fields:
-                    existing_record.save(update_fields=update_fields)
+                    existing_record.save(update_fields=sorted(set(update_fields)))
                 return existing_record
 
             merged_extra = self._merge_dns_extra_payload(None, incoming_extra, host)
-            dns_record = DNSRecord.objects.create(name=name_value, type=record_type, extra_data=merged_extra)
+            dns_record = DNSRecord.objects.create(
+                name=name_value, type=record_type, extra_data=merged_extra, source=task_source
+            )
             domain_info.dns_records.add(dns_record)
             logger.log_line(
                 PREFIX_DNS_REPO,

@@ -30,6 +30,7 @@ class TestCertificateRepository(BaseTestCase):
             "fingerprint_sha256": "abc123def456",
             "subject_cn": "example.com",
             "issuer_cn": "Let's Encrypt",
+            "_source": "tlsx",
         }
 
         result = self.cert_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
@@ -39,6 +40,7 @@ class TestCertificateRepository(BaseTestCase):
         self.assertEqual(result.fingerprint_sha256, "abc123def456")
         self.assertEqual(result.subject_cn, "example.com")
         self.assertEqual(result.issuer_cn, "Let's Encrypt")
+        self.assertEqual(result.source, "tlsx")
 
     def test_save_from_secator_missing_host(self):
         """Test handling missing host field."""

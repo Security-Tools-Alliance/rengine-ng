@@ -5,7 +5,7 @@ Tests for Subdomain repository functionality.
 from django.utils import timezone
 
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
-from startScan.models import Certificate, Subdomain, SubScan
+from startScan.models import Certificate, Subdomain, SubScan, Technology
 from utils.test_base import BaseTestCase
 
 
@@ -35,6 +35,19 @@ class TestSubdomainRepository(BaseTestCase):
         self.assertEqual(result.name, "test.example.com")
         self.assertTrue(result.verified)
         self.assertEqual(result.sources, ["subfinder", "amass"])
+
+    def test_save_from_secator_merges_underscore_source_into_sources(self) -> None:
+        """When ``sources`` omits ``_source``, append ``_source`` for traceability."""
+        item = {
+            "_type": "subdomain",
+            "host": "merge-src.example.com",
+            "verified": True,
+            "sources": ["subfinder"],
+            "_source": "httpx",
+        }
+        result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.sources, ["subfinder", "httpx"])
 
     def test_save_from_secator_missing_name(self):
         """Test handling missing subdomain name."""
@@ -151,6 +164,54 @@ class TestSubdomainRepository(BaseTestCase):
         self.assertEqual(result.content_length, 1000)
         self.assertEqual(result.webserver, "nginx")
         self.assertEqual(result.response_time, 0.5)
+
+    def test_save_from_secator_extra_data_technologies_tuple_is_accepted(self):
+        """Tuple (or other non-list iterables) in extra_data.technologies is coerced and linked."""
+        item = {
+            "_type": "subdomain",
+            "host": "tech-tuple.example.com",
+            "extra_data": {
+                "technologies": ("TechAlpha", "TechBeta"),
+            },
+        }
+        result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        names = set(result.technologies.values_list("name", flat=True))
+        self.assertEqual(names, {"TechAlpha", "TechBeta"})
+        self.assertEqual(Technology.objects.filter(name__in=["TechAlpha", "TechBeta"]).count(), 2)
+
+    def test_save_from_secator_extra_data_technologies_none_skips_without_error(self):
+        """Explicit null technologies must not raise when iterating."""
+        item = {
+            "_type": "subdomain",
+            "host": "tech-none.example.com",
+            "extra_data": {"technologies": None},
+        }
+        result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.technologies.count(), 0)
+
+    def test_save_from_secator_extra_data_technologies_dict_is_ignored(self):
+        """Dict payloads must not be coerced via key iteration into technology names."""
+        item = {
+            "_type": "subdomain",
+            "host": "tech-dict.example.com",
+            "extra_data": {"technologies": {"not-a-tech-name": "x"}},
+        }
+        result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.technologies.count(), 0)
+
+    def test_save_from_secator_extra_data_technologies_string_is_ignored(self):
+        """String values are not treated as character sequences of technology names."""
+        item = {
+            "_type": "subdomain",
+            "host": "tech-str.example.com",
+            "extra_data": {"technologies": "nginx"},
+        }
+        result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.technologies.count(), 0)
 
     def test_save_from_secator_extra_data_ip_addresses_syncs_alive_from_http(self):
         """M2M IPs get alive=True when subdomain carries HTTP evidence (http_status > 0)."""

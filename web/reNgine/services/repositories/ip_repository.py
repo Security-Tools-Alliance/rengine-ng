@@ -19,6 +19,7 @@ from django.db.models import Exists, OuterRef, Q
 
 from reNgine.core.ip_literal import normalize_ip_address_text
 from reNgine.core.validators import is_valid_ip
+from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.utilities.extra_data_merge import merge_secator_item_extra_data_into_model
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
@@ -256,6 +257,10 @@ class IpRepository:
 
         self._apply_reverse_pointer_from_secator_item(ip_obj, item, ip_address)
         self._merge_ip_extra_data_from_secator(ip_obj, item)
+        if src := extract_secator_tool_source(item, include_provider=False, max_length=200):
+            if ip_obj.source != src:
+                ip_obj.source = src
+                ip_obj.save(update_fields=["source"])
 
         # Link this IpAddress to a DNS hostname on a Subdomain only (not IP literals; those use IpAddress + EndPoint).
         hostname = self._resolve_hostname_for_association(item, ip_address)

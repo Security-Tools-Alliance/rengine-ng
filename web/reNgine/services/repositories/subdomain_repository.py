@@ -17,6 +17,8 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from reNgine.core.exceptions import FindingOutOfScopeError
+from reNgine.secator.source_extraction import merge_subdomain_sources_from_item
+from reNgine.secator.subdomain_technology_link import upsert_subdomain_technology_link
 from reNgine.core.validators import is_valid_domain, is_valid_ip
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
@@ -133,9 +135,9 @@ class SubdomainRepository:
         if item.get("verified", False) != subdomain.verified:
             subdomain.verified = item.get("verified", False)
             update_fields.append("verified")
-        sources = item.get("sources", [])
-        if sources != (subdomain.sources or []):
-            subdomain.sources = sources
+        merged_sources = merge_subdomain_sources_from_item(item.get("sources"), item)
+        if merged_sources != (subdomain.sources or []):
+            subdomain.sources = merged_sources
             update_fields.append("sources")
         if is_imported and not subdomain.is_imported_subdomain:
             subdomain.is_imported_subdomain = True
@@ -498,15 +500,22 @@ class SubdomainRepository:
         try:
             # Check if there are technologies in extra_data
             extra_data = item.get("extra_data", {})
-            technologies = extra_data.get("technologies", [])
-
-            if not technologies and isinstance(technologies, list):
+            technologies = extra_data.get("technologies")
+            if not technologies:
+                return
+            if isinstance(technologies, (str, bytes, dict)):
+                return
+            try:
+                technologies_iter = list(technologies)
+            except TypeError:
+                return
+            if not technologies_iter:
                 return
 
-            for tech_name in technologies:
+            for tech_name in technologies_iter:
                 if tech_name and isinstance(tech_name, str):
                     tech_obj, _ = Technology.objects.get_or_create(name=tech_name.strip())
-                    subdomain.technologies.add(tech_obj)
+                    upsert_subdomain_technology_link(subdomain, tech_obj, None)
                     logger.log_line(
                         PREFIX_SUBDOMAIN_REPO,
                         "ASSOCIATE_TECH_TO_SUBDOMAIN",

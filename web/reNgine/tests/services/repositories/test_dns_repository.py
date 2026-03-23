@@ -45,6 +45,30 @@ class TestDnsRepository(BaseTestCase):
         self.assertEqual(result.type, "A")
         self.assertEqual(result.extra_data.get("secator_host"), "192.168.1.1")
 
+    def test_save_from_secator_sets_and_updates_source(self) -> None:
+        """DNSRecord.source reflects Secator task/tool; updates on merge path."""
+        item = {
+            "_type": "record",
+            "name": "src.example.com",
+            "type": "A",
+            "host": "192.0.2.10",
+            "_source": "dnsx",
+        }
+        first = self.dns_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(first)
+        self.assertEqual(first.source, "dnsx")
+        item2 = {
+            "_type": "record",
+            "name": "src.example.com",
+            "type": "A",
+            "host": "192.0.2.10",
+            "_source": "massdns",
+        }
+        second = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.data_generator.target.id)
+        self.assertEqual(second.id, first.id)
+        second.refresh_from_db()
+        self.assertEqual(second.source, "massdns")
+
     def test_save_from_secator_ptr_record_stores_secator_host(self):
         """Secator Record host (e.g. IP for PTR) must persist in extra_data."""
         item = {

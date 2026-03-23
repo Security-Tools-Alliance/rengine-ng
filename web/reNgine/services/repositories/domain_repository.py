@@ -11,6 +11,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
 from reNgine.core.exceptions import FindingOutOfScopeError
+from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.core.validators import is_valid_ip
 from reNgine.utilities.domain import (
     get_domain_for_scan_by_name,
@@ -270,13 +271,16 @@ class DomainRepository:
 
         domain_info, created = self._get_or_create_domain_info(domain)
         extra_data_internal = self._build_extra_data_internal_from_whois(whois)
+        task_source = extract_secator_tool_source(item, include_provider=False, max_length=200)
 
         self._update_domain_info_dates(domain_info, item, whois, extra_data_internal)
         self._associate_registrar_and_registrant(domain_info, item, whois, extra_data_internal)
         self._associate_admin_and_tech_contacts(domain_info, extra_data_internal, domain)
         self._store_whois_payload(domain_info, whois, item)
 
-        self._save_and_finalize_domain_info(domain_info, extra_data_internal, domain, normalized, created)
+        self._save_and_finalize_domain_info(
+            domain_info, extra_data_internal, domain, normalized, created, secator_tool_source=task_source
+        )
 
         return domain_info
 
@@ -403,8 +407,11 @@ class DomainRepository:
         domain: Domain,
         domain_name: str,
         created: bool,
+        secator_tool_source: Optional[str] = None,
     ) -> None:
         """Save domain info and associate with domain."""
+        if secator_tool_source and domain_info.source != secator_tool_source:
+            domain_info.source = secator_tool_source
         domain_info.save()
         self._process_extra_data(domain_info, extra_data_internal)
         domain_info.save()

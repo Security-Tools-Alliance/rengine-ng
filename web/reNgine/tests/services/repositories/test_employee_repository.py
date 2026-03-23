@@ -34,6 +34,18 @@ class TestEmployeeRepository(BaseTestCase):
         self.assertEqual(result.url, "https://example.com/profile/john.doe")
         self.assertEqual(result.name, "john.doe")  # name should be set to username
 
+    def test_save_from_secator_sets_source_from_item(self) -> None:
+        item = {
+            "_type": "user_account",
+            "username": "jane.smith",
+            "site_name": "example.com",
+            "_source": "linkedin_scraper",
+        }
+        result = self.employee_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        result.refresh_from_db()
+        self.assertEqual(result.source, "linkedin_scraper")
+
     def test_save_from_secator_valid_employee_with_email(self):
         """Test saving valid employee with email from Secator."""
         # The repository code checks: if not username and not email: return None

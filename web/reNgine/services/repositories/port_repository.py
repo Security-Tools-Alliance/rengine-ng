@@ -13,6 +13,7 @@ from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.validators import is_valid_ip, is_valid_port
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
+from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.utilities.extra_data_merge import (
     bounded_diagnostic_preview,
     merge_extra_data_payload_into_model,
@@ -218,6 +219,8 @@ class PortRepository:
         }
         if extra_init is not None:
             port_defaults["extra_data"] = extra_init
+        if src := extract_secator_tool_source(item, include_provider=False, max_length=200):
+            port_defaults["source"] = src
 
         port_obj, created = Port.objects.get_or_create(
             number=port_number,
@@ -452,6 +455,10 @@ class PortRepository:
             update_fields.append("extra_data")
         if not created:
             update_fields.extend(self._fill_empty_port_fields_from_secator(port_obj, item, ip_literal, raw_host))
+        if src := extract_secator_tool_source(item, include_provider=False, max_length=200):
+            if port_obj.source != src:
+                port_obj.source = src
+                update_fields.append("source")
         if update_fields:
             port_obj.save(update_fields=sorted(set(update_fields)))
 

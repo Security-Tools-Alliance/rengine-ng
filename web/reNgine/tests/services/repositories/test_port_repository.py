@@ -39,6 +39,17 @@ class TestPortRepository(BaseTestCase):
         self.assertEqual(result.service_name, "http")
         self.assertEqual(result.description, "HTTP service")
         self.assertEqual(result.extra_data, {})
+        item_with_src = {
+            "_type": "port",
+            "port": 443,
+            "ip": "192.168.1.1",
+            "service_name": "https",
+            "_source": "nmap",
+        }
+        r2 = self.port_repo.save_from_secator(item_with_src, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(r2)
+        r2.refresh_from_db()
+        self.assertEqual(r2.source, "nmap")
 
     def test_save_from_secator_invalid_port(self):
         """Test handling invalid port number."""

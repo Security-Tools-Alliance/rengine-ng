@@ -3,6 +3,7 @@ Tests for Technology repository functionality.
 """
 
 from reNgine.services.repositories.technology_repository import TechnologyRepository
+from startScan.models import SubdomainTechnology
 from utils.test_base import BaseTestCase
 
 
@@ -36,6 +37,48 @@ class TestTechnologyRepository(BaseTestCase):
         # Verify association with subdomain
         subdomain.refresh_from_db()
         self.assertIn(result, subdomain.technologies.all())
+
+    def test_save_from_secator_persists_through_source(self) -> None:
+        subdomain = self.data_generator.create_subdomain(
+            name="tech-src.example.com",
+            scan_history=self.scan_history,
+            domain=self.domain,
+        )
+        item = {
+            "_type": "tag",
+            "name": "django",
+            "match": "tech-src.example.com",
+            "_source": "wappalyzer",
+        }
+        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        link = SubdomainTechnology.objects.filter(subdomain=subdomain, technology=result).first()
+        self.assertIsNotNone(link)
+        self.assertEqual(link.source, "wappalyzer")
+
+    def test_save_from_secator_overwrites_subdomain_technology_source_on_reingest(self) -> None:
+        """Unique (subdomain, technology) row: latest non-empty Secator source wins."""
+        subdomain = self.data_generator.create_subdomain(
+            name="tech-overwrite.example.com",
+            scan_history=self.scan_history,
+            domain=self.domain,
+        )
+        first = {
+            "_type": "tag",
+            "name": "rails",
+            "match": "tech-overwrite.example.com",
+            "_source": "wappalyzer",
+        }
+        second = {
+            "_type": "tag",
+            "name": "rails",
+            "match": "tech-overwrite.example.com",
+            "_source": "httpx",
+        }
+        self.tech_repo.save_from_secator(first, self.scan_history.id, self.data_generator.target.id)
+        self.tech_repo.save_from_secator(second, self.scan_history.id, self.data_generator.target.id)
+        link = SubdomainTechnology.objects.get(subdomain=subdomain, technology__name="rails")
+        self.assertEqual(link.source, "httpx")
 
     def test_save_from_secator_with_url_match(self):
         """Test saving technology with URL match."""

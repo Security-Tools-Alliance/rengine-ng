@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
+from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_or_create_domain_for_target
 from reNgine.utilities.logger import get_module_logger
@@ -133,6 +134,8 @@ class CertificateRepository:
             "serial_number": item.get("serial_number", ""),
             "ciphers": item.get("ciphers", []),
         }
+        if src := extract_secator_tool_source(item, include_provider=False, max_length=200):
+            defaults["source"] = src
 
         # Get or create certificate (use host_or_ip when host is empty so IP-only certs work)
         certificate, created = Certificate.objects.get_or_create(

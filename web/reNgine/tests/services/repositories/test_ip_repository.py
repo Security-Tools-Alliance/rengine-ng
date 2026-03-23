@@ -38,6 +38,18 @@ class TestIpRepository(BaseTestCase):
         self.assertTrue(result.is_private)
         self.assertEqual(result.reverse_pointer, "example.com")
 
+    def test_save_from_secator_persists_root_source(self) -> None:
+        item = {
+            "_type": "ip",
+            "ip": "192.168.1.50",
+            "host": "host-src.example.com",
+            "_source": "nmap",
+        }
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        result.refresh_from_db()
+        self.assertEqual(result.source, "nmap")
+
     def test_save_from_secator_valid_ipv6(self):
         """Test saving valid IPv6 address from Secator."""
         item = {
