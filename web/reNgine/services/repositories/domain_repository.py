@@ -154,6 +154,7 @@ class DomainRepository:
         domain_info, created = self._get_or_create_domain_info(domain)
         self._ensure_extra_data_initialized(domain_info)
         domain_info.extra_data["raw_whois"] = raw_whois_text
+        self._sanitize_extra_data_in_place(domain_info)
         domain_info.save()
         domain.domain_info = domain_info
         domain.save()
@@ -204,6 +205,7 @@ class DomainRepository:
         domain_info, _ = self._get_or_create_domain_info(domain)
         self._ensure_extra_data_initialized(domain_info)
         domain_info.extra_data["asn"] = asn_value
+        self._sanitize_extra_data_in_place(domain_info)
         domain_info.save()
         domain.domain_info = domain_info
         domain.save()
@@ -412,8 +414,10 @@ class DomainRepository:
         """Save domain info and associate with domain."""
         if secator_tool_source and domain_info.source != secator_tool_source:
             domain_info.source = secator_tool_source
+        self._sanitize_extra_data_in_place(domain_info)
         domain_info.save()
         self._process_extra_data(domain_info, extra_data_internal)
+        self._sanitize_extra_data_in_place(domain_info)
         domain_info.save()
 
         domain.domain_info = domain_info
@@ -1193,3 +1197,23 @@ class DomainRepository:
             tech_id = registry_ids.get("registry_tech_id", "")
             if isinstance(tech_id, str) and tech_id:
                 extra_data["tech_c"] = tech_id
+
+    def _sanitize_extra_data_in_place(self, domain_info: DomainInfo) -> None:
+        """Remove null-byte characters from JSONField payload before database writes."""
+        self._ensure_extra_data_initialized(domain_info)
+        domain_info.extra_data = self._sanitize_json_value(domain_info.extra_data)
+
+    def _sanitize_json_value(self, value: Any) -> Any:
+        """Recursively sanitize JSON-compatible values for PostgreSQL text safety."""
+        if isinstance(value, dict):
+            sanitized_dict = {}
+            for key, item in value.items():
+                if isinstance(key, str) and "\x00" in key:
+                    raise ValueError("Invalid JSON key contains null byte")
+                sanitized_dict[key] = self._sanitize_json_value(item)
+            return sanitized_dict
+        if isinstance(value, list):
+            return [self._sanitize_json_value(item) for item in value]
+        if isinstance(value, str):
+            return value.replace("\x00", "")
+        return value

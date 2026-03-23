@@ -1378,3 +1378,27 @@ class DomainRepositoryFindingScopeFilterTest(BaseTestCase):
             "raw whois text",
         )
         self.assertIsNotNone(result)
+
+    def test_save_raw_whois_with_null_byte_is_sanitized(self):
+        """Raw WHOIS null bytes are removed before persisting JSON data."""
+        raw_whois_text = "line-1\n\x00line-2"
+
+        result = self.domain_repo.save_raw_whois_from_secator_tag(
+            self.scan_history.id,
+            self.target.id,
+            self.target.value,
+            raw_whois_text,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.extra_data["raw_whois"], "line-1\nline-2")
+
+    def test_sanitize_json_value_rejects_null_bytes_in_dict_keys(self):
+        """JSON sanitizer rejects dictionary keys containing null bytes."""
+        with self.assertRaises(ValueError):
+            self.domain_repo._sanitize_json_value(
+                {
+                    "bad\x00key": "bad\x00value",
+                    "nested": [{"more\x00bad": "ok\x00"}],
+                }
+            )

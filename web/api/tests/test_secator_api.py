@@ -12,7 +12,7 @@ from rest_framework import status
 
 from dashboard.models import UserAPIKey
 from reNgine.definitions import RUNNING_TASK, SUCCESS_TASK
-from startScan.models import Domain, ScanHistory, SecatorRunner, Subdomain, SubScan
+from startScan.models import Domain, IpAddress, ScanHistory, SecatorRunner, Subdomain, SubScan
 from utils.test_base import BaseTestCase
 
 
@@ -739,6 +739,85 @@ class TestGetSecatorInputTypesAndTargets(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("error", response.data)
         self.assertIn("same target", response.data["error"].lower())
+
+    @patch("reNgine.secator.services.input_type_service.InputTypeService.get_input_types")
+    def test_success_with_workflow_id_and_target_id_includes_scan_history_ip(self, mock_get_input_types):
+        """API includes IpAddress rows scoped by scan_history->target in proposed_targets."""
+        mock_get_input_types.return_value = ["host", "ip"]
+        ip_row = IpAddress.objects.create(address="198.51.100.19", scan_history=self.subdomain.scan_history)
+        response = self.client.get(
+            self.url,
+            {
+                "workflow_id": self.secator_workflow.id,
+                "target_id": self.target.id,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("proposed_targets", response.data)
+        self.assertIn("198.51.100.19", response.data["proposed_targets"])
+        self.assertIn("ip", response.data["targets_by_type"])
+        self.assertIn("198.51.100.19", response.data["targets_by_type"]["ip"])
+        self.assertEqual(ip_row.scan_history_id, self.subdomain.scan_history_id)
+
+    @patch("reNgine.secator.services.input_type_service.InputTypeService.get_input_types")
+    def test_success_with_workflow_id_and_ip_address_ids_in_scan_history_mode(self, mock_get_input_types):
+        """API resolves proposed targets for explicit ip_address_ids using IpAddress.scan_history."""
+        mock_get_input_types.return_value = ["ip"]
+        ip_row = IpAddress.objects.create(address="198.51.100.20", scan_history=self.subdomain.scan_history)
+        response = self.client.get(
+            self.url,
+            {
+                "workflow_id": self.secator_workflow.id,
+                "ip_address_ids": str(ip_row.id),
+                "scan_history_id": self.subdomain.scan_history_id,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("proposed_targets", response.data)
+        self.assertIn("198.51.100.20", response.data["proposed_targets"])
+
+    @patch("reNgine.secator.services.input_type_service.InputTypeService.get_input_types")
+    def test_ip_address_ids_with_scan_history_id_equal_to_target_id_falls_back_to_target(self, mock_get_input_types):
+        """When scan_history_id carries a target id, API falls back to target validation."""
+        mock_get_input_types.return_value = ["ip"]
+        ip_row = IpAddress.objects.create(address="198.51.100.21", scan_history=self.subdomain.scan_history)
+        response = self.client.get(
+            self.url,
+            {
+                "workflow_id": self.secator_workflow.id,
+                "ip_address_ids": str(ip_row.id),
+                "scan_history_id": self.target.id,
+                "target_id": self.target.id,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("proposed_targets", response.data)
+        self.assertIn("198.51.100.21", response.data["proposed_targets"])
+
+    @patch("reNgine.secator.services.input_type_service.InputTypeService.get_input_types")
+    def test_ip_address_ids_with_existing_scan_history_does_not_fallback_to_target(self, mock_get_input_types):
+        """When scan_history exists but IP is out of scan scope, API must not fallback to target mode."""
+        mock_get_input_types.return_value = ["ip"]
+        other_target = self.data_generator.create_target()
+        other_scan = ScanHistory.objects.create(
+            target=other_target,
+            start_scan_date=timezone.now(),
+            scan_status=2,
+            is_legacy_scan=False,
+            tasks=["subdomain_discovery"],
+        )
+        other_ip = IpAddress.objects.create(address="198.51.100.31", scan_history=other_scan)
+        response = self.client.get(
+            self.url,
+            {
+                "workflow_id": self.secator_workflow.id,
+                "ip_address_ids": str(other_ip.id),
+                "scan_history_id": self.subdomain.scan_history_id,
+                "target_id": other_target.id,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("error", response.data)
 
 
 class PostScanParamsEffectivePreviewTest(BaseTestCase):

@@ -2662,7 +2662,7 @@ def _validate_ip_addresses_in_scan_context(
     target_id: int | None = None,
 ) -> tuple[list[IpAddress], int]:
     """
-    Ensure each IP is linked to at least one Subdomain in the given scan or target.
+    Ensure each IP belongs to the given scan or target via IpAddress.scan_history.
 
     Returns:
         (IpAddress rows in request order (unique ids preserved), resolved target_id).
@@ -2685,17 +2685,19 @@ def _validate_ip_addresses_in_scan_context(
         scan = ScanHistory.objects.filter(pk=scan_history_id).first()
         if not scan:
             raise ValueError("Scan not found")
-        sub_qs = Subdomain.objects.filter(scan_history_id=scan_history_id)
         for ip in ordered_ips:
-            if not sub_qs.filter(ip_addresses=ip).exists():
+            if ip.scan_history_id != scan_history_id:
                 raise ValueError("IP is not part of this scan")
         if scan.target_id is None:
             raise ValueError("Scan has no target")
         return ordered_ips, int(scan.target_id)
     if target_id is not None:
-        sub_qs = Subdomain.objects.filter(scan_history__target_id=target_id)
+        scan_ids = {ip.scan_history_id for ip in ordered_ips if ip.scan_history_id}
+        scan_to_target: dict[int, int] = {}
+        if scan_ids:
+            scan_to_target = dict(ScanHistory.objects.filter(id__in=scan_ids).values_list("id", "target_id"))
         for ip in ordered_ips:
-            if not sub_qs.filter(ip_addresses=ip).exists():
+            if not ip.scan_history_id or scan_to_target.get(ip.scan_history_id) != target_id:
                 raise ValueError("IP is not associated with this target")
         return ordered_ips, int(target_id)
     raise ValueError("scan_history_id or target_id is required for IP address scope validation")
@@ -2819,9 +2821,42 @@ class GetSecatorInputTypesAndTargets(APIView):
                 return Response({"error": str(exc)}, status=HTTP_400_BAD_REQUEST)
             try:
                 if scan_history_for_ips is not None:
-                    ip_targets_mode_objs, target_id = _validate_ip_addresses_in_scan_context(
-                        ip_ids, scan_history_id=scan_history_for_ips
-                    )
+                    fallback_target_id: int | None = None
+                    if target_id_param:
+                        try:
+                            fallback_target_id = int(target_id_param)
+                        except (TypeError, ValueError):
+                            return Response({"error": "target_id must be an integer"}, status=HTTP_400_BAD_REQUEST)
+
+                    try:
+                        ip_targets_mode_objs, target_id = _validate_ip_addresses_in_scan_context(
+                            ip_ids,
+                            scan_history_id=scan_history_for_ips,
+                        )
+                    except ValueError as scan_exc:
+                        # UI can pass target id in scan_history_id depending on launch origin (target summary vs scan detail).
+                        # Fallback order: explicit target_id param, then scan_history_id interpreted as target id.
+                        if ScanHistory.objects.filter(pk=scan_history_for_ips).exists():
+                            raise scan_exc
+
+                        fallback_candidates: list[int] = []
+                        if fallback_target_id is not None:
+                            fallback_candidates.append(fallback_target_id)
+                        fallback_candidates.append(scan_history_for_ips)
+
+                        resolved = False
+                        for candidate_target_id in fallback_candidates:
+                            try:
+                                ip_targets_mode_objs, target_id = _validate_ip_addresses_in_scan_context(
+                                    ip_ids,
+                                    target_id=candidate_target_id,
+                                )
+                                resolved = True
+                                break
+                            except ValueError:
+                                continue
+                        if not resolved:
+                            raise scan_exc
                 elif target_id_param:
                     tid = int(target_id_param)
                     ip_targets_mode_objs, target_id = _validate_ip_addresses_in_scan_context(ip_ids, target_id=tid)

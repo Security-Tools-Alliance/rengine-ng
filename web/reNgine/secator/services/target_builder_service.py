@@ -251,18 +251,26 @@ class TargetBuilderService:
         return sorted(host_ports)
 
     def _targets_ip(self) -> List[str]:
-        """Target value (if ip/cidr_range) or IP addresses from linked Domain(s) via Subdomain."""
+        """Target value (if ip/cidr_range) or IP addresses linked to scan histories of this target."""
+        targets: List[str] = []
+        seen: set[str] = set()
         if self.target.target_type in (TARGET_TYPE_IP, TARGET_TYPE_CIDR_RANGE) and self.target.value:
-            return [self.target.value]
-        domain_ids = self.domain_ids
-        if not domain_ids:
-            return []
+            targets.append(self.target.value)
+            seen.add(self.target.value)
         if self.subdomain_ids:
-            subdomains_qs = Subdomain.objects.filter(
-                id__in=self.subdomain_ids,
-                domain_id__in=domain_ids,
+            scan_history_ids = (
+                Subdomain.objects.filter(
+                    id__in=self.subdomain_ids,
+                    scan_history__target_id=self.target_id,
+                )
+                .values_list("scan_history_id", flat=True)
+                .distinct()
             )
-            qs = IpAddress.objects.filter(ip_addresses__in=subdomains_qs)
+            qs = IpAddress.objects.filter(scan_history_id__in=scan_history_ids)
         else:
-            qs = IpAddress.objects.filter(ip_addresses__domain_id__in=domain_ids)
-        return list(qs.values_list("address", flat=True).distinct())
+            qs = IpAddress.objects.filter(scan_history__target_id=self.target_id)
+        for address in qs.values_list("address", flat=True).distinct().iterator(chunk_size=1000):
+            if address and address not in seen:
+                seen.add(address)
+                targets.append(address)
+        return targets
