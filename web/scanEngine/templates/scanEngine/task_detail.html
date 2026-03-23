@@ -20,7 +20,7 @@
                         <a href="{% url 'duplicate_task' task.id %}" class="btn btn-secondary btn-sm">
                             <i class="fas fa-copy"></i> Copy
                         </a>
-                        <a href="{% url 'tasks' %}" class="btn btn-secondary btn-sm">
+                        <a href="{% url 'tasks' current_project.slug %}" class="btn btn-secondary btn-sm">
                             <i class="fas fa-arrow-left"></i> Back to Tasks
                         </a>
                     </div>
@@ -119,7 +119,7 @@
                                     {% if related_scans %}
                                     <div class="list-group">
                                         {% for scan in related_scans %}
-                                        <a href="{% url 'scan_detail' scan.id %}" class="list-group-item list-group-item-action">
+                                        <a href="{% url 'scan_detail' current_project.slug scan.id %}" class="list-group-item list-group-item-action">
                                             <div class="d-flex w-100 justify-content-between">
                                                 <h6 class="mb-1">{{ scan.name }}</h6>
                                                 <small>{{ scan.execution_mode|title }}</small>

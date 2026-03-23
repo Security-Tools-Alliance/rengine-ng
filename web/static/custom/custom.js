@@ -3727,7 +3727,7 @@ function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
     const addOpenAIBtn = document.getElementById('btn-add-openai-key');
     if (addOpenAIBtn) {
         addOpenAIBtn.addEventListener('click', function() {
-            window.location.href = '/scanEngine/api_vault';
+            window.location.href = (window.RENGINE_PAGE_URLS && window.RENGINE_PAGE_URLS.apiVault) || '/scanEngine/api_vault';
         });
     }
     
@@ -4081,7 +4081,7 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
             icon: 'error',
             title: 'Error',
             text: 'Unable to fetch LLM models. Please check configuration.',
-            footer: '<a href="/scanEngine/llm_toolkit/">Configure LLM models</a>'
+            footer: '<a href="' + (((window.RENGINE_PAGE_URLS && window.RENGINE_PAGE_URLS.llmToolkit) || '/scanEngine/llm_toolkit/')) + '">Configure LLM models</a>'
         });
     }
 }

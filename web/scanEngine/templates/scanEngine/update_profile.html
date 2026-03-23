@@ -15,7 +15,7 @@ Update Profile
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
-<li class="breadcrumb-item"><a href="{% url 'profiles' %}">Profiles</a></li>
+<li class="breadcrumb-item"><a href="{% url 'profiles' current_project.slug %}">Profiles</a></li>
 <li class="breadcrumb-item active">Update Profile</li>
 {% endblock breadcrumb_title %}
 
@@ -48,7 +48,7 @@ Update Profile
     <button class="btn btn-primary submit-fn" type="submit">
       <i class="fas fa-save"></i> Update Profile
     </button>
-    <a href="{% url 'profiles' %}" class="btn btn-secondary">
+    <a href="{% url 'profiles' current_project.slug %}" class="btn btn-secondary">
       <i class="fas fa-arrow-left"></i> Back to Profiles
     </a>
   </div>

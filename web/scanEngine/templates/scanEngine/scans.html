@@ -17,7 +17,7 @@
                         <i class="fas fa-cogs"></i> Scans
                     </h3>
                     <div class="card-tools">
-                        <a href="{% url 'add_scan' %}" class="btn btn-primary btn-sm">
+                        <a href="{% url 'add_scan' current_project.slug %}" class="btn btn-primary btn-sm">
                             <i class="fas fa-plus"></i> Create Scan
                         </a>
                         <button type="button" class="btn btn-success btn-sm" onclick="loadBuiltinScans()">
@@ -107,14 +107,14 @@
                                     <td>{{ scan.created_at|date:"M d, Y" }}</td>
                                     <td>
                                         <div class="btn-group btn-group-sm">
-                                            <a href="{% url 'scan_detail' scan.id %}" class="btn btn-info btn-sm">
+                                            <a href="{% url 'scan_detail' current_project.slug scan.id %}" class="btn btn-info btn-sm">
                                                 <i class="fas fa-eye"></i>
                                             </a>
                                             <a href="{% url 'duplicate_scan' scan.id %}" class="btn btn-secondary btn-sm" title="Copy">
                                                 <i class="fas fa-copy"></i>
                                             </a>
                                             {% if scan.scan_config_type == 'custom' %}
-                                            <a href="{% url 'update_scan' scan.id %}" class="btn btn-warning btn-sm">
+                                            <a href="{% url 'update_scan' current_project.slug scan.id %}" class="btn btn-warning btn-sm">
                                                 <i class="fas fa-edit"></i>
                                             </a>
                                             <button type="button" class="btn btn-danger btn-sm" data-scan-id="{{ scan.id }}" data-scan-name="{{ scan.name }}" onclick="deleteScan(this.dataset.scanId, this.dataset.scanName)">
@@ -180,6 +180,11 @@
 {% block page_level_script %}
 <script src="{% static 'scanEngine/js/secator.js' %}"></script>
 <script>
+window.RENGINE_PAGE_URLS = window.RENGINE_PAGE_URLS || {};
+(function () {
+  var templateUrl = "{% url 'delete_scan' current_project.slug 0 %}";
+  window.RENGINE_PAGE_URLS.delete_scan_base = templateUrl.replace(/\/0\/delete\/$/, "/");
+})();
 // Scan-specific JavaScript functions
 function filterScans() {
     const filter = document.getElementById('filterSelect').value;
@@ -275,7 +280,16 @@ function getCookie(name) {
 
 // Function to delete a scan configuration
 function deleteScan(scanId, scanName) {
-    const url = `/scanEngine/scans/${scanId}/delete/`;
+    const base = window.RENGINE_PAGE_URLS && window.RENGINE_PAGE_URLS.delete_scan_base;
+    if (!base) {
+        Swal.fire({
+            title: "Error",
+            text: "Delete URL is not configured.",
+            icon: "error"
+        });
+        return;
+    }
+    const url = base + String(scanId) + "/delete/";
     
     Swal.fire({
         title: 'Are you sure?',

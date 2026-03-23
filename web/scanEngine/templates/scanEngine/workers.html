@@ -18,7 +18,7 @@
                         <i class="fas fa-server"></i> Secator Workers
                     </h3>
                     <div class="card-tools">
-                        <a href="{% url 'worker_add' %}" class="btn btn-primary btn-sm">
+                        <a href="{% url 'worker_add' current_project.slug %}" class="btn btn-primary btn-sm">
                             <i class="fas fa-plus"></i> Add Worker
                         </a>
                     </div>
@@ -90,7 +90,7 @@
                                     </td>
                                     <td>
                                         <div class="btn-group btn-group-sm">
-                                            <a href="{% url 'worker_update' worker.id %}" class="btn btn-warning btn-sm" title="Edit">
+                                            <a href="{% url 'worker_update' current_project.slug worker.id %}" class="btn btn-warning btn-sm" title="Edit">
                                                 <i class="fas fa-edit"></i>
                                             </a>
                                             <a href="{% url 'duplicate_worker' worker.id %}" class="btn btn-secondary btn-sm" title="Copy">
@@ -135,7 +135,7 @@
                                                 <i class="fas fa-cloud-upload-alt"></i>
                                             </button>
                                             {% endif %}
-                                            <a href="{% url 'worker_download_bundle' worker.id %}" class="btn btn-{% if worker|worker_is_pull_only %}primary{% else %}outline-secondary{% endif %} btn-sm" title="{% if worker|worker_is_pull_only %}Download bundle (required for pull-agent deploy){% else %}Download bundle (manual deploy){% endif %}" download>
+                                            <a href="{% url 'worker_download_bundle' current_project.slug worker.id %}" class="btn btn-{% if worker|worker_is_pull_only %}primary{% else %}outline-secondary{% endif %} btn-sm" title="{% if worker|worker_is_pull_only %}Download bundle (required for pull-agent deploy){% else %}Download bundle (manual deploy){% endif %}" download>
                                                 <i class="fas fa-download"></i><span class="sr-only">Download bundle</span>
                                             </a>
                                             {% if worker.is_active %}

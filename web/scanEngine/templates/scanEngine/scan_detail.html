@@ -25,7 +25,7 @@
                         <a href="{% url 'duplicate_scan' scan.id %}" class="btn btn-secondary btn-sm">
                             <i class="fas fa-copy"></i> Copy
                         </a>
-                        <a href="{% url 'scans' %}" class="btn btn-secondary btn-sm">
+                        <a href="{% url 'scans' current_project.slug %}" class="btn btn-secondary btn-sm">
                             <i class="fas fa-arrow-left"></i> Back to Scans
                         </a>
                     </div>

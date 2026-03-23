@@ -47,7 +47,7 @@ print_msg "Starting ASGI server with Uvicorn"
 poetry run -C $RENGINE_FOLDER uvicorn reNgine.asgi:application \
     --host 0.0.0.0 \
     --port 8000 \
-    --workers 4 \
+    --workers 12 \
     --log-level info \
     --ws-ping-interval 20 \
     --ws-ping-timeout 30 \

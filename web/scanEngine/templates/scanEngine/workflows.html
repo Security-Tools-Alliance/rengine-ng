@@ -17,7 +17,7 @@
                         <i class="fas fa-project-diagram"></i> Workflows
                     </h3>
                     <div class="card-tools">
-                        <a href="{% url 'add_workflow' %}" class="btn btn-primary btn-sm">
+                        <a href="{% url 'add_workflow' current_project.slug %}" class="btn btn-primary btn-sm">
                             <i class="fas fa-plus"></i> Create Workflow
                         </a>
                         <button type="button" class="btn btn-success btn-sm" onclick="loadBuiltinWorkflows()">

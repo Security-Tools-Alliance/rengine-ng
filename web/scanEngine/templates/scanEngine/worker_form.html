@@ -4,7 +4,7 @@
 {% block title %}{% if worker %}Edit Worker{% else %}Add Worker{% endif %}{% endblock %}
 
 {% block breadcrumb_title %}
-<li class="breadcrumb-item"><a href="{% url 'worker_list' %}">Workers</a></li>
+<li class="breadcrumb-item"><a href="{% url 'worker_list' current_project.slug %}">Workers</a></li>
 <li class="breadcrumb-item active">{% if worker %}Edit{% else %}Add{% endif %} Worker</li>
 {% endblock breadcrumb_title %}
 
@@ -196,7 +196,7 @@
                             <i class="fas fa-copy"></i> Copy
                         </a>
                         {% endif %}
-                        <a href="{% url 'worker_list' %}" class="btn btn-secondary">
+                        <a href="{% url 'worker_list' current_project.slug %}" class="btn btn-secondary">
                             <i class="fas fa-arrow-left"></i> Back to Workers
                         </a>
                         {% if worker and worker_check_connection_url %}

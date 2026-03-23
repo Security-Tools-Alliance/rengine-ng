@@ -101,7 +101,25 @@ PREFIX_SCAN_ENGINE_VIEWS = "[SCAN_ENGINE_VIEWS]"
 logger = get_module_logger(__name__)
 
 
-def index(request):
+def _project_slug_from_request(request) -> str | None:
+    current = getattr(request, "current_project", None)
+    if current and getattr(current, "slug", None):
+        return current.slug
+    resolver = getattr(request, "resolver_match", None)
+    if resolver and "slug" in resolver.kwargs:
+        return resolver.kwargs.get("slug")
+    return None
+
+
+def _reverse_with_project(request, name: str, *args, **kwargs) -> str:
+    kwargs = dict(kwargs or {})
+    slug = _project_slug_from_request(request)
+    if slug:
+        kwargs.setdefault("slug", slug)
+    return reverse(name, args=args, kwargs=kwargs)
+
+
+def index(request, slug=None):
     # Get engines based on scan type - filter out legacy engines
     # Legacy engines are kept only for retrocompatibility of old scans
     engine_type_qs = EngineType.objects.filter(is_legacy=False).order_by("engine_name")
@@ -119,7 +137,7 @@ def index(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def add_engine(request):
+def add_engine(request, slug=None):
     form = AddEngineForm()
 
     # load default yaml config
@@ -133,7 +151,7 @@ def add_engine(request):
                 setattr(form.instance, key, value)
             form.instance.save()
             messages.add_message(request, messages.INFO, "Scan Engine Added successfully")
-            return http.HttpResponseRedirect(reverse("scan_engine_index"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "scan_engine_index"))
     else:
         # fill form with default yaml config
         form = AddEngineForm(initial={"yaml_configuration": default_config})
@@ -143,7 +161,7 @@ def add_engine(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def duplicate_engine(request, id):
+def duplicate_engine(request, id, slug=None):
     """Duplicate an existing scan engine with unique name generation"""
     original_engine = get_object_or_404(EngineType, id=id)
 
@@ -169,11 +187,11 @@ def duplicate_engine(request, id):
     messages.add_message(
         request, messages.SUCCESS, f"Engine '{original_engine.engine_name}' successfully duplicated as '{new_name}'!"
     )
-    return http.HttpResponseRedirect(reverse("scan_engine_index"))
+    return http.HttpResponseRedirect(_reverse_with_project(request, "scan_engine_index"))
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_engine(request, id):
+def delete_engine(request, id, slug=None):
     obj = get_object_or_404(EngineType, id=id)
     if request.method == "POST":
         obj.delete()
@@ -186,7 +204,7 @@ def delete_engine(request, id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def update_engine(request, id):
+def update_engine(request, id, slug=None):
     engine = get_object_or_404(EngineType, id=id)
     form = UpdateEngineForm(
         initial={
@@ -202,7 +220,7 @@ def update_engine(request, id):
                 setattr(form.instance, key, value)
             form.save()
             messages.add_message(request, messages.INFO, "Engine edited successfully")
-            return http.HttpResponseRedirect(reverse("scan_engine_index"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "scan_engine_index"))
     context = {"scan_engine_nav_active": "active", "form": form}
     return render(request, "scanEngine/update_engine.html", context)
 
@@ -213,7 +231,7 @@ def _wordlist_add_page_context(form) -> dict:
 
 
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
-def wordlist_list(request):
+def wordlist_list(request, slug=None):
     wordlists = Wordlist.objects.all().order_by("id")
     wordlist_names = sorted({wordlist.name for wordlist in wordlists if wordlist.name})
     dt_config = get_datatable_table_config(TABLE_ID_WORDLIST_LIST)
@@ -228,7 +246,7 @@ def wordlist_list(request):
 
 
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
-def add_wordlist(request):
+def add_wordlist(request, slug=None):
     form = AddWordlistForm(request.POST or None, request.FILES or None)
     if request.method != "POST":
         return render(request, "scanEngine/wordlist/add.html", _wordlist_add_page_context(form))
@@ -276,7 +294,7 @@ def add_wordlist(request):
             request,
             f"Wordlist '{name}' added successfully (short_name: {short_name}).",
         )
-        return http.HttpResponseRedirect(reverse("wordlist_list"))
+        return http.HttpResponseRedirect(_reverse_with_project(request, "wordlist_list"))
 
     empty_filenames = []
     saved_count = 0
@@ -327,11 +345,11 @@ def add_wordlist(request):
             request,
             "The following files were skipped because they are empty: " + ", ".join(empty_filenames),
         )
-    return http.HttpResponseRedirect(reverse("wordlist_list"))
+    return http.HttpResponseRedirect(_reverse_with_project(request, "wordlist_list"))
 
 
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_wordlist(request, id):
+def delete_wordlist(request, id, slug=None):
     obj = get_object_or_404(Wordlist, id=id)
     if request.method == "POST":
         short_name = obj.short_name
@@ -355,7 +373,7 @@ def delete_wordlist(request, id):
 
 
 @has_permission_decorator(PERM_MODIFY_INTERESTING_LOOKUP, redirect_url=FOUR_OH_FOUR_URL)
-def interesting_lookup(request):
+def interesting_lookup(request, slug=None):
     lookup_keywords = InterestingLookupModel.objects.filter(custom_type=True).order_by("-id").first()
     form = InterestingLookupForm(instance=lookup_keywords)
 
@@ -367,7 +385,7 @@ def interesting_lookup(request):
         if form.is_valid():
             form.save()
             messages.info(request, "Lookup Keywords updated successfully")
-            return http.HttpResponseRedirect(reverse("interesting_lookup"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "interesting_lookup"))
 
     context = {
         "scan_engine_nav_active": "active",
@@ -380,7 +398,7 @@ def interesting_lookup(request):
     return render(request, "scanEngine/lookup.html", context)
 
 
-def _tool_settings_context(request):
+def _tool_settings_context(request, slug=None):
     from django.urls import reverse as django_reverse
 
     return {
@@ -394,7 +412,7 @@ def _tool_settings_context(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def tool_specific_settings(request):
+def tool_specific_settings(request, slug=None):
     if request.method == "POST":
         if "gfFileUpload" in request.FILES:
             result = save_uploaded_assets(
@@ -420,13 +438,13 @@ def tool_specific_settings(request):
                 "No files were uploaded. Fix the errors above and try again.",
             )
             return render(request, "scanEngine/settings/tool.html", _tool_settings_context(request))
-        return http.HttpResponseRedirect(reverse("tool_settings"))
+        return http.HttpResponseRedirect(_reverse_with_project(request, "tool_settings"))
 
     return render(request, "scanEngine/settings/tool.html", _tool_settings_context(request))
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def rengine_settings(request):
+def rengine_settings(request, slug=None):
     total, used, _ = shutil.disk_usage("/")
     total_gb = total // (2**30)
     used_gb = used // (2**30)
@@ -445,7 +463,7 @@ def rengine_settings(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def notification_settings(request):
+def notification_settings(request, slug=None):
     notification = Notification.objects.first()
     form = NotificationForm(instance=notification)
 
@@ -457,7 +475,7 @@ def notification_settings(request):
                 service("*reNgine*\nCongratulations! your notification services are working.")
             send_discord_message("**reNgine**\nCongratulations! your notification services are working.")
             messages.info(request, "Notification Settings updated successfully and test message was sent.")
-            return http.HttpResponseRedirect(reverse("notification_settings"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "notification_settings"))
 
     context = {
         "form": form,
@@ -469,7 +487,7 @@ def notification_settings(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def proxy_settings(request):
+def proxy_settings(request, slug=None):
     proxy = Proxy.objects.first()
     form = ProxyForm(instance=proxy)
 
@@ -478,14 +496,14 @@ def proxy_settings(request):
         if form.is_valid():
             form.save()
             messages.info(request, "Proxies updated.")
-            return http.HttpResponseRedirect(reverse("proxy_settings"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "proxy_settings"))
 
     context = {"form": form, "settings_nav_active": "active", "proxy_settings_li": "active", "settings_ul_show": "show"}
     return render(request, "scanEngine/settings/proxy.html", context)
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def test_hackerone(request):
+def test_hackerone(request, slug=None):
     if request.method != "POST":
         return http.JsonResponse({"error": "Method not allowed"}, status=405)
 
@@ -539,7 +557,7 @@ def test_hackerone(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def hackerone_settings(request):
+def hackerone_settings(request, slug=None):
     hackerone = Hackerone.objects.first()
     form = HackeroneForm(instance=hackerone)
 
@@ -548,7 +566,7 @@ def hackerone_settings(request):
         if form.is_valid():
             form.save()
             messages.info(request, "Hackerone Settings updated.")
-            return http.HttpResponseRedirect(reverse("hackerone_settings"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "hackerone_settings"))
 
     context = {
         "form": form,
@@ -560,7 +578,7 @@ def hackerone_settings(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_REPORT, redirect_url=FOUR_OH_FOUR_URL)
-def report_settings(request):
+def report_settings(request, slug=None):
     primary_color = "#FFB74D"
     secondary_color = "#212121"
 
@@ -577,7 +595,7 @@ def report_settings(request):
         if form.is_valid():
             form.save()
             messages.info(request, "Report Settings updated.")
-            return http.HttpResponseRedirect(reverse("report_settings"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "report_settings"))
 
     context = {
         "form": form,
@@ -591,7 +609,7 @@ def report_settings(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def api_vault_delete(request):
+def api_vault_delete(request, slug=None):
     response = {"status": "error", "deleted": [], "skipped": []}
     if request.method != "POST":
         response["message"] = "Method not allowed"
@@ -624,7 +642,7 @@ def api_vault_delete(request):
     return http.JsonResponse(response)
 
 
-def llm_toolkit_section(request):
+def llm_toolkit_section(request, slug=None):
     try:
         # Direct call to the API
         api_response = LLMModelsManager().get(request)
@@ -638,7 +656,7 @@ def llm_toolkit_section(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def api_vault(request):
+def api_vault(request, slug=None):
     if request.method == "POST":
         if (key_openai := request.POST.get("key_openai")) and len(key_openai) > 0:
             if openai_api_key := OpenAiAPIKey.objects.first():
@@ -711,7 +729,7 @@ def _get_filtered_workflows(filter_type, search_query):
 
 
 @login_required
-def secator_workflows(request):
+def secator_workflows(request, slug=None):
     """List workflows with filtering."""
     filter_type = request.GET.get("filter", "all")
     search_query = request.GET.get("search", "")
@@ -725,7 +743,7 @@ def secator_workflows(request):
 
 
 @login_required
-def secator_workflows_table_partial(request):
+def secator_workflows_table_partial(request, slug=None):
     """Return only the workflows table body HTML for dynamic search/filter (no page reload)."""
     filter_type = request.GET.get("filter", "all")
     search_query = request.GET.get("search", "")
@@ -768,7 +786,7 @@ def _get_filtered_tasks(filter_type, search_query):
 
 
 @login_required
-def secator_tasks(request):
+def secator_tasks(request, slug=None):
     """List tasks with filtering."""
     filter_type = request.GET.get("filter", "all")
     search_query = request.GET.get("search", "")
@@ -782,7 +800,7 @@ def secator_tasks(request):
 
 
 @login_required
-def secator_tasks_table_partial(request):
+def secator_tasks_table_partial(request, slug=None):
     """Return only the tasks table body HTML for dynamic search/filter (no page reload)."""
     filter_type = request.GET.get("filter", "all")
     search_query = request.GET.get("search", "")
@@ -791,7 +809,7 @@ def secator_tasks_table_partial(request):
 
 
 @login_required
-def secator_task_detail(request, task_id):
+def secator_task_detail(request, task_id, slug=None):
     """Detail view for a task."""
     task = get_object_or_404(SecatorTask, id=task_id)
 
@@ -806,7 +824,7 @@ def secator_task_detail(request, task_id):
 
 
 @login_required
-def duplicate_workflow(request, workflow_id):
+def duplicate_workflow(request, workflow_id, slug=None):
     """Duplicate a workflow as a custom workflow."""
     workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
     duplicated_name = _build_duplicate_name(SecatorWorkflow, workflow.name)
@@ -823,11 +841,11 @@ def duplicate_workflow(request, workflow_id):
         tags=workflow.tags or [],
     )
     messages.add_message(request, messages.SUCCESS, f"Workflow '{workflow.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(reverse("workflow_detail", args=[duplicated_workflow.id]))
+    return http.HttpResponseRedirect(_reverse_with_project(request, "workflow_detail", duplicated_workflow.id))
 
 
 @login_required
-def secator_scans(request):
+def secator_scans(request, slug=None):
     """List scan configurations with filtering."""
     filter_type = request.GET.get("filter", "all")
     search_query = request.GET.get("search", "")
@@ -861,7 +879,7 @@ def secator_scans(request):
 
 
 @login_required
-def secator_workflow_detail(request, workflow_id):
+def secator_workflow_detail(request, workflow_id, slug=None):
     """Detail view for a workflow."""
     workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
     related_scans = list(SecatorScan.objects.filter_by_workflow(workflow))
@@ -875,7 +893,7 @@ def secator_workflow_detail(request, workflow_id):
 
 
 @login_required
-def secator_scan_detail(request, scan_id):
+def secator_scan_detail(request, scan_id, slug=None):
     """Detail view for a scan configuration."""
     scan = get_object_or_404(SecatorScan, id=scan_id)
 
@@ -947,7 +965,7 @@ def secator_scan_detail(request, scan_id):
 
 
 @login_required
-def duplicate_scan(request, scan_id):
+def duplicate_scan(request, scan_id, slug=None):
     """Duplicate a scan configuration as a custom scan."""
     scan = get_object_or_404(SecatorScan, id=scan_id)
     duplicated_name = _build_duplicate_name(SecatorScan, scan.name)
@@ -962,11 +980,11 @@ def duplicate_scan(request, scan_id):
         scan_type=scan.scan_type,
     )
     messages.add_message(request, messages.SUCCESS, f"Scan '{scan.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(reverse("scan_detail", args=[duplicated_scan.id]))
+    return http.HttpResponseRedirect(_reverse_with_project(request, "scan_detail", duplicated_scan.id))
 
 
 @login_required
-def add_workflow(request):
+def add_workflow(request, slug=None):
     """Create a new workflow."""
     form = SecatorWorkflowForm()
 
@@ -979,21 +997,21 @@ def add_workflow(request):
             form.instance.workflow_type = "custom"
             form.instance.save()
             messages.add_message(request, messages.INFO, "Workflow added successfully")
-            return http.HttpResponseRedirect(reverse("workflows"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "workflows"))
 
     context = {"scan_engine_nav_active": "active", "form": form}
     return render(request, "scanEngine/add_workflow.html", context)
 
 
 @login_required
-def update_workflow(request, workflow_id):
+def update_workflow(request, workflow_id, slug=None):
     """Update an existing workflow."""
     workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
 
     # Check if workflow can be modified (early check for better UX)
     if not workflow.can_modify():
         messages.add_message(request, messages.ERROR, "Built-in workflows cannot be modified!")
-        return http.HttpResponseRedirect(reverse("workflows"))
+        return http.HttpResponseRedirect(_reverse_with_project(request, "workflows"))
 
     form = SecatorWorkflowForm(
         initial={
@@ -1016,17 +1034,17 @@ def update_workflow(request, workflow_id):
                     setattr(form.instance, key, value)
                 form.save()
                 messages.add_message(request, messages.INFO, "Workflow updated successfully")
-                return http.HttpResponseRedirect(reverse("workflows"))
+                return http.HttpResponseRedirect(_reverse_with_project(request, "workflows"))
             except PermissionError as e:
                 messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
-                return http.HttpResponseRedirect(reverse("workflows"))
+                return http.HttpResponseRedirect(_reverse_with_project(request, "workflows"))
 
     context = {"scan_engine_nav_active": "active", "form": form, "workflow": workflow}
     return render(request, "scanEngine/update_workflow.html", context)
 
 
 @login_required
-def delete_workflow(request, workflow_id):
+def delete_workflow(request, workflow_id, slug=None):
     """Delete a workflow."""
     workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
 
@@ -1053,7 +1071,7 @@ def delete_workflow(request, workflow_id):
 
 
 @login_required
-def add_scan(request):
+def add_scan(request, slug=None):
     """Create a new scan configuration."""
     form = SecatorScanForm()
 
@@ -1066,21 +1084,21 @@ def add_scan(request):
             form.instance.scan_config_type = "custom"
             form.instance.save()
             messages.add_message(request, messages.INFO, "Scan configuration added successfully")
-            return http.HttpResponseRedirect(reverse("scans"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "scans"))
 
     context = {"scan_engine_nav_active": "active", "form": form}
     return render(request, "scanEngine/add_scan.html", context)
 
 
 @login_required
-def update_scan(request, scan_id):
+def update_scan(request, scan_id, slug=None):
     """Update an existing scan configuration."""
     scan = get_object_or_404(SecatorScan, id=scan_id)
 
     # Check if scan can be modified (early check for better UX)
     if not scan.can_modify():
         messages.add_message(request, messages.ERROR, "Built-in scan configurations cannot be modified!")
-        return http.HttpResponseRedirect(reverse("scans"))
+        return http.HttpResponseRedirect(_reverse_with_project(request, "scans"))
 
     form = SecatorScanForm(
         initial={
@@ -1102,17 +1120,17 @@ def update_scan(request, scan_id):
                     setattr(form.instance, key, value)
                 form.save()
                 messages.add_message(request, messages.INFO, "Scan configuration updated successfully")
-                return http.HttpResponseRedirect(reverse("scans"))
+                return http.HttpResponseRedirect(_reverse_with_project(request, "scans"))
             except PermissionError as e:
                 messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
-                return http.HttpResponseRedirect(reverse("scans"))
+                return http.HttpResponseRedirect(_reverse_with_project(request, "scans"))
 
     context = {"scan_engine_nav_active": "active", "form": form, "scan": scan}
     return render(request, "scanEngine/update_scan.html", context)
 
 
 @login_required
-def delete_scan(request, scan_id):
+def delete_scan(request, scan_id, slug=None):
     """Delete a scan configuration."""
     scan = get_object_or_404(SecatorScan, id=scan_id)
 
@@ -1144,7 +1162,7 @@ def delete_scan(request, scan_id):
 
 
 @login_required
-def secator_profiles(request):
+def secator_profiles(request, slug=None):
     """List profiles with filtering."""
     filter_type = request.GET.get("filter", "all")
     search_query = request.GET.get("search", "")
@@ -1183,7 +1201,7 @@ def secator_profiles(request):
 
 
 @login_required
-def secator_profile_detail(request, profile_id):
+def secator_profile_detail(request, profile_id, slug=None):
     """Detail view for a profile."""
     profile = get_object_or_404(SecatorProfile, id=profile_id)
 
@@ -1195,7 +1213,7 @@ def secator_profile_detail(request, profile_id):
 
 
 @login_required
-def duplicate_profile(request, profile_id):
+def duplicate_profile(request, profile_id, slug=None):
     """Duplicate a profile as a custom profile."""
     profile = get_object_or_404(SecatorProfile, id=profile_id)
     duplicated_name = _build_duplicate_name(SecatorProfile, profile.name)
@@ -1210,11 +1228,11 @@ def duplicate_profile(request, profile_id):
         is_default=False,
     )
     messages.add_message(request, messages.SUCCESS, f"Profile '{profile.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(reverse("profile_detail", args=[duplicated_profile.id]))
+    return http.HttpResponseRedirect(_reverse_with_project(request, "profile_detail", duplicated_profile.id))
 
 
 @login_required
-def add_profile(request):
+def add_profile(request, slug=None):
     """Create a new profile."""
     form = SecatorProfileForm()
 
@@ -1229,7 +1247,7 @@ def add_profile(request):
                 form.instance.save()
 
                 messages.add_message(request, messages.INFO, "Profile added successfully")
-                return http.HttpResponseRedirect(reverse("profiles"))
+                return http.HttpResponseRedirect(_reverse_with_project(request, "profiles"))
             except Exception as e:
                 logger.log_line(
                     PREFIX_SCAN_ENGINE_VIEWS,
@@ -1247,14 +1265,14 @@ def add_profile(request):
 
 
 @login_required
-def update_profile(request, profile_id):
+def update_profile(request, profile_id, slug=None):
     """Update an existing profile."""
     profile = get_object_or_404(SecatorProfile, id=profile_id)
 
     # Check if profile can be modified (early check for better UX)
     if not profile.can_modify():
         messages.add_message(request, messages.ERROR, "Built-in profiles cannot be modified!")
-        return http.HttpResponseRedirect(reverse("profiles"))
+        return http.HttpResponseRedirect(_reverse_with_project(request, "profiles"))
 
     form = SecatorProfileForm(
         initial={
@@ -1276,10 +1294,10 @@ def update_profile(request, profile_id):
                 form.save()
 
                 messages.add_message(request, messages.INFO, "Profile updated successfully")
-                return http.HttpResponseRedirect(reverse("profiles"))
+                return http.HttpResponseRedirect(_reverse_with_project(request, "profiles"))
             except PermissionError as e:
                 messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
-                return http.HttpResponseRedirect(reverse("profiles"))
+                return http.HttpResponseRedirect(_reverse_with_project(request, "profiles"))
             except Exception as e:
                 logger.log_line(
                     PREFIX_SCAN_ENGINE_VIEWS,
@@ -1297,7 +1315,7 @@ def update_profile(request, profile_id):
 
 
 @login_required
-def set_default_profile(request, profile_id):
+def set_default_profile(request, profile_id, slug=None):
     """Set a profile as default for its category."""
     profile = get_object_or_404(SecatorProfile, id=profile_id)
 
@@ -1331,7 +1349,7 @@ def set_default_profile(request, profile_id):
 
 
 @login_required
-def delete_profile(request, profile_id):
+def delete_profile(request, profile_id, slug=None):
     """Delete a profile."""
     profile = get_object_or_404(SecatorProfile, id=profile_id)
 
@@ -1358,7 +1376,7 @@ def delete_profile(request, profile_id):
 
 
 @login_required
-def duplicate_task(request, task_id):
+def duplicate_task(request, task_id, slug=None):
     """Duplicate a task as a custom task."""
     task = get_object_or_404(SecatorTask, id=task_id)
     duplicated_name = _build_duplicate_name(SecatorTask, task.name)
@@ -1372,11 +1390,11 @@ def duplicate_task(request, task_id):
         is_active=task.is_active,
     )
     messages.add_message(request, messages.SUCCESS, f"Task '{task.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(reverse("task_detail", args=[duplicated_task.id]))
+    return http.HttpResponseRedirect(_reverse_with_project(request, "task_detail", duplicated_task.id))
 
 
 @login_required
-def worker_list(request):
+def worker_list(request, slug=None):
     """List Secator workers; actions (deploy, refresh, disable, delete) are performed via API from JS."""
     workers = SecatorWorker.objects.all().order_by("name").prefetch_related("secatorrunner_set")
     context = {
@@ -1387,7 +1405,7 @@ def worker_list(request):
 
 
 @login_required
-def duplicate_worker(request, worker_id):
+def duplicate_worker(request, worker_id, slug=None):
     """Duplicate a worker without copying authentication secrets."""
     worker = get_object_or_404(SecatorWorker, id=worker_id)
     duplicated_name = _build_duplicate_name(SecatorWorker, worker.name)
@@ -1414,11 +1432,11 @@ def duplicate_worker(request, worker_id):
         https_pull_verify_ssl=worker.https_pull_verify_ssl,
     )
     messages.add_message(request, messages.SUCCESS, f"Worker '{worker.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(reverse("worker_update", args=[duplicated_worker.id]))
+    return http.HttpResponseRedirect(_reverse_with_project(request, "worker_update", duplicated_worker.id))
 
 
 @login_required
-def worker_add(request):
+def worker_add(request, slug=None):
     """Add a new Secator worker (form); optional deploy after create."""
     form = SecatorWorkerForm()
     if request.method == "POST":
@@ -1426,7 +1444,7 @@ def worker_add(request):
         if form.is_valid():
             worker = form.save()
             messages.add_message(request, messages.SUCCESS, f"Worker '{worker.name}' created.")
-            return http.HttpResponseRedirect(reverse("worker_list"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "worker_list"))
     context = {
         "scan_engine_nav_active": "active",
         "form": form,
@@ -1436,7 +1454,7 @@ def worker_add(request):
 
 
 @login_required
-def worker_update(request, worker_id):
+def worker_update(request, worker_id, slug=None):
     """Update a Secator worker; password left unchanged if empty."""
     worker = get_object_or_404(SecatorWorker, id=worker_id)
     form = SecatorWorkerForm(instance=worker)
@@ -1480,7 +1498,7 @@ def worker_update(request, worker_id):
                     )
             else:
                 messages.add_message(request, messages.SUCCESS, f"Worker '{worker.name}' updated.")
-            return http.HttpResponseRedirect(reverse("worker_list"))
+            return http.HttpResponseRedirect(_reverse_with_project(request, "worker_list"))
     worker_check_connection_url = reverse(
         "api:secator-workers-check-connection",
         kwargs={"pk": worker.id},
@@ -1501,7 +1519,7 @@ def worker_update(request, worker_id):
 
 
 @login_required
-def worker_download_bundle(request, worker_id):
+def worker_download_bundle(request, worker_id, slug=None):
     """Return a tar.gz bundle for manual worker deployment (compose, .env, templates, README)."""
     worker = get_object_or_404(SecatorWorker, id=worker_id)
     try:
@@ -1510,7 +1528,7 @@ def worker_download_bundle(request, worker_id):
         archive_bytes = build_worker_bundle_tar_gz(worker)
     except UserSafeError as e:
         messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
-        return http.HttpResponseRedirect(reverse("worker_list"))
+        return http.HttpResponseRedirect(_reverse_with_project(request, "worker_list"))
     safe_name = sanitize_path_component(worker.name) or "worker"
     filename = f"worker-{safe_name}-{worker.id}.tar.gz"
     response = http.HttpResponse(archive_bytes, content_type="application/gzip")

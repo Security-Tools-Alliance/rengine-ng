@@ -75,7 +75,7 @@ Scan Engine
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
-<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' %}">Engines</a></li>
+<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' current_project.slug %}">Engines</a></li>
 <li class="breadcrumb-item active">All Scan Engines</li>
 {% endblock breadcrumb_title %}
 
@@ -90,9 +90,9 @@ Scan Engines <small class="text-muted">(Legacy)</small>
     <div class="alert alert-warning alert-dismissible fade show" role="alert">
       <i class="fas fa-exclamation-triangle me-2"></i>
       <strong>Legacy Feature:</strong> Scan Engines are deprecated in favor of the new Secator system. 
-      Please use <a href="{% url 'scans' %}" class="alert-link">Scans</a>, 
-      <a href="{% url 'workflows' %}" class="alert-link">Workflows</a>, and 
-      <a href="{% url 'tasks' %}" class="alert-link">Tasks</a> instead.
+      Please use <a href="{% url 'scans' current_project.slug %}" class="alert-link">Scans</a>, 
+      <a href="{% url 'workflows' current_project.slug %}" class="alert-link">Workflows</a>, and 
+      <a href="{% url 'tasks' current_project.slug %}" class="alert-link">Tasks</a> instead.
       <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
     

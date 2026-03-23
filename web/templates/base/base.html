@@ -255,7 +255,17 @@
           listTechnologies: '{% url "api:listTechnologies" %}',
           fetchScreenshots: '{% url "api:fetchScreenshots" %}',
           uncommonWebPorts: '{% url "api:uncommonWebPorts" %}',
-          toolOllama: '{% url "api:ollama_manager" %}'
+          toolOllama: '{% url "api:ollama_manager" %}',
+          searchHistory: '{% url "api:search_history" %}'
+        });
+
+        window.RENGINE_PAGE_URLS = window.RENGINE_PAGE_URLS || {};
+        Object.assign(window.RENGINE_PAGE_URLS, {
+          apiVault: '{% if current_project %}{% url "api_vault" current_project.slug %}{% else %}{% url "api_vault" %}{% endif %}',
+          llmToolkit: '{% if current_project %}{% url "llm_toolkit" current_project.slug %}{% else %}{% url "llm_toolkit" %}{% endif %}',
+          reconNoteDelete: '{% if current_project %}{% url "delete_note" current_project.slug %}{% else %}{% url "delete_note" %}{% endif %}',
+          reconNoteFlipTodo: '{% if current_project %}{% url "flip_todo_status" current_project.slug %}{% else %}{% url "flip_todo_status" %}{% endif %}',
+          reconNoteFlipImportant: '{% if current_project %}{% url "flip_important_status" current_project.slug %}{% else %}{% url "flip_important_status" %}{% endif %}'
         });
 
         getScanStatusSidebar('{% url "api:scan_status" %}', '{% url "api:stop_scan" %}', '{% url "api:stop_activity" %}', '{% url "api:fetch_subscan_results" %}', { project: '{{ current_project.slug }}', reload: false });
@@ -292,7 +302,7 @@
       }
 
       function render_search_history(slug){
-        fetch('/api/search/history/')
+        fetch((window.RENGINE_API_URLS && window.RENGINE_API_URLS.searchHistory) || '/api/search/history/')
         .then(response => response.json())
         .then(function (response) {
           if (response.status) {

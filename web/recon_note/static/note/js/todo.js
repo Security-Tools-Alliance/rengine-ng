@@ -204,6 +204,15 @@ const dynamicBadgeNotification = function(setTodoCategoryCount) {
   }
 }
 
+const getRequiredReconNoteUrl = function(key) {
+  const urls = window.RENGINE_PAGE_URLS || {};
+  const value = urls[key];
+  if (!value) {
+    throw new Error('Missing required page URL: ' + key);
+  }
+  return value;
+}
+
 const deleteBtnListener = function() {
   $('.actions-btn .delete-btn').click(async function() {
     const id = this.id.split('_')[1];
@@ -217,7 +226,14 @@ const deleteBtnListener = function() {
       padding: '2em',
       showLoaderOnConfirm: true,
       preConfirm: async function() {
-        const response = await fetch('/recon_note/delete_note', {
+        let deleteUrl;
+        try {
+          deleteUrl = getRequiredReconNoteUrl('reconNoteDelete');
+        } catch (error) {
+          swal('Configuration error', error.message, 'error');
+          return;
+        }
+        const response = await fetch(deleteUrl, {
           method: 'POST',
           credentials: "same-origin",
           headers: {
@@ -262,15 +278,20 @@ const checkBtnListener = function() {
     todoItem.toggleClass('todo-task-done'); // Toggle the done class
 
     new dynamicBadgeNotification('completedList');
-    await fetch('/recon_note/flip_todo_status', {
-      method: 'post',
-      headers: {
-        "X-CSRFToken": getCookie("csrftoken")
-      },
-      body: JSON.stringify({
-        'id': parseInt(this.id.split('_')[1]),
-      })
-    }).then(res => res.json());
+    try {
+      const flipTodoUrl = getRequiredReconNoteUrl('reconNoteFlipTodo');
+      await fetch(flipTodoUrl, {
+        method: 'post',
+        headers: {
+          "X-CSRFToken": getCookie("csrftoken")
+        },
+        body: JSON.stringify({
+          'id': parseInt(this.id.split('_')[1]),
+        })
+      }).then(res => res.json());
+    } catch (error) {
+      swal('Configuration error', error.message, 'error');
+    }
   });
 }
 
@@ -301,15 +322,20 @@ const importantBtnListener = function() {
       $("#important-badge-"+badge_id).remove();
     }
     new dynamicBadgeNotification('importantList');
-    await fetch('/recon_note/flip_important_status', {
-      method: 'post',
-      headers: {
-        "X-CSRFToken": getCookie("csrftoken")
-      },
-      body: JSON.stringify({
-        'id': parseInt(this.id.split('_')[1]),
-      })
-    }).then(res => res.json());
+    try {
+      const flipImportantUrl = getRequiredReconNoteUrl('reconNoteFlipImportant');
+      await fetch(flipImportantUrl, {
+        method: 'post',
+        headers: {
+          "X-CSRFToken": getCookie("csrftoken")
+        },
+        body: JSON.stringify({
+          'id': parseInt(this.id.split('_')[1]),
+        })
+      }).then(res => res.json());
+    } catch (error) {
+      swal('Configuration error', error.message, 'error');
+    }
   });
 }
 

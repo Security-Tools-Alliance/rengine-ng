@@ -14,7 +14,7 @@ Update Workflow
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
-<li class="breadcrumb-item"><a href="{% url 'workflows' %}">Workflows</a></li>
+<li class="breadcrumb-item"><a href="{% url 'workflows' current_project.slug %}">Workflows</a></li>
 <li class="breadcrumb-item active">Update Workflow</li>
 {% endblock breadcrumb_title %}
 
@@ -44,7 +44,7 @@ Update Workflow
 						<button class="btn btn-primary submit-fn" type="submit">
 							<i class="fas fa-save"></i> Update Workflow
 						</button>
-						<a href="{% url 'workflows' %}" class="btn btn-secondary">
+						<a href="{% url 'workflows' current_project.slug %}" class="btn btn-secondary">
 							<i class="fas fa-arrow-left"></i> Back to Workflows
 						</a>
 					</div>

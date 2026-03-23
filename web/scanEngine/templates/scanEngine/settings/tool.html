@@ -72,7 +72,7 @@ GF Patterns, Wordlists & Nuclei Templates
         <p>
           Wordlists are used for directory bruteforce, subdomain bruteforce and other scan steps. They are available to Secator workflows on the worker at <code>/home/secator/.secator/wordlists/</code> (filename = short name + <code>.txt</code>).
         </p>
-        <a class="btn btn-soft-primary" href="{% url 'wordlist_list' %}">Manage wordlists</a>
+        <a class="btn btn-soft-primary" href="{% url 'wordlist_list' current_project.slug %}">Manage wordlists</a>
       </div>
     </div>
   </div>

@@ -21,7 +21,7 @@
                         <i class="fas fa-plus"></i> Add Scan
                     </h3>
                     <div class="card-tools">
-                        <a href="{% url 'scans' %}" class="btn btn-secondary btn-sm">
+                        <a href="{% url 'scans' current_project.slug %}" class="btn btn-secondary btn-sm">
                             <i class="fas fa-arrow-left"></i> Back to Scans
                         </a>
                     </div>
@@ -42,7 +42,7 @@
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save"></i> Create Scan
                             </button>
-                            <a href="{% url 'scans' %}" class="btn btn-secondary">
+                            <a href="{% url 'scans' current_project.slug %}" class="btn btn-secondary">
                                 <i class="fas fa-arrow-left"></i> Back to Scans
                             </a>
                         </div>

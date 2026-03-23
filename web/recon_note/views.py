@@ -6,6 +6,7 @@ the management of todo notesand related operations.
 """
 
 import json
+from typing import Optional
 
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -16,6 +17,13 @@ from reNgine.utilities.logger import get_module_logger
 
 PREFIX_RECON_NOTE = "[RECON_NOTE]"
 logger = get_module_logger(__name__)
+
+
+def _todo_notes_queryset_for_slug(slug: Optional[str]):
+    queryset = TodoNote.objects.all()
+    if slug:
+        queryset = queryset.filter(project__slug=slug)
+    return queryset
 
 
 def list_note(request, slug):
@@ -34,7 +42,7 @@ def list_note(request, slug):
     return render(request, "note/index.html", context)
 
 
-def flip_todo_status(request):
+def flip_todo_status(request, slug=None):
     """
     flip_todo_status toggles the completion status of a todo note based on the provided request data.
     It processes a POST request, validates the input, and updates the note's status,
@@ -71,7 +79,7 @@ def flip_todo_status(request):
         return JsonResponse({"status": False, "error": "ID is required."}, status=400)
 
     try:
-        note = TodoNote.objects.get(id=note_id)
+        note = _todo_notes_queryset_for_slug(slug).get(id=note_id)
     except TodoNote.DoesNotExist:
         return JsonResponse({"status": False, "error": "Note not found."}, status=404)
 
@@ -80,7 +88,7 @@ def flip_todo_status(request):
     return JsonResponse({"status": True, "error": False, "is_done": note.is_done}, status=200)
 
 
-def flip_important_status(request):
+def flip_important_status(request, slug=None):
     """
     flip_important_status toggles the importance status of a todo note based on the provided request data.
     It processes a POST request, validates the input, and updates the note's status,
@@ -117,7 +125,7 @@ def flip_important_status(request):
         return JsonResponse({"status": False, "error": "ID is required."}, status=400)
 
     try:
-        note = TodoNote.objects.get(id=note_id)
+        note = _todo_notes_queryset_for_slug(slug).get(id=note_id)
     except TodoNote.DoesNotExist:
         return JsonResponse({"status": False, "error": "Note not found."}, status=404)
 
@@ -126,7 +134,7 @@ def flip_important_status(request):
     return JsonResponse({"status": True, "error": False, "is_important": note.is_important}, status=200)
 
 
-def delete_note(request):
+def delete_note(request, slug=None):
     """
     delete_note handles the deletion of a todo note based on the provided request data.
     It processes a POST request, validates the input, and removes the specified note,
@@ -161,8 +169,9 @@ def delete_note(request):
     if note_id is None:
         return JsonResponse({"status": False, "error": "ID is required."}, status=400)
 
-    if not TodoNote.objects.filter(id=note_id).exists():
+    qs = _todo_notes_queryset_for_slug(slug).filter(id=note_id)
+    if not qs.exists():
         return JsonResponse({"status": False, "error": "Note not found."}, status=404)
 
-    TodoNote.objects.filter(id=note_id).delete()
+    qs.delete()
     return JsonResponse({"status": True, "error": False, "deleted": True}, status=200)
