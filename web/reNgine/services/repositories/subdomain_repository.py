@@ -17,9 +17,9 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from reNgine.core.exceptions import FindingOutOfScopeError
+from reNgine.core.validators import is_valid_domain, is_valid_ip
 from reNgine.secator.source_extraction import merge_subdomain_sources_from_item
 from reNgine.secator.subdomain_technology_link import upsert_subdomain_technology_link
-from reNgine.core.validators import is_valid_domain, is_valid_ip
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name, normalize_subdomain_host

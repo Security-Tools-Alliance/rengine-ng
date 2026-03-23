@@ -11,8 +11,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
 from reNgine.core.exceptions import FindingOutOfScopeError
-from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.core.validators import is_valid_ip
+from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.utilities.domain import (
     get_domain_for_scan_by_name,
     get_or_create_domain_for_target,

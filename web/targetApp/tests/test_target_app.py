@@ -33,7 +33,8 @@ from django.contrib.messages import get_messages
 from django.urls import reverse
 from django.utils import timezone
 
-from startScan.models import Domain, DomainInfo, RelatedDomain, ScanHistory
+from reNgine.secator.services.target_builder_service import TargetBuilderService
+from startScan.models import Domain, DomainInfo, IpAddress, RelatedDomain, ScanHistory, Subdomain
 from targetApp.models import Organization, Target
 from targetApp.views import _AggregatedDomainInfo
 from utils.test_base import BaseTestCase
@@ -86,16 +87,15 @@ class TestTargetAppViews(BaseTestCase):
         Domain.objects.all().delete()
 
         # Create test host data in the new format
-        host_data_1 = json.dumps({"ip": "192.168.1.1", "domain": "example.local", "is_alive": True})
-        host_data_2 = json.dumps({"ip": "192.168.1.2", "domain": "other-example.local", "is_alive": False})
+        host_data_1 = json.dumps({"ip": "192.168.1.1", "domain": "www.example.local", "is_alive": True})
 
         response = self.client.post(
             reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
             {
                 "ip_address": "192.168.1.0/24",
-                "targetName": "test-target",
-                "discovered_domains": ["example.local", "other-example.local"],
-                "resolved_hosts": [host_data_1, host_data_2],
+                "targetName": "example.local",
+                "discovered_domains": ["example.local"],
+                "resolved_hosts": [host_data_1],
                 "targetDescription": "Test Description",
                 "targetH1TeamHandle": "Test Handle",
                 "targetOrganization": "Test Organization",
@@ -104,41 +104,110 @@ class TestTargetAppViews(BaseTestCase):
         )
         self.assertEqual(response.status_code, 302)
 
-        target = Target.objects.filter(project=self.data_generator.project, value="test-target").first()
+        target = Target.objects.filter(project=self.data_generator.project, value="example.local").first()
         self.assertIsNotNone(target)
         self.assertEqual(target.target_type, "host")
+        scan = ScanHistory.objects.filter(target=target).first()
+        self.assertIsNotNone(scan)
+        self.assertEqual(scan.scan_config.get("seed_source"), "ip_discovery")
+        self.assertTrue(Domain.objects.filter(scan_history=scan, name="example.local").exists())
+        sub = Subdomain.objects.filter(scan_history=scan, name="www.example.local").first()
+        self.assertIsNotNone(sub)
+        self.assertTrue(IpAddress.objects.filter(address="192.168.1.1").exists())
+        self.assertTrue(sub.ip_addresses.filter(address="192.168.1.1").exists())
+        flat = TargetBuilderService(target_id=target.id).build_flat_targets(["host", "ip"])
+        self.assertIn("www.example.local", flat)
+        self.assertIn("192.168.1.1", flat)
 
-    def test_add_target_with_invalid_ip(self):
+    def test_add_ip_discovery_domain_checkbox_only_seeds_domain_finding(self):
+        """Checked domain with no host rows still creates Domain on the ip_discovery seed scan."""
+        Target.objects.filter(
+            project=self.data_generator.project,
+            value="example.local",
+        ).delete()
+        Domain.objects.all().delete()
+        ScanHistory.objects.all().delete()
+        response = self.client.post(
+            reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
+            {
+                "ip_address": "192.168.1.0/24",
+                "targetName": "example.local",
+                "discovered_domains": ["example.local"],
+                "resolved_hosts": [],
+                "add-ip-target": "submit",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        target = Target.objects.get(project=self.data_generator.project, value="example.local")
+        scan = ScanHistory.objects.filter(target=target).first()
+        self.assertIsNotNone(scan)
+        self.assertTrue(Domain.objects.filter(scan_history=scan, name="example.local").exists())
+
+    def test_add_ip_named_target_seeds_domain_and_ip_without_domain_checkbox(self):
+        """Explicit apex + IP-only selections still create Domain + IpAddress on the seed scan."""
+        Target.objects.filter(project=self.data_generator.project, value="ray.local").delete()
+        Domain.objects.all().delete()
+        ScanHistory.objects.all().delete()
+        ip_row = json.dumps({"ip": "192.168.1.50", "domain": "192.168.1.50", "is_alive": True})
+        response = self.client.post(
+            reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
+            {
+                "ip_address": "192.168.1.0/24",
+                "targetName": "ray.local",
+                "discovered_domains": [],
+                "resolved_hosts": [ip_row],
+                "add-ip-target": "submit",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        target = Target.objects.get(project=self.data_generator.project, value="ray.local")
+        scan = ScanHistory.objects.filter(target=target).first()
+        self.assertIsNotNone(scan)
+        self.assertTrue(Domain.objects.filter(scan_history=scan, name="ray.local").exists())
+        self.assertTrue(IpAddress.objects.filter(address="192.168.1.50").exists())
+
+    def test_add_ip_named_target_imports_selected_hostname_even_if_apex_differs(self):
+        """Selected hosts are imported into the named target without apex restriction."""
+        Target.objects.filter(project=self.data_generator.project, value="ray.local").delete()
+        Domain.objects.all().delete()
+        ScanHistory.objects.all().delete()
+        host_row = json.dumps({"ip": "10.0.0.2", "domain": "nas.local", "is_alive": True})
+        response = self.client.post(
+            reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
+            {
+                "ip_address": "192.168.1.0/24",
+                "targetName": "ray.local",
+                "discovered_domains": [],
+                "resolved_hosts": [host_row],
+                "add-ip-target": "submit",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        target = Target.objects.get(project=self.data_generator.project, value="ray.local")
+        scan = ScanHistory.objects.filter(target=target).first()
+        self.assertIsNotNone(scan)
+        self.assertTrue(Subdomain.objects.filter(scan_history=scan, name="nas.local").exists())
+        self.assertTrue(IpAddress.objects.filter(address="10.0.0.2").exists())
+
+    def test_add_ip_discovery_requires_target_name(self):
         """
-        Test adding a target with an invalid IP address.
+        DNS discovery import rejects submission when targetName is missing.
         """
-        # Create test host data with invalid IP
-        host_data = json.dumps({"ip": "999.999.999.999", "domain": "999.999.999.999", "is_alive": False})
+        host_data = json.dumps({"ip": "192.168.1.2", "domain": "host.lab.local", "is_alive": True})
 
         response = self.client.post(
             reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
             {
-                "ip_address": "999.999.999.999",  # Invalid IP address
-                "targetName": "test-target",
-                "discovered_domains": ["999.999.999.999"],
+                "ip_address": "192.168.1.0/24",
+                "targetName": "",
+                "discovered_domains": ["lab.local"],
                 "resolved_hosts": [host_data],
-                "targetDescription": "Test Description",
-                "targetH1TeamHandle": "Test Handle",
-                "targetOrganization": "Test Organization",
                 "add-ip-target": "submit",
             },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
-
-        self.assertEqual(response.status_code, 302)
-        messages_list = list(get_messages(response.wsgi_request))
-        # The new system processes the IP and creates targets successfully
-        self.assertIn(
-            "1 target(s) processed successfully",
-            [str(message) for message in messages_list],
-        )
-
-        # Verify that the target was actually created
-        self.assertTrue(Target.objects.filter(project=self.data_generator.project, value="test-target").exists())
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("required", (response.json().get("message") or "").lower())
 
     def test_add_target_with_file(self):
         """
@@ -699,7 +768,7 @@ class TestValidateDNSServers(BaseTestCase):
             reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
             {
                 "ip_address": "192.168.1.0/24",
-                "targetName": "test-target",
+                "targetName": "example.local",
                 "discovered_domains": ["example.local"],
                 "resolved_hosts": [host_data],
                 "used_dns_servers": "invalid!@#server,8.8.8.8",  # Invalid DNS servers
@@ -714,8 +783,7 @@ class TestValidateDNSServers(BaseTestCase):
         messages_list = list(get_messages(response.wsgi_request))
         self.assertTrue(any("Invalid DNS servers configuration" in str(msg) for msg in messages_list))
 
-        # Target should not be created
-        self.assertFalse(Domain.objects.filter(name="test-target").exists())
+        self.assertFalse(Domain.objects.filter(name="example.local").exists())
 
     def test_add_target_with_valid_dns_servers(self):
         """Test adding a target with valid DNS servers."""
@@ -727,7 +795,7 @@ class TestValidateDNSServers(BaseTestCase):
             reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
             {
                 "ip_address": "192.168.1.0/24",
-                "targetName": "test-target-dns",
+                "targetName": "example.local",
                 "discovered_domains": ["example.local"],
                 "resolved_hosts": [host_data],
                 "used_dns_servers": "8.8.8.8,1.1.1.1",  # Valid DNS servers
@@ -738,8 +806,11 @@ class TestValidateDNSServers(BaseTestCase):
         # Should redirect on success
         self.assertEqual(response.status_code, 302)
 
-        # Target should be created (Domain/Subdomain are created on scan, not at add)
-        self.assertTrue(Target.objects.filter(project=self.data_generator.project, value="test-target-dns").exists())
+        target = Target.objects.filter(project=self.data_generator.project, value="example.local").first()
+        self.assertIsNotNone(target)
+        scan = ScanHistory.objects.filter(target=target).first()
+        self.assertIsNotNone(scan)
+        self.assertTrue(Domain.objects.filter(scan_history=scan, name="example.local").exists())
 
     def test_add_single_target_by_type(self):
         """

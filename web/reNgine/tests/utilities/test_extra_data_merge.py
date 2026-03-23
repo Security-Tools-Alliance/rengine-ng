@@ -2,9 +2,8 @@
 Tests for shared Secator extra_data merge helpers.
 """
 
-from unittest.mock import patch
-
 from typing import Any, Dict, List, Optional
+from unittest.mock import patch
 
 from reNgine.utilities.extra_data_merge import (
     bounded_diagnostic_preview,

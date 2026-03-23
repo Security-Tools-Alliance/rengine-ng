@@ -10,13 +10,13 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 
 from reNgine.secator.source_extraction import extract_secator_tool_source
+from reNgine.services.repositories.subdomain_repository import SubdomainRepository
+from reNgine.utilities.domain import get_domain_by_id, get_or_create_domain_for_target
 from reNgine.utilities.extra_data_merge import (
     bounded_diagnostic_preview,
     coerce_extra_data_field_to_plain_dict,
     merge_extra_data_payload_into_model,
 )
-from reNgine.services.repositories.subdomain_repository import SubdomainRepository
-from reNgine.utilities.domain import get_domain_by_id, get_or_create_domain_for_target
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import DNSRecord, Domain, DomainInfo

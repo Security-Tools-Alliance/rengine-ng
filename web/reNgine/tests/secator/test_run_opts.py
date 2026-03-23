@@ -4,7 +4,7 @@ Tests for build_run_opts helper.
 
 import unittest
 
-from reNgine.secator.run_opts import build_run_opts
+from reNgine.secator.run_opts import build_ephemeral_sync_run_opts, build_run_opts
 
 
 class TestBuildRunOpts(unittest.TestCase):
@@ -101,3 +101,24 @@ class TestBuildRunOpts(unittest.TestCase):
         self.assertIn("header", result)
         self.assertIn("X-Valid: ok", result["header"])
         self.assertNotIn("123", result["header"])
+
+
+class TestBuildEphemeralSyncRunOpts(unittest.TestCase):
+    """Tests for build_ephemeral_sync_run_opts (UI / in-process Secator)."""
+
+    def test_defaults_sync_true_and_minimal_noise(self):
+        result = build_ephemeral_sync_run_opts()
+        self.assertTrue(result["sync"])
+        self.assertTrue(result["quiet"])
+        self.assertFalse(result["enable_hooks"])
+        self.assertFalse(result["enable_reports"])
+        self.assertTrue(result["process"])
+
+    def test_extra_merges_and_can_override_sync(self):
+        result = build_ephemeral_sync_run_opts(use_dns=True, show_name=True)
+        self.assertTrue(result["use_dns"])
+        self.assertTrue(result["show_name"])
+        self.assertTrue(result["sync"])
+
+        forced = build_ephemeral_sync_run_opts(sync=False)
+        self.assertFalse(forced["sync"])

@@ -39,6 +39,33 @@ def _header_dict_to_secator_string(header_dict: dict[str, Any]) -> str:
     return ";;".join(parts)
 
 
+def build_ephemeral_sync_run_opts(**extra: Any) -> dict[str, Any]:
+    """
+    Build run_opts for short in-process Secator runs (e.g. UI tools, fping discovery).
+
+    Sets ``sync`` True so work runs locally in the current process instead of
+    delegating to Celery inside Secator. Disables reports, hooks, profiles,
+    duplicate checks, and verbose printing for a minimal footprint.
+
+    Do not use for long-running scans; use :func:`build_run_opts` (default
+    ``sync`` False / Celery) for normal orchestration.
+    """
+    base: dict[str, Any] = {
+        "sync": True,
+        "process": True,
+        "enable_reports": False,
+        "enable_hooks": False,
+        "enable_profiles": False,
+        "enable_duplicate_check": False,
+        "print_start": False,
+        "print_end": False,
+        "print_item": False,
+        "quiet": True,
+    }
+    base.update(extra)
+    return base
+
+
 def build_run_opts(
     secator_config: dict[str, Any],
     profile_items: list[str] | list[dict[str, Any]],
@@ -48,6 +75,9 @@ def build_run_opts(
 
     Centralizes option construction so semantics remain consistent across
     runner, remote_runner, worker, and tasks.
+
+    Default ``sync`` is False so Secator sub-tasks use Celery. For interactive
+    UI paths that need low latency, use :func:`build_ephemeral_sync_run_opts`.
 
     profile_items: list of profile names (str) and/or inline profile dicts (for
     built-in profiles). The worker builds TemplateLoader from each: dict -> input,

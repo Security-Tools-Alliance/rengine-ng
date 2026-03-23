@@ -42,6 +42,10 @@ from reNgine.definitions import (
     SCAN_STATUS_RUNNING,
     SCAN_STATUS_RUNNING_BACKGROUND,
 )
+from reNgine.services.ip_discovery_target_seed import (
+    compute_total_processed,
+    seed_findings_from_ip_discovery,
+)
 from reNgine.services.repositories import EndpointRepository
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.request import get_string_from_post_or_json
@@ -248,6 +252,21 @@ def _get_or_create_target(project, value, target_type=TARGET_TYPE_HOST):
     return target, created
 
 
+def _parse_ip_discovery_resolved_hosts(raw_list):
+    """Parse checkbox JSON payloads from the IP discovery add-target form."""
+    out = []
+    for entry in raw_list:
+        if not entry or not isinstance(entry, str):
+            continue
+        try:
+            info = json.loads(entry.replace("&quot;", '"'))
+            if isinstance(info, dict):
+                out.append(info)
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return out
+
+
 def _apply_pending_normalizer_targets(scope, request):
     """
     If the request contains pending_normalizer_targets (JSON from scope normalizer Apply to form),
@@ -400,6 +419,7 @@ def add_target(request, slug):
             level="info",
         )
         total_processed_count = 0
+        ip_discovery_seed_stats = None
         add_single_target = request.POST.get("add-single-target")
         target_type_single = request.POST.get("target_type", "").strip()
         multiple_targets = request.POST.get("add-multiple-targets")
@@ -635,11 +655,6 @@ def add_target(request, slug):
                                     )
                                 org_cache[organization_name_csv].targets.add(tgt)
             elif ip_target:
-                import json
-
-                from reNgine.utilities.url import get_domain_from_subdomain
-
-                # Get selected items from the form
                 discovered_domains = request.POST.getlist("discovered_domains")
                 resolved_hosts_data = request.POST.getlist("resolved_hosts")
 
@@ -749,104 +764,37 @@ def add_target(request, slug):
                     level="info",
                 )
 
-                # Parse selected hosts to categorize them and deduplicate
-                selected_domains = set()
-                selected_hostnames = []
-                selected_ips = []
-                seen_hostnames = set()
-                seen_ips = set()
+                payloads = _parse_ip_discovery_resolved_hosts(resolved_hosts_data)
+                if not target_name:
+                    err_msg = "Target name is required when importing DNS discovery selections."
+                    messages.add_message(request, messages.ERROR, err_msg)
+                    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                        return JsonResponse({"status": "error", "message": err_msg}, status=400)
+                    return http.HttpResponseRedirect(reverse("add_target", kwargs={"slug": slug}))
 
-                # Only create Target entries (no Domain/Subdomain); scans will populate startScan models
-                if target_name:
+                with transaction.atomic():
                     tgt, created = _get_or_create_target(project, target_name, target_type=TARGET_TYPE_HOST)
-                    if created:
+                    if created and (description or h1_team_handle):
                         tgt.description = description or ("Grouped target from %s" % original_ip_range)
                         tgt.h1_team_handle = h1_team_handle
                         tgt.save(update_fields=["description", "h1_team_handle"])
-                        total_processed_count += 1
-                    logger.log_line(
-                        PREFIX_TARGET,
-                        "IP_SCAN",
-                        "Creating target(s) for %s selected hosts" % (len(resolved_hosts_data),),
-                        level="info",
+                    stats = seed_findings_from_ip_discovery(
+                        tgt,
+                        discovered_domain_names=list(discovered_domains) + [target_name],
+                        resolved_host_payloads=payloads,
+                        used_dns_servers=used_dns_servers,
+                        initiated_by=request.user,
+                        restrict_to_target_apex=None,
                     )
-                    for host_data_json in resolved_hosts_data:
-                        try:
-                            host_info = json.loads(host_data_json.replace("&quot;", '"'))
-                            ip = host_info.get("ip")
-                            hostname = host_info.get("domain")
-                            if hostname in seen_hostnames:
-                                continue
-                            seen_hostnames.add(hostname)
-                            if hostname != ip and validators.domain(hostname):
-                                _, created = _get_or_create_target(project, hostname, target_type=TARGET_TYPE_HOST)
-                                if created:
-                                    total_processed_count += 1
-                            elif validators.ipv4(ip) or validators.ipv6(ip):
-                                _, created = _get_or_create_target(project, ip, target_type=TARGET_TYPE_IP)
-                                if created:
-                                    total_processed_count += 1
-                        except (json.JSONDecodeError, KeyError):
-                            continue
-                    for domain in discovered_domains:
-                        if validators.domain(domain) and domain not in seen_hostnames:
-                            _, created = _get_or_create_target(project, domain, target_type=TARGET_TYPE_HOST)
-                            if created:
-                                total_processed_count += 1
-                    logger.log_line(
-                        PREFIX_TARGET,
-                        "IP_SCAN",
-                        "Grouped target processing complete.",
-                        level="info",
-                    )
-
-                else:
-                    # No target name: create one Target per selected domain/hostname/IP (no Domain/Subdomain)
-                    for host_data_json in resolved_hosts_data:
-                        try:
-                            host_info = json.loads(host_data_json.replace("&quot;", '"'))
-                            ip = host_info.get("ip")
-                            hostname = host_info.get("domain")
-                            if hostname != ip:
-                                if hostname not in seen_hostnames:
-                                    seen_hostnames.add(hostname)
-                                    selected_hostnames.append(hostname)
-                                    domain_name = get_domain_from_subdomain(hostname)
-                                    if domain_name:
-                                        selected_domains.add(domain_name)
-                            else:
-                                if ip not in seen_ips:
-                                    seen_ips.add(ip)
-                                    selected_ips.append(ip)
-                        except (json.JSONDecodeError, KeyError):
-                            continue
-
-                    for domain in discovered_domains:
-                        if validators.domain(domain):
-                            selected_domains.add(domain)
-
-                    for domain_name in selected_domains:
-                        if validators.domain(domain_name):
-                            _, created = _get_or_create_target(project, domain_name, target_type=TARGET_TYPE_HOST)
-                            if created:
-                                total_processed_count += 1
-
-                    for hostname in selected_hostnames:
-                        _, created = _get_or_create_target(project, hostname, target_type=TARGET_TYPE_HOST)
-                        if created:
-                            total_processed_count += 1
-
-                    for ip in selected_ips:
-                        _, created = _get_or_create_target(project, ip, target_type=TARGET_TYPE_IP)
-                        if created:
-                            total_processed_count += 1
-
-                    logger.log_line(
-                        PREFIX_TARGET,
-                        "IP_SCAN",
-                        "Processing complete.",
-                        level="info",
-                    )
+                had_sel = bool(discovered_domains or resolved_hosts_data)
+                total_processed_count = compute_total_processed(created, stats, had_sel)
+                ip_discovery_seed_stats = stats
+                logger.log_line(
+                    PREFIX_TARGET,
+                    "IP_SCAN",
+                    "Seeded ip_discovery findings for target_id=%s target_name=%s" % (tgt.id, target_name),
+                    level="info",
+                )
 
         except (Http404, ValueError) as e:
             logger.log_line(
@@ -895,6 +843,15 @@ def add_target(request, slug):
                 "processed_count": total_processed_count,
                 "redirect_url": reverse("list_target", kwargs={"slug": slug}),
             }
+            if ip_discovery_seed_stats is not None:
+                response_data["stats"] = {
+                    "domains_created": ip_discovery_seed_stats["domains_created"],
+                    "domains_existing": ip_discovery_seed_stats["domains_existing"],
+                    "subdomains_created": ip_discovery_seed_stats["subdomains_created"],
+                    "subdomains_existing": ip_discovery_seed_stats["subdomains_existing"],
+                    "ips_created": ip_discovery_seed_stats["ips_created"],
+                    "ips_existing": ip_discovery_seed_stats["ips_existing"],
+                }
 
             return JsonResponse(response_data)
 

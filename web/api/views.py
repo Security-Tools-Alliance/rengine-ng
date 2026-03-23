@@ -152,7 +152,6 @@ from reNgine.secator.service import run_per_task_secator_scans, start_secator_sc
 from reNgine.secator.services.target_builder_service import TargetBuilderService
 from reNgine.secator.synthetic_id import synthetic_id_skipped_scope
 from reNgine.services.repositories.ip_repository import normalize_ip_address_string
-from reNgine.utilities.scan_lookups import filter_ports_queryset_by_scan_ids, get_ip_linked_to_scan_ids
 from reNgine.services.scan_finding_metrics import (  # IP PKs in-scan; bulk IP for scan/target DataTables
     attach_ip_metrics_to_scans,
     attach_ip_metrics_to_targets,
@@ -175,6 +174,7 @@ from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.lookup import get_lookup_keywords
+from reNgine.utilities.scan_lookups import filter_ports_queryset_by_scan_ids, get_ip_linked_to_scan_ids
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from reNgine.utilities.url import is_apex_domain
 from scanEngine.models import (

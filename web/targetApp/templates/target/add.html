@@ -173,9 +173,9 @@ Add or Import Targets
                 </div>
               </div>
               <div class="col-12 mt-3">
-                <label for="targetName" class="form-label">Target Name (Optional)</label>
-                <input type="text" class="form-control form-control-lg" id="targetName" placeholder="My Target" name="targetName">
-                <small class="text-muted">If provided, all hostnames and IPs will be grouped under this single target name</small>
+                <label for="targetName" class="form-label">Target Name (Required)</label>
+                <input type="text" class="form-control form-control-lg" id="targetName" placeholder="My Target" name="targetName" required>
+                <small class="text-muted">All selected domains, hostnames and IPs will be grouped under this target name</small>
               </div>
               <input type="hidden" name="targetDescription" class="global-field-desc">
               <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
@@ -391,7 +391,7 @@ Add or Import Targets
       updateProgress(0, "Starting IP resolution...", `Scanning ${ip_addr} - Estimated duration: ${estimatedDuration}`);
       
       // Show warning and cancel button for large ranges
-      if (ipCount > 1000) {
+      if (ipCount > 256) {
         $("#large_range_warning").show();
         $("#scan_controls").show();
       } else if (ipCount > 100) {
@@ -465,7 +465,7 @@ Add or Import Targets
         }, 800);
       }
       
-      var url = `/api/tools/ip_to_domain/?format=json&ip_address=${ip_address.value}&scan_id=${scanId}`;
+      var url = `/api/tools/cidr_discovery/?format=json&ip_address=${encodeURIComponent(ip_address.value)}&scan_id=${encodeURIComponent(scanId)}`;
       if (custom_dns.trim()) {
         url += `&dns_servers=${encodeURIComponent(custom_dns)}`;
         var useSystemDns = $('#use_system_dns').is(':checked');
@@ -504,6 +504,10 @@ Add or Import Targets
       .then(function(json_data) {
         addLogEntry('DNS discovery completed successfully', 'success');
         addLogEntry(`Found ${json_data.total_hosts} hosts (${json_data.hostname_count} with hostnames)`, 'success');
+        if (json_data.range_warning) {
+          $("#large_range_warning").show();
+          addLogEntry('Large CIDR range detected (> /24): scan can be longer and noisier on the network.', 'warning');
+        }
         if (json_data.used_dns_servers) {
           usedDnsServers = json_data.used_dns_servers.join(',');
           addLogEntry(`DNS servers used: ${json_data.used_dns_servers.join(', ')}`, 'info');
@@ -651,7 +655,7 @@ Add or Import Targets
       var csrfToken = getCookie("csrftoken");
       
       // Launch ping task
-      fetch('/api/tools/ping_hosts/', {
+      fetch('/api/tools/ping_hosts_v2/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -724,7 +728,7 @@ Add or Import Targets
       
       addLogEntry('Fetching final ping results...', 'info');
       
-      fetch(`/api/tools/ping_hosts/?task_id=${currentPingTaskId}`, {
+      fetch(`/api/tools/ping_hosts_v2/?task_id=${currentPingTaskId}`, {
         headers: {
           'X-CSRFToken': getCookie("csrftoken")
         },
@@ -889,7 +893,7 @@ Add or Import Targets
     });
     
     function loadCurrentDNSInfo() {
-      fetch('/api/tools/ip_to_domain/?format=json&ip_address=8.8.8.8', {
+      fetch('/api/tools/cidr_discovery/?format=json&probe=current_dns', {
         method: 'GET',
         credentials: "same-origin",
         headers: {
@@ -955,8 +959,18 @@ Add or Import Targets
         </div>
       `);
       
-      // Extract domains from hostnames (same logic as after ping)
-      var extractedDomains = [...new Set(json_data['ip_address'].filter(h => h.domain !== h.ip).map(h => h.domain.split('.').slice(-2).join('.')))];
+      function registeredApexForRow(row) {
+        if (row.registered_apex) {
+          return row.registered_apex;
+        }
+        var d = row.domain;
+        if (!d || d === row.ip || d.indexOf('.') < 0) {
+          return null;
+        }
+        var parts = d.split('.');
+        return parts.slice(-2).join('.');
+      }
+      var extractedDomains = [...new Set(json_data['ip_address'].map(registeredApexForRow).filter(Boolean))];
       
       // Display discovered domains first
       if (extractedDomains && extractedDomains.length > 0) {
@@ -1090,15 +1104,16 @@ Add or Import Targets
       var host_count = $('.resolved_hosts:checked').length;
       var total_count = domain_count + host_count;
       var ip_addr = $('#ip_address').val().trim();
+      var target_name = $('#targetName').val().trim();
       var ipRegex = /^([0-9]{1,3}\.){3}[0-9]{1,3}$/;
       var has_valid_ip = ip_addr && ipRegex.test(ip_addr) && ip_addr.indexOf('/') === -1;
+      var has_target_name = target_name.length > 0;
 
       var add_button = document.getElementById("add-ip-target");
-      if (total_count > 0 || has_valid_ip) {
+      if ((total_count > 0 || has_valid_ip) && has_target_name) {
         add_button.disabled = false;
         $('#ip_address_hidden').val(ip_addr);
 
-        var target_name = $('#targetName').val().trim();
         var button_text;
         if (total_count > 0) {
           var label_parts = [];
@@ -1129,11 +1144,22 @@ Add or Import Targets
       var form = $(this);
       syncGlobalToForm(form);
       var formData = new FormData();
+      var requiredTargetName = form.find('[name=targetName]').val().trim();
+      if (!requiredTargetName) {
+        Snackbar.show({
+          text: 'Target name is required.',
+          pos: 'top-right',
+          actionTextColor: '#fff',
+          backgroundColor: '#dc3545',
+          duration: 3000
+        });
+        return;
+      }
       
       // Add all standard form fields
       formData.append('csrfmiddlewaretoken', form.find('[name=csrfmiddlewaretoken]').val());
       formData.append('ip_address', form.find('#ip_address_hidden').val() || $('#ip_address').val());
-      formData.append('targetName', form.find('[name=targetName]').val());
+      formData.append('targetName', requiredTargetName);
       formData.append('targetDescription', form.find('input.global-field-desc').val());
       formData.append('targetH1TeamHandle', form.find('input.global-field-h1').val());
       formData.append('targetOrganization', form.find('input.global-field-org').val());
@@ -1173,10 +1199,10 @@ Add or Import Targets
           if (response.stats) {
             var statsMsg = '✅ Success! ';
             var details = [];
-            if (response.stats.domains_created > 0) details.push(`${response.stats.domains_created} new target(s)`);
-            if (response.stats.domains_existing > 0) details.push(`${response.stats.domains_existing} existing target(s)`);
-            if (response.stats.subdomains_created > 0) details.push(`${response.stats.subdomains_created} new subdomain(s)`);
-            if (response.stats.subdomains_existing > 0) details.push(`${response.stats.subdomains_existing} existing subdomain(s)`);
+            if (response.stats.domains_created > 0) details.push(`${response.stats.domains_created} new domain finding(s)`);
+            if (response.stats.domains_existing > 0) details.push(`${response.stats.domains_existing} existing domain finding(s)`);
+            if (response.stats.subdomains_created > 0) details.push(`${response.stats.subdomains_created} new host(s)`);
+            if (response.stats.subdomains_existing > 0) details.push(`${response.stats.subdomains_existing} existing host(s)`);
             
             if (details.length > 0) {
               statsMsg += details.join(', ') + ' processed successfully.';

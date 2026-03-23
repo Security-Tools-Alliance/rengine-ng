@@ -1,9 +1,8 @@
 from django.utils import timezone
 
+from reNgine.services.target_ip_unlink import unlink_ip_addresses_from_target
 from startScan.models import EndPoint, IpAddress
 from utils.test_base import BaseTestCase
-
-from reNgine.services.target_ip_unlink import unlink_ip_addresses_from_target
 
 
 class TargetIpUnlinkServiceTestCase(BaseTestCase):

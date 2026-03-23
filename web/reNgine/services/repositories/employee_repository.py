@@ -11,8 +11,8 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from reNgine.core.validators import is_valid_email, is_valid_url
-from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.secator.source_extraction import extract_secator_tool_source
+from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, get_or_create_domain_for_target
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name

@@ -70,7 +70,8 @@ if __name__ == "__main__":
             profile_loaders.append(TemplateLoader(p))
         else:
             profile_loaders.append(TemplateLoader(name=f"profiles/{p}"))
-    run_opts = {"sync": False, **run_opts_data, "profiles": profile_loaders}
+    run_opts = {**run_opts_data, "profiles": profile_loaders}
+    run_opts["sync"] = False
 
     def _run_success(result) -> bool:
         """

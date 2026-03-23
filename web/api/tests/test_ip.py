@@ -49,14 +49,7 @@ class TestIpAddressViewSet(BaseTestCase):
             self.assertGreaterEqual(len(response.data), 1)
 
 
-class TestIPToDomain(BaseTestCase):
-    """Test case for IP to domain resolution."""
-
-    def setUp(self):
-        """Set up test environment."""
-        super().setUp()
-
-    # Deprecated endpoint tests removed - ip_to_domain endpoint has been removed
+# IP/CIDR DNS discovery: see api.tests.test_ip_discovery (cidr_discovery, ping_hosts_v2).
 
 
 # TestDomainIPHistory removed - functionality migrated to Secator

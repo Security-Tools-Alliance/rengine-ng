@@ -10,9 +10,13 @@ from .test_ip import (
     TestGetIpDetails,
     TestIpActionApiResponses,
     TestIpAddressViewSet,
-    TestIPToDomain,
     TestListIPs,
     TestListPorts,
+)
+from .test_ip_discovery import (
+    TestCidrDiscoveryApi,
+    TestIpDiscoveryServiceHelpers,
+    TestPingHostsV2Api,
 )
 from .test_organization import (
     TestListOrganizations,
@@ -106,9 +110,12 @@ __all__ = [
     "TestGetIpDetails",
     "TestIpActionApiResponses",
     "TestIpAddressViewSet",
-    "TestIPToDomain",
     "TestListIPs",
     "TestListPorts",
+    # test_ip_discovery
+    "TestCidrDiscoveryApi",
+    "TestIpDiscoveryServiceHelpers",
+    "TestPingHostsV2Api",
     # test_organization
     "TestListOrganizations",
     "TestListTargetsInOrganization",

@@ -3,7 +3,10 @@ SecatorRunner - Interface to Secator library for orchestrated scanning.
 
 This class provides the main interface between reNgine and Secator,
 allowing reNgine to use Secator as a library for managing scan workflows.
-Secator will orchestrate Celery tasks automatically with lifecycle hooks.
+By default, :func:`reNgine.secator.run_opts.build_run_opts` sets ``sync`` False
+so Secator delegates sub-tasks to Celery. Short UI-side runs can use
+:func:`reNgine.secator.run_opts.build_ephemeral_sync_run_opts` for in-process
+execution instead.
 
 Precedence of configuration:
     If both `config` and `profiles` specify the same keys, the value from `profiles` will take precedence over `config`.
@@ -26,10 +29,10 @@ from targetApp.models import Target
 
 class SecatorRunner:
     """
-    Interface to Secator - Secator orchestrates Celery tasks with hooks.
+    Interface to Secator for scans and workflows started from reNgine.
 
-    This class provides methods to run Secator workflows and tasks,
-    with Secator handling the creation and orchestration of Celery tasks.
+    Run options are built with ``build_run_opts`` (``sync`` False by default,
+    Celery inside Secator). Ephemeral UI helpers use ``build_ephemeral_sync_run_opts``.
     """
 
     def __init__(self):

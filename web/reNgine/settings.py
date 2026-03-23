@@ -438,7 +438,14 @@ RENGINE_TASK_IGNORE_CACHE_KWARGS = ["ctx"]
 
 # Django Cache Configuration
 # In development, disable caching to ensure templates and views reload properly
-if DEBUG:
+_RUNNING_DJANGO_TESTS = "test" in sys.argv
+if _RUNNING_DJANGO_TESTS:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
+elif DEBUG:
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.dummy.DummyCache",

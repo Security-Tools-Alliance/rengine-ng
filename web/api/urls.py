@@ -123,6 +123,7 @@ from .views_advanced_search import (
     AdvancedSearchValidateView,
     AdvancedSearchValuesView,
 )
+from .views_ip_discovery import CidrDiscoveryToolView, PingHostsV2ToolView
 from .views_worker_pull import (
     secator_worker_pull_checkin,
     secator_worker_pull_claim,
@@ -216,6 +217,8 @@ urlpatterns = [
     path("tools/csrf_token/", GetCSRFToken.as_view(), name="csrf_token"),
     path("tools/domain_ip_history", DomainIPHistory.as_view(), name="domain_ip_history"),
     path("tools/gf_list/", GfList.as_view(), name="gf_list"),
+    path("tools/cidr_discovery/", CidrDiscoveryToolView.as_view(), name="cidr_discovery"),
+    path("tools/ping_hosts_v2/", PingHostsV2ToolView.as_view(), name="ping_hosts_v2"),
     path(
         "tools/llm_vulnerability_report/",
         LLMVulnerabilityReportGenerator.as_view(),
