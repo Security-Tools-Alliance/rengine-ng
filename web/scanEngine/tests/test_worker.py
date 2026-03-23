@@ -916,6 +916,28 @@ class TestWorkerViews(BaseTestCase):
         response = self.client.get(reverse("worker_update", kwargs={"worker_id": worker.id}))
         self.assertEqual(response.status_code, 200)
 
+    def test_duplicate_worker_creates_copy_without_sensitive_fields(self):
+        """Duplicating a worker creates a copy and does not copy password secrets."""
+        worker = SecatorWorker.objects.create(
+            name="worker-original",
+            ssh_host="192.0.2.50",
+            ssh_port=22,
+            ssh_user="deploy",
+            ssh_auth_type=SecatorWorker.AUTH_PASSWORD,
+            ssh_password_encrypted="super-secret",
+            deploy_path="/opt/secator-worker",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+            is_active=True,
+        )
+        response = self.client.get(reverse("duplicate_worker", kwargs={"worker_id": worker.id}))
+        self.assertEqual(response.status_code, 302)
+        duplicated = SecatorWorker.objects.get(name="worker-original copy")
+        self.assertEqual(duplicated.ssh_host, worker.ssh_host)
+        self.assertEqual(duplicated.api_url, worker.api_url)
+        self.assertEqual(duplicated.ssh_password_encrypted, "")
+        self.assertNotEqual(duplicated.pull_token, "")
+
 
 class TestSecatorWorkerFormApiAccess(BaseTestCase):
     """SecatorWorkerForm validation for API access fields."""

@@ -53,22 +53,6 @@
             {% endif %}
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="form-group">
-            <label for="{{ form.scan_config_type.id_for_label }}">Configuration Type *</label>
-            {{ form.scan_config_type }}
-            {% if form.scan_config_type.help_text %}
-                <small class="form-text text-muted">{{ form.scan_config_type.help_text }}</small>
-            {% endif %}
-            {% if form.scan_config_type.errors %}
-                <div class="text-danger">
-                    {% for error in form.scan_config_type.errors %}
-                        <small>{{ error }}</small>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        </div>
-    </div>
 </div>
 
 <div class="form-group">

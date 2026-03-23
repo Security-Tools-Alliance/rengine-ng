@@ -110,6 +110,9 @@
                                             <a href="{% url 'scan_detail' scan.id %}" class="btn btn-info btn-sm">
                                                 <i class="fas fa-eye"></i>
                                             </a>
+                                            <a href="{% url 'duplicate_scan' scan.id %}" class="btn btn-secondary btn-sm" title="Copy">
+                                                <i class="fas fa-copy"></i>
+                                            </a>
                                             {% if scan.scan_config_type == 'custom' %}
                                             <a href="{% url 'update_scan' scan.id %}" class="btn btn-warning btn-sm">
                                                 <i class="fas fa-edit"></i>

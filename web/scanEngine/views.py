@@ -733,6 +733,19 @@ def secator_workflows_table_partial(request):
     return render(request, "scanEngine/_workflows_table_body.html", {"workflows": workflows})
 
 
+def _build_duplicate_name(model_cls, original_name: str, field_name: str = "name") -> str:
+    """Return a unique duplicate name with ` copy` suffix."""
+    base_name = (original_name or "").strip()
+    candidate = f"{base_name} copy"
+    counter = 2
+    filter_kwargs = {field_name: candidate}
+    while model_cls.objects.filter(**filter_kwargs).exists():
+        candidate = f"{base_name} copy {counter}"
+        counter += 1
+        filter_kwargs = {field_name: candidate}
+    return candidate
+
+
 def _get_filtered_tasks(filter_type, search_query):
     """Return SecatorTask queryset filtered by filter_type and search_query."""
     tasks = SecatorTask.objects.all()
@@ -790,6 +803,27 @@ def secator_task_detail(request, task_id):
     }
 
     return render(request, "scanEngine/task_detail.html", context)
+
+
+@login_required
+def duplicate_workflow(request, workflow_id):
+    """Duplicate a workflow as a custom workflow."""
+    workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
+    duplicated_name = _build_duplicate_name(SecatorWorkflow, workflow.name)
+    duplicated_workflow = SecatorWorkflow.objects.create(
+        name=duplicated_name,
+        alias=None,
+        description=workflow.description,
+        long_description=workflow.long_description,
+        workflow_type="custom",
+        yaml_configuration=workflow.yaml_configuration,
+        is_active=workflow.is_active,
+        scan_type=workflow.scan_type,
+        display_name=workflow.display_name,
+        tags=workflow.tags or [],
+    )
+    messages.add_message(request, messages.SUCCESS, f"Workflow '{workflow.name}' duplicated as '{duplicated_name}'.")
+    return http.HttpResponseRedirect(reverse("workflow_detail", args=[duplicated_workflow.id]))
 
 
 @login_required
@@ -913,6 +947,25 @@ def secator_scan_detail(request, scan_id):
 
 
 @login_required
+def duplicate_scan(request, scan_id):
+    """Duplicate a scan configuration as a custom scan."""
+    scan = get_object_or_404(SecatorScan, id=scan_id)
+    duplicated_name = _build_duplicate_name(SecatorScan, scan.name)
+    duplicated_scan = SecatorScan.objects.create(
+        name=duplicated_name,
+        description=scan.description,
+        long_description=scan.long_description,
+        scan_config_type="custom",
+        yaml_configuration=scan.yaml_configuration,
+        is_default=False,
+        is_active=scan.is_active,
+        scan_type=scan.scan_type,
+    )
+    messages.add_message(request, messages.SUCCESS, f"Scan '{scan.name}' duplicated as '{duplicated_name}'.")
+    return http.HttpResponseRedirect(reverse("scan_detail", args=[duplicated_scan.id]))
+
+
+@login_required
 def add_workflow(request):
     """Create a new workflow."""
     form = SecatorWorkflowForm()
@@ -945,6 +998,7 @@ def update_workflow(request, workflow_id):
     form = SecatorWorkflowForm(
         initial={
             "name": workflow.name,
+            "display_name": workflow.display_name,
             "alias": workflow.alias,
             "description": workflow.description,
             "tags": workflow.tags or [],
@@ -1141,6 +1195,25 @@ def secator_profile_detail(request, profile_id):
 
 
 @login_required
+def duplicate_profile(request, profile_id):
+    """Duplicate a profile as a custom profile."""
+    profile = get_object_or_404(SecatorProfile, id=profile_id)
+    duplicated_name = _build_duplicate_name(SecatorProfile, profile.name)
+    duplicated_profile = SecatorProfile.objects.create(
+        name=duplicated_name,
+        category=profile.category,
+        description=profile.description,
+        enforce=profile.enforce,
+        opts=profile.opts,
+        profile_type="custom",
+        is_active=profile.is_active,
+        is_default=False,
+    )
+    messages.add_message(request, messages.SUCCESS, f"Profile '{profile.name}' duplicated as '{duplicated_name}'.")
+    return http.HttpResponseRedirect(reverse("profile_detail", args=[duplicated_profile.id]))
+
+
+@login_required
 def add_profile(request):
     """Create a new profile."""
     form = SecatorProfileForm()
@@ -1285,6 +1358,24 @@ def delete_profile(request, profile_id):
 
 
 @login_required
+def duplicate_task(request, task_id):
+    """Duplicate a task as a custom task."""
+    task = get_object_or_404(SecatorTask, id=task_id)
+    duplicated_name = _build_duplicate_name(SecatorTask, task.name)
+    duplicated_task = SecatorTask.objects.create(
+        name=duplicated_name,
+        task_type=task.task_type,
+        tags=task.tags or [],
+        description=task.description,
+        is_builtin=False,
+        yaml_configuration=task.yaml_configuration,
+        is_active=task.is_active,
+    )
+    messages.add_message(request, messages.SUCCESS, f"Task '{task.name}' duplicated as '{duplicated_name}'.")
+    return http.HttpResponseRedirect(reverse("task_detail", args=[duplicated_task.id]))
+
+
+@login_required
 def worker_list(request):
     """List Secator workers; actions (deploy, refresh, disable, delete) are performed via API from JS."""
     workers = SecatorWorker.objects.all().order_by("name").prefetch_related("secatorrunner_set")
@@ -1293,6 +1384,37 @@ def worker_list(request):
         "workers": workers,
     }
     return render(request, "scanEngine/workers.html", context)
+
+
+@login_required
+def duplicate_worker(request, worker_id):
+    """Duplicate a worker without copying authentication secrets."""
+    worker = get_object_or_404(SecatorWorker, id=worker_id)
+    duplicated_name = _build_duplicate_name(SecatorWorker, worker.name)
+    duplicated_worker = SecatorWorker.objects.create(
+        name=duplicated_name,
+        ssh_host=worker.ssh_host,
+        ssh_port=worker.ssh_port,
+        ssh_user=worker.ssh_user,
+        ssh_auth_type=worker.ssh_auth_type,
+        ssh_key_path=worker.ssh_key_path,
+        ssh_password_encrypted="",
+        deploy_path=worker.deploy_path,
+        container_name=worker.container_name,
+        ssh_ok=False,
+        container_running=False,
+        api_reachable=False,
+        last_status_at=None,
+        last_error=None,
+        is_active=worker.is_active,
+        api_access_type=worker.api_access_type,
+        api_tunnel_port=worker.api_tunnel_port,
+        api_url=worker.api_url,
+        https_pull_agent=worker.https_pull_agent,
+        https_pull_verify_ssl=worker.https_pull_verify_ssl,
+    )
+    messages.add_message(request, messages.SUCCESS, f"Worker '{worker.name}' duplicated as '{duplicated_name}'.")
+    return http.HttpResponseRedirect(reverse("worker_update", args=[duplicated_worker.id]))
 
 
 @login_required

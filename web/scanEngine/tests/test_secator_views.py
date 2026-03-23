@@ -218,6 +218,46 @@ input_types:
         # Should show the scan that uses this workflow
         self.assertContains(response, "Test Scan")
 
+    def test_duplicate_workflow_creates_custom_copy(self):
+        """Duplicating a workflow creates a custom workflow copy."""
+        response = self.client.get(reverse("duplicate_workflow", args=[self.workflow.id]))
+        self.assertEqual(response.status_code, 302)
+        duplicated = SecatorWorkflow.objects.get(name="Test Workflow copy")
+        self.assertEqual(duplicated.workflow_type, "custom")
+        self.assertEqual(duplicated.yaml_configuration, self.workflow.yaml_configuration)
+
+    def test_duplicate_task_creates_custom_copy(self):
+        """Duplicating a task creates a custom task copy."""
+        response = self.client.get(reverse("duplicate_task", args=[self.task.id]))
+        self.assertEqual(response.status_code, 302)
+        duplicated = SecatorTask.objects.get(name="Test Task copy")
+        self.assertFalse(duplicated.is_builtin)
+        self.assertEqual(duplicated.task_type, self.task.task_type)
+
+    def test_duplicate_scan_creates_custom_non_default_copy(self):
+        """Duplicating a scan creates a custom non-default scan copy."""
+        response = self.client.get(reverse("duplicate_scan", args=[self.scan.id]))
+        self.assertEqual(response.status_code, 302)
+        duplicated = SecatorScan.objects.get(name="Test Scan copy")
+        self.assertEqual(duplicated.scan_config_type, "custom")
+        self.assertFalse(duplicated.is_default)
+        self.assertEqual(duplicated.yaml_configuration, self.scan.yaml_configuration)
+
+    def test_duplicate_scan_collision_uses_incremented_suffix(self):
+        """Duplicating with existing copy name appends an incremented suffix."""
+        SecatorScan.objects.create(
+            name="Test Scan copy",
+            description="Existing duplicate name",
+            scan_type="internet",
+            scan_config_type="custom",
+            yaml_configuration="type: scan\nname: existing-copy",
+            is_default=False,
+            is_active=True,
+        )
+        response = self.client.get(reverse("duplicate_scan", args=[self.scan.id]))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(SecatorScan.objects.filter(name="Test Scan copy 2").exists())
+
 
 class TestSecatorForms(BaseTestCase):
     """Test class for Secator forms."""
@@ -250,6 +290,9 @@ input_types:
 
         form = SecatorScanForm(data=form_data)
         self.assertTrue(form.is_valid())
+        scan = form.save()
+        parsed_yaml = yaml.safe_load(scan.yaml_configuration)
+        self.assertEqual(parsed_yaml.get("name"), "Test Scan")
 
     def test_secator_scan_form_invalid_yaml(self):
         """Test SecatorScanForm with invalid YAML."""
@@ -286,7 +329,8 @@ name: domain
     def test_secator_workflow_form_valid(self):
         """Test SecatorWorkflowForm with valid data."""
         form_data = {
-            "name": "Test Workflow",
+            "name": "test_workflow",
+            "display_name": "Test Workflow",
             "alias": "subdomain_recon",
             "description": "A test workflow",
             "scan_type": "internet",
@@ -304,11 +348,38 @@ tasks:
 
         form = SecatorWorkflowForm(data=form_data)
         self.assertTrue(form.is_valid(), msg=form.errors)
+        workflow = form.save()
+        self.assertEqual(workflow.alias, "testworkflow")
+        parsed_yaml = yaml.safe_load(workflow.yaml_configuration)
+        self.assertEqual(parsed_yaml.get("name"), "test_workflow")
+
+    def test_secator_workflow_form_name_without_spaces(self):
+        """Workflow name cannot contain spaces."""
+        form_data = {
+            "name": "workflow with spaces",
+            "display_name": "Workflow With Spaces",
+            "alias": "subdomain_recon",
+            "description": "A test workflow",
+            "scan_type": "internet",
+            "yaml_configuration": """
+type: workflow
+name: workflow_with_spaces
+description: A test workflow
+tags: []
+tasks:
+  subfinder:
+    description: Find subdomains
+""",
+            "is_active": True,
+        }
+        form = SecatorWorkflowForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("name", form.errors)
 
     def test_secator_workflow_form_invalid_yaml(self):
         """Test SecatorWorkflowForm with invalid YAML."""
         form_data = {
-            "name": "Test Workflow",
+            "name": "test_workflow_invalid_yaml",
             "alias": "test_workflow",
             "description": "A test workflow",
             "scan_type": "internet",
@@ -450,6 +521,15 @@ class TestSecatorProfileViews(BaseTestCase):
         response_data = response.json()
         self.assertFalse(response_data.get("status"))
         self.assertIn("cannot be deleted", response_data.get("message", ""))
+
+    def test_duplicate_profile_creates_custom_non_default_copy(self):
+        """Duplicating a profile creates a custom non-default profile copy."""
+        response = self.client.get(reverse("duplicate_profile", args=[self.builtin_profile.id]))
+        self.assertEqual(response.status_code, 302)
+        duplicated = SecatorProfile.objects.get(name="test_builtin copy")
+        self.assertEqual(duplicated.profile_type, "custom")
+        self.assertFalse(duplicated.is_default)
+        self.assertEqual(duplicated.category, self.builtin_profile.category)
 
     def test_secator_profile_form_validation(self):
         """Test SecatorProfileForm validation."""

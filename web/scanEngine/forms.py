@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.postgres.forms import SimpleArrayField
 from django.core.exceptions import ValidationError
 from django_ace import AceWidget
+import re
 import yaml
 
 from reNgine.validators import validate_short_name
@@ -19,6 +20,20 @@ from scanEngine.models import (
     SecatorWorkflow,
     VulnerabilityReportSetting,
 )
+
+
+def _sync_yaml_name(yaml_config: str, object_name: str) -> str:
+    """Return YAML with top-level `name` synchronized to object_name."""
+    if not yaml_config:
+        return yaml_config
+    try:
+        parsed_yaml = yaml.safe_load(yaml_config)
+    except yaml.YAMLError:
+        return yaml_config
+    if not isinstance(parsed_yaml, dict):
+        return yaml_config
+    parsed_yaml["name"] = object_name
+    return yaml.safe_dump(parsed_yaml, sort_keys=False)
 
 
 class AddEngineForm(forms.ModelForm):
@@ -735,13 +750,28 @@ class SecatorWorkflowForm(forms.ModelForm):
 
     class Meta:
         model = SecatorWorkflow
-        fields = ["name", "alias", "description", "tags", "scan_type", "yaml_configuration", "is_active"]
+        fields = ["name", "display_name", "alias", "description", "tags", "scan_type", "yaml_configuration", "is_active"]
 
     name = forms.CharField(
         required=True,
         widget=forms.TextInput(
-            attrs={"class": "form-control form-control-lg", "id": "workflow_name", "placeholder": "Workflow Name"}
+            attrs={
+                "class": "form-control form-control-lg",
+                "id": "workflow_name",
+                "placeholder": "workflow_name_without_spaces",
+            }
         ),
+    )
+    display_name = forms.CharField(
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control form-control-lg",
+                "id": "workflow_display_name",
+                "placeholder": "Workflow Display Name",
+            }
+        ),
+        help_text="Human readable workflow name (spaces allowed).",
     )
     alias = forms.CharField(
         required=False,
@@ -868,6 +898,8 @@ class SecatorWorkflowForm(forms.ModelForm):
         name = self.cleaned_data.get("name")
 
         if name:
+            if any(char.isspace() for char in name):
+                raise ValidationError("Workflow name cannot contain spaces.")
             # Check for duplicates (excluding current instance)
             queryset = SecatorWorkflow.objects.filter(name=name)
             if self.instance.pk:
@@ -890,7 +922,7 @@ class SecatorWorkflowForm(forms.ModelForm):
 
         return cleaned_data
 
-    def save(self, *args, **kwargs):
+    def save(self, commit=True):
         # Prevent duplicate error messages if clean() already raised the error
         if getattr(self, "_builtin_modification_error", False):
             # clean() already raised the error, so just return without saving
@@ -898,7 +930,13 @@ class SecatorWorkflowForm(forms.ModelForm):
         # Additional safeguard: if somehow save() is called directly, block modification
         if self.instance.pk and self.instance.workflow_type == "builtin":
             raise ValidationError("Built-in workflows cannot be modified.")
-        return super().save(*args, **kwargs)
+        instance = super().save(commit=False)
+        instance.workflow_type = "custom"
+        instance.alias = re.sub(r"[_-]", "", instance.name or "")
+        instance.yaml_configuration = _sync_yaml_name(instance.yaml_configuration, instance.name)
+        if commit:
+            instance.save()
+        return instance
 
 
 class SecatorTaskForm(forms.ModelForm):
@@ -958,6 +996,14 @@ class SecatorTaskForm(forms.ModelForm):
 
         return cleaned_data
 
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.is_builtin = False
+        instance.yaml_configuration = _sync_yaml_name(instance.yaml_configuration, instance.name)
+        if commit:
+            instance.save()
+        return instance
+
 
 class SecatorScanForm(forms.ModelForm):
     """Form for creating/editing Secator scan configurations."""
@@ -968,7 +1014,6 @@ class SecatorScanForm(forms.ModelForm):
             "name",
             "description",
             "scan_type",
-            "scan_config_type",
             "yaml_configuration",
             "is_default",
             "is_active",
@@ -979,7 +1024,6 @@ class SecatorScanForm(forms.ModelForm):
                 attrs={"class": "form-control", "rows": 3, "placeholder": "Enter scan description"}
             ),
             "scan_type": forms.Select(attrs={"class": "form-control"}),
-            "scan_config_type": forms.Select(attrs={"class": "form-control"}),
             "yaml_configuration": AceWidget(
                 mode="yaml",
                 theme="tomorrow_night_eighties",
@@ -1043,6 +1087,14 @@ class SecatorScanForm(forms.ModelForm):
             raise ValidationError("Built-in scan configurations cannot be modified.")
 
         return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.scan_config_type = "custom"
+        instance.yaml_configuration = _sync_yaml_name(instance.yaml_configuration, instance.name)
+        if commit:
+            instance.save()
+        return instance
 
 
 class SecatorProfileForm(forms.ModelForm):
@@ -1127,6 +1179,13 @@ class SecatorProfileForm(forms.ModelForm):
             raise ValidationError("Built-in profiles cannot be modified.")
 
         return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.profile_type = "custom"
+        if commit:
+            instance.save()
+        return instance
 
 
 class SecatorWorkerForm(forms.ModelForm):

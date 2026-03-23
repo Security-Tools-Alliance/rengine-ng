@@ -17,6 +17,9 @@
                         <i class="fas fa-tasks"></i> {{ task.name }}
                     </h3>
                     <div class="card-tools">
+                        <a href="{% url 'duplicate_task' task.id %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-copy"></i> Copy
+                        </a>
                         <a href="{% url 'tasks' %}" class="btn btn-secondary btn-sm">
                             <i class="fas fa-arrow-left"></i> Back to Tasks
                         </a>

@@ -93,6 +93,9 @@
                                             <a href="{% url 'worker_update' worker.id %}" class="btn btn-warning btn-sm" title="Edit">
                                                 <i class="fas fa-edit"></i>
                                             </a>
+                                            <a href="{% url 'duplicate_worker' worker.id %}" class="btn btn-secondary btn-sm" title="Copy">
+                                                <i class="fas fa-copy"></i>
+                                            </a>
                                             {% if worker|worker_is_pull_only %}
                                             <span class="d-inline-block" title="Use manual bundle deploy for pull-agent workers">
                                                 <button type="button" class="btn btn-info btn-sm" disabled aria-disabled="true">

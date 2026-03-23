@@ -191,6 +191,11 @@
                         <button class="btn btn-primary" type="submit">
                             <i class="fas fa-save"></i> {% if worker %}Update{% else %}Create{% endif %} Worker
                         </button>
+                        {% if worker %}
+                        <a href="{% url 'duplicate_worker' worker.id %}" class="btn btn-secondary">
+                            <i class="fas fa-copy"></i> Copy
+                        </a>
+                        {% endif %}
                         <a href="{% url 'worker_list' %}" class="btn btn-secondary">
                             <i class="fas fa-arrow-left"></i> Back to Workers
                         </a>

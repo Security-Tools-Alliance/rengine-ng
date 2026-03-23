@@ -1,9 +1,27 @@
 <div class="form-group">
-    <label for="{{ form.name.id_for_label }}">Workflow Name *</label>
+    <label for="{{ form.name.id_for_label }}">Name (no spaces) *</label>
     {{ form.name }}
+    {% if form.name.help_text %}
+        <small class="form-text text-muted">{{ form.name.help_text }}</small>
+    {% endif %}
     {% if form.name.errors %}
         <div class="text-danger">
             {% for error in form.name.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="form-group">
+    <label for="{{ form.display_name.id_for_label }}">Display Name</label>
+    {{ form.display_name }}
+    {% if form.display_name.help_text %}
+        <small class="form-text text-muted">{{ form.display_name.help_text }}</small>
+    {% endif %}
+    {% if form.display_name.errors %}
+        <div class="text-danger">
+            {% for error in form.display_name.errors %}
                 <small>{{ error }}</small>
             {% endfor %}
         </div>
