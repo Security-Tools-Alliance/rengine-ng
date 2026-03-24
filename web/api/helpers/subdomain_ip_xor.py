@@ -140,6 +140,8 @@ ATTACK_SURFACE_ENTITY_QUERY_ID_KEYS = (
     "organization_id",
 )
 
+ATTACK_SURFACE_OPTIONAL_POSITIVE_INT_KEYS = ("attack_surface_analysis_id",)
+
 
 def attack_surface_entity_query_params_invalid_error(query_params) -> Optional[str]:
     """
@@ -150,6 +152,18 @@ def attack_surface_entity_query_params_invalid_error(query_params) -> Optional[s
     entity id so the handler falls through to the wrong branch.
     """
     for key in ATTACK_SURFACE_ENTITY_QUERY_ID_KEYS:
+        if key not in query_params:
+            continue
+        raw = query_params.get(key)
+        if raw is None or (isinstance(raw, str) and raw.strip() == ""):
+            continue
+        try:
+            val = int(raw)
+        except (ValueError, TypeError):
+            return "%s must be a positive integer" % key
+        if val <= 0:
+            return "%s must be a positive integer" % key
+    for key in ATTACK_SURFACE_OPTIONAL_POSITIVE_INT_KEYS:
         if key not in query_params:
             continue
         raw = query_params.get(key)

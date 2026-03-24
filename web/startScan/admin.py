@@ -34,6 +34,7 @@ from startScan.models import (
     Exploit,
     HistoricalIP,
     IpAddress,
+    LlmAttackSurfaceAnalysis,
     LLMVulnerabilityReport,
     MetaFinderDocument,
     NameServer,
@@ -373,7 +374,7 @@ class SubdomainAdmin(admin.ModelAdmin):
         ),
         (
             "Dates & Metadata",
-            {"fields": ("discovered_date", "verified", "sources", "attack_surface")},
+            {"fields": ("discovered_date", "verified", "sources")},
         ),
         (
             "Relations",
@@ -690,6 +691,16 @@ class PortAdmin(admin.ModelAdmin):
             {"fields": ("is_uncommon", "confidence", "cpes")},
         ),
     )
+
+
+@admin.register(LlmAttackSurfaceAnalysis)
+class LlmAttackSurfaceAnalysisAdmin(admin.ModelAdmin):
+    """Stored LLM attack-surface analyses (generic FK to subdomain, IP, target, scope, org)."""
+
+    list_display = ["id", "content_type", "object_id", "llm_model", "updated_at"]
+    list_filter = ["content_type"]
+    search_fields = ["llm_model", "body_markdown"]
+    readonly_fields = ["created_at", "updated_at"]
 
 
 @admin.register(IpAddress)

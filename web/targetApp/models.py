@@ -4,7 +4,6 @@ from django.db import models
 from django.db.models import OuterRef, Subquery
 
 from dashboard.models import Project
-from reNgine.llm.utils import convert_markdown_to_html
 from reNgine.utilities.logger import get_module_logger
 from targetApp.constants import SCOPE_TYPE_CHOICES, TARGET_TYPE_CHOICES
 
@@ -68,7 +67,6 @@ class Target(models.Model):
         help_text="Per-target scan parameter overrides and profiles",
     )
     project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True, blank=False)
-    attack_surface = models.TextField(null=True, blank=True)
 
     objects = TargetManager()
 
@@ -83,12 +81,6 @@ class Target(models.Model):
 
     def __str__(self):
         return f"{self.value} ({self.target_type})"
-
-    @property
-    def formatted_attack_surface(self):
-        if not self.attack_surface:
-            return ""
-        return convert_markdown_to_html(self.attack_surface)
 
     def get_organization(self):
         return self.organizations.all()
@@ -149,18 +141,11 @@ class Organization(models.Model):
     )
     targets = models.ManyToManyField("Target", related_name="organizations", blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True, blank=False)
-    attack_surface = models.TextField(null=True, blank=True)
 
     objects = OrganizationManager()
 
     def __str__(self):
         return self.name
-
-    @property
-    def formatted_attack_surface(self):
-        if not self.attack_surface:
-            return ""
-        return convert_markdown_to_html(self.attack_surface)
 
     def get_domains(self):
         from startScan.models import Domain
@@ -212,7 +197,6 @@ class Scope(models.Model):
         blank=True,
         help_text="Scope-level scan parameter defaults and profiles",
     )
-    attack_surface = models.TextField(null=True, blank=True)
 
     targets = models.ManyToManyField("Target", related_name="scopes", blank=True)
     workers = models.ManyToManyField(
@@ -259,12 +243,6 @@ class Scope(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_scope_type_display()})"
-
-    @property
-    def formatted_attack_surface(self):
-        if not self.attack_surface:
-            return ""
-        return convert_markdown_to_html(self.attack_surface)
 
     def save(self, *args, **kwargs):
         from reNgine.utilities.domain import normalize_allowed_hosts_from_list

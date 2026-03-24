@@ -203,10 +203,11 @@ def build_subdomain_datatable_queryset(
         vuln_critical = count_subquery(Vulnerability, "subdomain_id", filter_kwargs={"severity": 4})
         vuln_total = count_subquery(Vulnerability, "subdomain_id")
 
+    from reNgine.llm.attack_surface_storage import annotate_subdomain_queryset_with_llm_attack_surface_flag
+
     # Scalar count subqueries avoid cartesian products vs Count(distinct=...) over joins.
-    queryset = (
-        Subdomain.objects.filter(**base_filter)
-        .annotate(
+    queryset = annotate_subdomain_queryset_with_llm_attack_surface_flag(
+        Subdomain.objects.filter(**base_filter).annotate(
             endpoint_count=count_subquery(EndPoint, "subdomain_id"),
             info_count=vuln_info,
             low_count=vuln_low,
@@ -218,19 +219,18 @@ def build_subdomain_datatable_queryset(
             certificate_count=count_subquery(Certificate, "subdomain_id"),
             todos_count=count_subquery(TodoNote, "subdomain_id", filter_kwargs={"is_done": False}),
         )
-        .prefetch_related(
-            "ip_addresses",
-            "ip_addresses__ports",
-            "technologies",
-            "waf",
-            "directories",
-            "scan_history",
-            Prefetch(
-                "endpoint_set",
-                queryset=EndPoint.objects.filter(is_default=True),
-                to_attr="default_endpoint_list",
-            ),
-        )
+    ).prefetch_related(
+        "ip_addresses",
+        "ip_addresses__ports",
+        "technologies",
+        "waf",
+        "directories",
+        "scan_history",
+        Prefetch(
+            "endpoint_set",
+            queryset=EndPoint.objects.filter(is_default=True),
+            to_attr="default_endpoint_list",
+        ),
     )
     return queryset, datatable_interesting_names
 

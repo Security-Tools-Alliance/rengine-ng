@@ -162,9 +162,18 @@ from reNgine.llm.attack_surface_context import (
     build_context_for_scope,
     build_context_for_target,
 )
+from reNgine.llm.attack_surface_storage import (
+    analyses_for_parent,
+    analysis_body_as_html,
+    delete_all_analyses_for_parent,
+    delete_one_analysis_for_parent,
+    get_analysis_for_parent,
+    serialized_saved_analyses,
+    upsert_llm_attack_surface_analysis,
+)
 from reNgine.llm.config import DEFAULT_GPT_MODELS, MODEL_REQUIREMENTS, OLLAMA_INSTANCE, RECOMMENDED_MODELS
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
-from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, is_empty_attack_surface
+from reNgine.llm.utils import get_default_llm_model
 
 # NOTE: Legacy task functions removed - functionality now in Secator
 from reNgine.secator.selected_targets import resolve_selected_targets
@@ -566,6 +575,53 @@ class AvailableOllamaModels(APIView):
 class LLMAttackSuggestion(APIView):
     permission_classes = [IsAuthenticated]
 
+    def _maybe_return_cached_attack_surface(
+        self,
+        obj,
+        display_name: str,
+        force_regenerate: bool,
+        check_only: bool,
+        analysis_id: int | None,
+    ) -> Response | None:
+        if force_regenerate:
+            return None
+        qs = analyses_for_parent(obj)
+        if analysis_id is not None and analysis_id > 0:
+            row = get_analysis_for_parent(obj, analysis_id)
+            if row is None:
+                return Response(
+                    {"status": False, "error": "Attack surface analysis not found"},
+                    status=HTTP_404_NOT_FOUND,
+                )
+        else:
+            row = qs.first()
+
+        if row is None:
+            if check_only:
+                return Response(
+                    {
+                        "status": True,
+                        "subdomain_name": display_name,
+                        "description": None,
+                        "saved_analyses": [],
+                        "selected_analysis_id": None,
+                    }
+                )
+            return None
+
+        payload = {
+            "status": True,
+            "subdomain_name": display_name,
+            "saved_analyses": serialized_saved_analyses(qs),
+            "selected_analysis_id": row.id,
+            "cached": True,
+        }
+        if check_only:
+            payload["description"] = None
+        else:
+            payload["description"] = analysis_body_as_html(row)
+        return Response(payload)
+
     def _persist_attack_surface_llm_result(
         self,
         obj,
@@ -576,18 +632,18 @@ class LLMAttackSuggestion(APIView):
             return
         raw_desc = response.get("description")
         if isinstance(raw_desc, str) and raw_desc.strip():
-            if selected_model:
-                markdown_content = "[LLM:%s]\n%s" % (selected_model, raw_desc)
-            else:
-                markdown_content = "[LLM]\n%s" % (raw_desc,)
-            obj.attack_surface = markdown_content
-            obj.save()
-            response["description"] = convert_markdown_to_html(markdown_content)
+            row = upsert_llm_attack_surface_analysis(obj, selected_model, raw_desc.strip())
+            response["description"] = analysis_body_as_html(row)
+            response["saved_analyses"] = serialized_saved_analyses(analyses_for_parent(obj))
+            response["selected_analysis_id"] = row.id
         else:
             response["description"] = ""
 
     def get(self, request):
         req = request
+        if err := attack_surface_entity_query_params_invalid_error(req.query_params):
+            return Response({"status": False, "error": err}, status=HTTP_400_BAD_REQUEST)
+
         subdomain_id = safe_int_cast(req.query_params.get("subdomain_id"))
         ip_address_id = safe_int_cast(req.query_params.get("ip_address_id"))
         target_id = safe_int_cast(req.query_params.get("target_id"))
@@ -596,9 +652,7 @@ class LLMAttackSuggestion(APIView):
         force_regenerate = req.query_params.get("force_regenerate") == "true"
         check_only = req.query_params.get("check_only") == "true"
         selected_model = req.query_params.get("llm_model")
-
-        if err := attack_surface_entity_query_params_invalid_error(req.query_params):
-            return Response({"status": False, "error": err}, status=HTTP_400_BAD_REQUEST)
+        attack_surface_analysis_id = safe_int_cast(req.query_params.get("attack_surface_analysis_id"))
 
         if err := xor_attack_surface_entity_ids_error(
             subdomain_id,
@@ -629,6 +683,7 @@ class LLMAttackSuggestion(APIView):
             force_regenerate,
             check_only,
             selected_model,
+            attack_surface_analysis_id,
         )
 
     def _dispatch_attack_surface_get(
@@ -639,6 +694,7 @@ class LLMAttackSuggestion(APIView):
         force_regenerate: bool,
         check_only: bool,
         selected_model: str | None,
+        attack_surface_analysis_id: int | None,
     ) -> Response:
         dispatch = {
             ATTACK_SURFACE_KIND_SUBDOMAIN: self._get_for_subdomain,
@@ -653,7 +709,7 @@ class LLMAttackSuggestion(APIView):
                 {"status": False, "error": "Invalid attack surface entity type"},
                 status=HTTP_400_BAD_REQUEST,
             )
-        return handler(user, entity_pk, force_regenerate, check_only, selected_model)
+        return handler(user, entity_pk, force_regenerate, check_only, selected_model, attack_surface_analysis_id)
 
     def _get_for_subdomain(
         self,
@@ -662,19 +718,32 @@ class LLMAttackSuggestion(APIView):
         force_regenerate: bool,
         check_only: bool,
         selected_model: str | None,
+        attack_surface_analysis_id: int | None,
     ) -> Response:
         subdomain = get_subdomain_for_llm_attack_surface(user, subdomain_id)
         if subdomain is None:
             return Response({"status": False, "error": "Subdomain not found"}, status=HTTP_404_NOT_FOUND)
 
-        if subdomain.attack_surface and not force_regenerate and not is_empty_attack_surface(subdomain.attack_surface):
-            sanitized_html = subdomain.formatted_attack_surface
-            return Response(
-                {"status": True, "subdomain_name": subdomain.name, "description": sanitized_html, "cached": True}
-            )
+        cached = self._maybe_return_cached_attack_surface(
+            subdomain,
+            subdomain.name,
+            force_regenerate,
+            check_only,
+            attack_surface_analysis_id,
+        )
+        if cached is not None:
+            return cached
 
         if check_only:
-            return Response({"status": True, "subdomain_name": subdomain.name, "description": None})
+            return Response(
+                {
+                    "status": True,
+                    "subdomain_name": subdomain.name,
+                    "description": None,
+                    "saved_analyses": [],
+                    "selected_analysis_id": None,
+                }
+            )
 
         ip_addrs = subdomain.ip_addresses.prefetch_related("ports").all()
         open_ports = ", ".join("%s/%s" % (port.number, port.service_name) for ip in ip_addrs for port in ip.ports.all())
@@ -713,28 +782,36 @@ class LLMAttackSuggestion(APIView):
         force_regenerate: bool,
         check_only: bool,
         selected_model: str | None,
+        attack_surface_analysis_id: int | None,
     ) -> Response:
         ip_row = get_ip_address_for_llm_attack_surface(
             user,
             ip_address_id,
-            prefetch_attack_surface=True,
+            prefetch_attack_surface=False,
         )
         if ip_row is None:
             return Response({"status": False, "error": "IP address not found"}, status=HTTP_404_NOT_FOUND)
         display_name = ip_row.address or ("IP #%s" % ip_address_id)
-        if ip_row.attack_surface and not force_regenerate and not is_empty_attack_surface(ip_row.attack_surface):
-            sanitized_html = ip_row.formatted_attack_surface
+        cached = self._maybe_return_cached_attack_surface(
+            ip_row,
+            display_name,
+            force_regenerate,
+            check_only,
+            attack_surface_analysis_id,
+        )
+        if cached is not None:
+            return cached
+
+        if check_only:
             return Response(
                 {
                     "status": True,
                     "subdomain_name": display_name,
-                    "description": sanitized_html,
-                    "cached": True,
+                    "description": None,
+                    "saved_analyses": [],
+                    "selected_analysis_id": None,
                 }
             )
-
-        if check_only:
-            return Response({"status": True, "subdomain_name": display_name, "description": None})
 
         open_ports = ", ".join("%s/%s" % (port.number, port.service_name or "") for port in ip_row.ports.all())
         hostnames = list(ip_row.ip_addresses.values_list("name", flat=True).distinct()[:50])
@@ -772,23 +849,32 @@ class LLMAttackSuggestion(APIView):
         force_regenerate: bool,
         check_only: bool,
         selected_model: str | None,
+        attack_surface_analysis_id: int | None,
     ) -> Response:
         target = get_target_for_llm_attack_surface(user, target_id)
         if target is None:
             return Response({"status": False, "error": "Target not found"}, status=HTTP_404_NOT_FOUND)
 
         display_name = "Target: %s" % (target.value,)
-        if target.attack_surface and not force_regenerate and not is_empty_attack_surface(target.attack_surface):
+        cached = self._maybe_return_cached_attack_surface(
+            target,
+            display_name,
+            force_regenerate,
+            check_only,
+            attack_surface_analysis_id,
+        )
+        if cached is not None:
+            return cached
+        if check_only:
             return Response(
                 {
                     "status": True,
                     "subdomain_name": display_name,
-                    "description": target.formatted_attack_surface,
-                    "cached": True,
+                    "description": None,
+                    "saved_analyses": [],
+                    "selected_analysis_id": None,
                 }
             )
-        if check_only:
-            return Response({"status": True, "subdomain_name": display_name, "description": None})
 
         input_data = build_context_for_target(target)
         llm = LLMAttackSuggestionGenerator()
@@ -804,23 +890,32 @@ class LLMAttackSuggestion(APIView):
         force_regenerate: bool,
         check_only: bool,
         selected_model: str | None,
+        attack_surface_analysis_id: int | None,
     ) -> Response:
         scope = get_scope_for_llm_attack_surface(user, scope_id)
         if scope is None:
             return Response({"status": False, "error": "Scope not found"}, status=HTTP_404_NOT_FOUND)
 
         display_name = "Scope: %s" % (scope.name,)
-        if scope.attack_surface and not force_regenerate and not is_empty_attack_surface(scope.attack_surface):
+        cached = self._maybe_return_cached_attack_surface(
+            scope,
+            display_name,
+            force_regenerate,
+            check_only,
+            attack_surface_analysis_id,
+        )
+        if cached is not None:
+            return cached
+        if check_only:
             return Response(
                 {
                     "status": True,
                     "subdomain_name": display_name,
-                    "description": scope.formatted_attack_surface,
-                    "cached": True,
+                    "description": None,
+                    "saved_analyses": [],
+                    "selected_analysis_id": None,
                 }
             )
-        if check_only:
-            return Response({"status": True, "subdomain_name": display_name, "description": None})
 
         input_data = build_context_for_scope(scope)
         llm = LLMAttackSuggestionGenerator()
@@ -836,27 +931,32 @@ class LLMAttackSuggestion(APIView):
         force_regenerate: bool,
         check_only: bool,
         selected_model: str | None,
+        attack_surface_analysis_id: int | None,
     ) -> Response:
         organization = get_organization_for_llm_attack_surface(user, organization_id)
         if organization is None:
             return Response({"status": False, "error": "Organization not found"}, status=HTTP_404_NOT_FOUND)
 
         display_name = "Organization: %s" % (organization.name,)
-        if (
-            organization.attack_surface
-            and not force_regenerate
-            and not is_empty_attack_surface(organization.attack_surface)
-        ):
+        cached = self._maybe_return_cached_attack_surface(
+            organization,
+            display_name,
+            force_regenerate,
+            check_only,
+            attack_surface_analysis_id,
+        )
+        if cached is not None:
+            return cached
+        if check_only:
             return Response(
                 {
                     "status": True,
                     "subdomain_name": display_name,
-                    "description": organization.formatted_attack_surface,
-                    "cached": True,
+                    "description": None,
+                    "saved_analyses": [],
+                    "selected_analysis_id": None,
                 }
             )
-        if check_only:
-            return Response({"status": True, "subdomain_name": display_name, "description": None})
 
         input_data = build_context_for_organization(organization)
         llm = LLMAttackSuggestionGenerator()
@@ -865,7 +965,13 @@ class LLMAttackSuggestion(APIView):
         self._persist_attack_surface_llm_result(organization, response, selected_model)
         return Response(response)
 
-    def _delete_attack_surface_entity(self, user, kind: str, entity_pk: int) -> Response:
+    def _delete_attack_surface_entity(
+        self,
+        user,
+        kind: str,
+        entity_pk: int,
+        attack_surface_analysis_id: int | None,
+    ) -> Response:
         getters = {
             ATTACK_SURFACE_KIND_SUBDOMAIN: get_subdomain_for_llm_attack_surface,
             ATTACK_SURFACE_KIND_IP: get_ip_address_for_llm_attack_surface,
@@ -879,18 +985,36 @@ class LLMAttackSuggestion(APIView):
         obj = getter(user, entity_pk)
         if obj is None:
             return Response({"status": False, "error": "Entity not found"}, status=404)
-        obj.attack_surface = None
-        obj.save()
-        return Response({"status": True, "message": "Attack surface analysis deleted successfully"})
+        if attack_surface_analysis_id is not None and attack_surface_analysis_id > 0:
+            if not delete_one_analysis_for_parent(obj, attack_surface_analysis_id):
+                return Response({"status": False, "error": "Attack surface analysis not found"}, status=404)
+            remaining = analyses_for_parent(obj).exists()
+            return Response(
+                {
+                    "status": True,
+                    "message": "Attack surface analysis deleted successfully",
+                    "remaining_analyses": remaining,
+                }
+            )
+        delete_all_analyses_for_parent(obj)
+        return Response(
+            {
+                "status": True,
+                "message": "Attack surface analysis deleted successfully",
+                "remaining_analyses": False,
+            }
+        )
 
     def delete(self, request):
+        if err := attack_surface_entity_query_params_invalid_error(request.query_params):
+            return Response({"status": False, "error": err}, status=400)
+
         subdomain_id = safe_int_cast(request.query_params.get("subdomain_id"))
         ip_address_id = safe_int_cast(request.query_params.get("ip_address_id"))
         target_id = safe_int_cast(request.query_params.get("target_id"))
         scope_id = safe_int_cast(request.query_params.get("scope_id"))
         organization_id = safe_int_cast(request.query_params.get("organization_id"))
-        if err := attack_surface_entity_query_params_invalid_error(request.query_params):
-            return Response({"status": False, "error": err}, status=400)
+        attack_surface_analysis_id = safe_int_cast(request.query_params.get("attack_surface_analysis_id"))
 
         if err := xor_attack_surface_entity_ids_error(
             subdomain_id,
@@ -911,7 +1035,7 @@ class LLMAttackSuggestion(APIView):
             return Response({"status": False, "error": ATTACK_SURFACE_ENTITY_XOR_MESSAGE}, status=400)
         kind, entity_pk = resolved
         try:
-            return self._delete_attack_surface_entity(request.user, kind, entity_pk)
+            return self._delete_attack_surface_entity(request.user, kind, entity_pk, attack_surface_analysis_id)
         except Exception as e:
             logger.log_line(
                 PREFIX_API,

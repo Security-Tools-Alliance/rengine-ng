@@ -1744,6 +1744,7 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
 class SubdomainChangesSerializer(serializers.ModelSerializer):
     change = serializers.SerializerMethodField("get_change")
     is_interesting = serializers.SerializerMethodField("get_is_interesting")
+    attack_surface = serializers.SerializerMethodField("get_attack_surface")
 
     class Meta:
         model = Subdomain
@@ -1780,6 +1781,14 @@ class SubdomainChangesSerializer(serializers.ModelSerializer):
 
     def get_is_interesting(self, Subdomain):
         return get_interesting_subdomains(Subdomain.scan_history.id).filter(name=Subdomain.name).exists()
+
+    def get_attack_surface(self, obj):
+        ann = getattr(obj, "llm_attack_surface_exists", None)
+        if ann is not None:
+            return bool(ann)
+        from reNgine.llm.attack_surface_storage import parent_has_llm_attack_surface_analyses
+
+        return parent_has_llm_attack_surface_analyses(obj)
 
 
 class EndPointChangesSerializer(serializers.ModelSerializer):
@@ -2050,6 +2059,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
     vuln_count = serializers.SerializerMethodField("get_vuln_count")
 
     is_interesting = serializers.SerializerMethodField("get_is_interesting")
+    attack_surface = serializers.SerializerMethodField("get_attack_surface")
 
     endpoint_count = serializers.SerializerMethodField("get_endpoint_count")
     info_count = serializers.SerializerMethodField("get_info_count")
@@ -2123,6 +2133,14 @@ class SubdomainSerializer(serializers.ModelSerializer):
             return subdomain.name in interesting_names
         scan_id = subdomain.scan_history.id if subdomain.scan_history else None
         return get_interesting_subdomains(scan_id).filter(name=subdomain.name).exists()
+
+    def get_attack_surface(self, obj):
+        ann = getattr(obj, "llm_attack_surface_exists", None)
+        if ann is not None:
+            return bool(ann)
+        from reNgine.llm.attack_surface_storage import parent_has_llm_attack_surface_analyses
+
+        return parent_has_llm_attack_surface_analyses(obj)
 
     def get_ports(self, subdomain):
         """Flatten all ports from subdomain's ip_addresses for DataTables 'ports' column."""

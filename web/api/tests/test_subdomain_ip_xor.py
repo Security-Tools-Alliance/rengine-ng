@@ -72,6 +72,12 @@ class SubdomainIpXorHelpersTests(SimpleTestCase):
         self.assertIsNotNone(err)
         self.assertIn("target_id", err)
 
+    def test_attack_surface_query_params_reject_non_positive_analysis_id_when_present(self) -> None:
+        q = QueryDict("target_id=1&attack_surface_analysis_id=0")
+        err = attack_surface_entity_query_params_invalid_error(q)
+        self.assertIsNotNone(err)
+        self.assertIn("attack_surface_analysis_id", err)
+
     def test_attack_surface_query_params_ok_single_positive_only(self) -> None:
         q = QueryDict("organization_id=5")
         self.assertIsNone(attack_surface_entity_query_params_invalid_error(q))

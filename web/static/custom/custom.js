@@ -3842,6 +3842,13 @@ async function send_llm__attack_surface_api_request(options) {
     if (llm_model) {
         params.append('llm_model', llm_model);
     }
+    const analysisRaw = options.attack_surface_analysis_id;
+    if (analysisRaw != null && analysisRaw !== '') {
+        const aid = Number(analysisRaw);
+        if (Number.isFinite(aid) && aid > 0) {
+            params.append('attack_surface_analysis_id', String(aid));
+        }
+    }
     const response = await fetch(`${endpoint_url}?${params}`);
     const contentType = response.headers.get('content-type') || '';
     let body = null;
@@ -3893,6 +3900,30 @@ async function regenerateAttackSurface(endpoint_url, id, attackEntity = ATTACK_S
 }
 
 /**
+ * Format ISO datetime from attack-surface saved_analyses for the analysis picker (user locale).
+ * @param {string|null|undefined} iso
+ * @returns {string}
+ */
+function formatAttackSurfaceAnalysisUpdatedAt(iso) {
+    if (iso == null) {
+        return '';
+    }
+    const s = String(iso).trim();
+    if (!s) {
+        return '';
+    }
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) {
+        return s;
+    }
+    try {
+        return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    } catch (e) {
+        return d.toLocaleString();
+    }
+}
+
+/**
  * Opens the attack-surface flow. Arguments: (endpointUrl, entityId, kind).
  * For rendering an existing API payload, use showAttackSurfaceModal(data, endpointUrl, entityId, kind) instead.
  */
@@ -3907,12 +3938,46 @@ async function show_attack_surface_modal(endpoint_url, id, attackEntity = ATTACK
             llm_model: null,
             attackEntity: kind
         });
-        
-        if (initialResponse.status && initialResponse.description) {
-            showAttackSurfaceModal(initialResponse, endpoint_url, id, kind);
-            return;
+
+        if (
+            initialResponse.status &&
+            Array.isArray(initialResponse.saved_analyses) &&
+            initialResponse.saved_analyses.length > 0
+        ) {
+            const defaultAid = initialResponse.selected_analysis_id;
+            showSwalLoader('Loading...', 'Loading saved analysis.');
+            try {
+                const full = await send_llm__attack_surface_api_request({
+                    endpoint_url: endpoint_url,
+                    id: id,
+                    force_regenerate: false,
+                    check_only: false,
+                    llm_model: null,
+                    attackEntity: kind,
+                    attack_surface_analysis_id:
+                        defaultAid != null && defaultAid !== '' ? defaultAid : null
+                });
+                Swal.close();
+                if (full.status) {
+                    showAttackSurfaceModal(full, endpoint_url, id, kind);
+                    return;
+                }
+            } catch (loadErr) {
+                Swal.close();
+                console.error(loadErr);
+                const httpStatus =
+                    loadErr && loadErr.status != null ? ' (HTTP ' + loadErr.status + ')' : '';
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text:
+                        (loadErr && loadErr.message ? loadErr.message : 'Could not load saved analysis.') +
+                        httpStatus
+                });
+                return;
+            }
         }
-        
+
         await showModelSelectionDialog(endpoint_url, id, { mode: 'attack', attackEntity: kind });
     } catch (error) {
         console.error(error);
@@ -4109,12 +4174,17 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
     }
 }
 
-async function deleteAttackSurfaceAnalysis(endpoint_url, id, attackEntity = ATTACK_SURFACE_ENTITY_SUBDOMAIN) {
+async function deleteAttackSurfaceAnalysis(
+    endpoint_url,
+    id,
+    attackEntity = ATTACK_SURFACE_ENTITY_SUBDOMAIN,
+    attack_surface_analysis_id
+) {
     try {
         const kind = requireAttackEntityForLlm(attackEntity);
         const result = await Swal.fire({
             title: 'Delete Analysis?',
-            text: "This will permanently delete the current attack surface analysis. This action cannot be undone.",
+            text: "This will permanently delete this attack surface analysis. This action cannot be undone.",
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#d33',
@@ -4129,26 +4199,36 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id, attackEntity = ATTA
             if (!paramName) {
                 throw new Error('Unknown attack entity kind for delete: ' + String(kind));
             }
-            const idParam = `${paramName}=${encodeURIComponent(id)}`;
-            const response = await fetch(`${endpoint_url}?${idParam}`, {
+            let q = `${paramName}=${encodeURIComponent(id)}`;
+            if (attack_surface_analysis_id != null && attack_surface_analysis_id !== '') {
+                q +=
+                    '&attack_surface_analysis_id=' +
+                    encodeURIComponent(String(attack_surface_analysis_id));
+            }
+            const response = await fetch(`${endpoint_url}?${q}`, {
                 method: 'DELETE',
                 headers: {
                     'X-CSRFToken': getCookie('csrftoken')
                 }
             });
-            
+
             const data = await response.json();
             Swal.close();
-            
+
             if (data.status) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Deleted!',
-                    text: 'The analysis has been deleted successfully.',
-                    showConfirmButton: false,
-                    timer: 1500
-                });
-                if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
+                if (data.remaining_analyses) {
+                    if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
+                    await show_attack_surface_modal(endpoint_url, id, kind);
+                } else {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Deleted!',
+                        text: 'The analysis has been deleted successfully.',
+                        showConfirmButton: false,
+                        timer: 1500
+                    });
+                    if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
+                }
             } else {
                 throw new Error(data.error || 'Failed to delete analysis');
             }
@@ -4178,8 +4258,41 @@ function showAttackSurfaceModal(data, endpoint_url, id, attackEntity = ATTACK_SU
     }
     const subdomainName = data.subdomain_name || '(unnamed)';
     const header = titlePrefix + ': ' + subdomainName;
+    const analyses = Array.isArray(data.saved_analyses) ? data.saved_analyses : [];
+    const selectedId = data.selected_analysis_id != null ? data.selected_analysis_id : null;
+    let selectorHtml = '';
+    if (analyses.length > 1) {
+        const enc = typeof htmlEncode === 'function' ? htmlEncode : escapeHtml;
+        const opts = analyses
+            .map(function (a) {
+                const aid = a.id;
+                const datePart = formatAttackSurfaceAnalysisUpdatedAt(a.updated_at);
+                const label = (a.llm_model || '') + (datePart ? ' · ' + datePart : '');
+                const sel =
+                    selectedId != null && Number(aid) === Number(selectedId) ? ' selected' : '';
+                return (
+                    '<option value="' +
+                    String(aid) +
+                    '"' +
+                    sel +
+                    '>' +
+                    enc(label) +
+                    '</option>'
+                );
+            })
+            .join('');
+        selectorHtml =
+            '<div class="mb-3">' +
+            '<label class="form-label" for="llm-as-analysis-select">Saved analyses</label>' +
+            '<select id="llm-as-analysis-select" class="form-select">' +
+            opts +
+            '</select></div>';
+    }
     const bodyHtml =
-        DOMPurify.sanitize(data.description) +
+        selectorHtml +
+        '<div id="llm-as-description">' +
+        DOMPurify.sanitize(data.description || '') +
+        '</div>' +
         `<div class="text-center mt-4">
             <div class="btn-group" role="group">
                 <button class="btn btn-primary" id="btn-as-regenerate">
@@ -4200,13 +4313,72 @@ function showAttackSurfaceModal(data, endpoint_url, id, attackEntity = ATTACK_SU
             footerHtml: ''
         });
     }
+
+    function currentAnalysisIdForDelete() {
+        const $sel = $('#llm-as-analysis-select');
+        if ($sel.length) {
+            const v = $sel.val();
+            const n = v != null && v !== '' ? Number(v) : NaN;
+            return Number.isFinite(n) && n > 0 ? n : selectedId;
+        }
+        return selectedId;
+    }
+
+    $('#llm-as-analysis-select')
+        .off('change')
+        .on('change', async function () {
+            const raw = $(this).val();
+            const aid = raw != null && raw !== '' ? Number(raw) : NaN;
+            if (!Number.isFinite(aid) || aid <= 0) {
+                return;
+            }
+            const $modal = $('#modal-dialog');
+            let $spinner = $modal.find('.modal-spinner');
+            if ($spinner.length === 0) {
+                $spinner = $(
+                    '<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Loading...</div>'
+                );
+                $modal.find('.modal-footer').prepend($spinner);
+            }
+            $spinner.show();
+            $('#btn-as-regenerate').prop('disabled', true);
+            $('#btn-as-delete').prop('disabled', true);
+            try {
+                const next = await send_llm__attack_surface_api_request({
+                    endpoint_url: endpoint_url,
+                    id: id,
+                    force_regenerate: false,
+                    check_only: false,
+                    llm_model: null,
+                    attackEntity: kind,
+                    attack_surface_analysis_id: aid
+                });
+                if (next.status) {
+                    $('#llm-as-description').html(DOMPurify.sanitize(next.description || ''));
+                }
+            } catch (err) {
+                console.error(err);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: err && err.message ? err.message : 'Failed to load analysis.'
+                });
+            } finally {
+                $spinner.hide();
+                $('#btn-as-regenerate').prop('disabled', false);
+                $('#btn-as-delete').prop('disabled', false);
+            }
+        });
+
     $('#btn-as-regenerate').off('click').on('click', async () => {
         const $btn = $('#btn-as-regenerate');
         const $otherBtn = $('#btn-as-delete');
         const $modal = $('#modal-dialog');
         let $spinner = $modal.find('.modal-spinner');
         if ($spinner.length === 0) {
-            $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Regenerating...</div>');
+            $spinner = $(
+                '<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Regenerating...</div>'
+            );
             $modal.find('.modal-footer').prepend($spinner);
         }
         $spinner.show();
@@ -4233,14 +4405,16 @@ function showAttackSurfaceModal(data, endpoint_url, id, attackEntity = ATTACK_SU
         const $modal = $('#modal-dialog');
         let $spinner = $modal.find('.modal-spinner');
         if ($spinner.length === 0) {
-            $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Deleting...</div>');
+            $spinner = $(
+                '<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Deleting...</div>'
+            );
             $modal.find('.modal-footer').prepend($spinner);
         }
         $spinner.show();
         $btn.prop('disabled', true);
         $otherBtn.prop('disabled', true);
         try {
-            await deleteAttackSurfaceAnalysis(endpoint_url, id, kind);
+            await deleteAttackSurfaceAnalysis(endpoint_url, id, kind, currentAnalysisIdForDelete());
         } catch (error) {
             console.error(error);
             Swal.fire({

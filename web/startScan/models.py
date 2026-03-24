@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 
 from django.apps import apps
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -969,7 +971,6 @@ class Subdomain(models.Model):
     ip_addresses = models.ManyToManyField("IPAddress", related_name="ip_addresses", blank=True)
     directories = models.ManyToManyField("DirectoryScan", related_name="directories", blank=True)
     waf = models.ManyToManyField("Waf", related_name="waf", blank=True)
-    attack_surface = models.TextField(null=True, blank=True)
     verified = models.BooleanField(default=False, null=True, blank=True)
     sources = ArrayField(models.CharField(max_length=200), null=True, blank=True)
 
@@ -1058,13 +1059,6 @@ class Subdomain(models.Model):
         if hasattr(self, "certificate_count"):
             return self.certificate_count
         return Certificate.objects.filter(subdomain=self).count()
-
-    @property
-    def formatted_attack_surface(self):
-        """Format description as HTML with proper styling"""
-        if not self.attack_surface:
-            return ""
-        return convert_markdown_to_html(self.attack_surface)
 
     @property
     def get_ports(self):
@@ -1675,6 +1669,33 @@ class CweId(models.Model):
         )
 
 
+class LlmAttackSurfaceAnalysis(models.Model):
+    """
+    One stored LLM attack-surface write-up per (asset, llm_model) pair.
+
+    ``content_object`` may be Subdomain, IpAddress, Target, Scope, or Organization.
+    """
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
+    llm_model = models.CharField(max_length=512)
+    body_markdown = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["content_type", "object_id", "llm_model"],
+                name="startscan_llm_attack_surface_ct_obj_model_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["content_type", "object_id"]),
+        ]
+
+
 class LLMVulnerabilityReport(models.Model):
     url_path = models.CharField(max_length=2000)
     title = models.CharField(max_length=2500)
@@ -2199,16 +2220,9 @@ class IpAddress(models.Model):
     extra_data = models.JSONField(null=True, blank=True, help_text="Optional data e.g. ASN from getasn")
     source = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     is_important = models.BooleanField(default=False, null=True, blank=True)
-    attack_surface = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return str(self.address)
-
-    @property
-    def formatted_attack_surface(self):
-        if not self.attack_surface:
-            return ""
-        return convert_markdown_to_html(self.attack_surface)
 
     @classmethod
     def get_project_data(cls, project):
