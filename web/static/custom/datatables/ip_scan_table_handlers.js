@@ -44,6 +44,7 @@
       var ip_label = $(this).attr("data-ip-address") || "";
       $("#subtask_subdomain_id").val("0");
       $("#subtask_ip_address_id").val(ip_id);
+      $("#subscan-modal").removeData("selected-ip-ids");
       $("#subscan-modal").data("subscan-ip-label", ip_label);
       $("#btn-initiate-subtask").attr("multiple-subscan", false);
       $('a[data-toggle="tooltip"]').tooltip("hide");

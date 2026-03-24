@@ -17,11 +17,29 @@
     organization: "organization"
   };
 
+  const resolveLlmAttackSurfaceReportCount = function (row) {
+    if (!row || typeof row !== "object") {
+      return 0;
+    }
+    const raw = row.attack_surface_count;
+    if (raw != null && raw !== "") {
+      const n = Number(raw);
+      if (Number.isFinite(n) && n >= 0) {
+        return n;
+      }
+    }
+    if (row.attack_surface === true || row.attack_surface === 1 || row.attack_surface === "1" || row.attack_surface === "true") {
+      return 1;
+    }
+    return 0;
+  };
+
   /**
    * Single-row LLM attack-surface control (same endpoint as subdomain/IP tables; icon: robot).
    * kindKey must be one of: subdomain, ip, target, scope, organization.
+   * row: DataTables row data; optional attack_surface_count / attack_surface for styling.
    */
-  const renderLlmAttackSurfaceRowButton = function (attackUrl, rowId, kindKey) {
+  const renderLlmAttackSurfaceRowButton = function (attackUrl, rowId, kindKey, row) {
     const kind = LLM_ATTACK_SURFACE_ROW_KIND[kindKey];
     if (!attackUrl || !kind || rowId == null || rowId === "") {
       return "";
@@ -30,8 +48,37 @@
     if (!Number.isFinite(idNum)) {
       return "";
     }
+    const reportCount = resolveLlmAttackSurfaceReportCount(row);
+    const hasReports = reportCount > 0;
+    const btnClass = hasReports
+      ? "btn btn-sm btn-soft-success position-relative pe-2"
+      : "btn btn-sm btn-soft-primary";
+    let title = "LLM attack surface";
+    if (reportCount > 1) {
+      title = "LLM attack surface (" + String(reportCount) + " saved analyses)";
+    } else if (hasReports) {
+      title = "LLM attack surface (1 saved analysis)";
+    }
+    const badge =
+      reportCount > 1
+        ? '<span class="badge rounded-pill bg-dark position-absolute top-0 start-100 translate-middle" style="font-size:0.6rem;line-height:1;padding:0.12em 0.35em">' +
+          safeText(String(reportCount)) +
+          "</span>"
+        : "";
     return (
-      `<a href="javascript:;" class="btn btn-sm btn-soft-primary bs-tooltip" data-toggle="tooltip" data-placement="top" title="LLM attack surface" onclick="show_attack_surface_modal('${safeAttr(attackUrl)}', ${idNum}, '${kind}')"><i class="mdi mdi-robot-outline"></i></a>`
+      '<a href="javascript:;" class="' +
+      btnClass +
+      ' bs-tooltip" data-toggle="tooltip" data-placement="top" title="' +
+      safeAttr(title) +
+      '" onclick="show_attack_surface_modal(\'' +
+      safeAttr(attackUrl) +
+      "', " +
+      idNum +
+      ", '" +
+      kind +
+      "')\"><i class=\"mdi mdi-robot-outline\"></i>" +
+      badge +
+      "</a>"
     );
   };
 
@@ -121,7 +168,7 @@
       : `<a href="javascript:;" class="btn btn-sm btn-soft-primary bs-tooltip" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" onclick="add_note_for_subdomain(${id}, '${safeName}', '${safeAttr(projectSlug)}')"><i class="fe-file-plus"></i></a>`;
     return (
       '<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">' +
-      renderLlmAttackSurfaceRowButton(urls.attackSurface || "", id, "subdomain") +
+      renderLlmAttackSurfaceRowButton(urls.attackSurface || "", id, "subdomain", row) +
       `<button type="button" class="btn btn-sm btn-soft-primary btn-scan-subdomain bs-tooltip" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" id="${id}"><i class="fe-zap"></i></button>` +
       addNoteHtml +
       `<a href="javascript:;" class="btn btn-sm btn-soft-warning bs-tooltip" data-toggle="tooltip" data-placement="top" title="Mark Important Subdomain" onclick="mark_important_subdomain('${safeAttr(urls.toggleSubdomain || "")}', this, ${id})" id="${id}"><i class="mdi mdi-alert-rhombus-outline"></i></a>` +
@@ -157,7 +204,7 @@
     const unlinkScanUrl = urls.unlinkScanIps || "/api/action/scan/unlink_ips/";
     const unlinkTargetUrl = urls.unlinkTargetIps || "/api/action/target/unlink_ips/";
     const parts = [];
-    const asBtn = renderLlmAttackSurfaceRowButton(urls.attackSurface || "", id, "ip");
+    const asBtn = renderLlmAttackSurfaceRowButton(urls.attackSurface || "", id, "ip", row);
     if (asBtn) {
       parts.push(asBtn);
     }
@@ -208,7 +255,7 @@
     const urls = options && options.urls ? options.urls : {};
     const showFullActions = options && options.showFullActions;
     const id = row.id;
-    const asBtn = renderLlmAttackSurfaceRowButton(urls.attackSurface || "", id, "target");
+    const asBtn = renderLlmAttackSurfaceRowButton(urls.attackSurface || "", id, "target", row);
     const targetSummaryUrl = (urls.targetSummaryBase || "") + id;
     const startScanUrl = (urls.startScanBase || "") + id;
     const scheduleScanUrl = (urls.scheduleScanBase || "") + id;

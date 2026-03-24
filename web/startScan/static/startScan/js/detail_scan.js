@@ -1895,7 +1895,14 @@ function initiate_subscan(subdomain_ids){
 	const data = {};
 	const ipRaw = $('#subtask_ip_address_id').val();
 	const ipId = ipRaw ? parseInt(ipRaw, 10) : 0;
-	if (ipId > 0) {
+	const selectedIpIds = $('#subscan-modal').data('selected-ip-ids');
+	if (Array.isArray(selectedIpIds) && selectedIpIds.length > 0) {
+		data.ip_address_ids = selectedIpIds.map(function (id) {
+			return parseInt(id, 10);
+		}).filter(function (id) {
+			return Number.isFinite(id) && id > 0;
+		});
+	} else if (ipId > 0) {
 		data.ip_address_ids = [ipId];
 	} else {
 		data.subdomain_ids = subdomain_ids;
@@ -2078,6 +2085,9 @@ $('#subscan-modal').on('shown.bs.modal', function() {
     // Reset modal state
     $('#subscan-modal .execution-mode-card').removeClass('selected');
     $('#subscan-selection-container').empty();
+    if ($('#btn-initiate-subtask').attr('multiple-subscan') !== 'true') {
+    	$('#subscan-modal').removeData('selected-ip-ids');
+    }
 });
 
 // download subdomains
@@ -2215,9 +2225,32 @@ function deleteMultipleSubdomains(){
 function initiateMultipleSubscan(){
 		$('#btn-initiate-subtask').attr('multiple-subscan', true);
 		$('#subtask_ip_address_id').val('0');
+		$('#subscan-modal').removeData('selected-ip-ids');
 		$('#subscan-modal').removeData('subscan-ip-label');
 		$('a[data-toggle="tooltip"]').tooltip("hide");
 		if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.SUBSCAN);
+}
+
+function initiateMultipleIpSubscan() {
+	const getSelectedIpIds = window.getSelectedIpIds;
+	const selectedIpIds = typeof getSelectedIpIds === 'function' ? getSelectedIpIds() : [];
+	if (!selectedIpIds.length) {
+		Swal.fire({
+			title: 'Oops! No IP Address has been selected!',
+			icon: 'error',
+			padding: '2em'
+		});
+		return;
+	}
+	$('#btn-initiate-subtask').attr('multiple-subscan', true);
+	$('#subtask_subdomain_id').val('0');
+	$('#subtask_ip_address_id').val('0');
+	$('#subscan-modal').data('selected-ip-ids', selectedIpIds);
+	$('#subscan-modal').removeData('subscan-ip-label');
+	$('a[data-toggle="tooltip"]').tooltip("hide");
+	if (window.ModalManager) {
+		ModalManager.showById(ModalManager.MODAL_IDS.SUBSCAN);
+	}
 }
 
 

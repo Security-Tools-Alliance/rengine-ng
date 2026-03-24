@@ -155,6 +155,8 @@ class TargetSerializer(serializers.ModelSerializer):
     exploit_count = serializers.IntegerField(read_only=True, default=0)
     ip_address_count = serializers.SerializerMethodField()
     ip_alive_count = serializers.SerializerMethodField()
+    attack_surface = serializers.SerializerMethodField()
+    attack_surface_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Target
@@ -181,6 +183,8 @@ class TargetSerializer(serializers.ModelSerializer):
             "ip_address_count",
             "ip_alive_count",
             "has_scan",
+            "attack_surface",
+            "attack_surface_count",
         ]
         datatables_always_serialize = (
             "domain_count",
@@ -191,6 +195,7 @@ class TargetSerializer(serializers.ModelSerializer):
             "exploit_count",
             "ip_address_count",
             "ip_alive_count",
+            "attack_surface_count",
         )
 
     has_scan = serializers.SerializerMethodField()
@@ -251,6 +256,22 @@ class TargetSerializer(serializers.ModelSerializer):
     def get_ip_alive_count(self, obj):
         _total, alive = self._target_ip_counts_for_serialization(obj)
         return alive
+
+    def get_attack_surface(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c) > 0
+        from reNgine.llm.attack_surface_storage import parent_has_llm_attack_surface_analyses
+
+        return parent_has_llm_attack_surface_analyses(obj)
+
+    def get_attack_surface_count(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c)
+        from reNgine.llm.attack_surface_storage import count_llm_attack_surface_analyses_for_parent
+
+        return count_llm_attack_surface_analyses_for_parent(obj)
 
 
 class SubScanResultSerializer(serializers.ModelSerializer):
@@ -990,6 +1011,8 @@ class ScopeDatatableSerializer(serializers.ModelSerializer):
     target_count = serializers.IntegerField(read_only=True, default=0)
     worker_count = serializers.IntegerField(read_only=True, default=0)
     insert_date_humanized = serializers.SerializerMethodField()
+    attack_surface = serializers.SerializerMethodField()
+    attack_surface_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Scope
@@ -1004,6 +1027,8 @@ class ScopeDatatableSerializer(serializers.ModelSerializer):
             "worker_count",
             "insert_date",
             "insert_date_humanized",
+            "attack_surface",
+            "attack_surface_count",
         ]
 
     def get_scope_type(self, obj):
@@ -1012,6 +1037,22 @@ class ScopeDatatableSerializer(serializers.ModelSerializer):
     def get_insert_date_humanized(self, obj):
         return naturaltime(obj.insert_date).title() if obj.insert_date else ""
 
+    def get_attack_surface(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c) > 0
+        from reNgine.llm.attack_surface_storage import parent_has_llm_attack_surface_analyses
+
+        return parent_has_llm_attack_surface_analyses(obj)
+
+    def get_attack_surface_count(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c)
+        from reNgine.llm.attack_surface_storage import count_llm_attack_surface_analyses_for_parent
+
+        return count_llm_attack_surface_analyses_for_parent(obj)
+
 
 class OrganizationDatatableSerializer(serializers.ModelSerializer):
     """Serializer for organization list DataTables API. Expects annotated scope_count, total_targets."""
@@ -1019,13 +1060,41 @@ class OrganizationDatatableSerializer(serializers.ModelSerializer):
     scope_count = serializers.IntegerField(read_only=True, default=0)
     total_targets = serializers.IntegerField(read_only=True, default=0)
     insert_date_humanized = serializers.SerializerMethodField()
+    attack_surface = serializers.SerializerMethodField()
+    attack_surface_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Organization
-        fields = ["id", "name", "description", "scope_count", "total_targets", "insert_date", "insert_date_humanized"]
+        fields = [
+            "id",
+            "name",
+            "description",
+            "scope_count",
+            "total_targets",
+            "insert_date",
+            "insert_date_humanized",
+            "attack_surface",
+            "attack_surface_count",
+        ]
 
     def get_insert_date_humanized(self, obj):
         return naturaltime(obj.insert_date).title() if obj.insert_date else ""
+
+    def get_attack_surface(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c) > 0
+        from reNgine.llm.attack_surface_storage import parent_has_llm_attack_surface_analyses
+
+        return parent_has_llm_attack_surface_analyses(obj)
+
+    def get_attack_surface_count(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c)
+        from reNgine.llm.attack_surface_storage import count_llm_attack_surface_analyses_for_parent
+
+        return count_llm_attack_surface_analyses_for_parent(obj)
 
 
 class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
@@ -1745,6 +1814,7 @@ class SubdomainChangesSerializer(serializers.ModelSerializer):
     change = serializers.SerializerMethodField("get_change")
     is_interesting = serializers.SerializerMethodField("get_is_interesting")
     attack_surface = serializers.SerializerMethodField("get_attack_surface")
+    attack_surface_count = serializers.SerializerMethodField("get_attack_surface_count")
 
     class Meta:
         model = Subdomain
@@ -1772,6 +1842,7 @@ class SubdomainChangesSerializer(serializers.ModelSerializer):
             "directories",
             "waf",
             "attack_surface",
+            "attack_surface_count",
             "change",
             "is_interesting",
         ]
@@ -1783,12 +1854,20 @@ class SubdomainChangesSerializer(serializers.ModelSerializer):
         return get_interesting_subdomains(Subdomain.scan_history.id).filter(name=Subdomain.name).exists()
 
     def get_attack_surface(self, obj):
-        ann = getattr(obj, "llm_attack_surface_exists", None)
-        if ann is not None:
-            return bool(ann)
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c) > 0
         from reNgine.llm.attack_surface_storage import parent_has_llm_attack_surface_analyses
 
         return parent_has_llm_attack_surface_analyses(obj)
+
+    def get_attack_surface_count(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c)
+        from reNgine.llm.attack_surface_storage import count_llm_attack_surface_analyses_for_parent
+
+        return count_llm_attack_surface_analyses_for_parent(obj)
 
 
 class EndPointChangesSerializer(serializers.ModelSerializer):
@@ -1932,6 +2011,8 @@ class IpSerializer(serializers.ModelSerializer):
     ports = PortSerializer(many=True)
     subdomain_count = serializers.SerializerMethodField()
     subdomain_names = serializers.SerializerMethodField()
+    attack_surface = serializers.SerializerMethodField()
+    attack_surface_count = serializers.SerializerMethodField()
 
     class Meta:
         model = IpAddress
@@ -1949,6 +2030,8 @@ class IpSerializer(serializers.ModelSerializer):
             "ip_subscan_ids",
             "subdomain_count",
             "subdomain_names",
+            "attack_surface",
+            "attack_surface_count",
         ]
 
     def get_base_subdomain_query(self, obj):
@@ -1974,6 +2057,22 @@ class IpSerializer(serializers.ModelSerializer):
         if precomputed and obj.id in precomputed:
             return precomputed[obj.id]["names"]
         return list(self.get_base_subdomain_query(obj).values_list("name", flat=True))
+
+    def get_attack_surface(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c) > 0
+        from reNgine.llm.attack_surface_storage import parent_has_llm_attack_surface_analyses
+
+        return parent_has_llm_attack_surface_analyses(obj)
+
+    def get_attack_surface_count(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c)
+        from reNgine.llm.attack_surface_storage import count_llm_attack_surface_analyses_for_parent
+
+        return count_llm_attack_surface_analyses_for_parent(obj)
 
 
 class DirectoryFileSerializer(serializers.ModelSerializer):
@@ -2060,6 +2159,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
 
     is_interesting = serializers.SerializerMethodField("get_is_interesting")
     attack_surface = serializers.SerializerMethodField("get_attack_surface")
+    attack_surface_count = serializers.SerializerMethodField("get_attack_surface_count")
 
     endpoint_count = serializers.SerializerMethodField("get_endpoint_count")
     info_count = serializers.SerializerMethodField("get_info_count")
@@ -2110,6 +2210,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
             "directories",
             "waf",
             "attack_surface",
+            "attack_surface_count",
             "verified",
             "sources",
             "vuln_count",
@@ -2125,7 +2226,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
             "subscan_count",
             "certificate_count",
         ]
-        datatables_always_serialize = ("certificate_count",)
+        datatables_always_serialize = ("certificate_count", "attack_surface_count")
 
     def get_is_interesting(self, subdomain):
         interesting_names = self.context.get("datatable_interesting_names")
@@ -2135,12 +2236,20 @@ class SubdomainSerializer(serializers.ModelSerializer):
         return get_interesting_subdomains(scan_id).filter(name=subdomain.name).exists()
 
     def get_attack_surface(self, obj):
-        ann = getattr(obj, "llm_attack_surface_exists", None)
-        if ann is not None:
-            return bool(ann)
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c) > 0
         from reNgine.llm.attack_surface_storage import parent_has_llm_attack_surface_analyses
 
         return parent_has_llm_attack_surface_analyses(obj)
+
+    def get_attack_surface_count(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c)
+        from reNgine.llm.attack_surface_storage import count_llm_attack_surface_analyses_for_parent
+
+        return count_llm_attack_surface_analyses_for_parent(obj)
 
     def get_ports(self, subdomain):
         """Flatten all ports from subdomain's ip_addresses for DataTables 'ports' column."""

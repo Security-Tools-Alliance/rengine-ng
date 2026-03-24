@@ -20,6 +20,7 @@ from reNgine.definitions import (
     SCAN_STATUSES_RECENTLY_COMPLETED,
     SUCCESS_TASK,
 )
+from reNgine.llm.attack_surface_storage import annotate_queryset_with_llm_attack_surface_count
 from reNgine.utilities.db import count_subquery, count_subquery_related
 from reNgine.utilities.subdomain import get_interesting_subdomains
 
@@ -337,7 +338,7 @@ def build_ip_datatable_base_queryset(request: Any) -> QuerySet:
 
     if port_ok:
         ips = ips.filter(ports__number=port_num)
-    return ips
+    return annotate_queryset_with_llm_attack_surface_count(ips, IpAddress)
 
 
 def get_ip_subdomain_data(ip_queryset: Union[QuerySet, list]) -> dict[int, dict[str, Any]]:

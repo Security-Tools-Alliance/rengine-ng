@@ -229,7 +229,7 @@ $(document).ready(function() {
             ? window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls()
             : null;
           const llmBtn = window.RengineDatatableActionRenderers && typeof window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton === 'function'
-            ? window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton(attackUrl || '', row.id, 'scope')
+            ? window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton(attackUrl || '', row.id, 'scope', row)
             : '';
           const idEnc = window.safeAttr(String(row.id));
           let html = '<div class="d-flex flex-wrap gap-1 justify-content-center">';

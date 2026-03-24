@@ -166,7 +166,7 @@ $(document).ready(function() {
             ? window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls()
             : null;
           const llmBtn = window.RengineDatatableActionRenderers && typeof window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton === 'function'
-            ? window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton(attackUrl || '', row.id, 'organization')
+            ? window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton(attackUrl || '', row.id, 'organization', row)
             : '';
           let html = '<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">';
           html += llmBtn;

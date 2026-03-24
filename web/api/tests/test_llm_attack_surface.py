@@ -10,7 +10,7 @@ from rest_framework import status
 from dashboard.models import Project
 from reNgine.llm.attack_surface_storage import UNSPECIFIED_LLM_MODEL_KEY
 from startScan.models import LlmAttackSurfaceAnalysis
-from targetApp.models import Target
+from targetApp.models import Organization, Scope, Target
 from utils.test_base import BaseTestCase
 
 
@@ -91,6 +91,31 @@ class LLMAttackSurfaceApiTests(BaseTestCase):
         self.assertEqual(row.llm_model, UNSPECIFIED_LLM_MODEL_KEY)
         self.assertEqual(row.body_markdown.strip(), "Analysis body")
         self.assertEqual(response.data.get("selected_analysis_id"), row.id)
+
+    def test_saved_analyses_sorted_alphabetically_default_selection_is_latest(self) -> None:
+        tid = self.data_generator.target.id
+        ct = ContentType.objects.get_for_model(Target)
+        LlmAttackSurfaceAnalysis.objects.create(
+            content_type=ct,
+            object_id=tid,
+            llm_model="alpha-model",
+            body_markdown="A",
+        )
+        newer = LlmAttackSurfaceAnalysis.objects.create(
+            content_type=ct,
+            object_id=tid,
+            llm_model="zebra-model",
+            body_markdown="Z",
+        )
+        url = reverse("api:llm_get_possible_attacks")
+        response = self.client.get(
+            url,
+            {"target_id": tid, "check_only": "true"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        saved = response.data.get("saved_analyses") or []
+        self.assertEqual([s["llm_model"] for s in saved], ["alpha-model", "zebra-model"])
+        self.assertEqual(response.data.get("selected_analysis_id"), newer.pk)
 
     def test_get_target_check_only_with_saved_analyses_returns_list_without_description(self) -> None:
         tid = self.data_generator.target.id
@@ -281,3 +306,62 @@ class LLMAttackSurfaceApiTests(BaseTestCase):
         url = reverse("api:llm_get_possible_attacks")
         response = self.client.delete("%s?target_id=%s" % (url, alien.pk))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class LLMAttackSurfaceScopeOrgDatatableTests(BaseTestCase):
+    def test_scopes_datatable_includes_attack_surface_counts(self) -> None:
+        self.data_generator.create_scope()
+        scope = self.data_generator.scope
+        ct = ContentType.objects.get_for_model(Scope)
+        LlmAttackSurfaceAnalysis.objects.create(
+            content_type=ct,
+            object_id=scope.id,
+            llm_model="unit-scope-model-a",
+            body_markdown="A",
+        )
+        LlmAttackSurfaceAnalysis.objects.create(
+            content_type=ct,
+            object_id=scope.id,
+            llm_model="unit-scope-model-b",
+            body_markdown="B",
+        )
+        url = reverse("api:scopes-datatable-list")
+        response = self.client.get(
+            url,
+            {
+                "slug": self.data_generator.project.slug,
+                "start": "0",
+                "length": "50",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data") or []
+        row = next((r for r in rows if r.get("id") == scope.id), None)
+        self.assertIsNotNone(row)
+        self.assertTrue(row.get("attack_surface"))
+        self.assertEqual(row.get("attack_surface_count"), 2)
+
+    def test_organizations_datatable_includes_attack_surface_counts(self) -> None:
+        org = self.data_generator.organization
+        ct = ContentType.objects.get_for_model(Organization)
+        LlmAttackSurfaceAnalysis.objects.create(
+            content_type=ct,
+            object_id=org.id,
+            llm_model="unit-org-model",
+            body_markdown="O",
+        )
+        url = reverse("api:organizations-datatable-list")
+        response = self.client.get(
+            url,
+            {
+                "slug": self.data_generator.project.slug,
+                "start": "0",
+                "length": "50",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data") or []
+        row = next((r for r in rows if r.get("id") == org.id), None)
+        self.assertIsNotNone(row)
+        self.assertTrue(row.get("attack_surface"))
+        self.assertEqual(row.get("attack_surface_count"), 1)

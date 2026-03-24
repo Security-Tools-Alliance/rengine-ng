@@ -11,9 +11,10 @@ from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
-from django.db.models import Exists, OuterRef, QuerySet
+from django.db.models import Count, IntegerField, OuterRef, QuerySet, Subquery, Value
+from django.db.models.functions import Coalesce
 
-from reNgine.llm.utils import convert_markdown_to_html
+from reNgine.llm.utils import convert_markdown_to_html, llm_model_name_sort_key
 
 
 # Stored when the legacy header was ``[LLM]`` or no model was provided.
@@ -64,6 +65,10 @@ def parent_has_llm_attack_surface_analyses(parent: models.Model) -> bool:
     return analyses_for_parent(parent).exists()
 
 
+def count_llm_attack_surface_analyses_for_parent(parent: models.Model) -> int:
+    return analyses_for_parent(parent).count()
+
+
 def get_analysis_for_parent(parent: models.Model, analysis_id: int) -> Any:
     if analysis_id <= 0:
         return None
@@ -71,13 +76,21 @@ def get_analysis_for_parent(parent: models.Model, analysis_id: int) -> Any:
 
 
 def serialized_saved_analyses(qs: QuerySet) -> list[dict[str, Any]]:
+    rows = list(qs)
+    rows.sort(
+        key=lambda r: (
+            llm_model_name_sort_key(display_llm_model(r.llm_model)),
+            -(r.updated_at.timestamp() if r.updated_at else 0.0),
+            -r.pk,
+        )
+    )
     return [
         {
             "id": row.id,
             "llm_model": display_llm_model(row.llm_model),
             "updated_at": row.updated_at.isoformat() if row.updated_at else "",
         }
-        for row in qs
+        for row in rows
     ]
 
 
@@ -111,10 +124,26 @@ def delete_one_analysis_for_parent(parent: models.Model, analysis_id: int) -> bo
     return True
 
 
-def annotate_subdomain_queryset_with_llm_attack_surface_flag(queryset: QuerySet) -> QuerySet:
-    """Add ``llm_attack_surface_exists`` (bool) for Subdomain rows."""
-    from startScan.models import LlmAttackSurfaceAnalysis, Subdomain
+def annotate_queryset_with_llm_attack_surface_count(queryset: QuerySet, model_cls: type[models.Model]) -> QuerySet:
+    """
+    Add ``llm_attack_surface_count`` (int) per row for any model keyed by ``pk`` in GenericFK rows.
+    """
+    from startScan.models import LlmAttackSurfaceAnalysis
 
-    ct = ContentType.objects.get_for_model(Subdomain)
-    subq = LlmAttackSurfaceAnalysis.objects.filter(content_type=ct, object_id=OuterRef("pk"))
-    return queryset.annotate(llm_attack_surface_exists=Exists(subq))
+    ct = ContentType.objects.get_for_model(model_cls)
+    count_sq = (
+        LlmAttackSurfaceAnalysis.objects.filter(content_type=ct, object_id=OuterRef("pk"))
+        .values("object_id")
+        .annotate(c=Count("pk"))
+        .values("c")[:1]
+    )
+    return queryset.annotate(
+        llm_attack_surface_count=Coalesce(Subquery(count_sq, output_field=IntegerField()), Value(0))
+    )
+
+
+def annotate_subdomain_queryset_with_llm_attack_surface_flag(queryset: QuerySet) -> QuerySet:
+    """Add ``llm_attack_surface_count`` (int) for Subdomain rows (DataTables / serializers)."""
+    from startScan.models import Subdomain
+
+    return annotate_queryset_with_llm_attack_surface_count(queryset, Subdomain)

@@ -165,6 +165,7 @@ from reNgine.llm.attack_surface_context import (
 from reNgine.llm.attack_surface_storage import (
     analyses_for_parent,
     analysis_body_as_html,
+    annotate_queryset_with_llm_attack_surface_count,
     delete_all_analyses_for_parent,
     delete_one_analysis_for_parent,
     get_analysis_for_parent,
@@ -173,7 +174,7 @@ from reNgine.llm.attack_surface_storage import (
 )
 from reNgine.llm.config import DEFAULT_GPT_MODELS, MODEL_REQUIREMENTS, OLLAMA_INSTANCE, RECOMMENDED_MODELS
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
-from reNgine.llm.utils import get_default_llm_model
+from reNgine.llm.utils import get_default_llm_model, llm_model_name_sort_key
 
 # NOTE: Legacy task functions removed - functionality now in Secator
 from reNgine.secator.selected_targets import resolve_selected_targets
@@ -513,8 +514,15 @@ class AvailableOllamaModels(APIView):
     def get(self, request):
         try:
             cache_key = "ollama_available_models"
-            if cached_data := cache.get(cache_key):
-                return Response(cached_data)
+            if cached := cache.get(cache_key):
+                payload = dict(cached)
+                models = payload.get("models")
+                if isinstance(models, list):
+                    payload["models"] = sorted(
+                        models,
+                        key=lambda m: llm_model_name_sort_key(m.get("name")),
+                    )
+                return Response(payload)
 
             # Use recommended models from config
             recommended_models = list(RECOMMENDED_MODELS.values())
@@ -557,6 +565,7 @@ class AvailableOllamaModels(APIView):
                     model["installed"] = False
                     model["installed_versions"] = []
 
+            recommended_models.sort(key=lambda m: llm_model_name_sort_key(m.get("name")))
             response_data = {"status": True, "models": recommended_models}
 
             cache.set(cache_key, response_data, 300)
@@ -1260,7 +1269,7 @@ class ListTargetsDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, 
                 scope_group_name=Coalesce(Subquery(first_scope_name), Value("No scope")),
             )
         )
-        return qs
+        return annotate_queryset_with_llm_attack_surface_count(qs, Target)
 
     def filter_queryset(self, qs):
         qs = self.get_queryset()
@@ -1345,7 +1354,7 @@ class ListScopesDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, v
         slug = self.request.query_params.get("slug")
         if not slug:
             return Scope.objects.none()
-        return (
+        qs = (
             Scope.objects.filter(organization__project__slug=slug)
             .select_related("organization")
             .annotate(
@@ -1354,6 +1363,7 @@ class ListScopesDatatableViewSet(DatatableListMixin, DatatablePaginationMixin, v
             )
             .order_by("-insert_date")
         )
+        return annotate_queryset_with_llm_attack_surface_count(qs, Scope)
 
     def filter_queryset(self, qs):
         search_value = self.request.GET.get("search[value]", None)
@@ -1387,7 +1397,7 @@ class ListOrganizationsDatatableViewSet(DatatableListMixin, DatatablePaginationM
         slug = self.request.query_params.get("slug")
         if not slug:
             return Organization.objects.none()
-        return (
+        qs = (
             Organization.objects.filter(project__slug=slug)
             .annotate(
                 scope_count=Count("scopes", distinct=True),
@@ -1395,6 +1405,7 @@ class ListOrganizationsDatatableViewSet(DatatableListMixin, DatatablePaginationM
             )
             .order_by("-insert_date")
         )
+        return annotate_queryset_with_llm_attack_surface_count(qs, Organization)
 
     def filter_queryset(self, qs):
         search_value = self.request.GET.get("search[value]", None)
@@ -4710,7 +4721,7 @@ class IpAddressViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
             )
         else:
             self.serializer_class = IpSerializer
-            self.queryset = IpAddress.objects.all()
+            self.queryset = annotate_queryset_with_llm_attack_surface_count(IpAddress.objects.all(), IpAddress)
         return self.queryset
 
     def list(self, request, *args, **kwargs):
@@ -5803,6 +5814,8 @@ class LLMModelsManager(APIView):
                 base_model_name = model["name"].split(":")[0]
                 if base_model_name in MODEL_REQUIREMENTS:
                     model["capabilities"] = MODEL_REQUIREMENTS[base_model_name]
+
+            all_models.sort(key=lambda m: llm_model_name_sort_key(m.get("name")))
 
             return Response(
                 {

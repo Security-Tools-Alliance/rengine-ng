@@ -46,6 +46,11 @@ def get_default_llm_model():
         return "gpt-3.5-turbo"  # Ultimate fallback
 
 
+def llm_model_name_sort_key(name: object) -> str:
+    """Case-insensitive key for alphabetical ordering of LLM model names in the UI."""
+    return str(name or "").casefold()
+
+
 def get_llm_vuln_input_description(title, path):
     vulnerability_description = ""
     vulnerability_description += f"Vulnerability Title: {title}"

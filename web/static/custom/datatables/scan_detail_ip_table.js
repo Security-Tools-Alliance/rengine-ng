@@ -67,7 +67,7 @@
       typeof window.createRengineDatatableIdSelection === "function"
         ? window.createRengineDatatableIdSelection({
             countBadgeId: "ip_selected_count",
-            disabledWhenEmptyIds: ["download_selected_ips_btn"],
+            disabledWhenEmptyIds: ["download_selected_ips_btn", "initiate_selected_ips_subscan_btn"],
           })
         : null;
     const ipSelection = ipSel ? ipSel.ids : new Set();
@@ -86,7 +86,16 @@
           if (downloadBtn) {
             downloadBtn.classList.toggle("disabled", count === 0);
           }
+          const subscanBtn = document.getElementById("initiate_selected_ips_subscan_btn");
+          if (subscanBtn) {
+            subscanBtn.classList.toggle("disabled", count === 0);
+          }
         };
+    window.getSelectedIpIds = function () {
+      return Array.from(ipSelection).filter(function (id) {
+        return Number.isFinite(id) && id > 0;
+      });
+    };
 
     window.uncheckIps = function () {
       if (ipSel) {
