@@ -47,3 +47,4 @@ These commands show the different elements that Secator exposes (workflows, scan
 - Orchestrate Secator from dedicated service/orchestrator modules; avoid mixing orchestration logic directly into views when possible.
 - Validate all user input before passing it into Secator configurations (targets, scopes, workflow names, etc.).
 - Do not duplicate Secator configuration parsing logic in multiple places; reuse shared helpers/modules.
+- **IP targets for Secator**: `reNgine.secator.services.target_builder_service.TargetBuilderService` resolves host targets from `IpAddress` rows tied to the current target’s `ScanHistory` (via `scan_history__target_id` and, when subdomain ids are supplied, `scan_history_id` on those subdomains). Prefer extending that service instead of reintroducing domain-only IP collection that ignores scan linkage.

@@ -84,6 +84,12 @@ make test KEEPDB=1
 make test-only TESTS="reNgine.tests.services.repositories.test_domain_repository.DomainRepositoryFindingScopeFilterTest.test_save_raw_whois_ip_as_domain_returns_none" KEEPDB=1 VERBOSITY=2
 ```
 
+Examples for recently added areas:
+
+```bash
+make test-only TESTS="api.tests.test_llm_attack_surface api.tests.test_subdomain_ip_xor recon_note.tests.test_recon_note reNgine.tests.llm.test_attack_surface_context" KEEPDB=1 VERBOSITY=2
+```
+
   Multiple tests: pass a space-separated list of dotted paths as `TESTS="path1 path2 path3"`. Same options as `make test` apply (`KEEPDB=1`, `VERBOSITY=1|2|3`).
 
 - Other useful commands:

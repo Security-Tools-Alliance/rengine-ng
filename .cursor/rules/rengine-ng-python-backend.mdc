@@ -79,4 +79,15 @@ logger.log_line(
 - **No Subdomain row for numeric hosts**: `SubdomainRepository.get_or_create_from_host` returns `None` for IP literals; IP-backed assets use `IpAddress` and `EndPoint.ip_address` (see `EndpointRepository` / `_resolve_endpoint_host_for_scan`, `startScan.services.host_assignment` for manual FK assignment).
 - **“IP linked to this scan”**: use `reNgine.services.scan_finding_metrics` (`ip_address_id_linked_to_scan`, `partition_ip_address_ids_for_scan_history`, `ip_address_ids_in_scan`, etc.). `reNgine.utilities.scan_lookups.ip_exists_in_scan` delegates there—do not reintroduce parallel filter logic.
 - **Mutually exclusive `subdomain_id` / `ip_address_id` (or list forms) in APIs**: use `api.helpers.subdomain_ip_xor` and request parsing helpers in `api.helpers.secator_scan_target_request` (`coerce_json_ip_address_ids`, `parse_comma_separated_int_ids`, `positive_ip_ids`).
+- **`IpAddress.scan_history`**: optional `ForeignKey` to `ScanHistory` for direct scan linkage; IP rows can still be tied via subdomain M2M (`ip_addresses`) and endpoints (`ip_endpoints`). Project-scoped queries for LLM access use `Q(ip_addresses__scan_history__...)` and `Q(ip_endpoints__scan_history__...)` in `get_ip_address_for_llm_attack_surface`.
+
+## LLM attack surface (access and payloads)
+
+- **Access control**: Before serving LLM attack-surface data, resolve `Target`, `Scope`, `Organization`, `Subdomain`, and `IpAddress` with `api.helpers.llm_attack_surface_access` only (`get_*_for_llm_attack_surface`). Do not load by primary key without the same project filter (except `is_superuser`).
+- **Entity XOR and kinds**: `api.helpers.subdomain_ip_xor` centralises XOR validation for host-level ids and for aggregate entities (`xor_attack_surface_entity_ids_error`, `attack_surface_entity_query_params_invalid_error`, `resolve_attack_surface_entity_kind_and_pk`, `ATTACK_SURFACE_KIND_*`). Keep constants in sync with `web/static/custom/target_entity_kind.js`.
+- **Aggregate context**: `reNgine.llm.attack_surface_context` builds capped, structured text for target/scope/organization analysis (`MAX_SUBDOMAINS_IN_CONTEXT`, `MAX_IPS_IN_CONTEXT`, `MAX_CONTEXT_CHARS`, etc.); extend caps there rather than duplicating logic in views.
+
+## Markdown `attack_surface` on org / scope / target / IP
+
+- `Organization`, `Scope`, `Target`, and `IpAddress` expose an `attack_surface` text field and `formatted_attack_surface` for HTML display. Persist and edit through the existing org/scope/target flows and related UI; do not bypass validation or escaping rules from `rengine-ng-security.mdc` when rendering user-authored markdown.
 

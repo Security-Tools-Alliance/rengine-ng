@@ -62,6 +62,7 @@ alwaysApply: true
 - **Rule 7.1**: Do not duplicate security logic: have a single place for path validation, a single one for HTML escaping on the client side, a single one for URL validation if needed. Other modules must call these helpers.
 - **Rule 7.2**: Prefer native Django mechanisms whenever they exist (for example file storage, name validation, CSRF, template escaping) and only bypass them with justification and a documented secure alternative.
 - **Rule 7.3**: CodeQL alerts of level High and Medium must be addressed or explicitly accepted with justification (for example in a suppression file or an issue); do not ignore them without trace.
+- **Rule 7.4 (LLM attack surface)**: Any view or API that loads `Target`, `Scope`, `Organization`, `Subdomain`, or `IpAddress` for LLM or aggregate attack-surface features must enforce project membership through `api.helpers.llm_attack_surface_access` (or equivalent shared checks). Do not trust a bare integer id from the client without that filter (superusers may bypass as implemented there).
 
 ---
 

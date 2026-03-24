@@ -53,7 +53,7 @@ Before adding or changing a DataTable action/column/rendering flow, run this che
 1. Check whether a shared renderer/helper already exists in `web/static/custom/datatables/` (especially `actions.js`, `column_definitions.js`, `init.js`, `filters.js`).
 2. If a shared renderer exists, reuse/extend it instead of writing inline HTML render logic in templates.
 3. If a new action renderer is required, add it to `actions.js` and expose it through `window.RengineDatatableActionRenderers`.
-4. Wire URLs through `get_datatable_action_urls()` in `web/api/helpers/datatables/actions.py` and consume via `window.RENGINE_DATATABLE_ACTION_URLS`.
+4. Wire URLs through `get_datatable_action_urls()` in `web/api/helpers/datatables/actions.py` and consume via `window.RENGINE_DATATABLE_ACTION_URLS`. That helper exposes `attackSurface` (LLM attack-surface API) on `subdomain`, `ip`, and `target` dicts; the IP map may include `toggleIpImportant`, `unlinkScanIps`, `unlinkTargetIps`, `getIpDetails`, `querySubdomains`. Omit keys you do not inject so `actions.js` hides the matching buttons.
 5. Keep templates focused on DataTable composition and configuration; avoid feature logic duplication in template JS blocks.
 6. Add/adjust tests for datatable action URL contracts in `web/api/tests/test_datatables.py`.
 
@@ -69,6 +69,7 @@ Load order in `base.html` must be respected (escape first, then layout, cookies,
 - **filters.js** – `getRengineDatatableFilterParams`, `buildRengineDatatableAjaxData`, `attachDatatableFilters`, multi-select and reset.
 - **config.js** – Central element IDs: `RENGINE_DATATABLE_FILTER_PARAMS_SCRIPT_ID`, `RENGINE_DATATABLE_ROW_GROUP_CONFIG_SCRIPT_ID`. Row-group helpers: `getRengineRowGroupConfigFromScript`, `getRengineRowGroupConfig`.
 - **actions.js** – Action column renderers (subdomain, **IP**, vulnerability, target), `confirmDeleteRow`, `renderScanSummaryBadges`. Uses `safeAttr`/`safeText` from escape.js. **`renderIpActions`**: omit attack-surface / mark-important / unlink controls when the corresponding key is missing from `RENGINE_DATATABLE_ACTION_URLS.ip`; subtask scan and recon-note buttons do not need those URLs. Prefer `data-*` + delegated handlers over inline `onclick` for dynamic text (e.g. `.js-add-note-ip` in `detail_scan.js`).
+- **target_entity_kind.js** – Included from `base.html`; defines attack-surface entity kind constants and `RengineTargetEntityKind` (including `datatableTargetAttackSurfaceUrlKey`). Must match `ATTACK_SURFACE_KIND_*` in `api/helpers/subdomain_ip_xor.py` and the `attackSurface` key shape from `get_datatable_action_urls()`.
 - **init.js** – `getRengineDatatableConfig`, `initServerSideDataTable`, **`initRengineServerSideDataTable`** (one-call entry point).
 - **tooltips.js** – `getRengineDatatableDrawCallbackTooltips` for drawCallback tooltip refresh.
 - **column_definitions.js** – Shared column arrays and default order/row-group metadata (`RENGINE_VULN_DATATABLE_COLUMNS`, `RENGINE_SUBDOMAIN_DATATABLE_COLUMNS`, `RENGINE_IP_DATATABLE_COLUMNS`, `RENGINE_DATATABLE_IP_DEFAULT_ORDER`, `RENGINE_DATATABLE_IP_ROW_GROUP_GROUPS`, etc.) and factories such as `getScanIpTableColumnDefs`. Single source of truth; keep in sync with backend column maps. IP table init: `scan_detail_ip_table.js` (`initDetailScanIpDataTable`), used with `ListIPs` DataTables mode from **`detail_scan.html`** ( `scan_id` ) and **`target/summary.html`** ( `target_id` + optional `domainId` in column defs).
@@ -138,4 +139,8 @@ Each selected profile is stored as a hidden `<input name="{prefix}_profiles" val
 ## Security cross-reference
 
 - For HTML/JS injection and XSS-related rules, also see the security rule `rengine-ng-security.mdc` (HTML escaping, `htmlEncode`, URL validation).
+
+## Recon note AJAX routes (`recon_note`)
+
+- Prefer slug-prefixed URLs: `/<slug>/list_note`, `/<slug>/flip_todo_status`, `/<slug>/flip_important_status`, `/<slug>/delete_note` (see `web/recon_note/urls.py`). Non-prefixed paths exist for backward compatibility. Frontend code (`web/recon_note/static/note/js/todo.js`) must build requests with the project `slug` in the path when using the prefixed routes.
 
