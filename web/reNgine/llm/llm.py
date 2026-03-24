@@ -4,15 +4,23 @@ from typing import Any, Dict, Optional
 from langchain_ollama import OllamaLLM as Ollama
 import openai
 
-from reNgine.llm.config import LLM_CONFIG
+from reNgine.llm.config import (
+    ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT,
+    DEFAULT_OPENAI_MAX_TOKENS_AGGREGATE,
+    LLM_CONFIG,
+)
 from reNgine.llm.utils import get_default_llm_model
 from reNgine.llm.validators import LLMProvider, LLMResponse
+from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.logger import get_module_logger
 
 
 PREFIX_LLM = "[LLM]"
 logger = get_module_logger(__name__)
+
+# OpenAI aggregate prompts (target / scope / organization) use max_tokens_aggregate.
+ATTACK_PROMPT_KEYS_OPENAI_AGGREGATE = frozenset({"target", "scope", "organization"})
 
 
 class BaseLLMGenerator(ABC):
@@ -223,25 +231,77 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
 
         return input_data
 
-    def get_attack_suggestion(self, input_data: str, model_name: str = None) -> dict:
+    def _attack_prompt_asset_fallback(self, attack_cfg: dict) -> str:
+        raw = attack_cfg.get("asset")
+        if isinstance(raw, str) and raw.strip():
+            return raw
+        logger.log_line(
+            PREFIX_LLM,
+            "ATTACK_PROMPT",
+            "LLM attack prompts config missing or empty 'asset' key; using built-in default.",
+            level="error",
+        )
+        return ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT
+
+    def _resolve_attack_system_prompt(self, prompt_key: str) -> str:
+        attack_cfg = self.config["prompts"]["attack"]
+        if isinstance(attack_cfg, str) and attack_cfg.strip():
+            return attack_cfg
+        if not isinstance(attack_cfg, dict) or not attack_cfg:
+            logger.log_line(
+                PREFIX_LLM,
+                "ATTACK_PROMPT",
+                "Invalid or empty attack prompts config; using built-in default.",
+                level="warning",
+            )
+            return ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT
+        asset_default = self._attack_prompt_asset_fallback(attack_cfg)
+        if prompt_key not in attack_cfg:
+            logger.log_line(
+                PREFIX_LLM,
+                "ATTACK_PROMPT",
+                "Unknown attack prompt_key %s; known keys: %s. Using asset prompt."
+                % (prompt_key, ", ".join(sorted(attack_cfg.keys()))),
+                level="warning",
+            )
+            return asset_default
+        chosen = attack_cfg[prompt_key]
+        if isinstance(chosen, str) and chosen.strip():
+            return chosen
+        return asset_default
+
+    def get_attack_suggestion(
+        self,
+        input_data: str,
+        model_name: str | None = None,
+        *,
+        prompt_key: str = "asset",
+    ) -> dict:
         """
         Generate attack suggestions using LLM
 
         Args:
             input_data: Reconnaissance data
+            model_name: Optional OpenAI model override
+            prompt_key: One of asset, target, scope, organization (system prompt selection)
 
         Returns:
             dict: Response containing status and description
         """
         try:
-            # Validate both input data and model name
             validated_input = self._validate_input(input_data, model_name)
 
-            # Get response from appropriate provider
             if self.provider == LLMProvider.OLLAMA:
-                response_content = self._get_ollama_response(validated_input)
+                system_prompt = self._resolve_attack_system_prompt(prompt_key)
+                response_content = self._get_ollama_response(validated_input, system_prompt)
             else:
-                response_content = self._get_openai_response(validated_input, model_name)
+                openai_system_prompt, openai_chat_kwargs = self._attack_openai_prompt_and_chat_kwargs(prompt_key)
+                response_content = self._get_openai_response(
+                    validated_input,
+                    model_name,
+                    openai_system_prompt,
+                    openai_chat_kwargs,
+                )
 
             return {"status": True, "description": response_content, "input": input_data, "model_name": model_name}
 
@@ -253,14 +313,44 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
                 level="error",
                 exc_info=True,
             )
-            return {"status": False, "error": str(e), "input": input_data, "model_name": model_name}
+            return {
+                "status": False,
+                "error": get_safe_user_message(e, None),
+                "input": input_data,
+                "model_name": model_name,
+            }
 
-    def _get_ollama_response(self, description: str) -> str:
+    def _get_ollama_response(self, description: str, system_prompt: str) -> str:
         """Get response from Ollama"""
-        prompt = f"{self.config['prompts']['attack']}\nUser: {description}"
+        prompt = "%s\nUser: %s" % (system_prompt, description)
         return self.ollama(prompt)
 
-    def _get_openai_response(self, description: str, model_name: str) -> str:
+    def _attack_openai_prompt_and_chat_kwargs(self, prompt_key: str) -> tuple[str, Dict[str, Any]]:
+        """Resolve system prompt and OpenAI ``ChatCompletion`` kwargs for ``prompt_key`` together."""
+        return (
+            self._resolve_attack_system_prompt(prompt_key),
+            self._build_attack_openai_chat_kwargs(prompt_key),
+        )
+
+    def _build_attack_openai_chat_kwargs(self, prompt_key: str) -> Dict[str, Any]:
+        raw = dict(self._get_provider_config())
+        raw.pop("max_tokens_aggregate", None)
+        allowed: Dict[str, Any] = {}
+        for key in ("max_tokens", "temperature"):
+            if key in raw:
+                allowed[key] = raw[key]
+        if prompt_key in ATTACK_PROMPT_KEYS_OPENAI_AGGREGATE:
+            openai_cfg = self.config["providers"]["openai"]
+            allowed["max_tokens"] = openai_cfg.get("max_tokens_aggregate", DEFAULT_OPENAI_MAX_TOKENS_AGGREGATE)
+        return allowed
+
+    def _get_openai_response(
+        self,
+        description: str,
+        model_name: str,
+        system_prompt: str,
+        openai_chat_kwargs: Dict[str, Any],
+    ) -> str:
         """Get response from OpenAI"""
         if not self.api_key:
             raise ValueError("OpenAI API Key not set")
@@ -268,11 +358,11 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
         openai.api_key = self.api_key
 
         response = openai.ChatCompletion.create(
-            model=model_name,
+            model=model_name or self.model_name,
             messages=[
-                {"role": "system", "content": self.config["prompts"]["attack"]},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": description},
             ],
-            **self._get_provider_config(),
+            **openai_chat_kwargs,
         )
         return response["choices"][0]["message"]["content"]

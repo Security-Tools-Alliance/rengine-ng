@@ -3786,18 +3786,31 @@ function endpoint_datatable_col_visibility(endpoint_table, columns){
 
 const ATTACK_SURFACE_ENTITY_SUBDOMAIN = 'subdomain';
 const ATTACK_SURFACE_ENTITY_IP = 'ip';
+const ATTACK_SURFACE_ENTITY_TARGET = 'target';
+const ATTACK_SURFACE_ENTITY_SCOPE = 'scope';
+const ATTACK_SURFACE_ENTITY_ORGANIZATION = 'organization';
 if (typeof window !== 'undefined') {
     window.RENGINE_ATTACK_SURFACE_ENTITY_SUBDOMAIN = ATTACK_SURFACE_ENTITY_SUBDOMAIN;
     window.RENGINE_ATTACK_SURFACE_ENTITY_IP = ATTACK_SURFACE_ENTITY_IP;
+    window.RENGINE_ATTACK_SURFACE_ENTITY_TARGET = ATTACK_SURFACE_ENTITY_TARGET;
+    window.RENGINE_ATTACK_SURFACE_ENTITY_SCOPE = ATTACK_SURFACE_ENTITY_SCOPE;
+    window.RENGINE_ATTACK_SURFACE_ENTITY_ORGANIZATION = ATTACK_SURFACE_ENTITY_ORGANIZATION;
 }
 
 function requireAttackEntityForLlm(attackEntity) {
-    // API contract: only these two literals (not window.RENGINE_* aliases).
-    if (attackEntity === 'subdomain' || attackEntity === 'ip') {
+    if (
+        attackEntity === ATTACK_SURFACE_ENTITY_SUBDOMAIN ||
+        attackEntity === ATTACK_SURFACE_ENTITY_IP ||
+        attackEntity === ATTACK_SURFACE_ENTITY_TARGET ||
+        attackEntity === ATTACK_SURFACE_ENTITY_SCOPE ||
+        attackEntity === ATTACK_SURFACE_ENTITY_ORGANIZATION
+    ) {
         return attackEntity;
     }
     throw new Error(
-        'Invalid attackEntity "' + String(attackEntity) + '". Expected "subdomain" or "ip".'
+        'Invalid attackEntity "' +
+            String(attackEntity) +
+            '". Expected subdomain, ip, target, scope, or organization.'
     );
 }
 
@@ -3812,14 +3825,20 @@ async function send_llm__attack_surface_api_request(options) {
     const kind = requireAttackEntityForLlm(attackEntity);
     const numericId = id != null && id !== '' ? Number(id) : NaN;
     if (!Number.isFinite(numericId) || numericId <= 0) {
-        throw new Error('Invalid entity id for attack surface request.');
+        throw new Error(
+            'Invalid attack entity id for LLM query: ' + String(id) + '. Expected a positive number.'
+        );
     }
 
     const params = new URLSearchParams({
         force_regenerate: String(force_regenerate),
         check_only: String(check_only)
     });
-    params.append(window.RengineTargetEntityKind.llmQueryParamForKind(kind), String(numericId));
+    const idParamName = window.RengineTargetEntityKind.llmQueryParamForKind(kind);
+    if (!idParamName) {
+        throw new Error('Unknown attack entity kind for LLM query parameter: ' + String(kind));
+    }
+    params.append(idParamName, String(numericId));
     if (llm_model) {
         params.append('llm_model', llm_model);
     }
@@ -3873,6 +3892,10 @@ async function regenerateAttackSurface(endpoint_url, id, attackEntity = ATTACK_S
     }
 }
 
+/**
+ * Opens the attack-surface flow. Arguments: (endpointUrl, entityId, kind).
+ * For rendering an existing API payload, use showAttackSurfaceModal(data, endpointUrl, entityId, kind) instead.
+ */
 async function show_attack_surface_modal(endpoint_url, id, attackEntity = ATTACK_SURFACE_ENTITY_SUBDOMAIN) {
     try {
         const kind = requireAttackEntityForLlm(attackEntity);
@@ -4102,9 +4125,11 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id, attackEntity = ATTA
 
         if (result.isConfirmed) {
             showSwalLoader("Deleting...", "Please wait while the analysis is being deleted.");
-            const idParam = window.RengineTargetEntityKind.isIp(kind)
-                ? `ip_address_id=${encodeURIComponent(id)}`
-                : `subdomain_id=${encodeURIComponent(id)}`;
+            const paramName = window.RengineTargetEntityKind.llmQueryParamForKind(kind);
+            if (!paramName) {
+                throw new Error('Unknown attack entity kind for delete: ' + String(kind));
+            }
+            const idParam = `${paramName}=${encodeURIComponent(id)}`;
             const response = await fetch(`${endpoint_url}?${idParam}`, {
                 method: 'DELETE',
                 headers: {
@@ -4138,9 +4163,21 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id, attackEntity = ATTA
     }
 }
 
+/** @param data JSON body from the attack-surface API (description; subdomain_name optional, falls back for header). */
 function showAttackSurfaceModal(data, endpoint_url, id, attackEntity = ATTACK_SURFACE_ENTITY_SUBDOMAIN) {
     const kind = requireAttackEntityForLlm(attackEntity);
-    const header = 'Attack Surface Suggestion for ' + data.subdomain_name;
+    let titlePrefix = 'Attack surface suggestion for';
+    if (kind === ATTACK_SURFACE_ENTITY_IP) {
+        titlePrefix = 'Attack surface suggestion for IP';
+    } else if (kind === ATTACK_SURFACE_ENTITY_TARGET) {
+        titlePrefix = 'Target attack surface';
+    } else if (kind === ATTACK_SURFACE_ENTITY_SCOPE) {
+        titlePrefix = 'Scope attack surface';
+    } else if (kind === ATTACK_SURFACE_ENTITY_ORGANIZATION) {
+        titlePrefix = 'Organization attack surface';
+    }
+    const subdomainName = data.subdomain_name || '(unnamed)';
+    const header = titlePrefix + ': ' + subdomainName;
     const bodyHtml =
         DOMPurify.sanitize(data.description) +
         `<div class="text-center mt-4">

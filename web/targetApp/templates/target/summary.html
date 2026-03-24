@@ -63,6 +63,11 @@ Target Summary
 	</div>
 </div>
 <input type="hidden" name="summary_identifier" value="{{target.id}}" id="summary_identifier_val">
+<div class="d-flex justify-content-end mb-2">
+	<button type="button" class="btn btn-sm btn-soft-primary" id="btn-target-summary-attack-surface">
+		<i class="mdi mdi-robot-outline me-1"></i> LLM attack surface
+	</button>
+</div>
 
 <div class="tab-content no-padding-tab">
 	<div class="tab-pane show active" id="summary-tab">
@@ -612,6 +617,16 @@ const vuln_datatable_length_menu = window.getRengineDatatableLengthMenu ? window
 
 $(document).ready(function(){
 	{% include 'base/_items/most_common_cve_cwe_tags.js' %}
+	$('#btn-target-summary-attack-surface').on('click', function () {
+		const endpoint = window.RengineTargetEntityKind && typeof window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls === 'function'
+			? window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls()
+			: null;
+		if (!endpoint || typeof show_attack_surface_modal !== 'function') {
+			return;
+		}
+		const tid = $('#summary_identifier_val').val();
+		show_attack_surface_modal(endpoint, tid, 'target');
+	});
 	const ps = new PerfectScrollbar(document.querySelector('.mt-container'));
 	const ps1 = new PerfectScrollbar(document.querySelector('.endpoint-search'));
 	const ps2 = new PerfectScrollbar(document.querySelector('.vulnerability-search'));

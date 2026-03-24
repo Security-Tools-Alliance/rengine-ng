@@ -96,6 +96,13 @@ from api.helpers.ip_action_response import (
     IP_ERR_TARGET_NOT_FOUND,
     ip_action_error,
 )
+from api.helpers.llm_attack_surface_access import (
+    get_ip_address_for_llm_attack_surface,
+    get_organization_for_llm_attack_surface,
+    get_scope_for_llm_attack_surface,
+    get_subdomain_for_llm_attack_surface,
+    get_target_for_llm_attack_surface,
+)
 from api.helpers.query import (
     build_ip_datatable_base_queryset,
     build_subdomain_datatable_queryset,
@@ -113,10 +120,18 @@ from api.helpers.secator_scan_target_request import (
     positive_ip_ids,
 )
 from api.helpers.subdomain_ip_xor import (
+    ATTACK_SURFACE_ENTITY_XOR_MESSAGE,
+    ATTACK_SURFACE_KIND_IP,
+    ATTACK_SURFACE_KIND_ORGANIZATION,
+    ATTACK_SURFACE_KIND_SCOPE,
+    ATTACK_SURFACE_KIND_SUBDOMAIN,
+    ATTACK_SURFACE_KIND_TARGET,
+    attack_surface_entity_query_params_invalid_error,
     both_subdomain_and_ip_provided_error,
+    resolve_attack_surface_entity_kind_and_pk,
     subdomain_ids_conflict_when_ip_address_ids_requested_error,
+    xor_attack_surface_entity_ids_error,
     xor_subdomain_ids_or_ip_address_ids_error,
-    xor_subdomain_ip_single_ids_error,
 )
 from api.mixins import (
     AdvancedSearchMixin,
@@ -141,6 +156,11 @@ from reNgine.definitions import (
     MAX_ASSET_PREVIEW_BYTES,
     NUCLEI_SEVERITY_MAP,
     RUNNING_TASK,
+)
+from reNgine.llm.attack_surface_context import (
+    build_context_for_organization,
+    build_context_for_scope,
+    build_context_for_target,
 )
 from reNgine.llm.config import DEFAULT_GPT_MODELS, MODEL_REQUIREMENTS, OLLAMA_INSTANCE, RECOMMENDED_MODELS
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
@@ -544,33 +564,108 @@ class AvailableOllamaModels(APIView):
 
 
 class LLMAttackSuggestion(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _persist_attack_surface_llm_result(
+        self,
+        obj,
+        response: dict,
+        selected_model: str | None,
+    ) -> None:
+        if not response.get("status"):
+            return
+        raw_desc = response.get("description")
+        if isinstance(raw_desc, str) and raw_desc.strip():
+            if selected_model:
+                markdown_content = "[LLM:%s]\n%s" % (selected_model, raw_desc)
+            else:
+                markdown_content = "[LLM]\n%s" % (raw_desc,)
+            obj.attack_surface = markdown_content
+            obj.save()
+            response["description"] = convert_markdown_to_html(markdown_content)
+        else:
+            response["description"] = ""
+
     def get(self, request):
         req = request
         subdomain_id = safe_int_cast(req.query_params.get("subdomain_id"))
         ip_address_id = safe_int_cast(req.query_params.get("ip_address_id"))
+        target_id = safe_int_cast(req.query_params.get("target_id"))
+        scope_id = safe_int_cast(req.query_params.get("scope_id"))
+        organization_id = safe_int_cast(req.query_params.get("organization_id"))
         force_regenerate = req.query_params.get("force_regenerate") == "true"
         check_only = req.query_params.get("check_only") == "true"
-        selected_model = req.query_params.get("llm_model")  # Get selected model from request
+        selected_model = req.query_params.get("llm_model")
 
-        # Exactly one of subdomain_id / ip_address_id (xor_subdomain_ip_single_ids_error).
-        if err := xor_subdomain_ip_single_ids_error(subdomain_id, ip_address_id):
+        if err := attack_surface_entity_query_params_invalid_error(req.query_params):
             return Response({"status": False, "error": err}, status=HTTP_400_BAD_REQUEST)
 
-        if subdomain_id:
-            return self._get_for_subdomain(subdomain_id, force_regenerate, check_only, selected_model)
-        return self._get_for_ip_address(ip_address_id, force_regenerate, check_only, selected_model)
+        if err := xor_attack_surface_entity_ids_error(
+            subdomain_id,
+            ip_address_id,
+            target_id,
+            scope_id,
+            organization_id,
+        ):
+            return Response({"status": False, "error": err}, status=HTTP_400_BAD_REQUEST)
+
+        resolved = resolve_attack_surface_entity_kind_and_pk(
+            subdomain_id,
+            ip_address_id,
+            target_id,
+            scope_id,
+            organization_id,
+        )
+        if resolved is None:
+            return Response(
+                {"status": False, "error": ATTACK_SURFACE_ENTITY_XOR_MESSAGE},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        kind, entity_pk = resolved
+        return self._dispatch_attack_surface_get(
+            request.user,
+            kind,
+            entity_pk,
+            force_regenerate,
+            check_only,
+            selected_model,
+        )
+
+    def _dispatch_attack_surface_get(
+        self,
+        user,
+        kind: str,
+        entity_pk: int,
+        force_regenerate: bool,
+        check_only: bool,
+        selected_model: str | None,
+    ) -> Response:
+        dispatch = {
+            ATTACK_SURFACE_KIND_SUBDOMAIN: self._get_for_subdomain,
+            ATTACK_SURFACE_KIND_IP: self._get_for_ip_address,
+            ATTACK_SURFACE_KIND_TARGET: self._get_for_target,
+            ATTACK_SURFACE_KIND_SCOPE: self._get_for_scope,
+            ATTACK_SURFACE_KIND_ORGANIZATION: self._get_for_organization,
+        }
+        handler = dispatch.get(kind)
+        if handler is None:
+            return Response(
+                {"status": False, "error": "Invalid attack surface entity type"},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        return handler(user, entity_pk, force_regenerate, check_only, selected_model)
 
     def _get_for_subdomain(
         self,
+        user,
         subdomain_id: int,
         force_regenerate: bool,
         check_only: bool,
         selected_model: str | None,
     ) -> Response:
-        try:
-            subdomain = Subdomain.objects.get(id=subdomain_id)
-        except Subdomain.DoesNotExist:
-            return Response({"status": False, "error": "Subdomain not found with id %s" % (subdomain_id,)})
+        subdomain = get_subdomain_for_llm_attack_surface(user, subdomain_id)
+        if subdomain is None:
+            return Response({"status": False, "error": "Subdomain not found"}, status=HTTP_404_NOT_FOUND)
 
         if subdomain.attack_surface and not force_regenerate and not is_empty_attack_surface(subdomain.attack_surface):
             sanitized_html = subdomain.formatted_attack_surface
@@ -606,33 +701,26 @@ class LLMAttackSuggestion(APIView):
         )
 
         llm = LLMAttackSuggestionGenerator()
-        response = llm.get_attack_suggestion(input_data, selected_model)
+        response = llm.get_attack_suggestion(input_data, selected_model, prompt_key="asset")
         response["subdomain_name"] = subdomain.name
-
-        if response.get("status"):
-            raw_desc = response.get("description")
-            if isinstance(raw_desc, str) and raw_desc.strip():
-                markdown_content = "[LLM:%s]\n%s" % (selected_model, raw_desc)
-                subdomain.attack_surface = markdown_content
-                subdomain.save()
-                response["description"] = convert_markdown_to_html(markdown_content)
-            else:
-                response["description"] = ""
-
+        self._persist_attack_surface_llm_result(subdomain, response, selected_model)
         return Response(response)
 
     def _get_for_ip_address(
         self,
+        user,
         ip_address_id: int,
         force_regenerate: bool,
         check_only: bool,
         selected_model: str | None,
     ) -> Response:
-        try:
-            ip_row = IpAddress.objects.prefetch_related("ports", "ip_addresses").get(id=ip_address_id)
-        except IpAddress.DoesNotExist:
-            return Response({"status": False, "error": "IP address not found with id %s" % (ip_address_id,)})
-
+        ip_row = get_ip_address_for_llm_attack_surface(
+            user,
+            ip_address_id,
+            prefetch_attack_surface=True,
+        )
+        if ip_row is None:
+            return Response({"status": False, "error": "IP address not found"}, status=HTTP_404_NOT_FOUND)
         display_name = ip_row.address or ("IP #%s" % ip_address_id)
         if ip_row.attack_surface and not force_regenerate and not is_empty_attack_surface(ip_row.attack_surface):
             sanitized_html = ip_row.formatted_attack_surface
@@ -672,38 +760,158 @@ class LLMAttackSuggestion(APIView):
         )
 
         llm = LLMAttackSuggestionGenerator()
-        response = llm.get_attack_suggestion(input_data, selected_model)
+        response = llm.get_attack_suggestion(input_data, selected_model, prompt_key="asset")
         response["subdomain_name"] = display_name
-
-        if response.get("status"):
-            raw_desc = response.get("description")
-            if isinstance(raw_desc, str) and raw_desc.strip():
-                markdown_content = "[LLM:%s]\n%s" % (selected_model, raw_desc)
-                ip_row.attack_surface = markdown_content
-                ip_row.save()
-                response["description"] = convert_markdown_to_html(markdown_content)
-            else:
-                response["description"] = ""
-
+        self._persist_attack_surface_llm_result(ip_row, response, selected_model)
         return Response(response)
+
+    def _get_for_target(
+        self,
+        user,
+        target_id: int,
+        force_regenerate: bool,
+        check_only: bool,
+        selected_model: str | None,
+    ) -> Response:
+        target = get_target_for_llm_attack_surface(user, target_id)
+        if target is None:
+            return Response({"status": False, "error": "Target not found"}, status=HTTP_404_NOT_FOUND)
+
+        display_name = "Target: %s" % (target.value,)
+        if target.attack_surface and not force_regenerate and not is_empty_attack_surface(target.attack_surface):
+            return Response(
+                {
+                    "status": True,
+                    "subdomain_name": display_name,
+                    "description": target.formatted_attack_surface,
+                    "cached": True,
+                }
+            )
+        if check_only:
+            return Response({"status": True, "subdomain_name": display_name, "description": None})
+
+        input_data = build_context_for_target(target)
+        llm = LLMAttackSuggestionGenerator()
+        response = llm.get_attack_suggestion(input_data, selected_model, prompt_key="target")
+        response["subdomain_name"] = display_name
+        self._persist_attack_surface_llm_result(target, response, selected_model)
+        return Response(response)
+
+    def _get_for_scope(
+        self,
+        user,
+        scope_id: int,
+        force_regenerate: bool,
+        check_only: bool,
+        selected_model: str | None,
+    ) -> Response:
+        scope = get_scope_for_llm_attack_surface(user, scope_id)
+        if scope is None:
+            return Response({"status": False, "error": "Scope not found"}, status=HTTP_404_NOT_FOUND)
+
+        display_name = "Scope: %s" % (scope.name,)
+        if scope.attack_surface and not force_regenerate and not is_empty_attack_surface(scope.attack_surface):
+            return Response(
+                {
+                    "status": True,
+                    "subdomain_name": display_name,
+                    "description": scope.formatted_attack_surface,
+                    "cached": True,
+                }
+            )
+        if check_only:
+            return Response({"status": True, "subdomain_name": display_name, "description": None})
+
+        input_data = build_context_for_scope(scope)
+        llm = LLMAttackSuggestionGenerator()
+        response = llm.get_attack_suggestion(input_data, selected_model, prompt_key="scope")
+        response["subdomain_name"] = display_name
+        self._persist_attack_surface_llm_result(scope, response, selected_model)
+        return Response(response)
+
+    def _get_for_organization(
+        self,
+        user,
+        organization_id: int,
+        force_regenerate: bool,
+        check_only: bool,
+        selected_model: str | None,
+    ) -> Response:
+        organization = get_organization_for_llm_attack_surface(user, organization_id)
+        if organization is None:
+            return Response({"status": False, "error": "Organization not found"}, status=HTTP_404_NOT_FOUND)
+
+        display_name = "Organization: %s" % (organization.name,)
+        if (
+            organization.attack_surface
+            and not force_regenerate
+            and not is_empty_attack_surface(organization.attack_surface)
+        ):
+            return Response(
+                {
+                    "status": True,
+                    "subdomain_name": display_name,
+                    "description": organization.formatted_attack_surface,
+                    "cached": True,
+                }
+            )
+        if check_only:
+            return Response({"status": True, "subdomain_name": display_name, "description": None})
+
+        input_data = build_context_for_organization(organization)
+        llm = LLMAttackSuggestionGenerator()
+        response = llm.get_attack_suggestion(input_data, selected_model, prompt_key="organization")
+        response["subdomain_name"] = display_name
+        self._persist_attack_surface_llm_result(organization, response, selected_model)
+        return Response(response)
+
+    def _delete_attack_surface_entity(self, user, kind: str, entity_pk: int) -> Response:
+        getters = {
+            ATTACK_SURFACE_KIND_SUBDOMAIN: get_subdomain_for_llm_attack_surface,
+            ATTACK_SURFACE_KIND_IP: get_ip_address_for_llm_attack_surface,
+            ATTACK_SURFACE_KIND_TARGET: get_target_for_llm_attack_surface,
+            ATTACK_SURFACE_KIND_SCOPE: get_scope_for_llm_attack_surface,
+            ATTACK_SURFACE_KIND_ORGANIZATION: get_organization_for_llm_attack_surface,
+        }
+        getter = getters.get(kind)
+        if getter is None:
+            return Response({"status": False, "error": "Invalid attack surface entity type"}, status=400)
+        obj = getter(user, entity_pk)
+        if obj is None:
+            return Response({"status": False, "error": "Entity not found"}, status=404)
+        obj.attack_surface = None
+        obj.save()
+        return Response({"status": True, "message": "Attack surface analysis deleted successfully"})
 
     def delete(self, request):
         subdomain_id = safe_int_cast(request.query_params.get("subdomain_id"))
         ip_address_id = safe_int_cast(request.query_params.get("ip_address_id"))
-        if err := xor_subdomain_ip_single_ids_error(subdomain_id, ip_address_id):
+        target_id = safe_int_cast(request.query_params.get("target_id"))
+        scope_id = safe_int_cast(request.query_params.get("scope_id"))
+        organization_id = safe_int_cast(request.query_params.get("organization_id"))
+        if err := attack_surface_entity_query_params_invalid_error(request.query_params):
             return Response({"status": False, "error": err}, status=400)
+
+        if err := xor_attack_surface_entity_ids_error(
+            subdomain_id,
+            ip_address_id,
+            target_id,
+            scope_id,
+            organization_id,
+        ):
+            return Response({"status": False, "error": err}, status=400)
+        resolved = resolve_attack_surface_entity_kind_and_pk(
+            subdomain_id,
+            ip_address_id,
+            target_id,
+            scope_id,
+            organization_id,
+        )
+        if resolved is None:
+            return Response({"status": False, "error": ATTACK_SURFACE_ENTITY_XOR_MESSAGE}, status=400)
+        kind, entity_pk = resolved
         try:
-            if subdomain_id:
-                subdomain = Subdomain.objects.get(id=subdomain_id)
-                subdomain.attack_surface = None
-                subdomain.save()
-            else:
-                ip_row = IpAddress.objects.get(id=ip_address_id)
-                ip_row.attack_surface = None
-                ip_row.save()
-            return Response({"status": True, "message": "Attack surface analysis deleted successfully"})
-        except (Subdomain.DoesNotExist, IpAddress.DoesNotExist):
-            return Response({"status": False, "error": "Entity not found"}, status=404)
+            return self._delete_attack_surface_entity(request.user, kind, entity_pk)
         except Exception as e:
             logger.log_line(
                 PREFIX_API,

@@ -1062,6 +1062,8 @@ class Subdomain(models.Model):
     @property
     def formatted_attack_surface(self):
         """Format description as HTML with proper styling"""
+        if not self.attack_surface:
+            return ""
         return convert_markdown_to_html(self.attack_surface)
 
     @property
@@ -2204,6 +2206,8 @@ class IpAddress(models.Model):
 
     @property
     def formatted_attack_surface(self):
+        if not self.attack_surface:
+            return ""
         return convert_markdown_to_html(self.attack_surface)
 
     @classmethod

@@ -35,6 +35,9 @@ Organization Dashboard
           </ul>
         </div>
         {% endif %}
+        <button type="button" class="btn btn-soft-primary" id="btn-org-dashboard-attack-surface">
+          <i class="mdi mdi-robot-outline me-1"></i> LLM attack surface
+        </button>
         <a class="btn btn-soft-secondary" href="{% url 'list_organization' current_project.slug %}"><i class="fe-list me-1"></i> All organizations</a>
       </div>
     </div>
@@ -252,3 +255,19 @@ Organization Dashboard
   </div>
 </div>
 {% endblock main_content %}
+
+{% block page_level_script %}
+<script>
+$(document).ready(function () {
+  $('#btn-org-dashboard-attack-surface').on('click', function () {
+    const endpoint = window.RengineTargetEntityKind && typeof window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls === 'function'
+      ? window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls()
+      : null;
+    if (!endpoint || typeof show_attack_surface_modal !== 'function') {
+      return;
+    }
+    show_attack_surface_modal(endpoint, String({{ organization.id }}), 'organization');
+  });
+});
+</script>
+{% endblock page_level_script %}

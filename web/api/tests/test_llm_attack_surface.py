@@ -1,0 +1,124 @@
+"""API tests for LLM attack-surface endpoint (aggregate entities and XOR validation)."""
+
+from unittest.mock import patch
+
+from django.urls import reverse
+from django.utils import timezone
+from rest_framework import status
+
+from dashboard.models import Project
+from targetApp.models import Target
+from utils.test_base import BaseTestCase
+
+
+class LLMAttackSurfaceApiTests(BaseTestCase):
+    def test_get_without_entity_id_returns_400(self) -> None:
+        url = reverse("api:llm_get_possible_attacks")
+        response = self.client.get(url, {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data.get("status", True))
+
+    def test_get_with_two_entity_ids_returns_400(self) -> None:
+        url = reverse("api:llm_get_possible_attacks")
+        response = self.client.get(
+            url,
+            {"target_id": self.data_generator.target.id, "scope_id": 99999},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_get_with_non_positive_target_id_and_valid_organization_returns_400(self) -> None:
+        url = reverse("api:llm_get_possible_attacks")
+        oid = self.data_generator.organization.id
+        response = self.client.get(url, {"target_id": "0", "organization_id": oid})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data.get("status", True))
+        self.assertIn("target_id", (response.data.get("error") or "").lower())
+
+    def test_get_target_check_only_without_cache(self) -> None:
+        url = reverse("api:llm_get_possible_attacks")
+        response = self.client.get(
+            url,
+            {
+                "target_id": self.data_generator.target.id,
+                "check_only": "true",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertIsNone(response.data.get("description"))
+
+    @patch("reNgine.llm.llm.LLMAttackSuggestionGenerator.get_attack_suggestion")
+    def test_get_target_force_regenerate_calls_llm(self, mock_llm) -> None:
+        mock_llm.return_value = {
+            "status": True,
+            "description": "Synthetic aggregate analysis",
+            "input": "",
+            "model_name": None,
+        }
+        url = reverse("api:llm_get_possible_attacks")
+        response = self.client.get(
+            url,
+            {
+                "target_id": self.data_generator.target.id,
+                "llm_model": "unit-test-model",
+                "force_regenerate": "true",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        mock_llm.assert_called_once()
+        self.assertIn("Synthetic aggregate analysis", response.data.get("description", ""))
+
+    @patch("reNgine.llm.llm.LLMAttackSuggestionGenerator.get_attack_suggestion")
+    def test_get_target_persists_generic_llm_header_when_llm_model_omitted(self, mock_llm) -> None:
+        mock_llm.return_value = {
+            "status": True,
+            "description": "Analysis body",
+            "input": "",
+            "model_name": None,
+        }
+        url = reverse("api:llm_get_possible_attacks")
+        tid = self.data_generator.target.id
+        response = self.client.get(url, {"target_id": tid, "force_regenerate": "true"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.data_generator.target.refresh_from_db()
+        stored = self.data_generator.target.attack_surface or ""
+        self.assertTrue(stored.startswith("[LLM]\n"), msg=stored)
+        self.assertNotIn("[LLM:None]", stored)
+
+    def test_get_target_from_other_project_returns_404(self) -> None:
+        # BaseTestCase user is a superuser; project filter is skipped for superusers.
+        self.user.is_superuser = False
+        self.user.save(update_fields=["is_superuser"])
+        other = Project.objects.create(
+            name="Isolated Project LLM AS",
+            slug="isolated-proj-llm-as",
+            insert_date=timezone.now(),
+        )
+        alien = Target.objects.create(
+            project=other,
+            value="isolated.anon.example.test",
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        url = reverse("api:llm_get_possible_attacks")
+        response = self.client.get(url, {"target_id": alien.pk})
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_delete_target_from_other_project_returns_404(self) -> None:
+        self.user.is_superuser = False
+        self.user.save(update_fields=["is_superuser"])
+        other = Project.objects.create(
+            name="Isolated Project LLM AS Del",
+            slug="isolated-proj-llm-as-del",
+            insert_date=timezone.now(),
+        )
+        alien = Target.objects.create(
+            project=other,
+            value="isolated-del.anon.example.test",
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        url = reverse("api:llm_get_possible_attacks")
+        response = self.client.delete("%s?target_id=%s" % (url, alien.pk))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

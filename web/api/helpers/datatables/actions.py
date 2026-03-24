@@ -22,6 +22,11 @@ def get_datatable_action_urls(project_slug: str) -> dict:
     Returns dict with keys 'subdomain', 'ip', 'vulnerability', 'target', each mapping to
     the URL dict expected by the corresponding renderer.
 
+    ``target['attackSurface']`` is the LLM attack-surface API URL for aggregate analysis
+    (target summary, organization dashboard, scope update) as well as row-less flows.
+    Keep ``RengineTargetEntityKind.datatableTargetAttackSurfaceUrlKey`` in
+    ``static/custom/target_entity_kind.js`` aligned with this key name.
+
     For the scan-detail IP table, ``ip['attackSurface']``, ``ip['toggleIpImportant']``, and
     ``ip['unlinkScanIps']`` enable the matching action buttons; for the target-summary IP table,
     ``ip['unlinkTargetIps']`` enables per-row removal from the target. Missing keys omit those
@@ -46,6 +51,7 @@ def get_datatable_action_urls(project_slug: str) -> dict:
             "deleteVulnerability": reverse("api:delete_vulnerability"),
         },
         "target": {
+            "attackSurface": reverse("api:llm_get_possible_attacks"),
             "targetSummaryBase": _target_url_base(reverse("target_summary", args=[project_slug, 0])),
             "startScanBase": _target_url_base(reverse("start_scan", args=[project_slug, 0])),
             "scheduleScanBase": _target_url_base(reverse("schedule_scan", args=[project_slug, 0])),

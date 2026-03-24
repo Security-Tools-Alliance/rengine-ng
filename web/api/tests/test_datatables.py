@@ -115,6 +115,7 @@ class TestGetDatatableActionUrls(BaseTestCase):
         slug = self.data_generator.project.slug
         urls = get_datatable_action_urls(slug)
         target = urls["target"]
+        self.assertIn("attackSurface", target)
         self.assertIn("targetSummaryBase", target)
         self.assertIn("startScanBase", target)
         self.assertIn("scheduleScanBase", target)

@@ -97,9 +97,62 @@ Focus on actionable, evidence-based suggestions. Prioritize attacks based on fea
 Avoid theoretical attacks without supporting evidence from the reconnaissance data.
 """
 
+ATTACK_SUGGESTION_TARGET_AGGREGATE_PROMPT = """
+You are an advanced penetration tester. You receive aggregated reconnaissance for a single Target
+(multiple scans, subdomains, IPs, vulnerability summary). The user message uses fixed sections
+(=== SUBDOMAINS ===, === IP_ADDRESSES ===, === VULNERABILITIES ===, etc.). Sections may be empty or
+explicitly marked truncated—state that clearly; do not invent assets not present in the data.
+
+Provide:
+1. ATTACK SURFACE OVERVIEW — cross-cutting entry points, shared infrastructure, CDN/WAF patterns.
+2. PRIORITIZED ATTACK VECTORS — ranked by feasibility and impact; tie each to specific signals from the data.
+3. PROGRAM NOTES — scope boundaries implied by targets/hosts; MITRE ATT&CK mapping where evidence supports it.
+4. RELEVANT SECURITY CONTEXT — CVEs/advisories only when tied to observed tech or services; verified HTTP/HTTPS URLs only.
+
+Stay evidence-based. If data is thin, say so and suggest what additional recon would help.
+"""
+
+ATTACK_SUGGESTION_SCOPE_AGGREGATE_PROMPT = """
+You are an advanced penetration tester. You receive aggregated reconnaissance for a Scope (one or more Targets,
+plus scope metadata and scan_config summary). Respect engagement boundaries implied by scope type, dates, and
+organization context in the header. Sections may be empty or truncated—acknowledge gaps; do not fabricate.
+
+Provide:
+1. SCOPE-LEVEL ATTACK SURFACE — how targets relate; shared dependencies; wildcard/CDN clusters.
+2. PRIORITIZED ATTACK VECTORS — across the scope; dependencies between targets when visible in the data.
+3. OPERATIONAL CONSIDERATIONS — what to validate first given the scope metadata.
+4. RELEVANT SECURITY CONTEXT — evidence-backed CVEs/advisories; verified HTTP/HTTPS URLs only.
+
+Stay evidence-based and aligned with the supplied recon sections.
+"""
+
+ATTACK_SUGGESTION_ORGANIZATION_AGGREGATE_PROMPT = """
+You are an advanced penetration tester. You receive aggregated reconnaissance for an entire Organization
+(all associated targets). The header lists organization metadata and scan_config summary. Data may be large
+and partially truncated—if a section says truncated or lists row caps, repeat that limitation in your answer.
+
+Provide:
+1. ENTERPRISE / PROGRAM ATTACK SURFACE — major clusters, repeated tech stacks, critical exposed services.
+2. PRIORITIZED ATTACK VECTORS — portfolio-wide priorities; note concentration risk (many hosts, same stack).
+3. STRATEGIC RECOMMENDATIONS — phased testing order grounded in the vulnerability summary and host data.
+4. RELEVANT SECURITY CONTEXT — only when tied to observed data; verified HTTP/HTTPS URLs only.
+
+Do not invent findings. When the vulnerability list is summary-only, treat it as indicative, not exhaustive.
+"""
+
+ATTACK_PROMPTS_BY_KEY: Dict[str, str] = {
+    "asset": ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT,
+    "target": ATTACK_SUGGESTION_TARGET_AGGREGATE_PROMPT,
+    "scope": ATTACK_SUGGESTION_SCOPE_AGGREGATE_PROMPT,
+    "organization": ATTACK_SUGGESTION_ORGANIZATION_AGGREGATE_PROMPT,
+}
+
 ###############################################################################
 # LLM CONFIGURATION
 ###############################################################################
+
+# Default max output tokens for aggregate attack-surface prompts (target / scope / organization).
+DEFAULT_OPENAI_MAX_TOKENS_AGGREGATE = 6000
 
 LLM_CONFIG: Dict[str, Any] = {
     "providers": {
@@ -108,6 +161,7 @@ LLM_CONFIG: Dict[str, Any] = {
             "models": ["gpt-4-turbo", "gpt-4", "gpt-3.5-turbo", "gpt-3"],
             "api_version": "2024-02-15",
             "max_tokens": 2000,
+            "max_tokens_aggregate": DEFAULT_OPENAI_MAX_TOKENS_AGGREGATE,
             "temperature": 0.7,
         },
         "ollama": {
@@ -126,7 +180,7 @@ LLM_CONFIG: Dict[str, Any] = {
             "remediation": VULNERABILITY_REMEDIATION_STEPS_PROMPT,
             "references": VULNERABILITY_REFERENCES_PROMPT,
         },
-        "attack": ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT,
+        "attack": ATTACK_PROMPTS_BY_KEY,
     },
 }
 

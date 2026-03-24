@@ -9,6 +9,32 @@
   const safeAttr = window.safeAttr;
   const safeText = window.safeText;
 
+  const LLM_ATTACK_SURFACE_ROW_KIND = {
+    subdomain: "subdomain",
+    ip: "ip",
+    target: "target",
+    scope: "scope",
+    organization: "organization"
+  };
+
+  /**
+   * Single-row LLM attack-surface control (same endpoint as subdomain/IP tables; icon: robot).
+   * kindKey must be one of: subdomain, ip, target, scope, organization.
+   */
+  const renderLlmAttackSurfaceRowButton = function (attackUrl, rowId, kindKey) {
+    const kind = LLM_ATTACK_SURFACE_ROW_KIND[kindKey];
+    if (!attackUrl || !kind || rowId == null || rowId === "") {
+      return "";
+    }
+    const idNum = Number(rowId);
+    if (!Number.isFinite(idNum)) {
+      return "";
+    }
+    return (
+      `<a href="javascript:;" class="btn btn-sm btn-soft-primary bs-tooltip" data-toggle="tooltip" data-placement="top" title="LLM attack surface" onclick="show_attack_surface_modal('${safeAttr(attackUrl)}', ${idNum}, '${kind}')"><i class="mdi mdi-robot-outline"></i></a>`
+    );
+  };
+
   const confirmDeleteRow = function (btn, options) {
     const opts = options || {};
     const deleteUrlAttr = opts.deleteUrlAttr || "data-delete-url";
@@ -95,7 +121,7 @@
       : `<a href="javascript:;" class="btn btn-sm btn-soft-primary bs-tooltip" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" onclick="add_note_for_subdomain(${id}, '${safeName}', '${safeAttr(projectSlug)}')"><i class="fe-file-plus"></i></a>`;
     return (
       '<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">' +
-      `<a href="javascript:;" class="btn btn-sm btn-soft-primary bs-tooltip" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" onclick="show_attack_surface_modal('${safeAttr(urls.attackSurface || "")}', ${id}, 'subdomain')"><i class="fe-eye"></i></a>` +
+      renderLlmAttackSurfaceRowButton(urls.attackSurface || "", id, "subdomain") +
       `<button type="button" class="btn btn-sm btn-soft-primary btn-scan-subdomain bs-tooltip" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" id="${id}"><i class="fe-zap"></i></button>` +
       addNoteHtml +
       `<a href="javascript:;" class="btn btn-sm btn-soft-warning bs-tooltip" data-toggle="tooltip" data-placement="top" title="Mark Important Subdomain" onclick="mark_important_subdomain('${safeAttr(urls.toggleSubdomain || "")}', this, ${id})" id="${id}"><i class="mdi mdi-alert-rhombus-outline"></i></a>` +
@@ -131,10 +157,9 @@
     const unlinkScanUrl = urls.unlinkScanIps || "/api/action/scan/unlink_ips/";
     const unlinkTargetUrl = urls.unlinkTargetIps || "/api/action/target/unlink_ips/";
     const parts = [];
-    if (urls.attackSurface) {
-      parts.push(
-        `<a href="javascript:;" class="btn btn-sm btn-soft-primary bs-tooltip" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" onclick="show_attack_surface_modal('${safeAttr(urls.attackSurface)}', ${id}, 'ip')"><i class="fe-eye"></i></a>`
-      );
+    const asBtn = renderLlmAttackSurfaceRowButton(urls.attackSurface || "", id, "ip");
+    if (asBtn) {
+      parts.push(asBtn);
     }
     parts.push(
       `<button type="button" class="btn btn-sm btn-soft-primary btn-scan-ip bs-tooltip" data-toggle="tooltip" data-placement="top" title="Further Scan IP" data-ip-address="${safeAddress}" id="${id}"><i class="fe-zap"></i></button>`
@@ -183,6 +208,7 @@
     const urls = options && options.urls ? options.urls : {};
     const showFullActions = options && options.showFullActions;
     const id = row.id;
+    const asBtn = renderLlmAttackSurfaceRowButton(urls.attackSurface || "", id, "target");
     const targetSummaryUrl = (urls.targetSummaryBase || "") + id;
     const startScanUrl = (urls.startScanBase || "") + id;
     const scheduleScanUrl = (urls.scheduleScanBase || "") + id;
@@ -192,6 +218,7 @@
     if (showFullActions) {
       return (
         '<div class="d-flex flex-wrap gap-1 justify-content-end">' +
+        asBtn +
         `<a class="btn btn-sm btn-soft-info" href="${safeAttr(targetSummaryUrl)}" data-toggle="tooltip" data-placement="top" title="Target Summary"><i class="fe-info"></i></a>` +
         `<a href="${safeAttr(startScanUrl)}" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="Initiate Scan"><i class="fe-zap"></i></a>` +
         `<a class="btn btn-sm btn-soft-warning" href="${safeAttr(scheduleScanUrl)}" data-toggle="tooltip" data-placement="top" title="Schedule Scan"><i class="fe-clock"></i></a>` +
@@ -202,6 +229,7 @@
     }
     return (
       '<div class="d-flex flex-wrap gap-1 justify-content-end">' +
+      asBtn +
       `<a class="btn btn-sm btn-soft-info" href="${safeAttr(targetSummaryUrl)}" data-toggle="tooltip" data-placement="top" title="Target Summary"><i class="fe-info"></i></a>` +
       "</div>"
     );
@@ -254,5 +282,6 @@
     renderIpActions: renderIpActions,
     renderVulnerabilityActions: renderVulnerabilityActions,
     renderTargetActions: renderTargetActions,
+    renderLlmAttackSurfaceRowButton: renderLlmAttackSurfaceRowButton,
   };
 })(window);

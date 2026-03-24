@@ -225,11 +225,19 @@ $(document).ready(function() {
         className: 'text-center',
         orderable: false,
         render: function(data, type, row) {
-          if (!window.SCOPE_LIST_CAN_INITIATE_SCANS && !window.SCOPE_LIST_CAN_MODIFY_TARGETS) {
-            return '';
-          }
+          const attackUrl = window.RengineTargetEntityKind && typeof window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls === 'function'
+            ? window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls()
+            : null;
+          const llmBtn = window.RengineDatatableActionRenderers && typeof window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton === 'function'
+            ? window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton(attackUrl || '', row.id, 'scope')
+            : '';
           const idEnc = window.safeAttr(String(row.id));
           let html = '<div class="d-flex flex-wrap gap-1 justify-content-center">';
+          html += llmBtn;
+          if (!window.SCOPE_LIST_CAN_INITIATE_SCANS && !window.SCOPE_LIST_CAN_MODIFY_TARGETS) {
+            html += '</div>';
+            return html;
+          }
           if (window.SCOPE_LIST_CAN_INITIATE_SCANS) {
             html += '<a href="' + window.SCOPE_LIST_START_SCAN_BASE + idEnc + '" class="btn btn-sm btn-soft-success" data-toggle="tooltip" title="Quick Scan Entire Scope"><i class="fe-zap"></i></a>';
           }
