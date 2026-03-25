@@ -309,9 +309,7 @@ def _subdomain_block_for_scan_history(scan_id: int) -> str:
         )
     body = "\n".join(lines) + "\n"
     if truncated:
-        body += "\n... (more subdomains found in this scan run; list truncated at %s)\n" % (
-            MAX_SUBDOMAINS_IN_CONTEXT,
-        )
+        body += "\n... (more subdomains found in this scan run; list truncated at %s)\n" % (MAX_SUBDOMAINS_IN_CONTEXT,)
     return body
 
 
