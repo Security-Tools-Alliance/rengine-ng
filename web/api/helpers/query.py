@@ -25,6 +25,68 @@ from reNgine.utilities.db import count_subquery, count_subquery_related
 from reNgine.utilities.subdomain import get_interesting_subdomains
 
 
+def datatable_port_services_serializer_context(port_query_param: Any) -> dict[str, Any]:
+    """
+    Context fragment for ``IpSerializer`` / ``SubdomainSerializer`` ``services_for_request_port``.
+
+    Prefer ``datatable_ip_list_serializer_context`` or ``datatable_subdomain_list_serializer_context``
+    in list views so ``scan_id``, ``target_id``, and port flags stay wired consistently.
+    """
+    port_filter = safe_int_cast(port_query_param)
+    port_filter_ok = isinstance(port_filter, int) and 1 <= port_filter <= 65535
+    return {
+        "filter_port_number": port_filter if port_filter_ok else None,
+        "expose_ip_port_services": port_filter_ok,
+    }
+
+
+def datatable_ip_list_serializer_context(
+    *,
+    scan_id: Any = None,
+    target_id: Any = None,
+    port_query_param: Any = None,
+    ip_subdomain_data: Optional[dict] = None,
+) -> dict[str, Any]:
+    """
+    Serializer context for ``IpSerializer`` list/DataTables (``ListIPs``).
+
+    Includes ``scan_id``, ``target_id``, port-service column flags, and optional
+    ``ip_subdomain_data`` from ``get_ip_subdomain_data``.
+    """
+    ctx: dict[str, Any] = {
+        "scan_id": safe_int_cast(scan_id),
+        "target_id": safe_int_cast(target_id),
+        **datatable_port_services_serializer_context(port_query_param),
+    }
+    if ip_subdomain_data is not None:
+        ctx["ip_subdomain_data"] = ip_subdomain_data
+    return ctx
+
+
+def datatable_subdomain_list_serializer_context(
+    *,
+    scan_id: Any = None,
+    target_id: Any = None,
+    port_query_param: Any = None,
+    datatable_interesting_names: Optional[set[str]] = None,
+) -> dict[str, Any]:
+    """
+    Serializer context for ``SubdomainSerializer`` list/DataTables (``ListSubdomains``).
+
+    Sets ``scan_id`` and ``target_id`` for nested ``IpSerializer`` rows and default-endpoint
+    scoping in ``DefaultEndpointTechnologyMixin``. Omits ``datatable_interesting_names`` when
+    ``None`` so ``get_is_interesting`` keeps its per-row query fallback.
+    """
+    ctx: dict[str, Any] = {
+        "scan_id": safe_int_cast(scan_id),
+        "target_id": safe_int_cast(target_id),
+        **datatable_port_services_serializer_context(port_query_param),
+    }
+    if datatable_interesting_names is not None:
+        ctx["datatable_interesting_names"] = datatable_interesting_names
+    return ctx
+
+
 def get_scan_status_querysets(
     project_slug: str,
     max_running_tasks: int = 20,
@@ -93,6 +155,7 @@ def build_endpoint_datatable_queryset(request: Any) -> QuerySet:
     EndPoint rows for the endpoint DataTable: latest id per http_url within request scope.
     Same filters as EndPointViewSet list / advanced-search distinct values.
     """
+    from reNgine.services.default_endpoint_queryset import apply_endpoint_techs_prefetch
     from startScan.models import EndPoint
 
     req = datatable_request_params(request)
@@ -117,7 +180,7 @@ def build_endpoint_datatable_queryset(request: Any) -> QuerySet:
         endpoints = endpoints.filter(subdomain__id=subdomain_id)
 
     latest_ids = endpoints.values("http_url").annotate(max_id=Max("id")).values_list("max_id", flat=True)
-    return EndPoint.objects.filter(id__in=latest_ids).order_by("-scan_history_id", "-id")
+    return apply_endpoint_techs_prefetch(EndPoint.objects.filter(id__in=latest_ids).order_by("-scan_history_id", "-id"))
 
 
 def build_subdomain_datatable_queryset(
@@ -141,6 +204,7 @@ def build_subdomain_datatable_queryset(
     """
 
     from recon_note.models import TodoNote
+    from reNgine.services.default_endpoint_queryset import apply_endpoint_port_and_techs_related
     from startScan.models import Certificate, EndPoint, Subdomain, SubScan, Vulnerability
 
     subdomains = Subdomain.objects.filter(domain__scan_history__target__project__slug=project_slug)
@@ -229,7 +293,7 @@ def build_subdomain_datatable_queryset(
         "scan_history",
         Prefetch(
             "endpoint_set",
-            queryset=EndPoint.objects.filter(is_default=True),
+            queryset=apply_endpoint_port_and_techs_related(EndPoint.objects.filter(is_default=True)),
             to_attr="default_endpoint_list",
         ),
     )
@@ -313,10 +377,18 @@ def build_ip_datatable_base_queryset(request: Any) -> QuerySet:
     IP rows scoped like ListIPs (filters only, no prefetch).
     Used by advanced-search distinct values and ListIPs to avoid diverging filters.
 
+    When both ``scan_id`` and ``target_id`` are present, ``scan_id`` wins so scan-detail
+    UIs (e.g. Discovered Ports modal) stay scoped to the current scan. This is intentional:
+    do not merge both filters; clients sending both must expect scan-only scope (not an error).
+
+    With neither ``scan_id`` nor ``target_id``, rows are restricted to IPs linked to at least
+    one subdomain (``ip_addresses__isnull=False`` on the Subdomain M2M reverse), avoiding a
+    subquery over all subdomain primary keys.
+
     Query param ``port``: if present and parses to an integer in 1..65535, filter by
     ``ports__number``; non-numeric or out-of-range values are ignored (no error response).
     """
-    from startScan.models import IpAddress, ScanHistory, Subdomain
+    from startScan.models import IpAddress, ScanHistory
 
     req = datatable_request_params(request)
     scan_id = safe_int_cast(req.get("scan_id"))
@@ -324,17 +396,19 @@ def build_ip_datatable_base_queryset(request: Any) -> QuerySet:
     port_num = safe_int_cast(req.get("port"))
     port_ok = isinstance(port_num, int) and 1 <= port_num <= 65535
 
-    if target_id:
+    # scan_id branch first: when both IDs are present, target_id is ignored (see docstring).
+    if scan_id:
+        ips = IpAddress.objects.filter(
+            Q(ip_addresses__scan_history_id=scan_id) | Q(ip_endpoints__scan_history_id=scan_id)
+        ).distinct()
+    elif target_id:
         scan_ids = ScanHistory.objects.filter(target_id=target_id).values_list("id", flat=True)
         ips = IpAddress.objects.filter(
             Q(ip_addresses__scan_history_id__in=scan_ids) | Q(ip_endpoints__scan_history_id__in=scan_ids)
         ).distinct()
-    elif scan_id:
-        ips = IpAddress.objects.filter(
-            Q(ip_addresses__scan_history_id=scan_id) | Q(ip_endpoints__scan_history_id=scan_id)
-        ).distinct()
     else:
-        ips = IpAddress.objects.filter(ip_addresses__in=Subdomain.objects.all()).distinct()
+        # IPs linked to at least one subdomain (M2M); avoids a subquery over all subdomain PKs.
+        ips = IpAddress.objects.filter(ip_addresses__isnull=False).distinct()
 
     if port_ok:
         ips = ips.filter(ports__number=port_num)

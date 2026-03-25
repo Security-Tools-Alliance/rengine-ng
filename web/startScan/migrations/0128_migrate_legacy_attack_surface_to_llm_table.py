@@ -1,7 +1,21 @@
+from django.apps import apps as global_apps
+from django.contrib.contenttypes.management import create_contenttypes
 from django.db import migrations
 
 
 _UNSPECIFIED = "__unspecified__"
+
+
+def _ensure_content_types_for_apps(schema_editor, app_labels: tuple[str, ...]) -> None:
+    """Populate django_content_type rows before lookups (post_migrate has not run yet)."""
+    using = schema_editor.connection.alias
+    for app_label in app_labels:
+        create_contenttypes(
+            global_apps.get_app_config(app_label),
+            interactive=False,
+            verbosity=0,
+            using=using,
+        )
 
 
 def _legacy_model_key_and_body(raw):
@@ -41,6 +55,7 @@ def _migrate_rows(apps, django_app_label, model_class_name, ct_map, field_name):
 
 
 def forwards(apps, schema_editor):
+    _ensure_content_types_for_apps(schema_editor, ("startScan", "targetApp"))
     content_type_model = apps.get_model("contenttypes", "ContentType")
 
     def cid(app_label, model_name_lower):

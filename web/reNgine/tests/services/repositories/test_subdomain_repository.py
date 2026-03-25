@@ -165,8 +165,8 @@ class TestSubdomainRepository(BaseTestCase):
         self.assertEqual(result.webserver, "nginx")
         self.assertEqual(result.response_time, 0.5)
 
-    def test_save_from_secator_extra_data_technologies_tuple_is_accepted(self):
-        """Tuple (or other non-list iterables) in extra_data.technologies is coerced and linked."""
+    def test_save_from_secator_extra_data_technologies_tuple_is_ignored(self):
+        """Subdomain ingestion does not persist technologies; endpoint is the source of truth."""
         item = {
             "_type": "subdomain",
             "host": "tech-tuple.example.com",
@@ -176,9 +176,8 @@ class TestSubdomainRepository(BaseTestCase):
         }
         result = self.subdomain_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
         self.assertIsNotNone(result)
-        names = set(result.technologies.values_list("name", flat=True))
-        self.assertEqual(names, {"TechAlpha", "TechBeta"})
-        self.assertEqual(Technology.objects.filter(name__in=["TechAlpha", "TechBeta"]).count(), 2)
+        self.assertEqual(result.technologies.count(), 0)
+        self.assertEqual(Technology.objects.filter(name__in=["TechAlpha", "TechBeta"]).count(), 0)
 
     def test_save_from_secator_extra_data_technologies_none_skips_without_error(self):
         """Explicit null technologies must not raise when iterating."""

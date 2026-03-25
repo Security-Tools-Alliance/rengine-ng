@@ -107,6 +107,8 @@ from api.helpers.query import (
     build_ip_datatable_base_queryset,
     build_subdomain_datatable_queryset,
     build_vulnerability_datatable_base_queryset,
+    datatable_ip_list_serializer_context,
+    datatable_subdomain_list_serializer_context,
     get_ip_subdomain_data,
     get_scan_status_querysets,
     parse_subdomain_datatable_request,
@@ -181,6 +183,10 @@ from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.secator.services.target_builder_service import TargetBuilderService
 from reNgine.secator.synthetic_id import synthetic_id_skipped_scope
+from reNgine.services.default_endpoint_queryset import (
+    apply_endpoint_port_and_techs_related,
+    apply_endpoint_techs_prefetch,
+)
 from reNgine.services.repositories.ip_repository import normalize_ip_address_string
 from reNgine.services.scan_finding_metrics import (  # IP PKs in-scan; bulk IP for scan/target DataTables
     attach_ip_metrics_to_scans,
@@ -1471,12 +1477,24 @@ class UniversalSearch(APIView):
         SearchHistory.objects.get_or_create(query=query)
 
         # lookup query in subdomain
-        subdomain = Subdomain.objects.filter(
-            Q(name__icontains=query)
-            | Q(cname__icontains=query)
-            | Q(page_title__icontains=query)
-            | Q(http_url__icontains=query)
-        ).distinct("name")
+        subdomain = (
+            Subdomain.objects.filter(
+                Q(name__icontains=query)
+                | Q(cname__icontains=query)
+                | Q(page_title__icontains=query)
+                | Q(http_url__icontains=query)
+            )
+            .distinct("name")
+            .prefetch_related(
+                "ip_addresses",
+                "ip_addresses__ports",
+                "technologies",
+                "waf",
+                "directories",
+                "scan_history",
+                "domain",
+            )
+        )
         subdomain_data = SubdomainSerializer(subdomain, many=True).data
         response["results"]["subdomains"] = subdomain_data
 
@@ -1977,7 +1995,15 @@ class FetchSubscanResults(APIView):
             subscan_results = DirectoryScanSerializer(dirs_in_subscan, many=True).data
 
         elif task_name in subdomain_types:
-            subdomains_in_subscan = Subdomain.objects.filter(subdomain_subscan_ids__in=subscan)
+            subdomains_in_subscan = Subdomain.objects.filter(subdomain_subscan_ids__in=subscan).prefetch_related(
+                "ip_addresses",
+                "ip_addresses__ports",
+                "technologies",
+                "waf",
+                "directories",
+                "scan_history",
+                "domain",
+            )
             subscan_results = SubdomainSerializer(subdomains_in_subscan, many=True).data
 
         elif task_name == "screenshot":
@@ -4554,10 +4580,17 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
             page_size=req.query_params.get("page_size"),
         )
 
-        serializer_context = {}
+        interesting_names = None
         if scan_id and "no_lookup_interesting" not in req.query_params:
             interesting = get_interesting_subdomains(scan_history=scan_id)
-            serializer_context["datatable_interesting_names"] = set(interesting.values_list("name", flat=True))
+            interesting_names = set(interesting.values_list("name", flat=True))
+
+        serializer_context = datatable_subdomain_list_serializer_context(
+            scan_id=scan_id,
+            target_id=target_id,
+            port_query_param=req.query_params.get("port"),
+            datatable_interesting_names=interesting_names,
+        )
 
         if pagination:
             total_count = subdomain_query.count()
@@ -4660,8 +4693,15 @@ class ListIPs(AdvancedSearchMixin, APIView):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
         target_id = safe_int_cast(req.query_params.get("target_id"))
-
+        port_param = req.query_params.get("port")
         ips = build_ip_datatable_base_queryset(request)
+        ip_ctx_probe = datatable_ip_list_serializer_context(
+            scan_id=scan_id,
+            target_id=target_id,
+            port_query_param=port_param,
+        )
+        if ip_ctx_probe["expose_ip_port_services"]:
+            ips = ips.prefetch_related("ports")
 
         pagination = parse_pagination_params(
             start=req.query_params.get("start"),
@@ -4684,11 +4724,12 @@ class ListIPs(AdvancedSearchMixin, APIView):
             serializer = IpSerializer(
                 paginated,
                 many=True,
-                context={
-                    "ip_subdomain_data": ip_subdomain_data,
-                    "scan_id": scan_id,
-                    "target_id": target_id,
-                },
+                context=datatable_ip_list_serializer_context(
+                    scan_id=scan_id,
+                    target_id=target_id,
+                    port_query_param=port_param,
+                    ip_subdomain_data=ip_subdomain_data,
+                ),
             )
             return Response(build_datatables_serverside_response(req, records_total, records_filtered, serializer.data))
 
@@ -4696,11 +4737,12 @@ class ListIPs(AdvancedSearchMixin, APIView):
         serializer = IpSerializer(
             ips,
             many=True,
-            context={
-                "ip_subdomain_data": ip_subdomain_data,
-                "scan_id": scan_id,
-                "target_id": target_id,
-            },
+            context=datatable_ip_list_serializer_context(
+                scan_id=scan_id,
+                target_id=target_id,
+                port_query_param=port_param,
+                ip_subdomain_data=ip_subdomain_data,
+            ),
         )
         return Response({"ips": serializer.data})
 
@@ -4772,7 +4814,7 @@ class SubdomainsViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
                 "domain",
                 Prefetch(
                     "endpoint_set",
-                    queryset=EndPoint.objects.filter(is_default=True),
+                    queryset=apply_endpoint_port_and_techs_related(EndPoint.objects.filter(is_default=True)),
                     to_attr="default_endpoint_list",
                 ),
             )
@@ -4927,7 +4969,9 @@ class EndPointChangesViewSet(DatatableListMixin, DatatablePaginationMixin, views
         scanned_host_q2 = EndPoint.objects.filter(scan_history__id=last_scan.id).values("http_url")
         added_endpoint = scanned_host_q1.difference(scanned_host_q2)
         removed_endpoints = scanned_host_q2.difference(scanned_host_q1)
-        endpoint_base = EndPoint.objects.select_related("subdomain", "domain", "scan_history").prefetch_related("techs")
+        endpoint_base = apply_endpoint_techs_prefetch(
+            EndPoint.objects.select_related("subdomain", "domain", "scan_history")
+        )
         if changes == "added":
             return (
                 endpoint_base.filter(scan_history__id=scan_id)
@@ -5076,7 +5120,7 @@ class InterestingEndpointViewSet(DatatableListMixin, DatatablePaginationMixin, v
         if hasattr(queryset, "select_related"):
             queryset = queryset.select_related("subdomain", "subdomain__domain", "domain", "scan_history")
         if hasattr(queryset, "prefetch_related"):
-            queryset = queryset.prefetch_related("techs", "endpoint_subscan_ids")
+            queryset = queryset.prefetch_related("endpoint_subscan_ids")
 
         return queryset
 

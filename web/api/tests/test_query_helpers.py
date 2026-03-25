@@ -4,7 +4,13 @@ Unit tests for api.helpers.query (get_scan_status_querysets, build_subdomain_dat
 
 from django.utils import timezone
 
-from api.helpers.query import build_subdomain_datatable_queryset, get_scan_status_querysets
+from api.helpers.query import (
+    build_subdomain_datatable_queryset,
+    datatable_ip_list_serializer_context,
+    datatable_port_services_serializer_context,
+    datatable_subdomain_list_serializer_context,
+    get_scan_status_querysets,
+)
 from reNgine.definitions import (
     SCAN_STATUS_COMPLETED,
     SCAN_STATUS_FAILED,
@@ -13,6 +19,61 @@ from reNgine.definitions import (
 )
 from startScan.models import ScanHistory
 from utils.test_base import BaseTestCase
+
+
+class DatatablePortServicesSerializerContextTestCase(BaseTestCase):
+    """Tests for datatable_port_services_serializer_context (IP/subdomain service column)."""
+
+    def test_valid_port_enables_expose_and_sets_filter_number(self) -> None:
+        ctx = datatable_port_services_serializer_context("443")
+        self.assertTrue(ctx["expose_ip_port_services"])
+        self.assertEqual(ctx["filter_port_number"], 443)
+
+    def test_invalid_port_disables_expose(self) -> None:
+        ctx = datatable_port_services_serializer_context("99999")
+        self.assertFalse(ctx["expose_ip_port_services"])
+        self.assertIsNone(ctx["filter_port_number"])
+
+    def test_missing_port_disables_expose(self) -> None:
+        ctx = datatable_port_services_serializer_context(None)
+        self.assertFalse(ctx["expose_ip_port_services"])
+        self.assertIsNone(ctx["filter_port_number"])
+
+
+class DatatableIpListSerializerContextTestCase(BaseTestCase):
+    """Tests for datatable_ip_list_serializer_context."""
+
+    def test_merges_scan_target_port_and_optional_ip_subdomain_data(self) -> None:
+        precomputed = {1: {"count": 1, "names": ["a.example"]}}
+        ctx = datatable_ip_list_serializer_context(
+            scan_id="42",
+            target_id="7",
+            port_query_param="443",
+            ip_subdomain_data=precomputed,
+        )
+        self.assertEqual(ctx["scan_id"], 42)
+        self.assertEqual(ctx["target_id"], 7)
+        self.assertTrue(ctx["expose_ip_port_services"])
+        self.assertEqual(ctx["filter_port_number"], 443)
+        self.assertIs(ctx["ip_subdomain_data"], precomputed)
+
+
+class DatatableSubdomainListSerializerContextTestCase(BaseTestCase):
+    """Tests for datatable_subdomain_list_serializer_context."""
+
+    def test_omits_interesting_names_when_none(self) -> None:
+        ctx = datatable_subdomain_list_serializer_context(scan_id=1, target_id=None, port_query_param=None)
+        self.assertEqual(ctx["scan_id"], 1)
+        self.assertIsNone(ctx["target_id"])
+        self.assertFalse(ctx["expose_ip_port_services"])
+        self.assertNotIn("datatable_interesting_names", ctx)
+
+    def test_includes_interesting_names_when_passed(self) -> None:
+        ctx = datatable_subdomain_list_serializer_context(
+            scan_id=1,
+            datatable_interesting_names={"api.example"},
+        )
+        self.assertEqual(ctx["datatable_interesting_names"], {"api.example"})
 
 
 class GetScanStatusQuerysetsTestCase(BaseTestCase):

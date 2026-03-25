@@ -31,6 +31,7 @@ from reNgine.core.secator_target import parse_secator_target_value
 from reNgine.core.validators import is_valid_ip, is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
 from reNgine.secator.source_extraction import extract_secator_tool_source
+from reNgine.services.endpoint_port_resolution import extract_port_number_from_http_url
 from reNgine.services.repositories.ip_repository import IpRepository, normalize_ip_address_string
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.distributed_lock import DistributedLock
@@ -38,7 +39,7 @@ from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.endpoint_ingest_logging import format_endpoint_host_unresolved_suffix
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
-from startScan.models import DirectoryFile, Domain, EndPoint, IpAddress, ScanHistory, Subdomain, Technology
+from startScan.models import DirectoryFile, Domain, EndPoint, IpAddress, Port, ScanHistory, Subdomain, Technology
 from targetApp.models import Target
 from targetApp.services.scope_params import get_finding_scope_filter_host_for_target
 
@@ -224,6 +225,14 @@ class EndpointRepository:
                 level=_endpoint_host_unresolved_severity(host_res.reason or ""),
             )
             return None
+        endpoint_port_number = self._get_port_from_url(http_url)
+        resolved_port_for_host: Optional[Port] = self._resolve_port_for_host(
+            subdomain=host_res.subdomain,
+            ip_address=host_res.ip_address,
+            port_number=endpoint_port_number,
+        )
+        if resolved_port_for_host is not None:
+            defaults["port"] = resolved_port_for_host
 
         endpoint, created = EndPoint.objects.update_or_create(
             http_url=http_url,
@@ -237,6 +246,12 @@ class EndpointRepository:
             scan_history_id,
             hostname_override=hostname_override,
             rengine_context=ctx,
+        )
+        self._associate_port(
+            endpoint,
+            port_number=endpoint_port_number,
+            skip_host_resolution=True,
+            resolved_port=resolved_port_for_host,
         )
         self._mark_as_default_if_first(endpoint)
         self._associate_technologies(endpoint, item)
@@ -369,11 +384,25 @@ class EndpointRepository:
                 level=_endpoint_host_unresolved_severity(host_res.reason or ""),
             )
             return None
+        endpoint_port_number = self._get_port_from_url(http_url)
+        resolved_port_for_host: Optional[Port] = self._resolve_port_for_host(
+            subdomain=host_res.subdomain,
+            ip_address=host_res.ip_address,
+            port_number=endpoint_port_number,
+        )
+        if resolved_port_for_host is not None:
+            defaults["port"] = resolved_port_for_host
 
         endpoint, _ = EndPoint.objects.update_or_create(
             http_url=http_url,
             scan_history=scan_history,
             defaults=defaults,
+        )
+        self._associate_port(
+            endpoint,
+            port_number=endpoint_port_number,
+            skip_host_resolution=True,
+            resolved_port=resolved_port_for_host,
         )
 
         current = (endpoint.matched_gf_patterns or "").strip()
@@ -530,6 +559,8 @@ class EndpointRepository:
             domain = get_domain_by_id(domain_id)
             if domain is None:
                 return None, False
+            endpoint_port_number: Optional[int] = None
+            resolved_port_for_associate: Optional[Port] = None
 
             defaults = {
                 "domain": domain,
@@ -568,9 +599,23 @@ class EndpointRepository:
                         level=_endpoint_host_unresolved_severity(host_res.reason or ""),
                     )
                     return None, False
+                endpoint_port_number = self._get_port_from_url(http_url)
+                resolved_port_for_associate = self._resolve_port_for_host(
+                    subdomain=host_res.subdomain,
+                    ip_address=host_res.ip_address,
+                    port_number=endpoint_port_number,
+                )
+                if resolved_port_for_associate is not None:
+                    defaults["port"] = resolved_port_for_associate
 
             endpoint, created = EndPoint.objects.get_or_create(
                 http_url=http_url, scan_history=scan_history, defaults=defaults
+            )
+            self._associate_port(
+                endpoint,
+                port_number=endpoint_port_number,
+                skip_host_resolution=not has_host,
+                resolved_port=resolved_port_for_associate,
             )
 
             return endpoint, created
@@ -890,11 +935,23 @@ class EndpointRepository:
             )
 
     def _get_port_from_url(self, http_url: str) -> int:
-        """Extract port from URL; returns 80 or 443 if scheme has no explicit port."""
-        parsed = urlparse(http_url)
-        if parsed.port is not None:
-            return parsed.port
-        return 443 if parsed.scheme == "https" else 80
+        """
+        Port for URL parsing used by default-endpoint and port association paths.
+
+        Delegates to ``extract_port_number_from_http_url``; falls back to 80 for unknown schemes
+        or parse gaps to preserve historical behavior. A debug log records the fallback so odd
+        URLs are traceable without changing default-endpoint grouping for existing data.
+        """
+        n = extract_port_number_from_http_url(http_url)
+        if n is not None:
+            return n
+        logger.log_line(
+            PREFIX_ENDPOINT_REPO,
+            "PORT_FROM_URL",
+            "_get_port_from_url: no http(s) port from URL (prefix=%r); using legacy default 80" % (http_url[:160],),
+            level="debug",
+        )
+        return 80
 
     def _mark_as_default_if_first(self, endpoint: EndPoint) -> None:
         """
@@ -964,6 +1021,54 @@ class EndpointRepository:
                 level="error",
                 exc_info=True,
             )
+
+    def _resolve_port_for_host(
+        self,
+        subdomain: Optional[Subdomain],
+        ip_address: Optional[IpAddress],
+        port_number: Optional[int],
+    ) -> Optional[Port]:
+        """
+        Resolve ``Port`` for the URL port; same rules as
+        ``resolve_port_pk_for_endpoint_maps`` / migration 0130 (see ``endpoint_port_resolution``).
+        """
+        if not isinstance(port_number, int) or port_number <= 0:
+            return None
+        if ip_address is not None:
+            return Port.objects.filter(ip_address_id=ip_address.id, number=port_number).order_by("id").first()
+        if subdomain is not None:
+            candidates = list(
+                Port.objects.filter(ip_address__in=subdomain.ip_addresses.all(), number=port_number).order_by("id")[:2]
+            )
+            if len(candidates) == 1:
+                return candidates[0]
+        return None
+
+    def _associate_port(
+        self,
+        endpoint: EndPoint,
+        port_number: Optional[int] = None,
+        *,
+        skip_host_resolution: bool = False,
+        resolved_port: Optional[Port] = None,
+    ) -> None:
+        if endpoint.port_id:
+            return
+        if resolved_port is not None:
+            endpoint.port = resolved_port
+            endpoint.save(update_fields=["port"])
+            return
+        if port_number is None:
+            port_number = self._get_port_from_url(endpoint.http_url)
+        if skip_host_resolution:
+            return
+        if port := self._resolve_port_for_host(
+            subdomain=endpoint.subdomain,
+            ip_address=endpoint.ip_address,
+            port_number=port_number,
+        ):
+            endpoint.port = port
+            endpoint.save(update_fields=["port"])
 
     def create_endpoint_for_ip(self, ip_address: str, scan_history_id: int, domain_id: int) -> Optional[EndPoint]:
         """
@@ -1048,6 +1153,7 @@ class EndpointRepository:
             endpoint.ip_address = ip_obj
             endpoint.subdomain = None
             endpoint.save(update_fields=["ip_address", "subdomain"])
+        self._associate_port(endpoint, port_number=self._get_port_from_url(http_url))
         if created:
             logger.log_line(
                 PREFIX_ENDPOINT_REPO,

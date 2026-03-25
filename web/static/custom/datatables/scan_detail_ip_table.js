@@ -288,6 +288,12 @@
         c.visible($(this).is(":checked"));
       }
     });
+    $("input[name=ip_technologies_filter_checkbox]").on("change", function () {
+      const c = colByName("technologies");
+      if (c) {
+        c.visible($(this).is(":checked"));
+      }
+    });
     $("input[name=ip_alive_filter_checkbox]").on("change", function () {
       const c = colByName("alive");
       if (c) {

@@ -20,13 +20,15 @@ Use these entry points to avoid drift:
   get_ip_metrics_for_target_ids, get_ip_metrics_for_project
 - Target list views: attach_ip_metrics_to_targets sets TARGET_IP_COUNT_ATTR /
   TARGET_IP_ALIVE_ATTR on each Target (+ bulk_ip_metrics_for_targets).
+- Serialized IP widgets (summary, scan detail, reports): ip_addresses_queryset_for_scan,
+  ip_addresses_queryset_for_target (same membership as counts above).
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Sequence, Set
 
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 
 from startScan.models import (
     Domain,
@@ -325,6 +327,34 @@ def bulk_ip_metrics_for_scans(scan_ids: Iterable[int]) -> Dict[int, tuple[int, i
         alive_n = sum(1 for i in ip_ids if alive_map.get(i))
         out[sid] = (len(ip_ids), alive_n)
     return out
+
+
+def ip_addresses_queryset_for_scan(scan_history_id: int) -> QuerySet[IpAddress]:
+    """
+    IpAddress rows linked to the scan (M2M or EndPoint.ip_address), with ports prefetched.
+
+    Matches ``ip_address_ids_in_scan`` / ``get_ip_address_metrics_for_scan`` semantics.
+    """
+    if not scan_history_id or scan_history_id < 1:
+        return IpAddress.objects.none()
+    ids = ip_address_ids_in_scan(scan_history_id)
+    if not ids:
+        return IpAddress.objects.none()
+    return IpAddress.objects.filter(pk__in=ids).prefetch_related("ports").order_by("address", "id")
+
+
+def ip_addresses_queryset_for_target(target_id: int) -> QuerySet[IpAddress]:
+    """
+    IpAddress rows linked to any scan of the target (M2M or EndPoint.ip_address), ports prefetched.
+
+    Matches ``ip_address_ids_for_target`` / ``get_ip_metrics_for_target`` semantics.
+    """
+    if not target_id or target_id < 1:
+        return IpAddress.objects.none()
+    ids = ip_address_ids_for_target(target_id)
+    if not ids:
+        return IpAddress.objects.none()
+    return IpAddress.objects.filter(pk__in=ids).prefetch_related("ports").order_by("address", "id")
 
 
 def attach_ip_metrics_to_scans(scans: List[ScanHistory]) -> None:

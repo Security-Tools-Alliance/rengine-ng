@@ -1,9 +1,10 @@
 from collections import defaultdict
 import html
 import json
+from typing import Any, Iterable, MutableMapping, Sequence
 
 from django.contrib.humanize.templatetags.humanize import naturalday, naturaltime
-from django.db.models import F, JSONField, Value
+from django.db.models import F, JSONField, QuerySet, Value
 from django.urls import reverse
 from rest_framework import serializers
 import yaml
@@ -19,6 +20,7 @@ from recon_note.models import (
     TodoNote,
 )
 from reNgine.definitions import ENGINE_NAMES
+from reNgine.services.default_endpoint_queryset import apply_endpoint_port_and_techs_related
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from scanEngine.models import (
@@ -2007,12 +2009,244 @@ class PortSerializer(serializers.ModelSerializer):
         ]
 
 
-class IpSerializer(serializers.ModelSerializer):
+def _collect_sorted_service_labels_for_ip_port(
+    ip_address: Any,
+    port_num: int,
+    cache: MutableMapping[Any, Any],
+) -> tuple[str, ...]:
+    """
+    Unique service labels for ``ip_address`` at ``port_num``, cached per serializer context.
+
+    Requires a persisted ``IpAddress`` (non-null primary key). Unsaved instances return ``()``
+    without caching to avoid collisions on ``(None, port_num)``.
+
+    Uses only prefetched ``ports`` when present to avoid lazy queries and N+1 patterns. If
+    ``ports`` were not prefetched, logs once per ``cache`` and returns an empty tuple (callers
+    should use ``prefetch_related('ports')`` / ``ip_addresses__ports`` when exposing port-filtered
+    services).
+
+    Relies on Django's ``_prefetched_objects_cache`` (private); re-check after ORM upgrades if
+    prefetch behavior changes.
+    """
+    if getattr(ip_address, "pk", None) is None:
+        return ()
+    key = (ip_address.id, port_num)
+    if key in cache:
+        return cache[key]
+    # Django internal: set when `prefetch_related("ports")` was applied on the queryset.
+    prefetch_cache = getattr(ip_address, "_prefetched_objects_cache", None)
+    if prefetch_cache is None or "ports" not in prefetch_cache:
+        if not cache.get(_SERVICE_LABELS_BY_IP_PORT_CACHE_WARN_KEY):
+            cache[_SERVICE_LABELS_BY_IP_PORT_CACHE_WARN_KEY] = True
+            logger.log_line(
+                PREFIX_API_SERIALIZERS,
+                "SERVICE_LABELS_IP_PORT",
+                "IpAddress id=%s: ports not prefetched while collecting service labels for port %s; "
+                "expect empty service column unless queryset uses prefetch_related('ports')."
+                % (getattr(ip_address, "pk", None), port_num),
+                level="warning",
+            )
+        cache[key] = ()
+        return cache[key]
+    labels: list[str] = []
+    seen: set[str] = set()
+    for p in prefetch_cache["ports"]:
+        if p.number != port_num:
+            continue
+        label = (p.service_name or "").strip() or (p.description or "").strip() or ""
+        if label and label not in seen:
+            seen.add(label)
+            labels.append(label)
+    out = tuple(sorted(labels))
+    cache[key] = out
+    return out
+
+
+def _format_service_labels_tuple(labels: tuple[str, ...]) -> str:
+    return ", ".join(labels) if labels else "-"
+
+
+# Per-request serializer context keys (avoid mutable state on serializer instances).
+_CTX_WARN_ENDPOINT_TECHS_NOT_PREFETCHED = "_warned_endpoint_techs_not_prefetched"
+_CTX_WARN_DEFAULT_ENDPOINT_LIST_TECHS = "_warned_default_endpoint_list_missing_techs_prefetch"
+_CTX_EVALUATED_DEFAULT_ENDPOINTS_BY_IP_ID = "_evaluated_default_endpoints_by_ip_id"
+_SERVICE_LABELS_BY_IP_PORT_CACHE_WARN_KEY = "__ports_prefetch_warning_emitted__"
+
+
+class DefaultEndpointTechnologyMixin:
+    """
+    Shared serialization for default ``EndPoint`` rows (``is_default=True``) and their ``techs``.
+
+    Querysets are built via ``reNgine.services.default_endpoint_queryset.apply_endpoint_port_and_techs_related``
+    so ``techs`` are always prefetched
+    without relying on Django queryset internals. Lists from ``Subdomain.default_endpoint_list``
+    must prefetch ``techs`` on the source queryset; otherwise a one-time warning is logged when
+    that list is first built.
+
+    List views should pass ``scan_id`` and ``target_id`` via ``api.helpers.query.datatable_ip_list_serializer_context``
+    or ``datatable_subdomain_list_serializer_context`` so nested serializers and default-endpoint
+    queries stay scoped consistently.
+
+    Serializers that need the same default-endpoint technology payload should inherit this mixin
+    rather than duplicating aggregation. Currently only ``IpSerializer`` and ``SubdomainSerializer``
+    use it; thinner endpoint serializers (e.g. list-only) stay without it.
+
+    **API / UI contract (keep in sync with ``web/static/custom/datatables/renderers_subdomain_endpoint.js``):**
+
+    - ``endpoint_defaults_by_port`` (always serialize on affected DataTables rows): ``list[dict]`` ordered
+      by port then endpoint id. Each dict has ``id``, ``http_url``, ``port`` (``int | None`` from the
+      ``Port`` FK), ``content_type``, ``webserver``, and ``technologies`` (list of technology dicts:
+      ``id``, ``name``, ``value``, ``category``, ``stored_response_path``, ``stored_response_url``).
+    - ``technologies`` on the same serializers: flat aggregate of unique technologies across default
+      endpoints (legacy / summary column). When ``endpoint_defaults_by_port`` is missing or not an
+      array (older servers), the UI falls back to rendering this flat list once per row with a
+      one-time console warning.
+    """
+
+    def _iter_endpoint_tech_instances_for_serialization(self, endpoint: Any) -> list[Any]:
+        """
+        Return ``Technology`` instances for ``endpoint.techs``, respecting prefetch when present.
+
+        If ``techs`` is missing or not prefetched, logs at most once per serializer context;
+        unprefetched access still runs queries so row data stays correct when the contract breaks.
+        """
+        techs_rel = getattr(endpoint, "techs", None)
+        if techs_rel is None:
+            return []
+        # Django internal: presence indicates `prefetch_related("techs")` on the queryset.
+        cache = getattr(endpoint, "_prefetched_objects_cache", None)
+        if cache is None or "techs" not in cache:
+            ctx = self.context
+            if not ctx.get(_CTX_WARN_ENDPOINT_TECHS_NOT_PREFETCHED):
+                ctx[_CTX_WARN_ENDPOINT_TECHS_NOT_PREFETCHED] = True
+                logger.log_line(
+                    PREFIX_API_SERIALIZERS,
+                    "DEFAULT_ENDPOINT_TECHS",
+                    "EndPoint id=%s: techs not prefetched during serialization; expect extra queries" % (endpoint.pk,),
+                    level="warning",
+                )
+        return list(techs_rel.all())
+
+    @staticmethod
+    def _serialize_technology_payload(tech: Any) -> dict[str, Any]:
+        return {
+            "id": tech.id,
+            "name": tech.name,
+            "value": tech.value,
+            "category": tech.category,
+            "stored_response_path": tech.stored_response_path,
+            "stored_response_url": build_scan_file_url(tech.stored_response_path),
+        }
+
+    def _default_endpoints_queryset_for_ip_address(self, ip_address: Any) -> QuerySet:
+        query = apply_endpoint_port_and_techs_related(EndPoint.objects.filter(ip_address=ip_address, is_default=True))
+        scan_id = self.context.get("scan_id")
+        target_id = self.context.get("target_id")
+        if scan_id:
+            query = query.filter(scan_history_id=scan_id)
+        elif target_id:
+            query = query.filter(scan_history__target_id=target_id)
+        return query
+
+    def _evaluated_default_endpoints_for_ip_address(self, ip_address: Any) -> list[Any]:
+        cache: dict[int, list[Any]] = self.context.setdefault(_CTX_EVALUATED_DEFAULT_ENDPOINTS_BY_IP_ID, {})
+        iid = ip_address.id
+        if iid not in cache:
+            cache[iid] = list(self._default_endpoints_queryset_for_ip_address(ip_address))
+        return cache[iid]
+
+    def _default_endpoints_for_subdomain_serialization(self, subdomain: Any) -> list[Any]:
+        cache_attr = "_cached_default_endpoints_for_serialization"
+        if hasattr(subdomain, cache_attr):
+            return getattr(subdomain, cache_attr)
+
+        if hasattr(subdomain, "default_endpoint_list"):
+            endpoints = list(subdomain.default_endpoint_list or [])
+            if endpoints:
+                self._warn_if_default_endpoint_list_missing_techs_prefetch(endpoints)
+            setattr(subdomain, cache_attr, endpoints)
+            return endpoints
+
+        if not subdomain.scan_history or subdomain.scan_history.is_legacy_scan:
+            setattr(subdomain, cache_attr, [])
+            return []
+
+        qs = apply_endpoint_port_and_techs_related(EndPoint.objects.filter(subdomain=subdomain, is_default=True))
+        endpoints = list(qs)
+        setattr(subdomain, cache_attr, endpoints)
+        return endpoints
+
+    def _warn_if_default_endpoint_list_missing_techs_prefetch(self, endpoints: Sequence[Any]) -> None:
+        if not endpoints:
+            return
+        endpoint = endpoints[0]
+        cache = getattr(endpoint, "_prefetched_objects_cache", None)
+        if cache is not None and "techs" in cache:
+            return
+        ctx = self.context
+        if ctx.get(_CTX_WARN_DEFAULT_ENDPOINT_LIST_TECHS):
+            return
+        ctx[_CTX_WARN_DEFAULT_ENDPOINT_LIST_TECHS] = True
+        logger.log_line(
+            PREFIX_API_SERIALIZERS,
+            "DEFAULT_ENDPOINT_TECHS",
+            'EndPoint id=%s in default_endpoint_list without prefetched techs; add prefetch_related("techs") on the source queryset'
+            % (endpoint.pk,),
+            level="warning",
+        )
+
+    def _serialize_endpoint_defaults_by_port(self, endpoints: Iterable[Any]) -> list[dict[str, Any]]:
+        """
+        Build the list consumed by DataTables and `renderEndpointDefaultsByPortBadges` (JS).
+
+        Each item: ``id``, ``http_url``, ``port`` (int or None), ``content_type``, ``webserver``,
+        ``technologies`` (list of dicts from `_serialize_technology_payload`: id, name, value,
+        category, stored_response_path, stored_response_url). Sorted by port then id.
+        """
+        payload: list[dict[str, Any]] = []
+        for endpoint in endpoints:
+            payload.append(
+                {
+                    "id": endpoint.id,
+                    "http_url": endpoint.http_url,
+                    "port": endpoint.port.number if endpoint.port_id else None,
+                    "content_type": endpoint.content_type or "",
+                    "webserver": endpoint.webserver or "",
+                    "technologies": [
+                        self._serialize_technology_payload(tech)
+                        for tech in self._iter_endpoint_tech_instances_for_serialization(endpoint)
+                    ],
+                }
+            )
+        payload.sort(key=lambda row: (row["port"] is None, row["port"] or 0, row["id"]))
+        return payload
+
+    def _serialize_unique_technologies(self, endpoints: Iterable[Any]) -> list[dict[str, Any]]:
+        tech_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for endpoint in endpoints:
+            for tech in self._iter_endpoint_tech_instances_for_serialization(endpoint):
+                key = (tech.name or "", tech.value or "", tech.category or "")
+                if key not in tech_by_key:
+                    tech_by_key[key] = self._serialize_technology_payload(tech)
+        return list(tech_by_key.values())
+
+
+class IpSerializer(DefaultEndpointTechnologyMixin, serializers.ModelSerializer):
+    """
+    IP list/detail payload: ``endpoint_defaults_by_port`` is the canonical default-endpoint tech
+    shape (see ``DefaultEndpointTechnologyMixin``); ``technologies`` is a flat aggregate for
+    backward compatibility. Keep list views and ``datatables_always_serialize`` aligned when
+    changing technology fields.
+    """
+
     ports = PortSerializer(many=True)
     subdomain_count = serializers.SerializerMethodField()
     subdomain_names = serializers.SerializerMethodField()
+    technologies = serializers.SerializerMethodField()
+    endpoint_defaults_by_port = serializers.SerializerMethodField()
     attack_surface = serializers.SerializerMethodField()
     attack_surface_count = serializers.SerializerMethodField()
+    services_for_request_port = serializers.SerializerMethodField()
 
     class Meta:
         model = IpAddress
@@ -2026,13 +2260,17 @@ class IpSerializer(serializers.ModelSerializer):
             "version",
             "is_private",
             "alive",
+            "services_for_request_port",
             "is_important",
             "ip_subscan_ids",
             "subdomain_count",
             "subdomain_names",
+            "technologies",
+            "endpoint_defaults_by_port",
             "attack_surface",
             "attack_surface_count",
         ]
+        datatables_always_serialize = ("endpoint_defaults_by_port",)
 
     def get_base_subdomain_query(self, obj):
         query = Subdomain.objects.filter(ip_addresses=obj)
@@ -2057,6 +2295,35 @@ class IpSerializer(serializers.ModelSerializer):
         if precomputed and obj.id in precomputed:
             return precomputed[obj.id]["names"]
         return list(self.get_base_subdomain_query(obj).values_list("name", flat=True))
+
+    def get_services_for_request_port(self, obj):
+        """
+        Service labels for the request ``port`` query param.
+
+        Contract (enforced by ``ListIPs`` via ``datatable_ip_list_serializer_context``): when a
+        valid ``port`` query param is present, ``context["expose_ip_port_services"]`` is True,
+        ``context["filter_port_number"]`` is that int, and the IP queryset uses
+        ``prefetch_related("ports")``. Do not serialize this field from other entry points without
+        mirroring that context and prefetch, or the column will be wrong or trigger prefetch
+        warnings from ``_collect_sorted_service_labels_for_ip_port``.
+
+        Returns ``"-"`` when the request is not filtered by port (aligned with subdomain rows and
+        DataTables placeholders).
+        """
+        if not self.context.get("expose_ip_port_services"):
+            return "-"
+        pn = self.context.get("filter_port_number")
+        if not isinstance(pn, int) or not (1 <= pn <= 65535):
+            return "-"
+        cache: MutableMapping[Any, Any] = self.context.setdefault("_service_labels_by_ip_port", {})
+        tup = _collect_sorted_service_labels_for_ip_port(obj, pn, cache)
+        return _format_service_labels_tuple(tup)
+
+    def get_technologies(self, obj):
+        return self._serialize_unique_technologies(self._evaluated_default_endpoints_for_ip_address(obj))
+
+    def get_endpoint_defaults_by_port(self, obj):
+        return self._serialize_endpoint_defaults_by_port(self._evaluated_default_endpoints_for_ip_address(obj))
 
     def get_attack_surface(self, obj):
         c = getattr(obj, "llm_attack_surface_count", None)
@@ -2154,8 +2421,15 @@ class CertificateSerializer(serializers.ModelSerializer):
         return obj.is_expired() if obj.not_after else None
 
 
-class SubdomainSerializer(serializers.ModelSerializer):
+class SubdomainSerializer(DefaultEndpointTechnologyMixin, serializers.ModelSerializer):
+    """
+    Subdomain list/detail payload: ``endpoint_defaults_by_port`` is the source of truth for
+    per-port default endpoint technologies in DataTables/UI; avoid regressing new work to flat
+    ``technologies`` alone.
+    """
+
     vuln_count = serializers.SerializerMethodField("get_vuln_count")
+    services_for_request_port = serializers.SerializerMethodField()
 
     is_interesting = serializers.SerializerMethodField("get_is_interesting")
     attack_surface = serializers.SerializerMethodField("get_attack_surface")
@@ -2174,7 +2448,8 @@ class SubdomainSerializer(serializers.ModelSerializer):
     ip_addresses = IpSerializer(many=True)
     ports = serializers.SerializerMethodField("get_ports")
     waf = WafSerializer(many=True)
-    technologies = TechnologySerializer(many=True)
+    technologies = serializers.SerializerMethodField("get_technologies")
+    endpoint_defaults_by_port = serializers.SerializerMethodField("get_endpoint_defaults_by_port")
     directories = DirectoryScanSerializer(many=True)
 
     # Use display properties for Secator scans (default endpoint values)
@@ -2199,12 +2474,14 @@ class SubdomainSerializer(serializers.ModelSerializer):
             "is_cdn",
             "cdn_name",
             "http_status",
+            "services_for_request_port",
             "content_type",
             "response_time",
             "webserver",
             "content_length",
             "page_title",
             "technologies",
+            "endpoint_defaults_by_port",
             "ip_addresses",
             "ports",
             "directories",
@@ -2226,7 +2503,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
             "subscan_count",
             "certificate_count",
         ]
-        datatables_always_serialize = ("certificate_count", "attack_surface_count")
+        datatables_always_serialize = ("certificate_count", "attack_surface_count", "endpoint_defaults_by_port")
 
     def get_is_interesting(self, subdomain):
         interesting_names = self.context.get("datatable_interesting_names")
@@ -2251,8 +2528,35 @@ class SubdomainSerializer(serializers.ModelSerializer):
 
         return count_llm_attack_surface_analyses_for_parent(obj)
 
+    def get_services_for_request_port(self, obj):
+        """
+        Merged service labels for the filtered port across this subdomain's IPs.
+
+        Contract (enforced by ``ListSubdomains`` via ``datatable_subdomain_list_serializer_context``):
+        ``context["filter_port_number"]`` is set when ``port`` is a valid TCP/UDP port (else ``None``,
+        and this method returns ``"-"``). The queryset must prefetch ``ip_addresses__ports`` so
+        ``_collect_sorted_service_labels_for_ip_port`` does not warn and service labels are complete.
+        """
+        pn = self.context.get("filter_port_number")
+        if not isinstance(pn, int) or not (1 <= pn <= 65535):
+            return "-"
+        cache: MutableMapping[Any, Any] = self.context.setdefault("_service_labels_by_ip_port", {})
+        merged: list[str] = []
+        seen: set[str] = set()
+        for ip in obj.ip_addresses.all():
+            for lab in _collect_sorted_service_labels_for_ip_port(ip, pn, cache):
+                if lab not in seen:
+                    seen.add(lab)
+                    merged.append(lab)
+        return ", ".join(sorted(merged)) if merged else "-"
+
     def get_ports(self, subdomain):
-        """Flatten all ports from subdomain's ip_addresses for DataTables 'ports' column."""
+        """
+        Flatten all ports from subdomain's ip_addresses for DataTables 'ports' column.
+
+        ``prefetch_related("ports")`` on the relation manager is a no-op when the parent queryset
+        already prefetched ``ip_addresses__ports``; otherwise it avoids N+1 on ``ip.ports``.
+        """
         return [
             PortSerializer(port).data
             for ip in subdomain.ip_addresses.prefetch_related("ports").all()
@@ -2317,6 +2621,12 @@ class SubdomainSerializer(serializers.ModelSerializer):
             return obj.default_endpoint_list[0]
         # Fallback to HybridProperty for backward compatibility
         return obj._default_endpoint
+
+    def get_technologies(self, obj):
+        return self._serialize_unique_technologies(self._default_endpoints_for_subdomain_serialization(obj))
+
+    def get_endpoint_defaults_by_port(self, obj):
+        return self._serialize_endpoint_defaults_by_port(self._default_endpoints_for_subdomain_serialization(obj))
 
     def get_display_http_status(self, obj):
         """Return default endpoint http_status for Secator scans, otherwise subdomain http_status."""

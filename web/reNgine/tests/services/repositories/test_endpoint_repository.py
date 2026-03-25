@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
 from reNgine.services.repositories.ip_repository import IpRepository, normalize_ip_address_string
-from startScan.models import DirectoryScan, EndPoint, Subdomain, SubScan
+from startScan.models import DirectoryScan, EndPoint, Port, Subdomain, SubScan
 from utils.test_base import BaseTestCase
 
 
@@ -333,6 +333,38 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result.response_time, 1.5)
+
+    def test_save_from_secator_sets_port_from_ip_host(self):
+        """Secator endpoint on IP host links EndPoint.port when matching Port exists."""
+        ip_obj, _ = IpRepository().get_or_create_for_scan(
+            self.scan_history.id,
+            self.data_generator.target.id,
+            "192.0.2.25",
+        )
+        self.assertIsNotNone(ip_obj)
+        port = Port.objects.create(number=8080, ip_address=ip_obj, service_name="http-alt")
+
+        endpoint = self._save_secator_endpoint("http://192.0.2.25:8080/", status_code=200)
+        self.assertIsNotNone(endpoint)
+        endpoint.refresh_from_db()
+        self.assertEqual(endpoint.port_id, port.id)
+
+    def test_save_from_secator_sets_port_from_subdomain_default_endpoint(self):
+        """Subdomain default endpoint links EndPoint.port when a unique matching Port exists."""
+        ip_obj, _ = IpRepository().get_or_create_for_scan(
+            self.scan_history.id,
+            self.data_generator.target.id,
+            "198.51.100.88",
+        )
+        self.assertIsNotNone(ip_obj)
+        self.subdomain.ip_addresses.add(ip_obj)
+        port = Port.objects.create(number=8443, ip_address=ip_obj, service_name="https-alt")
+
+        endpoint = self._save_secator_endpoint("https://test.example.com:8443/", status_code=200)
+        self.assertIsNotNone(endpoint)
+        endpoint.refresh_from_db()
+        self.assertEqual(endpoint.subdomain_id, self.subdomain.id)
+        self.assertEqual(endpoint.port_id, port.id)
 
     def test_create_endpoints_in_bulk_valid(self):
         """Test _create_endpoints_in_bulk with valid data."""

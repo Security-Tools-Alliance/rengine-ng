@@ -3,7 +3,6 @@ from datetime import datetime
 import json
 
 from django.contrib import messages
-from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Case, Count, F, IntegerField, Q, Value, When
 from django.db.models.functions import Coalesce, Lower
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
@@ -48,7 +47,7 @@ from reNgine.secator.selected_targets import (
 )
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.services.repositories import EndpointRepository
-from reNgine.services.scan_finding_metrics import get_scan_finding_counts
+from reNgine.services.scan_finding_metrics import get_scan_finding_counts, ip_addresses_queryset_for_scan
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.utilities.db import count_subquery
 from reNgine.utilities.domain import (
@@ -73,7 +72,6 @@ from startScan.models import (
     Email,
     Employee,
     EndPoint,
-    IpAddress,
     S3Bucket,
     ScanActivity,
     ScanHistory,
@@ -672,8 +670,7 @@ def detail_scan(request, id, slug):
     )
 
     vulns_tags = VulnerabilityTags.objects.filter(vuln_tags__in=vulns)
-    # Distinct by PK so we keep one row per IpAddress; distinct("address") can drop rows on some backends.
-    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct()
+    ip_addresses = ip_addresses_queryset_for_scan(id)
     # Precompute subdomain count/names per IP to avoid N+1 in IpSerializer
     through = Subdomain.ip_addresses.through
     ip_subdomain_data = defaultdict(lambda: {"count": 0, "names": []})
@@ -683,7 +680,7 @@ def detail_scan(request, id, slug):
         ip_subdomain_data[ip_id]["count"] += 1
         ip_subdomain_data[ip_id]["names"].append(name)
     ip_serializer = IpSerializer(
-        ip_addresses.prefetch_related("ports").all(),
+        ip_addresses,
         many=True,
         context={
             "scan_id": id,
@@ -799,7 +796,7 @@ def detail_scan(request, id, slug):
         "scan_activity": scan_activity,
         "secator_runners": secator_runners,
         "is_secator_scan": is_secator_scan,
-        "ip_addresses": json.dumps(ip_serializer.data, cls=DjangoJSONEncoder),
+        "ip_addresses_payload": ip_serializer.data,
         "subdomain_count": subdomain_count,
         "alive_count": alive_count,
         "important_count": important_count,
@@ -1783,13 +1780,7 @@ def create_report(request, slug, id):
         Subdomain.objects.filter(scan_history__id=id).values("name").distinct().filter(http_status__gt=0).count()
     )
     interesting_subdomains = get_interesting_subdomains(scan_history=id)
-    ip_addresses = (
-        IpAddress.objects.filter(ip_addresses__in=subdomains)
-        .prefetch_related(
-            "ports",
-        )
-        .distinct()
-    )
+    ip_addresses = ip_addresses_queryset_for_scan(id)
 
     data = {
         "scan_object": scan,

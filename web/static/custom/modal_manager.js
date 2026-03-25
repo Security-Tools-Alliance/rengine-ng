@@ -34,11 +34,56 @@
     return;
   }
 
+  const DIALOG_SIZE_CLASSES = 'modal-sm modal-lg modal-xl modal-full-width';
+  const DIALOG_SIZE_CLASS_LIST = DIALOG_SIZE_CLASSES.split(/\s+/);
+
+  // Last runtime size class applied via showDialog({ dialogClass }); stripped on reset / next open.
+  let lastAppliedDialogSizeClass = null;
+
+  const BASELINE_DATA_KEY = 'rengineBaselineDialogSize';
+
+  const detectTemplateDialogSize = function ($inner) {
+    const parts = ($inner.attr('class') || '').split(/\s+/).filter(Boolean);
+    for (let i = 0; i < DIALOG_SIZE_CLASS_LIST.length; i++) {
+      if (parts.indexOf(DIALOG_SIZE_CLASS_LIST[i]) >= 0) {
+        return DIALOG_SIZE_CLASS_LIST[i];
+      }
+    }
+    return '';
+  };
+
+  /**
+   * Baseline size class from the template for this .modal-dialog node (captured once per DOM node).
+   * Avoids a single global snapshot when multiple templates or replacements exist; re-captures if the node is replaced.
+   */
+  const getBaselineDialogSizeClass = function ($inner) {
+    if ($inner.data(BASELINE_DATA_KEY) === undefined) {
+      $inner.data(BASELINE_DATA_KEY, detectTemplateDialogSize($inner));
+    }
+    const v = $inner.data(BASELINE_DATA_KEY);
+    return typeof v === 'string' && v ? v : '';
+  };
+
+  const resetDialogInnerToDefaultSize = function () {
+    const $dialog = $('#' + MODAL_IDS.DIALOG);
+    if (!$dialog.length) return;
+    const $inner = $dialog.find('.modal-dialog').first();
+    if (!$inner.length) return;
+    if (lastAppliedDialogSizeClass) {
+      $inner.removeClass(lastAppliedDialogSizeClass);
+      lastAppliedDialogSizeClass = null;
+    }
+    $inner.removeClass(DIALOG_SIZE_CLASSES);
+    const baseline = getBaselineDialogSizeClass($inner);
+    if (baseline) {
+      $inner.addClass(baseline);
+    }
+  };
+
   const ensureModalInBody = function (id) {
     const el = document.getElementById(id);
     if (el && el.parentNode !== document.body) {
       document.body.appendChild(el);
-      return true;
     }
     return !!el;
   };
@@ -48,6 +93,28 @@
     ensureModalInBody(MODAL_IDS.DIALOG);
     const $dialog = $('#' + MODAL_IDS.DIALOG);
     if (!$dialog.length) return;
+    const $inner = $dialog.find('.modal-dialog').first();
+    if ($inner.length) {
+      getBaselineDialogSizeClass($inner);
+      $dialog.off('hidden.bs.modal.rengineDialogSize');
+      if (lastAppliedDialogSizeClass) {
+        $inner.removeClass(lastAppliedDialogSizeClass);
+        lastAppliedDialogSizeClass = null;
+      }
+      $inner.removeClass(DIALOG_SIZE_CLASSES);
+      if (opts.dialogClass) {
+        $inner.addClass(opts.dialogClass);
+        lastAppliedDialogSizeClass = opts.dialogClass;
+        $dialog.one('hidden.bs.modal.rengineDialogSize', function () {
+          resetDialogInnerToDefaultSize();
+        });
+      } else {
+        const baseline = getBaselineDialogSizeClass($inner);
+        if (baseline) {
+          $inner.addClass(baseline);
+        }
+      }
+    }
     $('#' + MODAL_DIALOG_TITLE).html(opts.title !== undefined ? opts.title : '');
     $('#' + MODAL_DIALOG_BODY).html(opts.bodyHtml !== undefined ? opts.bodyHtml : '');
     $('#' + MODAL_DIALOG_FOOTER).html(opts.footerHtml !== undefined ? opts.footerHtml : '');

@@ -1182,6 +1182,7 @@ window.DETAIL_SCAN_API_LIST_SUBSCANS = "{% url 'api:listSubScans' %}";
 
 {# visualisation libraries #}
 <script src="{% static 'custom/mitch.js' %}"></script>
+{{ ip_addresses_payload|json_script:"rengine-detail-scan-ip-addresses" }}
 
 <script type="text/javascript">
 const vuln_datatable_columns = window.RENGINE_VULN_DATATABLE_COLUMNS || [];
@@ -1428,9 +1429,18 @@ $(document).ready(function() {
 	//populate widgets (querySubdomains uses target_id as Target id; get_ips/get_technologies/get_ports use scan_id, domain_id optional)
 	get_important_subdomains('{% url "api:querySubdomains" %}', target_id=contextTargetId, scan_history_id={{scan_history_id}});
 
-	get_ips('{{ ip_addresses|safe }}', '{% url "api:getIpDetails" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=contextDomainId);
+	var rengineDetailScanIpAddresses = [];
+	var rengineDetailScanIpEl = document.getElementById("rengine-detail-scan-ip-addresses");
+	if (rengineDetailScanIpEl && rengineDetailScanIpEl.textContent) {
+		try {
+			rengineDetailScanIpAddresses = JSON.parse(rengineDetailScanIpEl.textContent);
+		} catch (e) {
+			console.error("Error parsing scan detail IP payload:", e);
+		}
+	}
+	get_ips(rengineDetailScanIpAddresses, '{% url "api:getIpDetails" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=contextDomainId);
 	get_technologies('{% url "api:listTechnologies" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=null);
-	get_ports('{{ ip_addresses|safe }}', '{% url "api:listIPs" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=contextDomainId);
+	get_ports(rengineDetailScanIpAddresses, '{% url "api:listIPs" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=contextDomainId);
 
 	get_subdomain_changes('{% url "api:subdomain-changes-list" %}', {{scan_history_id}});
 	get_endpoint_changes('{% url "api:endpoint-changes-list" %}', {{scan_history_id}});

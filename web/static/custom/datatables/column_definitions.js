@@ -39,8 +39,8 @@
  * - RENGINE_IP_DATATABLE_COLUMNS / RENGINE_DATATABLE_IP_*: startScan/detail_scan.html (IP tab). Backend: DATATABLE_COLUMN_MAP_IPS in column_maps.py.
  *
  * RENGINE_IP_DATATABLE_COLUMNS (DATATABLE_COLUMN_MAP_IPS, ListIPs datatables mode):
- *   0=id (checkbox)   1=address   2=subdomain_names   3=ports   4=alive   5=is_cdn   6=is_important (hidden)   7=action
- *   Orderable backend cols: 1=address, 4=alive, 5=is_cdn. Hidden is_important keeps server field in row data for highlights.
+ *   0=id (checkbox)   1=address   2=subdomain_names   3=ports   4=technologies   5=alive   6=is_cdn   7=is_important (hidden)   8=action
+ *   Orderable backend cols: 1=address, 5=alive, 6=is_cdn. Hidden is_important keeps server field in row data for highlights.
  *   Consumer: startScan/detail_scan.html (IP tab). Use getScanIpTableColumnDefs() for columnDefs.
  */
 (function () {
@@ -137,6 +137,7 @@
     { data: "address", name: "address" },
     { data: "subdomain_names", name: "subdomain_names", orderable: false, searchable: false },
     { data: "ports", name: "ports", orderable: false, searchable: false },
+    { data: "technologies", name: "technologies", orderable: false, searchable: false },
     { data: "alive", name: "alive" },
     { data: "is_cdn", name: "is_cdn" },
     {
@@ -310,6 +311,30 @@
             summaryWithPopover: true,
             rowId: row.id,
           });
+        },
+      },
+      {
+        targets: "technologies:name",
+        orderable: false,
+        render: function (_data, _type, row) {
+          if (
+            window.RengineDatatableRenderers &&
+            typeof window.RengineDatatableRenderers.renderEndpointDefaultsByPortBadges === "function"
+          ) {
+            return window.RengineDatatableRenderers.renderEndpointDefaultsByPortBadges(
+              row.endpoint_defaults_by_port,
+              {
+                queryUrl: querySubdomainsUrl,
+                showPortLabel: true,
+                technologies: {
+                  technologies: row.technologies || null,
+                  content_type: row.content_type || "",
+                  webserver: row.webserver || "",
+                },
+              },
+            );
+          }
+          return "";
         },
       },
       {

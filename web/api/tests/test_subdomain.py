@@ -7,7 +7,7 @@ from datetime import timedelta
 from django.urls import reverse
 from rest_framework import status
 
-from startScan.models import ScanHistory, Subdomain
+from startScan.models import EndPoint, IpAddress, Port, ScanHistory, Subdomain, Technology
 from targetApp.constants import TARGET_TYPE_HOST
 from targetApp.models import Target
 from utils.test_base import BaseTestCase
@@ -85,6 +85,30 @@ class TestListSubdomains(BaseTestCase):
         self.assertIn("subdomains", response.data)
         self.assertGreaterEqual(len(response.data["subdomains"]), 1)
         self.assertEqual(response.data["subdomains"][0]["name"], self.data_generator.subdomain.name)
+
+    def test_query_subdomains_datatables_port_filter_services_for_request_port(self):
+        """Port-filtered ListSubdomains exposes merged service names for that port (port modal)."""
+        url = reverse("api:querySubdomains")
+        dg = self.data_generator
+        subdomain = dg.subdomain
+        ip = IpAddress.objects.create(address="203.0.113.190")
+        subdomain.ip_addresses.add(ip)
+        Port.objects.create(number=9000, ip_address=ip, service_name="jetty")
+        response = self.client.get(
+            url,
+            {
+                "scan_id": dg.scan_history.id,
+                "project": dg.project.slug,
+                "port": "9000",
+                "start": "0",
+                "length": "50",
+                "draw": "1",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = next((x for x in response.data["data"] if x["id"] == subdomain.id), None)
+        self.assertIsNotNone(row)
+        self.assertEqual(row.get("services_for_request_port"), "jetty")
 
 
 class TestSubdomainsViewSet(BaseTestCase):
@@ -243,6 +267,44 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
         self.assertEqual(baseline.status_code, status.HTTP_200_OK)
         self.assertEqual(bad.status_code, status.HTTP_200_OK)
         self.assertEqual(baseline.data.get("recordsFiltered"), bad.data.get("recordsFiltered"))
+
+    def test_datatable_uses_default_endpoints_for_technology_payload(self):
+        """Subdomain DataTables row exposes endpoint-derived technologies grouped by port."""
+        subdomain = self.data_generator.subdomain
+        ip = IpAddress.objects.create(address="203.0.113.140")
+        subdomain.ip_addresses.add(ip)
+        port = Port.objects.create(number=8443, ip_address=ip, service_name="https-alt")
+        tech = Technology.objects.create(name="Caddy")
+        endpoint = EndPoint.objects.create(
+            scan_history=self.data_generator.scan_history,
+            domain=self.data_generator.domain,
+            subdomain=subdomain,
+            http_url=f"https://{subdomain.name}:8443/",
+            is_default=True,
+            port=port,
+            content_type="text/html",
+            webserver="caddy",
+        )
+        endpoint.techs.add(tech)
+
+        api_url = reverse("api:subdomain-datatable-list")
+        response = self.client.get(
+            api_url,
+            {
+                "scan_id": self.data_generator.scan_history.id,
+                "project": self.data_generator.project.slug,
+                "start": "0",
+                "length": "20",
+                "draw": "1",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = next((x for x in response.data["data"] if x["id"] == subdomain.id), None)
+        self.assertIsNotNone(row)
+        self.assertIn("endpoint_defaults_by_port", row)
+        self.assertTrue(any(item.get("port") == 8443 for item in row["endpoint_defaults_by_port"]))
+        tech_names = {t.get("name") for t in row.get("technologies", [])}
+        self.assertIn("Caddy", tech_names)
 
 
 class TestInterestingSubdomainViewSet(BaseTestCase):

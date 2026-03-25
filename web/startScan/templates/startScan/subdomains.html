@@ -116,23 +116,24 @@ $(document).ready(function() {
 						var badges = '';
 						var tech_badge = '';
 						var interesting_badge = '';
-						var content_type = '';
-						var web_server = '';
 						var waf_badge = '';
-						if (row['technologies']){
+						if (window.RengineDatatableRenderers && typeof window.RengineDatatableRenderers.renderEndpointDefaultsByPortBadges === 'function') {
+							tech_badge = window.RengineDatatableRenderers.renderEndpointDefaultsByPortBadges(row['endpoint_defaults_by_port'], {
+								queryUrl: '{% url "api:querySubdomains" %}',
+								showPortLabel: true,
+								technologies: {
+									technologies: row['technologies'] || null,
+									content_type: row['content_type'] || '',
+									webserver: row['webserver'] || '',
+								},
+							});
+						}
+						if (!tech_badge && row['technologies']){
 							tech_badge = '<div>' + parse_technology('{% url "api:querySubdomains" %}', row['technologies'], "primary", scan_id=null, domain_id=null) + '</div>';
 						}
 						if(row['is_interesting'])
 						{
 							interesting_badge = `<div><span class='me-1 badge badge-soft-danger' data-toggle="tooltip" data-placement="top" title="Interesting Subdomain">Interesting</span></div>`;
-						}
-
-						if (row['content_type']) {
-							content_type = `<div><span class='mt-1 badge badge-soft-blue bs-tooltip' title="Content Type">${row['content_type']}</span></div>`;
-						}
-
-						if (row['webserver']) {
-							web_server = `<div><span class='mt-1 badge badge-soft-info bs-tooltip' title="Web Server">${row['webserver']}</span></div>`;
 						}
 
 						if (interesting_badge) {
@@ -180,9 +181,6 @@ $(document).ready(function() {
 						if (row['certificate_count']) {
 							certificate_count_badge = `<span class="me-1 badge badge-soft-secondary badge-link bs-tooltip" title="Certificate(s)" onclick="render_certificate_in_xl_modal(${row['id']}, '${String(row['name']).replace(/'/g, "\\'")}', null)">${row['certificate_count']} <i class="fas fa-certificate"></i></span>`;
 						}
-
-						tech_badge += content_type;
-						tech_badge += web_server;
 
 						end_vuln_badge = '<div class="">' + subscan_count_badge + endpoint_count_badge + directory_count_badge + certificate_count_badge + vuln_count_badge + '</div>';
 

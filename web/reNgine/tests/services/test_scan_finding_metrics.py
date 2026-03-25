@@ -14,6 +14,8 @@ from reNgine.services.scan_finding_metrics import (
     get_ip_metrics_for_target,
     get_scan_finding_counts,
     ip_address_id_linked_to_scan,
+    ip_addresses_queryset_for_scan,
+    ip_addresses_queryset_for_target,
     partition_ip_address_ids_for_scan_history,
     partition_ip_address_ids_for_target,
 )
@@ -57,6 +59,38 @@ class ScanFindingMetricsTestCase(BaseTestCase):
         total, alive = get_ip_address_metrics_for_scan(self.scan.id)
         self.assertEqual(total, 1)
         self.assertEqual(alive, 1)
+
+    def test_ip_addresses_queryset_for_scan_includes_endpoint_only_ip(self) -> None:
+        ip = IpAddress.objects.create(address="192.0.2.88", version=4, alive=True)
+        EndPoint.objects.create(
+            scan_history=self.scan,
+            domain=self.domain,
+            subdomain=None,
+            ip_address=ip,
+            http_url="http://192.0.2.88/",
+            discovered_date=timezone.now(),
+        )
+        qs = ip_addresses_queryset_for_scan(self.scan.id)
+        self.assertEqual(qs.count(), 1)
+        self.assertEqual(qs.first().pk, ip.pk)
+        self.assertEqual(qs.count(), get_ip_address_total_for_scan(self.scan.id))
+
+    def test_ip_addresses_queryset_for_target_includes_endpoint_only_ip(self) -> None:
+        target = self.data_generator.target
+        self.assertIsNotNone(target)
+        ip = IpAddress.objects.create(address="192.0.2.89", version=4, alive=True)
+        EndPoint.objects.create(
+            scan_history=self.scan,
+            domain=self.domain,
+            subdomain=None,
+            ip_address=ip,
+            http_url="http://192.0.2.89/",
+            discovered_date=timezone.now(),
+        )
+        qs = ip_addresses_queryset_for_target(target.id)
+        self.assertEqual(qs.count(), 1)
+        self.assertEqual(qs.first().pk, ip.pk)
+        self.assertEqual(qs.count(), get_ip_metrics_for_target(target.id)[0])
 
     def test_ip_address_id_linked_to_scan_matches_partition(self) -> None:
         sub = self.data_generator.create_subdomain(scan_history=self.scan, domain=self.domain)

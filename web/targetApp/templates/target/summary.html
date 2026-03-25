@@ -605,6 +605,7 @@ window.DETAIL_SCAN_API_CERTIFICATES_LIST = "{% url 'api:certificates_list' %}";
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
 <script src="{% static 'plugins/j-map/jquery-jvectormap.min.js' %}"></script>
 <script src="{% static 'plugins/j-map/maps/jquery-jvectormap-world-mill-en.js' %}"></script>
+{{ ip_addresses_payload|json_script:"rengine-target-summary-ip-addresses" }}
 <script type="text/javascript">
 const subdomain_datatable_columns = (window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS || []).map(function(col) {
 	if (col && col.name === 'vuln_count') return Object.assign({}, col, { visible: false });
@@ -855,9 +856,18 @@ $(document).ready(function(){
 	get_important_subdomains('{% url "api:querySubdomains" %}', target_id={{target.id}}, scan_history_id=null);
 	get_recon_notes('{% url "api:listTodoNotes" %}', target_id={{target.id}}, scan_history_id=null);
 
-	get_ips('{{ ip_addresses|safe }}', '{% url "api:getIpDetails" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
+	var rengineTargetSummaryIpAddresses = [];
+	var rengineTargetSummaryIpEl = document.getElementById("rengine-target-summary-ip-addresses");
+	if (rengineTargetSummaryIpEl && rengineTargetSummaryIpEl.textContent) {
+		try {
+			rengineTargetSummaryIpAddresses = JSON.parse(rengineTargetSummaryIpEl.textContent);
+		} catch (e) {
+			console.error("Error parsing target summary IP payload:", e);
+		}
+	}
+	get_ips(rengineTargetSummaryIpAddresses, '{% url "api:getIpDetails" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
 	get_technologies('{% url "api:listTechnologies" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
-	get_ports('{{ ip_addresses }}', '{% url "api:listIPs" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
+	get_ports(rengineTargetSummaryIpAddresses, '{% url "api:listIPs" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
 
 	var clipboard = new Clipboard('.copyable');
 	clipboard.on('success', function(e) {

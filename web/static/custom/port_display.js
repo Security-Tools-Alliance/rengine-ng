@@ -6,6 +6,65 @@ function portDisplaySafeText(s) {
     return (typeof window.safeText === "function" ? window.safeText(s) : (s == null ? "" : String(s)));
 }
 
+/**
+ * Finite non-negative count or NaN (invalid / missing). Prefer this for repeated coercion on hot paths.
+ */
+function portDisplayCoerceFiniteNonNegativeCount(value) {
+    if (value == null || value === "") {
+        return NaN;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return value >= 0 ? value : NaN;
+    }
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : NaN;
+}
+
+/**
+ * Non-negative integer for counts, or 0 if missing or not a finite number.
+ * Used for IP-address badges: the only association dimension in that payload is subdomains.
+ */
+function portDisplayFiniteNonNegativeCountOrZero(value) {
+    const n = portDisplayCoerceFiniteNonNegativeCount(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Association metadata for a port-number badge (not an IP badge).
+ *
+ * Prefer ip_address_count: distinct IPs exposing this port in the aggregated payload.
+ * Fall back to subdomain_count when IP counts are absent so the badge still reflects host coverage.
+ *
+ * @returns {{ count: number, kind: "ip"|"subdomain"|"none" }}
+ */
+function portDisplayPickPortRowAssociationCount(element) {
+    const ipRaw = portDisplayCoerceFiniteNonNegativeCount(element.ip_address_count);
+    const subRaw = portDisplayCoerceFiniteNonNegativeCount(element.subdomain_count);
+    if (Number.isFinite(ipRaw)) {
+        return { count: ipRaw, kind: "ip" };
+    }
+    if (Number.isFinite(subRaw)) {
+        return { count: subRaw, kind: "subdomain" };
+    }
+    return { count: 0, kind: "none" };
+}
+
+/** Sentinel sort key so invalid / non-finite port values sort after all valid ports. */
+const PORT_SORT_MAX_SENTINEL = Number.MAX_SAFE_INTEGER;
+
+/**
+ * Numeric sort key for port numbers; non-finite values sort after real ports.
+ */
+function portDisplayCoercePortSortKey(num) {
+    if (typeof num === "number" && Number.isFinite(num)) {
+        return num;
+    }
+    const n = Number(num);
+    return Number.isFinite(n) ? n : PORT_SORT_MAX_SENTINEL;
+}
+
+/** Strict TCP port parsing lives in rengine_datatable_port_endpoint_pure.js (loaded before this file). */
+
 function portDisplaySafeBadgeWithTooltip(title, displayText, badgeClass, extraInnerHtml) {
     if (typeof window.safeBadgeWithTooltip === "function") {
         const fullClass = "m-1 badge " + (badgeClass != null && badgeClass !== "" ? badgeClass : "") + " bs-tooltip badge-link";
@@ -58,39 +117,109 @@ function portDisplaySubdomainLinkCell(data, type, row, urlOverride) {
 const PORT_SUMMARY_THRESHOLD = 3;
 const PORT_SUMMARY_VISIBLE = 2;
 
+function portDisplayBadgeColorForPortRow(isIp, element) {
+    if (isIp) {
+        return element.is_cdn ? "warning" : "primary";
+    }
+    return element.is_uncommon ? "danger" : "primary";
+}
+
+function portDisplayBuildTooltipTitleBase(element, isIp) {
+    if (isIp) {
+        let t = element.is_cdn ? "CDN IP Address" : "IP Address";
+        if (element.alive !== undefined) {
+            t += "\nAlive: " + (element.alive ? "Yes" : "No");
+        }
+        return t;
+    }
+    let t = "Port " + element.number;
+    if (element.state) t += "\nState: " + element.state;
+    if (element.protocol) t += "\nProtocol: " + element.protocol;
+    if (element.host) t += "\nHost: " + element.host;
+    if (element.cpes && element.cpes.length > 0) {
+        t += "\nCPEs: " + element.cpes.join(", ");
+    }
+    return t;
+}
+
+function portDisplayAppendDescriptionToTitle(title, element) {
+    return element.description ? title + " - " + element.description : title;
+}
+
+function portDisplayAssociationFieldsForBadge(element, isIp) {
+    if (!isIp) {
+        const picked = portDisplayPickPortRowAssociationCount(element);
+        let associationNames = null;
+        let associationLabelSingular = "host";
+        let associationLabelPlural = "hosts";
+        if (picked.kind === "ip") {
+            associationNames =
+                element.ip_address_names ||
+                (Array.isArray(element.ip_addresses) ? element.ip_addresses : null);
+            associationLabelSingular = "IP address";
+            associationLabelPlural = "IP addresses";
+        } else if (picked.kind === "subdomain") {
+            associationNames = element.subdomain_names;
+            associationLabelSingular = "subdomain";
+            associationLabelPlural = "subdomains";
+        }
+        return {
+            assocNum: picked.count,
+            associationNames: associationNames,
+            associationLabelSingular: associationLabelSingular,
+            associationLabelPlural: associationLabelPlural,
+        };
+    }
+    return {
+        assocNum: portDisplayFiniteNonNegativeCountOrZero(element.subdomain_count),
+        associationNames: element.subdomain_names,
+        associationLabelSingular: "subdomain",
+        associationLabelPlural: "subdomains",
+    };
+}
+
+function portDisplayAppendAssociationLines(title, assocNum, associationNames, singular, plural) {
+    if (assocNum <= 0) {
+        return title;
+    }
+    const assocLabel = assocNum === 1 ? singular : plural;
+    let out = title + "\nFound on " + assocNum + " " + assocLabel;
+    if (associationNames && associationNames.length > 0) {
+        out += ":\n• " + associationNames.join("\n• ");
+    }
+    return out;
+}
+
+function portDisplayPortRowMainLabel(element) {
+    return element.service_name
+        ? element.number + "/" + element.service_name
+        : String(element.number != null ? element.number : "");
+}
+
+function portDisplayAssociationCountBadgeHtml(assocNum, badgeColor) {
+    if (assocNum <= 0) {
+        return "";
+    }
+    if (typeof window.safeBadge === "function") {
+        return window.safeBadge(String(assocNum), "badge bg-" + badgeColor + " ms-1", "");
+    }
+    return "<span class=\"badge bg-" + badgeColor + " ms-1\">" + portDisplaySafeText(String(assocNum)) + "</span>";
+}
+
 function buildSinglePortBadgeHtml(element, settings) {
-    const is_ip = !element.number;
-    const badge_color = is_ip
-        ? (element.is_cdn ? "warning" : "primary")
-        : (element.is_uncommon ? "danger" : "primary");
-
-    let title = is_ip
-        ? (element.is_cdn ? "CDN IP Address" : "IP Address")
-        : "Port " + element.number;
-
-    if (is_ip && element.alive !== undefined) {
-        title += "\nAlive: " + (element.alive ? "Yes" : "No");
-    }
-    if (!is_ip) {
-        if (element.state) title += "\nState: " + element.state;
-        if (element.protocol) title += "\nProtocol: " + element.protocol;
-        if (element.host) title += "\nHost: " + element.host;
-        if (element.cpes && element.cpes.length > 0) {
-            title += "\nCPEs: " + element.cpes.join(", ");
-        }
-    }
-    if (element.description) title += " - " + element.description;
-    if (element.subdomain_count) {
-        title += "\nFound on " + element.subdomain_count + " subdomain" + (element.subdomain_count > 1 ? "s" : "");
-        if (element.subdomain_names && element.subdomain_names.length > 0) {
-            title += ":\n• " + element.subdomain_names.join("\n• ");
-        }
-    }
-
-    const display_text = is_ip ? (element.address || "") : (element.number + "/" + (element.service_name || ""));
-    const countHtml = element.subdomain_count && typeof window.safeBadge === "function"
-        ? window.safeBadge(String(element.subdomain_count), "badge bg-" + badge_color + " ms-1", "")
-        : (element.subdomain_count ? "<span class=\"badge bg-" + badge_color + " ms-1\">" + portDisplaySafeText(String(element.subdomain_count)) + "</span>" : "");
+    const is_ip = element.number == null;
+    const badge_color = portDisplayBadgeColorForPortRow(is_ip, element);
+    const assoc = portDisplayAssociationFieldsForBadge(element, is_ip);
+    let title = portDisplayAppendDescriptionToTitle(portDisplayBuildTooltipTitleBase(element, is_ip), element);
+    title = portDisplayAppendAssociationLines(
+        title,
+        assoc.assocNum,
+        assoc.associationNames,
+        assoc.associationLabelSingular,
+        assoc.associationLabelPlural,
+    );
+    const display_text = is_ip ? (element.address || "") : portDisplayPortRowMainLabel(element);
+    const countHtml = portDisplayAssociationCountBadgeHtml(assoc.assocNum, badge_color);
 
     const portsUrl = portDisplaySafeAttr(settings.api_ports_url || "");
     const subdomainsUrl = portDisplaySafeAttr(settings.api_subdomains_url || "");
@@ -226,10 +355,51 @@ function attachPortBadgeTriggerListener() {
     });
 }
 
+/**
+ * Legacy path: JSON embedded in HTML (historical templates used |safe + DOMParser).
+ * @param {string} str
+ * @returns {Array}
+ */
+function normalizeIpAddressesPayloadFromLegacyHtmlEmbeddedJson(str) {
+    if (typeof str !== "string" || !str.trim()) {
+        return [];
+    }
+    try {
+        const decoded = new DOMParser().parseFromString(str, "text/html").documentElement.textContent;
+        const parsed = JSON.parse(decoded);
+        if (!Array.isArray(parsed)) {
+            console.warn("Legacy IP widget JSON: root value is not an array");
+            return [];
+        }
+        return parsed;
+    } catch (e) {
+        console.error("Legacy IP widget JSON parse failed:", e);
+        return [];
+    }
+}
+
+/**
+ * Coalesce IP widget payload: arrays from json_script + JSON.parse (current templates), or legacy string.
+ * @param {*} raw
+ * @returns {Array}
+ */
+function normalizeIpAddressesPayload(raw) {
+    if (Array.isArray(raw)) {
+        return raw;
+    }
+    if (raw == null || raw === "") {
+        return [];
+    }
+    if (typeof raw === "string") {
+        return normalizeIpAddressesPayloadFromLegacyHtmlEmbeddedJson(raw);
+    }
+    console.warn("IP widget payload: expected array or legacy HTML-wrapped JSON string, got", typeof raw);
+    return [];
+}
+
 function get_ips(ip_addresses, port_url, endpoint_subdomains, scan_id=null, domain_id=null) {
     try {
-        const decoded = new DOMParser().parseFromString(ip_addresses, "text/html").documentElement.textContent;
-        const data = JSON.parse(decoded);
+        const data = normalizeIpAddressesPayload(ip_addresses);
         
         $('#ip-address-count').html(`<span class="badge badge-soft-primary me-1">${data.length}</span>`);
         $('#ip-address').html(renderBadge(
@@ -250,39 +420,55 @@ function get_ips(ip_addresses, port_url, endpoint_subdomains, scan_id=null, doma
     }
 }
 
-function get_ports(ip_addresses, ip_url, subdomain_url, scan_id=null, domain_id=null) {
+/**
+ * Build aggregated port badges from embedded IP data (client-side only; no list API call).
+ *
+ * @param {*} ip_addresses - IP rows with nested `ports` (from `json_script` or legacy HTML-wrapped JSON).
+ * @param {string} api_ips_url - Required: passed through to `renderBadge` as `api_ips_url` for port-badge modals.
+ * @param {string} api_subdomains_url - Required: passed through to `renderBadge` as `api_subdomains_url`.
+ * @param {number|null} scan_id
+ * @param {number|null} domain_id
+ *
+ * Aggregation is intentionally **by port number only**: `service_name` / `description` on each
+ * nested port row are ignored so one badge is shown per distinct port with IP coverage counts.
+ * Detailed service text belongs in list/modal APIs, not this summary widget.
+ */
+function get_ports(ip_addresses, api_ips_url, api_subdomains_url, scan_id=null, domain_id=null) {
     try {
-        const decoded = new DOMParser().parseFromString(ip_addresses, "text/html").documentElement.textContent;
-        const data = JSON.parse(decoded);
+        const data = normalizeIpAddressesPayload(ip_addresses);
         
-        // Create a Map to store ports and their subdomains
         const portMap = new Map();
-        
-        // Iterate through all IPs and their ports
+
         data.forEach(ip => {
             ip.ports.forEach(port => {
-                const portKey = JSON.stringify({
-                    number: port.number,
-                    service_name: port.service_name,
-                    description: port.description,
-                    is_uncommon: port.is_uncommon
-                });
-                
-                // Initialize or update the Set of subdomains for this port
-                if (!portMap.has(portKey)) {
-                    portMap.set(portKey, new Set());
+                const num = port.number;
+                if (num == null || num === "") {
+                    return;
                 }
-                // Add the current IP to the Set of this port
-                portMap.get(portKey).add(ip.address);
+                if (!portMap.has(num)) {
+                    portMap.set(num, { ipSet: new Set(), is_uncommon: false });
+                }
+                const entry = portMap.get(num);
+                entry.ipSet.add(ip.address);
+                if (port.is_uncommon) {
+                    entry.is_uncommon = true;
+                }
             });
         });
-        
-        // Convert the Map to an array of ports with the count of subdomains
-        const ports = Array.from(portMap.entries()).map(([portKey, ips]) => {
-            const port = JSON.parse(portKey);
-            port.subdomain_count = ips.size;
-            return port;
-        });
+
+        const ports = Array.from(portMap.entries())
+            .map(([number, entry]) => {
+                const names = Array.from(entry.ipSet).sort();
+                return {
+                    number,
+                    service_name: "",
+                    description: "",
+                    is_uncommon: entry.is_uncommon,
+                    ip_address_count: names.length,
+                    ip_address_names: names
+                };
+            })
+            .sort((a, b) => portDisplayCoercePortSortKey(a.number) - portDisplayCoercePortSortKey(b.number));
         
         // Display the total number of ports
         $('#ports-count').html(`<span class="badge badge-soft-primary me-1">${ports.length}</span>`);
@@ -291,8 +477,8 @@ function get_ports(ip_addresses, ip_url, subdomain_url, scan_id=null, domain_id=
         $('#ports').html(renderBadge(
             [{ports: ports}],
             {
-                api_ips_url: ip_url,
-                api_subdomains_url: subdomain_url,
+                api_ips_url: api_ips_url,
+                api_subdomains_url: api_subdomains_url,
                 scan_id: scan_id,
                 domain_id: domain_id
             }
@@ -307,7 +493,8 @@ function get_ports(ip_addresses, ip_url, subdomain_url, scan_id=null, domain_id=
     }
 }
 
-function setupModal(title, tabs) {
+function setupModal(title, tabs, options) {
+    const opts = options || {};
     let navHtml = '<ul class="nav nav-tabs nav-bordered" id="modal_tab_nav">';
     let contentHtml = '<div id="modal_tab_content" class="tab-content">';
     tabs.forEach((tab, index) => {
@@ -319,7 +506,14 @@ function setupModal(title, tabs) {
     navHtml += '</ul>';
     contentHtml += '</div>';
     const bodyHtml = navHtml + contentHtml;
-    if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml: '' });
+    if (window.ModalManager) {
+        ModalManager.showDialog({
+            title,
+            bodyHtml,
+            footerHtml: '',
+            dialogClass: opts.dialogClass || null
+        });
+    }
     $('#modal_tab_nav').off('shown.bs.tab').on('shown.bs.tab', 'a[data-tab-id="subdomain"]', function () {
         setTimeout(() => {
             const containerId = 'modal_content_subdomain';
@@ -621,6 +815,151 @@ function showScreenshotImageModal(screenshotUrl, httpUrl = '') {
     }
 }
 
+/**
+ * Registry for one-shot port_display console warnings: stable id → window flag + static message
+ * or {@link portDisplayFormatMalformedUrlMessage} context label. Extend here only; call {@link portDisplayWarnOnce}.
+ */
+var RENGINE_PORT_DISPLAY_WARN_ONCE = (function () {
+    var K = (typeof RENGINE_CONSOLE_WARN_KEYS !== "undefined" && RENGINE_CONSOLE_WARN_KEYS.portDisplay) || {
+        missingServicesForRequestPort: "__rengineWarnOnce_portDisplay_missingServicesForRequestPort",
+        malformedUrlModalIp: "__rengineWarnOnce_portDisplay_malformedUrlModalIp",
+        malformedUrlModalSubdomainHttpUrl: "__rengineWarnOnce_portDisplay_malformedUrlModalSubHttpUrl",
+        malformedUrlNameColumn: "__rengineWarnOnce_portDisplay_malformedUrlNameColumn"
+    };
+    return {
+        missingServicesForRequestPort: {
+            windowKey: K.missingServicesForRequestPort,
+            message:
+                "Port modal DataTable: row payload lacks services_for_request_port (older API / mixed-version). " +
+                "Service cells may show a placeholder; prefetch and serializer support require a matching server version."
+        },
+        malformedUrlModalIp: {
+            windowKey: K.malformedUrlModalIp,
+            contextLabel: "portDisplayModalWebSchemeHref(ip)"
+        },
+        malformedUrlModalSubdomainHttpUrl: {
+            windowKey: K.malformedUrlModalSubdomainHttpUrl,
+            contextLabel: "portDisplayModalWebSchemeHref(subdomain http_url)"
+        },
+        malformedUrlNameColumn: {
+            windowKey: K.malformedUrlNameColumn,
+            contextLabel: "port modal subdomain name column URL rewrite"
+        }
+    };
+}());
+
+function portDisplayFormatMalformedUrlMessage(contextLabel, err) {
+    const detail = err && err.message ? err.message : err != null ? String(err) : "";
+    return "port_display: URL parse/build failed (" + contextLabel + ")." + (detail ? " " + detail : "");
+}
+
+/**
+ * Emit a registered one-time warning (see {@link RENGINE_PORT_DISPLAY_WARN_ONCE}).
+ * @param {string} warnId - key of {@link RENGINE_PORT_DISPLAY_WARN_ONCE}
+ * @param {*} [err] - optional caught value when the entry uses {@link portDisplayFormatMalformedUrlMessage}
+ */
+function portDisplayWarnOnce(warnId, err) {
+    const spec = RENGINE_PORT_DISPLAY_WARN_ONCE[warnId];
+    if (!spec || typeof spec !== "object") {
+        return;
+    }
+    const wk = spec.windowKey;
+    if (typeof window !== "undefined" && window[wk]) {
+        return;
+    }
+    if (typeof window !== "undefined") {
+        window[wk] = true;
+    }
+    if (typeof console === "undefined" || typeof console.warn !== "function") {
+        return;
+    }
+    let msg;
+    if (typeof spec.message === "string") {
+        msg = spec.message;
+    } else if (spec.contextLabel) {
+        msg = portDisplayFormatMalformedUrlMessage(spec.contextLabel, err);
+    }
+    if (msg) {
+        console.warn(msg);
+    }
+}
+
+/**
+ * True if webPorts (numbers or numeric strings from config) includes the given port.
+ */
+function portDisplayWebPortsArrayIncludesPort(webPorts, portNum) {
+    const p = typeof portNum === "number" && Number.isFinite(portNum) ? portNum : parseInt(portNum, 10);
+    if (!Number.isFinite(p) || !Array.isArray(webPorts)) {
+        return false;
+    }
+    return webPorts.some(function (wp) {
+        return parseInt(wp, 10) === p;
+    });
+}
+
+/**
+ * Normalize IP literal for URL host (IPv6 bracketed; zone id stripped before brackets).
+ */
+function portDisplayBracketedHostForUrl(addrRaw) {
+    const raw = addrRaw != null ? String(addrRaw).trim() : "";
+    if (!raw) {
+        return null;
+    }
+    const unbracketed = raw.replace(/^\[|\]$/g, "");
+    if (unbracketed.indexOf(":") >= 0) {
+        const noZone = unbracketed.split("%")[0];
+        return "[" + noZone + "]";
+    }
+    return unbracketed;
+}
+
+/**
+ * Build http(s) URL for port-modal DataTable link columns (IP or subdomain tab).
+ *
+ * @param {"ip"|"subdomain"} rowMode - `ip` uses `row.address`; `subdomain` prefers `row.http_url` then `row.name`.
+ */
+function portDisplayModalWebSchemeHref(rowMode, row, portStr, webPorts, scheme) {
+    if (!row || typeof row !== "object") {
+        return null;
+    }
+    const p = portDisplayParseStrictTcpPortString(portStr);
+    if (p === null || !portDisplayWebPortsArrayIncludesPort(webPorts, p)) {
+        return null;
+    }
+    if (rowMode === "ip") {
+        const host = portDisplayBracketedHostForUrl(row.address);
+        if (!host) {
+            return null;
+        }
+        try {
+            const u = new URL(scheme + "://" + host + "/");
+            u.port = String(p);
+            return u.origin;
+        } catch (e) {
+            portDisplayWarnOnce("malformedUrlModalIp", e);
+            return null;
+        }
+    }
+    if (rowMode !== "subdomain") {
+        return null;
+    }
+    try {
+        if (row.http_url) {
+            const u = new URL(row.http_url);
+            u.protocol = scheme + ":";
+            u.port = String(p);
+            return u.toString();
+        }
+    } catch (e) {
+        portDisplayWarnOnce("malformedUrlModalSubdomainHttpUrl", e);
+    }
+    const host = row.name != null ? String(row.name).trim() : "";
+    if (!host) {
+        return null;
+    }
+    return scheme + "://" + host + ":" + p;
+}
+
 function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id=null, domain_id=null) {
 
     // Store modal data globally for tab click events
@@ -650,7 +989,8 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
             [
                 { id: 'ip', label: 'IP Addresses', loader: loaders.ip },
                 { id: 'subdomain', label: 'Subdomains', loader: loaders.subdomain }
-            ]
+            ],
+            { dialogClass: 'modal-xl' }
         );
 
         // IP tab: server-side DataTable
@@ -658,7 +998,7 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
             .append('<p id="modal_content_ip_info">Loading...</p>')
             .append(
                 '<table id="modal_content_ip-datatable" class="table table-striped table-sm">' +
-                '<thead><tr><th>IP Address</th><th>Alive</th><th>HTTP</th><th>HTTPS</th><th>Tags</th></tr></thead><tbody></tbody></table>'
+                '<thead><tr><th>IP Address</th><th>Alive</th><th>Service</th><th>HTTP</th><th>HTTPS</th><th>Tags</th></tr></thead><tbody></tbody></table>'
             );
         const ipTableOpts = {
             ajax: {
@@ -672,9 +1012,10 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
             columns: [
                 { data: "address", name: "address" },
                 { data: "alive", name: "alive" },
-                { data: null, name: "http_link" },
-                { data: null, name: "https_link" },
-                { data: "is_cdn", name: "is_cdn" }
+                { data: "services_for_request_port", name: "service", orderable: false },
+                { data: null, name: "http_link", orderable: false },
+                { data: null, name: "https_link", orderable: false },
+                { data: "is_cdn", name: "is_cdn", orderable: false }
             ],
             columnDefs: [
                 {
@@ -694,23 +1035,32 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
                     }
                 },
                 {
+                    targets: "service:name",
+                    render: function (data, type, row) {
+                        if (row && typeof row === "object" && !Object.prototype.hasOwnProperty.call(row, "services_for_request_port")) {
+                            portDisplayWarnOnce("missingServicesForRequestPort");
+                            return "<span class=\"text-muted\" title=\"Service column unavailable: services_for_request_port not in API response (older server?)\">—</span>";
+                        }
+                        const t = data != null && data !== "" ? data : "-";
+                        return portDisplaySafeText(t);
+                    }
+                },
+                {
                     targets: "http_link:name",
                     orderable: false,
                     render: function (data, type, row) {
-                        const isWebPort = webPorts.includes(parseInt(port, 10));
-                        if (!isWebPort || !row.address) return "-";
-                        const rawHref = "http://" + row.address + ":" + port;
-                        return portDisplaySafeLink(rawHref, "HTTP", { target: "_blank", className: "badge badge-soft-primary" });
+                        const href = portDisplayModalWebSchemeHref("ip", row, port, webPorts, "http");
+                        if (!href) return "-";
+                        return portDisplaySafeLink(href, "HTTP", { target: "_blank", className: "badge badge-soft-primary" });
                     }
                 },
                 {
                     targets: "https_link:name",
                     orderable: false,
                     render: function (data, type, row) {
-                        const isWebPort = webPorts.includes(parseInt(port, 10));
-                        if (!isWebPort || !row.address) return "-";
-                        const rawHref = "https://" + row.address + ":" + port;
-                        return portDisplaySafeLink(rawHref, "HTTPS", { target: "_blank", className: "badge badge-soft-primary" });
+                        const href = portDisplayModalWebSchemeHref("ip", row, port, webPorts, "https");
+                        if (!href) return "-";
+                        return portDisplaySafeLink(href, "HTTPS", { target: "_blank", className: "badge badge-soft-primary" });
                     }
                 },
                 {
@@ -747,7 +1097,7 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
             .append('<p id="modal_content_subdomain_info">Loading...</p>')
             .append(
                 '<table id="modal_content_subdomain-datatable" class="table table-striped table-sm">' +
-                '<thead><tr><th>Subdomain</th><th>Status</th><th>Title</th><th>Screenshots</th></tr></thead><tbody></tbody></table>'
+                '<thead><tr><th>Subdomain</th><th>Alive</th><th>Service</th><th>HTTP</th><th>HTTPS</th><th>Tags</th><th>Screenshots</th></tr></thead><tbody></tbody></table>'
             )
             .data('port', port)
             .data('scan_id', scan_id)
@@ -763,27 +1113,73 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
             },
             columns: [
                 { data: "name", name: "name" },
-                { data: "http_status", name: "http_status" },
-                { data: "page_title", name: "page_title" },
-                { data: null, name: "screenshots" }
+                { data: "http_status", name: "alive", orderable: false },
+                { data: "services_for_request_port", name: "service", orderable: false },
+                { data: null, name: "http_link", orderable: false },
+                { data: null, name: "https_link", orderable: false },
+                { data: "is_cdn", name: "is_cdn", orderable: false },
+                { data: null, name: "screenshots", orderable: false }
             ],
             columnDefs: [
                 {
                     targets: "name:name",
                     render: function (data, type, row) {
                         let url = row.http_url;
-                        if (url && webPorts.includes(parseInt(port, 10))) {
+                        if (url && portDisplayWebPortsArrayIncludesPort(webPorts, port)) {
                             try {
                                 const u = new URL(url);
                                 u.port = port;
                                 url = u.toString();
-                            } catch (e) { /* keep original url */ }
+                            } catch (e) {
+                                portDisplayWarnOnce("malformedUrlNameColumn", e);
+                            }
                         }
                         return portDisplaySubdomainLinkCell(data, type, row, url);
                     }
                 },
-                { targets: "http_status:name", render: function (data, type, row) { return portDisplayHttpStatusWithInteresting(data, row); } },
-                { targets: "page_title:name", render: function (data) { return (data && portDisplaySafeText(data)) || "-"; } },
+                {
+                    targets: "alive:name",
+                    render: function (data) {
+                        const st = data != null ? Number(data) : NaN;
+                        const alive = Number.isFinite(st) && st > 0;
+                        if (alive) return "<span class=\"badge badge-soft-success ms-1\">Alive</span>";
+                        if (data === 0 || st === 0) return "<span class=\"badge badge-soft-secondary ms-1\">Not Alive</span>";
+                        return "-";
+                    }
+                },
+                {
+                    targets: "service:name",
+                    render: function (data, type, row) {
+                        if (row && typeof row === "object" && !Object.prototype.hasOwnProperty.call(row, "services_for_request_port")) {
+                            portDisplayWarnOnce("missingServicesForRequestPort");
+                            return "<span class=\"text-muted\" title=\"Service column unavailable: services_for_request_port not in API response (older server?)\">—</span>";
+                        }
+                        const t = data != null && data !== "" ? data : "-";
+                        return portDisplaySafeText(t);
+                    }
+                },
+                {
+                    targets: "http_link:name",
+                    render: function (data, type, row) {
+                        const href = portDisplayModalWebSchemeHref("subdomain", row, port, webPorts, "http");
+                        if (!href) return "-";
+                        return portDisplaySafeLink(href, "HTTP", { target: "_blank", className: "badge badge-soft-primary" });
+                    }
+                },
+                {
+                    targets: "https_link:name",
+                    render: function (data, type, row) {
+                        const href = portDisplayModalWebSchemeHref("subdomain", row, port, webPorts, "https");
+                        if (!href) return "-";
+                        return portDisplaySafeLink(href, "HTTPS", { target: "_blank", className: "badge badge-soft-primary" });
+                    }
+                },
+                {
+                    targets: "is_cdn:name",
+                    render: function (data) {
+                        return data ? "<span class=\"badge badge-soft-warning\">CDN</span>" : "";
+                    }
+                },
                 {
                     targets: "screenshots:name",
                     orderable: false,

@@ -19,11 +19,10 @@ from django.utils import timezone
 from reNgine.core.exceptions import FindingOutOfScopeError
 from reNgine.core.validators import is_valid_domain, is_valid_ip
 from reNgine.secator.source_extraction import merge_subdomain_sources_from_item
-from reNgine.secator.subdomain_technology_link import upsert_subdomain_technology_link
 from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name, normalize_subdomain_host
-from startScan.models import Domain, ScanHistory, Subdomain, Technology
+from startScan.models import Domain, ScanHistory, Subdomain
 from targetApp.models import Target
 from targetApp.services.scope_params import get_finding_scope_filter_host_for_target
 
@@ -156,7 +155,6 @@ class SubdomainRepository:
 
         self._associate_ip_addresses(subdomain, item, scan_history_id, target_id)
         self._sync_alive_for_subdomain_linked_ips(subdomain)
-        self._associate_technologies(subdomain, item)
 
         logger.log_line(
             PREFIX_SUBDOMAIN_REPO,
@@ -488,50 +486,6 @@ class SubdomainRepository:
         ip_repo = IpRepository()
         for ip in subdomain.ip_addresses.all().only("id"):
             ip_repo.sync_alive_from_http_evidence(ip.pk, sid)
-
-    def _associate_technologies(self, subdomain: Subdomain, item: Dict[str, Any]) -> None:
-        """
-        Associate technologies with subdomain.
-
-        Args:
-            subdomain: Subdomain object
-            item: Secator item
-        """
-        try:
-            # Check if there are technologies in extra_data
-            extra_data = item.get("extra_data", {})
-            technologies = extra_data.get("technologies")
-            if not technologies:
-                return
-            if isinstance(technologies, (str, bytes, dict)):
-                return
-            try:
-                technologies_iter = list(technologies)
-            except TypeError:
-                return
-            if not technologies_iter:
-                return
-
-            for tech_name in technologies_iter:
-                if tech_name and isinstance(tech_name, str):
-                    tech_obj, _ = Technology.objects.get_or_create(name=tech_name.strip())
-                    upsert_subdomain_technology_link(subdomain, tech_obj, None)
-                    logger.log_line(
-                        PREFIX_SUBDOMAIN_REPO,
-                        "ASSOCIATE_TECH_TO_SUBDOMAIN",
-                        "Technology %s linked to subdomain %s" % (tech_name, subdomain.name),
-                        level="debug",
-                    )
-
-        except Exception as e:
-            reason = format_exception_for_log(e)
-            logger.log_line(
-                PREFIX_SUBDOMAIN_REPO,
-                "ASSOCIATE_TECH_TO_SUBDOMAIN",
-                "Error linking technology to subdomain: %s | subdomain=%s scan_id=%s"
-                % (reason, subdomain.name if subdomain else "", subdomain.scan_history_id if subdomain else ""),
-                level="error",
-            )
 
     def _is_private_ip(self, ip_address: str) -> bool:
         """

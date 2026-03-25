@@ -1509,6 +1509,13 @@ class EndPoint(models.Model):
         blank=True,
         related_name="ip_endpoints",
     )
+    port = models.ForeignKey(
+        "Port",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="endpoints",
+    )
     source = models.CharField(max_length=200, null=True, blank=True)
     http_url = models.CharField(max_length=30000)
     content_length = models.IntegerField(default=0, null=True, blank=True)
@@ -1609,6 +1616,9 @@ class EndPoint(models.Model):
         ]
         indexes = [
             models.Index(fields=["scan_history_id", "content_length"], name="ss_ep_scan_content_len"),
+            models.Index(fields=["subdomain_id", "port_id", "is_default"], name="ss_ep_sub_port_def_idx"),
+            models.Index(fields=["ip_address_id", "port_id", "is_default"], name="ss_ep_ip_port_def_idx"),
+            models.Index(fields=["scan_history_id", "port_id"], name="ss_ep_scan_port_idx"),
         ]
 
 

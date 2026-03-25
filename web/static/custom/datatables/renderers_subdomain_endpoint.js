@@ -2,6 +2,7 @@
  * Shared DataTables cell renderers for subdomain and endpoint tables
  * (main and "interesting" variants). Depends on escape.js (safeLink, safeText,
  * safeAttr, safeBadge, sanitizeUrlForHref). Uses parse_technology from custom.js when available.
+ * Requires ``rengine_datatable_port_endpoint_pure.js`` (base.html loads it before this file).
  * Load after escape.js and column_definitions.js; used by custom.js and detail_scan.js.
  */
 (function (window) {
@@ -32,6 +33,66 @@
     return url && typeof url === "string" ? url : "#";
   };
 
+  const placeholderNoDefaultEndpointData = function () {
+    return "<span class=\"badge badge-soft-secondary bs-tooltip\" title=\"No default endpoint technology data\">—</span>";
+  };
+  const placeholderMissingEndpointDefaultsField = function () {
+    return "<span class=\"text-muted bs-tooltip\" title=\"endpoint_defaults_by_port missing from API response (mixed-version deployment); no legacy technologies to display\">—</span>";
+  };
+  const placeholderTechRendererUnavailable = function () {
+    return "<span class=\"badge badge-soft-secondary bs-tooltip\" title=\"Technology data present but renderer unavailable (parse_technology or query URL missing)\">…</span>";
+  };
+
+  const normalizeEndpointDefaultsTechnologiesFallback = window.rengineNormalizeEndpointDefaultsTechnologiesFallback;
+  const isEffectivelyEmptyHtml = window.rengineIsEffectivelyEmptyHtml;
+  const validEndpointDefaultRows = window.rengineValidEndpointDefaultRows;
+  const classifyEndpointDefaultsByPortInput = window.rengineClassifyEndpointDefaultsByPortInput;
+
+  const rengineWarnOnce = function (windowFlag, message) {
+    if (typeof window !== "undefined" && window[windowFlag]) {
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window[windowFlag] = true;
+    }
+    if (typeof console !== "undefined" && typeof console.warn === "function") {
+      console.warn(message);
+    }
+  };
+
+  const parseTechnologyAvailable = function () {
+    return typeof window.parse_technology === "function";
+  };
+
+  const renderTechnologyRowBadges = function (row, queryUrl) {
+    if (!row || typeof row !== "object") {
+      return "";
+    }
+    let html = "";
+    const techs = row.technologies;
+    const hasTechs = Array.isArray(techs) && techs.length > 0;
+    if (hasTechs && parseTechnologyAvailable() && queryUrl) {
+      html += "<div>" + window.parse_technology(queryUrl, techs, "primary", null, null, true) + "</div>";
+    } else if (hasTechs) {
+      html += "<div>" + placeholderTechRendererUnavailable() + "</div>";
+    }
+    if (row.content_type) {
+      html += "<div><span class='mt-1 badge badge-soft-blue bs-tooltip' title=\"Content Type\">" + safeText(row.content_type) + "</span></div>";
+    }
+    if (row.webserver) {
+      html += "<div><span class='mt-1 badge badge-soft-info bs-tooltip' title=\"Web Server\">" + safeText(row.webserver) + "</span></div>";
+    }
+    return html;
+  };
+
+  const renderEndpointDefaultPortPrefix = function (row, showPortLabel) {
+    if (!showPortLabel) {
+      return "";
+    }
+    const portLabel = row.port != null ? String(row.port) : "?";
+    return "<div><span class=\"badge badge-soft-dark mt-1 me-1\">:" + safeText(portLabel) + "</span></div>";
+  };
+
   const COPY_ICON_SVG = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"feather feather-copy\"><rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\" ry=\"2\"></rect><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"></path></svg>";
 
   const getHttpStatusBadge = function (data) {
@@ -44,6 +105,59 @@
   };
 
   /**
+   * Renders per-port default endpoint tech/content-type/webserver badges.
+   * `endpointDefaultsByPort` matches `DefaultEndpointTechnologyMixin._serialize_endpoint_defaults_by_port` (API).
+   */
+  var _rendererEndpointWarnKeys = (typeof RENGINE_CONSOLE_WARN_KEYS !== "undefined" && RENGINE_CONSOLE_WARN_KEYS.rendererEndpoint) || {
+    missingEndpointDefaultsByPort: "__rengineWarnOnce_rendererEndpoint_missingEdbp",
+    invalidEndpointDefaultsByPort: "__rengineWarnOnce_rendererEndpoint_invalidEdbp"
+  };
+
+  const renderEndpointDefaultsByPortBadges = function (endpointDefaultsByPort, options) {
+    const opts = options || {};
+    const queryUrl = opts.queryUrl || "";
+    const showPortLabel = opts.showPortLabel !== false;
+    const technologiesFallback = normalizeEndpointDefaultsTechnologiesFallback(opts.technologies);
+    const branch = classifyEndpointDefaultsByPortInput(endpointDefaultsByPort);
+    if (branch === "missing") {
+      rengineWarnOnce(
+        _rendererEndpointWarnKeys.missingEndpointDefaultsByPort,
+        "renderEndpointDefaultsByPortBadges: endpoint_defaults_by_port is undefined; using legacy technologies fallback. Verify API includes this field (e.g. datatables_always_serialize) and client/server versions match."
+      );
+      const legacyHtml = renderTechnologyRowBadges(technologiesFallback, queryUrl);
+      if (!isEffectivelyEmptyHtml(legacyHtml)) {
+        return legacyHtml;
+      }
+      return placeholderMissingEndpointDefaultsField();
+    }
+    if (branch === "invalid_type") {
+      rengineWarnOnce(
+        _rendererEndpointWarnKeys.invalidEndpointDefaultsByPort,
+        "renderEndpointDefaultsByPortBadges: endpoint_defaults_by_port is present but not an array; using legacy technologies fallback. This may indicate mixed client/server versions or a serialization issue."
+      );
+      const legacyHtml = renderTechnologyRowBadges(technologiesFallback, queryUrl);
+      if (!isEffectivelyEmptyHtml(legacyHtml)) {
+        return legacyHtml;
+      }
+      return placeholderMissingEndpointDefaultsField();
+    }
+    let htmlOut;
+    if (branch === "empty_valid_rows") {
+      htmlOut = renderTechnologyRowBadges(technologiesFallback, queryUrl);
+    } else {
+      htmlOut = validEndpointDefaultRows(endpointDefaultsByPort)
+        .map(function (row) {
+          return renderEndpointDefaultPortPrefix(row, showPortLabel) + renderTechnologyRowBadges(row, queryUrl);
+        })
+        .join("");
+    }
+    if (isEffectivelyEmptyHtml(htmlOut)) {
+      return placeholderNoDefaultEndpointData();
+    }
+    return htmlOut;
+  };
+
+  /**
    * Builds endpoint URL cell HTML: link, tech badges, webserver badge, copy button.
    * @param {Object} row - Data row (id, http_url, techs, webserver).
    * @param {string} endpointSubdomainUrl - Base URL for parse_technology (e.g. subdomains or endpoints API).
@@ -52,7 +166,7 @@
     if (!row || typeof row !== "object") return "";
     const techData = row.techs || row.technologies;
     let techBadge = "";
-    if (techData && (Array.isArray(techData) ? techData.length > 0 : Object.keys(techData).length > 0) && typeof window.parse_technology === "function" && endpointSubdomainUrl) {
+    if (techData && (Array.isArray(techData) ? techData.length > 0 : Object.keys(techData).length > 0) && parseTechnologyAvailable() && endpointSubdomainUrl) {
       techBadge = "</br>" + window.parse_technology(endpointSubdomainUrl, techData, "primary", true, false, true);
     }
     let webServer = "";
@@ -82,16 +196,11 @@
     if (row.is_interesting) {
       badges = "<div><span class='me-1 badge badge-soft-danger' data-toggle=\"tooltip\" data-placement=\"top\" title=\"Interesting Subdomain\">Interesting</span></div>";
     }
-    let techBadge = "";
-    if (row.technologies && typeof window.parse_technology === "function" && queryUrl) {
-      techBadge = "<div>" + window.parse_technology(queryUrl, row.technologies, "primary", null, null, true) + "</div>";
-    }
-    if (row.content_type) {
-      techBadge += "<div><span class='mt-1 badge badge-soft-blue bs-tooltip' title=\"Content Type\">" + safeText(row.content_type) + "</span></div>";
-    }
-    if (row.webserver) {
-      techBadge += "<div><span class='mt-1 badge badge-soft-info bs-tooltip' title=\"Web Server\">" + safeText(row.webserver) + "</span></div>";
-    }
+    let techBadge = renderEndpointDefaultsByPortBadges(row.endpoint_defaults_by_port, {
+      queryUrl: queryUrl,
+      showPortLabel: true,
+      technologies: row.technologies
+    });
     const href = (row.http_url != null && row.http_url !== "") ? row.http_url : ("https://" + (row.name != null ? row.name : ""));
     const safeHref = sanitizeUrl(href) || "#";
     const data = row.name != null ? row.name : "";
@@ -119,6 +228,7 @@
 
   window.RengineDatatableRenderers = {
     getHttpStatusBadge: getHttpStatusBadge,
+    renderEndpointDefaultsByPortBadges: renderEndpointDefaultsByPortBadges,
     buildEndpointUrlCellHtml: buildEndpointUrlCellHtml,
     buildInterestingSubdomainNameCellHtml: buildInterestingSubdomainNameCellHtml,
     buildInterestingSubdomainHttpUrlCellHtml: buildInterestingSubdomainHttpUrlCellHtml

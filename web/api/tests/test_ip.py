@@ -16,8 +16,11 @@ from api.helpers.ip_action_response import (
     IP_ERR_MISSING_REQUIRED_FIELDS,
     IP_ERR_TARGET_NOT_FOUND,
 )
+from api.helpers.query import datatable_ip_list_serializer_context, datatable_subdomain_list_serializer_context
+from api.serializers import IpSerializer, SubdomainSerializer, _collect_sorted_service_labels_for_ip_port
+from reNgine.definitions import SCAN_STATUS_COMPLETED
 from reNgine.services.scan_finding_metrics import get_ip_address_metrics_for_scan
-from startScan.models import EndPoint, IpAddress, Port
+from startScan.models import EndPoint, IpAddress, Port, ScanHistory, Technology
 from utils.test_base import BaseTestCase
 
 
@@ -214,6 +217,87 @@ class TestListIPs(BaseTestCase):
         self.assertEqual(desc_resp.status_code, status.HTTP_200_OK)
         desc_rows = [row["address"] for row in desc_resp.data["data"]]
         self.assertLess(desc_rows.index(ip_high.address), desc_rows.index(ip_low.address))
+
+    def test_list_ips_datatables_includes_endpoint_technologies_by_port(self):
+        """ListIPs DataTables includes endpoint_defaults_by_port and technologies from default endpoints."""
+        scan = self.data_generator.scan_history
+        ip = IpAddress.objects.create(address="203.0.113.211")
+        port = Port.objects.create(number=8080, ip_address=ip, service_name="http-alt")
+        tech = Technology.objects.create(name="Traefik")
+        endpoint = EndPoint.objects.create(
+            domain=self.data_generator.domain,
+            subdomain=None,
+            scan_history=scan,
+            http_url="http://203.0.113.211:8080/",
+            ip_address=ip,
+            is_default=True,
+            port=port,
+            content_type="text/html",
+            webserver="traefik",
+        )
+        endpoint.techs.add(tech)
+        url = reverse("api:listIPs")
+        response = self.client.get(
+            url,
+            {"scan_id": scan.id, "start": "0", "length": "100"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = next((x for x in response.data["data"] if x["address"] == "203.0.113.211"), None)
+        self.assertIsNotNone(row)
+        self.assertIn("endpoint_defaults_by_port", row)
+        self.assertTrue(any(item.get("port") == 8080 for item in row["endpoint_defaults_by_port"]))
+        tech_names = {t.get("name") for t in row.get("technologies", [])}
+        self.assertIn("Traefik", tech_names)
+
+    def test_list_ips_datatables_scan_id_wins_over_target_id_with_port_filter(self):
+        """When scan_id and target_id are both sent, scope to that scan (not all target scans)."""
+        dg = self.data_generator
+        target = dg.target
+        scan_a = dg.scan_history
+        scan_b = ScanHistory.objects.create(
+            target=target,
+            start_scan_date=timezone.now(),
+            scan_status=SCAN_STATUS_COMPLETED,
+            is_legacy_scan=False,
+            tasks=[],
+        )
+        now = timezone.now()
+        ip_a = IpAddress.objects.create(address="203.0.113.201", alive=True)
+        ip_b = IpAddress.objects.create(address="203.0.113.202", alive=True)
+        Port.objects.create(number=8080, ip_address=ip_a, service_name="http-alt")
+        Port.objects.create(number=8080, ip_address=ip_b, service_name="http-alt")
+        EndPoint.objects.create(
+            domain=dg.domain,
+            subdomain=None,
+            scan_history=scan_a,
+            http_url="http://203.0.113.201:8080/",
+            discovered_date=now,
+            ip_address=ip_a,
+        )
+        EndPoint.objects.create(
+            domain=dg.domain,
+            subdomain=None,
+            scan_history=scan_b,
+            http_url="http://203.0.113.202:8080/",
+            discovered_date=now,
+            ip_address=ip_b,
+        )
+        url = reverse("api:listIPs")
+        response = self.client.get(
+            url,
+            {
+                "scan_id": scan_a.id,
+                "target_id": target.id,
+                "port": "8080",
+                "start": "0",
+                "length": "100",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        addresses = {row["address"] for row in response.data["data"]}
+        self.assertEqual(addresses, {ip_a.address})
+        row0 = response.data["data"][0]
+        self.assertEqual(row0.get("services_for_request_port"), "http-alt")
 
 
 class TestListPorts(BaseTestCase):
@@ -463,6 +547,42 @@ class TestIpActionApiResponses(BaseTestCase):
         self.assertFalse(
             EndPoint.objects.filter(scan_history=dg.scan_history, http_url="http://203.0.113.120/").exists()
         )
+
+
+class ServicesForRequestPortPlaceholderTestCase(BaseTestCase):
+    """``services_for_request_port`` uses ``"-"`` when not port-filtered (IP and subdomain serializers)."""
+
+    def test_ip_serializer_returns_dash_when_port_services_not_exposed(self) -> None:
+        self.data_generator.create_project_full()
+        ip = self.data_generator.ip_address
+        ser = IpSerializer(
+            context=datatable_ip_list_serializer_context(
+                scan_id=None,
+                target_id=None,
+                port_query_param=None,
+            ),
+        )
+        self.assertEqual(ser.get_services_for_request_port(ip), "-")
+
+    def test_subdomain_serializer_returns_dash_when_no_port_filter(self) -> None:
+        self.data_generator.create_project_full()
+        sub = self.data_generator.subdomain
+        ser = SubdomainSerializer(
+            context=datatable_subdomain_list_serializer_context(
+                scan_id=None,
+                target_id=None,
+                port_query_param=None,
+            ),
+        )
+        self.assertEqual(ser.get_services_for_request_port(sub), "-")
+
+
+class CollectSortedServiceLabelsForIpPortTestCase(BaseTestCase):
+    def test_unsaved_ip_returns_empty_without_cache_pollution(self) -> None:
+        cache: dict = {}
+        unsaved = IpAddress()
+        self.assertEqual(_collect_sorted_service_labels_for_ip_port(unsaved, 443, cache), ())
+        self.assertEqual(cache, {})
 
 
 # TestWhois removed - functionality migrated to Secator

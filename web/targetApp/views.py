@@ -8,7 +8,6 @@ from pathlib import Path
 from django import http
 from django.conf import settings
 from django.contrib import messages
-from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Value, When
 from django.http import Http404, JsonResponse
@@ -59,7 +58,6 @@ from startScan.models import (
     Employee,
     EndPoint,
     Exploit,
-    IpAddress,
     ScanHistory,
     Subdomain,
     Vulnerability,
@@ -1195,7 +1193,7 @@ def target_summary(request, slug, id):
     # Exploits (all scans for this target)
     context["exploit_count"] = Exploit.objects.filter(scan_history__target_id=id).count()
 
-    from reNgine.services.scan_finding_metrics import get_ip_metrics_for_target
+    from reNgine.services.scan_finding_metrics import get_ip_metrics_for_target, ip_addresses_queryset_for_target
 
     ip_total, ip_alive = get_ip_metrics_for_target(id)
     context["ip_address_count"] = ip_total
@@ -1244,10 +1242,9 @@ def target_summary(request, slug, id):
         {"http_status": status, "http_status__count": count} for status, count in sorted(status_counts.items())
     ]
 
-    subdomains = Subdomain.objects.filter(domain__scan_history__target_id=id)
-    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct("address")
-    ip_serializer = IpSerializer(ip_addresses.all(), many=True, context={"target_id": id})
-    context["ip_addresses"] = json.dumps(ip_serializer.data, cls=DjangoJSONEncoder)
+    ip_addresses = ip_addresses_queryset_for_target(id)
+    ip_serializer = IpSerializer(ip_addresses, many=True, context={"target_id": id})
+    context["ip_addresses_payload"] = ip_serializer.data
 
     context["asset_countries"] = (
         CountryISO.objects.filter(ipaddress__in=ip_addresses).annotate(count=Count("iso")).order_by("-count")
