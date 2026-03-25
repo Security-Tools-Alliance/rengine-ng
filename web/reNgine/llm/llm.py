@@ -7,6 +7,7 @@ import openai
 from reNgine.llm.config import (
     ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT,
     DEFAULT_OPENAI_MAX_TOKENS_AGGREGATE,
+    DEFAULT_OPENAI_MAX_TOKENS_SCAN_HISTORY,
     LLM_CONFIG,
 )
 from reNgine.llm.utils import get_default_llm_model
@@ -21,6 +22,9 @@ logger = get_module_logger(__name__)
 
 # OpenAI aggregate prompts (target / scope / organization) use max_tokens_aggregate.
 ATTACK_PROMPT_KEYS_OPENAI_AGGREGATE = frozenset({"target", "scope", "organization"})
+
+# OpenAI scan-history prompts get a tighter output token budget.
+ATTACK_PROMPT_KEYS_OPENAI_SCAN_HISTORY = frozenset({"scan_history"})
 
 
 class BaseLLMGenerator(ABC):
@@ -340,8 +344,11 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
             if key in raw:
                 allowed[key] = raw[key]
         if prompt_key in ATTACK_PROMPT_KEYS_OPENAI_AGGREGATE:
-            openai_cfg = self.config["providers"]["openai"]
+            openai_cfg = self.config.get("providers", {}).get("openai", {})
             allowed["max_tokens"] = openai_cfg.get("max_tokens_aggregate", DEFAULT_OPENAI_MAX_TOKENS_AGGREGATE)
+        elif prompt_key in ATTACK_PROMPT_KEYS_OPENAI_SCAN_HISTORY:
+            openai_cfg = self.config.get("providers", {}).get("openai", {})
+            allowed["max_tokens"] = openai_cfg.get("max_tokens_scan_history", DEFAULT_OPENAI_MAX_TOKENS_SCAN_HISTORY)
         return allowed
 
     def _get_openai_response(

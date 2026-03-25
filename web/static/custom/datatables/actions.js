@@ -14,7 +14,8 @@
     ip: "ip",
     target: "target",
     scope: "scope",
-    organization: "organization"
+    organization: "organization",
+    scan_history: "scan_history"
   };
 
   const resolveLlmAttackSurfaceReportCount = function (row) {
@@ -36,7 +37,7 @@
 
   /**
    * Single-row LLM attack-surface control (same endpoint as subdomain/IP tables; icon: robot).
-   * kindKey must be one of: subdomain, ip, target, scope, organization.
+   * kindKey must be one of: subdomain, ip, target, scope, organization, scan_history.
    * row: DataTables row data; optional attack_surface_count / attack_surface for styling.
    */
   const renderLlmAttackSurfaceRowButton = function (attackUrl, rowId, kindKey, row) {

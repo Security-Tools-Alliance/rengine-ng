@@ -9,7 +9,7 @@ from rest_framework import status
 
 from dashboard.models import Project
 from reNgine.llm.attack_surface_storage import UNSPECIFIED_LLM_MODEL_KEY
-from startScan.models import LlmAttackSurfaceAnalysis
+from startScan.models import LlmAttackSurfaceAnalysis, ScanHistory
 from targetApp.models import Organization, Scope, Target
 from utils.test_base import BaseTestCase
 
@@ -365,3 +365,68 @@ class LLMAttackSurfaceScopeOrgDatatableTests(BaseTestCase):
         self.assertIsNotNone(row)
         self.assertTrue(row.get("attack_surface"))
         self.assertEqual(row.get("attack_surface_count"), 1)
+
+
+class LLMAttackSurfaceScanHistoryApiTests(BaseTestCase):
+    def test_get_scan_history_check_only_without_cache(self) -> None:
+        sid = self.data_generator.scan_history.id
+        url = reverse("api:llm_get_possible_attacks")
+        response = self.client.get(url, {"scan_history_id": sid, "check_only": "true"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertIsNone(response.data.get("description"))
+        self.assertEqual(response.data.get("saved_analyses"), [])
+        self.assertIsNone(response.data.get("selected_analysis_id"))
+        expected = "ScanHistory: %s (%s)" % (sid, self.data_generator.target.value)
+        self.assertEqual(response.data.get("subdomain_name"), expected)
+
+    @patch("reNgine.llm.llm.LLMAttackSuggestionGenerator.get_attack_suggestion")
+    def test_get_scan_history_persists_llm_row_when_llm_model_omitted(self, mock_llm) -> None:
+        mock_llm.return_value = {
+            "status": True,
+            "description": "Analysis body",
+            "input": "",
+            "model_name": None,
+        }
+        sid = self.data_generator.scan_history.id
+        url = reverse("api:llm_get_possible_attacks")
+        response = self.client.get(url, {"scan_history_id": sid, "force_regenerate": "true"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        ct = ContentType.objects.get_for_model(ScanHistory)
+        rows = LlmAttackSurfaceAnalysis.objects.filter(content_type=ct, object_id=sid)
+        self.assertEqual(rows.count(), 1)
+        row = rows.first()
+        self.assertEqual(row.llm_model, UNSPECIFIED_LLM_MODEL_KEY)
+        self.assertEqual(row.body_markdown.strip(), "Analysis body")
+        self.assertEqual(response.data.get("selected_analysis_id"), row.id)
+
+        called_kwargs = mock_llm.call_args.kwargs
+        self.assertEqual(called_kwargs.get("prompt_key"), "scan_history")
+
+    def test_get_scan_history_from_other_project_returns_404(self) -> None:
+        self.user.is_superuser = False
+        self.user.save(update_fields=["is_superuser"])
+        other = Project.objects.create(
+            name="Isolated Project LLM AS History",
+            slug="isolated-proj-llm-as-history",
+            insert_date=timezone.now(),
+        )
+        alien_target = Target.objects.create(
+            project=other,
+            value="isolated.anon.example.test",
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        alien_scan = ScanHistory.objects.create(
+            start_scan_date=timezone.now(),
+            scan_status=-1,
+            target=alien_target,
+            is_legacy_scan=False,
+            tasks=[],
+            scan_config=None,
+        )
+
+        url = reverse("api:llm_get_possible_attacks")
+        response = self.client.get(url, {"scan_history_id": alien_scan.pk})
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

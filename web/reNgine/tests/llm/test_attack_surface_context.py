@@ -23,3 +23,13 @@ class AttackSurfaceContextBuilderTests(BaseTestCase):
             text = build_context_for_target(self.data_generator.target)
         self.assertIn("more subdomains exist", text)
         self.assertIn("truncated", text.lower())
+
+    def test_build_context_for_scan_history_uses_scan_run_wording(self) -> None:
+        from reNgine.llm.attack_surface_context import build_context_for_scan_history
+
+        text = build_context_for_scan_history(self.data_generator.scan_history)
+        self.assertIn("Analysis level: single ScanHistory run", text)
+        self.assertIn("=== SCAN_RUN_SUMMARY ===", text)
+        self.assertIn("=== SUBDOMAINS_IN_SCAN_RUN ===", text)
+        self.assertIn("=== IP_ADDRESSES_IN_SCAN_RUN ===", text)
+        self.assertIn("=== VULNERABILITIES_IN_SCAN_RUN ===", text)

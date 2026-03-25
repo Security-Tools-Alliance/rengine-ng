@@ -1,7 +1,7 @@
 """
 Build large, structured recon payloads for aggregate LLM attack-surface analysis.
 
-Used for Target, Scope, and Organization levels. Applies row caps and includes
+Used for Target, Scope, Organization, and ScanHistory levels. Applies row caps and includes
 explicit truncation notices so the model can avoid hallucinating missing data.
 """
 
@@ -10,9 +10,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 import json
 
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Case, Count, IntegerField, Prefetch, Q, QuerySet, When
 
-from startScan.models import IpAddress, ScanHistory, Subdomain, Vulnerability
+from startScan.models import IpAddress, Port, ScanHistory, Subdomain, Vulnerability
 from targetApp.models import Organization, Scope, Target
 
 
@@ -224,3 +224,143 @@ def build_context_for_organization(organization: Organization) -> str:
         )
     )
     return _build_aggregate_body(tids, header)
+
+
+def _vulnerability_summary_for_scan_history(scan_id: int) -> str:
+    base = Vulnerability.objects.filter(scan_history_id=scan_id)
+    total = base.count()
+    severity_weight = Case(
+        When(severity=4, then=0),  # CRITICAL
+        When(severity=3, then=1),  # HIGH
+        When(severity=2, then=2),  # MEDIUM
+        When(severity=1, then=3),  # LOW
+        When(severity=0, then=4),  # INFO
+        When(severity=-1, then=5),  # UNKNOWN
+        default=6,
+        output_field=IntegerField(),
+    )
+    by_sev = base.values("severity").annotate(n=Count("id")).order_by(severity_weight)
+    sev_parts = ["%s:%s" % (row["severity"], row["n"]) for row in by_sev]
+    lines = ["Total vulnerabilities (for this scan): %s" % (total,)]
+    lines.append("By severity code: %s" % (", ".join(sev_parts) if sev_parts else "none",))
+    sample = base.order_by(severity_weight, "id").values_list("name", flat=True)[:MAX_VULN_ROWS_IN_CONTEXT]
+    names = list(sample)
+    for name in names:
+        lines.append("- %s" % (name[:300],))
+    if total > len(names):
+        lines.append(
+            "... (%s more vulnerabilities not listed; list truncated at %s rows)"
+            % (total - len(names), MAX_VULN_ROWS_IN_CONTEXT)
+        )
+    return "\n".join(lines)
+
+
+def _ip_block_for_scan_history(scan_id: int) -> str:
+    base_qs = (
+        IpAddress.objects.filter(Q(ip_addresses__scan_history__id=scan_id) | Q(ip_endpoints__scan_history__id=scan_id))
+        .distinct()
+        .prefetch_related(Prefetch("ports", queryset=Port.objects.order_by("number", "id")))
+        .order_by("id")
+    )
+    rows = list(base_qs[: MAX_IPS_IN_CONTEXT + 1])
+    truncated = len(rows) > MAX_IPS_IN_CONTEXT
+    rows = rows[:MAX_IPS_IN_CONTEXT]
+    lines = []
+    for ip_row in rows:
+        ports = ", ".join("%s/%s" % (p.number, p.service_name or "") for p in ip_row.ports.all()[:40])
+        lines.append(
+            "IP: %s | alive=%s | cdn=%s | proto=%s | ptr=%s | ports=%s"
+            % (
+                ip_row.address,
+                ip_row.alive,
+                ip_row.is_cdn,
+                ip_row.protocol or "",
+                ip_row.reverse_pointer or "",
+                ports[:500],
+            )
+        )
+    body = "\n".join(lines) + "\n"
+    if truncated:
+        body += "\n... (more IP rows found in this scan run; list truncated at %s)\n" % (MAX_IPS_IN_CONTEXT,)
+    return body
+
+
+def _subdomain_block_for_scan_history(scan_id: int) -> str:
+    base_qs: QuerySet[Subdomain] = (
+        Subdomain.objects.filter(scan_history_id=scan_id).distinct().prefetch_related("technologies").order_by("id")
+    )
+    rows = list(base_qs[: MAX_SUBDOMAINS_IN_CONTEXT + 1])
+    truncated = len(rows) > MAX_SUBDOMAINS_IN_CONTEXT
+    rows = rows[:MAX_SUBDOMAINS_IN_CONTEXT]
+    lines = []
+    for s in rows:
+        tech_names = list(s.technologies.values_list("name", flat=True)[:20])
+        tech = ",".join(tech_names)
+        lines.append(
+            "%s | http_status=%s | title=%s | webserver=%s | tech=%s | cdn=%s"
+            % (
+                s.name,
+                s.http_status,
+                (s.page_title or "")[:120],
+                (s.webserver or "")[:80],
+                tech[:400],
+                s.is_cdn,
+            )
+        )
+    body = "\n".join(lines) + "\n"
+    if truncated:
+        body += "\n... (more subdomains found in this scan run; list truncated at %s)\n" % (
+            MAX_SUBDOMAINS_IN_CONTEXT,
+        )
+    return body
+
+
+def build_context_for_scan_history(scan: ScanHistory) -> str:
+    target = getattr(scan, "target", None)
+    target_value = target.value if target else ""
+    target_type = target.target_type if target else ""
+
+    header = (
+        "Analysis level: single ScanHistory run\n"
+        "ScanHistory id=%s\n"
+        "Associated target id=%s value=%s type=%s\n"
+        "Scan run status=%s\n"
+        "Scan run dates: start=%s stop=%s\n"
+        "ScanHistory scan_config (summary): %s\n"
+    ) % (
+        scan.id,
+        scan.target_id,
+        target_value,
+        target_type,
+        scan.scan_status,
+        scan.start_scan_date,
+        getattr(scan, "stop_scan_date", None),
+        _scan_config_summary(scan.scan_config),
+    )
+
+    scan_line = "Single scan run (one execution) mapped to the scan_config above."
+    sub_block = _subdomain_block_for_scan_history(scan.id)
+    ip_block = _ip_block_for_scan_history(scan.id)
+    vuln_block = _vulnerability_summary_for_scan_history(scan.id)
+
+    parts = [
+        header.strip(),
+        "",
+        "=== SCAN_RUN_SUMMARY ===",
+        scan_line,
+        "",
+        "=== SUBDOMAINS_IN_SCAN_RUN ===",
+        sub_block,
+        "",
+        "=== IP_ADDRESSES_IN_SCAN_RUN ===",
+        ip_block,
+        "",
+        "=== VULNERABILITIES_IN_SCAN_RUN ===",
+        vuln_block,
+    ]
+    text = "\n".join(parts)
+    if len(text) > MAX_CONTEXT_CHARS:
+        return text[:MAX_CONTEXT_CHARS] + "\n\n... (overall context truncated at %s characters)\n" % (
+            MAX_CONTEXT_CHARS,
+        )
+    return text

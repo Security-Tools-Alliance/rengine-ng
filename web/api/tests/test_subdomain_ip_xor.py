@@ -4,11 +4,15 @@ from django.http import QueryDict
 from django.test import SimpleTestCase
 
 from api.helpers.subdomain_ip_xor import (
+    ATTACK_SURFACE_ENTITY_QUERY_ID_KEYS,
     ATTACK_SURFACE_ENTITY_XOR_MESSAGE,
     ATTACK_SURFACE_KIND_ORGANIZATION,
+    ATTACK_SURFACE_KIND_SCAN_HISTORY,
     ATTACK_SURFACE_KIND_SUBDOMAIN,
+    ATTACK_SURFACE_QUERY_ID_KIND_BY_KEY,
     attack_surface_entity_query_params_invalid_error,
     both_subdomain_and_ip_provided_error,
+    iter_attack_surface_entity_kinds_and_ids,
     resolve_attack_surface_entity_kind_and_pk,
     subdomain_ids_conflict_when_ip_address_ids_requested_error,
     xor_attack_surface_entity_ids_error,
@@ -18,6 +22,24 @@ from api.helpers.subdomain_ip_xor import (
 
 
 class SubdomainIpXorHelpersTests(SimpleTestCase):
+    def test_query_id_keys_stay_aligned_with_iter_helper(self) -> None:
+        key_set = set(ATTACK_SURFACE_ENTITY_QUERY_ID_KEYS)
+        map_key_set = {k for k, _ in ATTACK_SURFACE_QUERY_ID_KIND_BY_KEY}
+        self.assertSetEqual(key_set, map_key_set)
+
+        kinds = {
+            kind
+            for kind, _ in iter_attack_surface_entity_kinds_and_ids(
+                subdomain_id=1,
+                ip_address_id=2,
+                target_id=3,
+                scope_id=4,
+                organization_id=5,
+                scan_history_id=6,
+            )
+        }
+        self.assertSetEqual(kinds, {kind for _, kind in ATTACK_SURFACE_QUERY_ID_KIND_BY_KEY})
+
     def test_xor_single_ids_ok_subdomain(self) -> None:
         self.assertIsNone(xor_subdomain_ip_single_ids_error(1, None))
         self.assertIsNone(xor_subdomain_ip_single_ids_error(1, 0))
@@ -47,24 +69,26 @@ class SubdomainIpXorHelpersTests(SimpleTestCase):
         self.assertIsNotNone(subdomain_ids_conflict_when_ip_address_ids_requested_error([1]))
 
     def test_xor_attack_surface_entity_ids_ok_single(self) -> None:
-        self.assertIsNone(xor_attack_surface_entity_ids_error(1, None, None, None, None))
-        self.assertIsNone(xor_attack_surface_entity_ids_error(None, 2, None, None, None))
-        self.assertIsNone(xor_attack_surface_entity_ids_error(None, None, 3, None, None))
-        self.assertIsNone(xor_attack_surface_entity_ids_error(None, None, None, 4, None))
-        self.assertIsNone(xor_attack_surface_entity_ids_error(None, None, None, None, 5))
+        self.assertIsNone(xor_attack_surface_entity_ids_error(1, None, None, None, None, None))
+        self.assertIsNone(xor_attack_surface_entity_ids_error(None, 2, None, None, None, None))
+        self.assertIsNone(xor_attack_surface_entity_ids_error(None, None, 3, None, None, None))
+        self.assertIsNone(xor_attack_surface_entity_ids_error(None, None, None, 4, None, None))
+        self.assertIsNone(xor_attack_surface_entity_ids_error(None, None, None, None, 5, None))
+        self.assertIsNone(xor_attack_surface_entity_ids_error(None, None, None, None, None, 6))
 
     def test_xor_attack_surface_entity_ids_rejects_zero_or_multiple(self) -> None:
-        msg = xor_attack_surface_entity_ids_error(None, None, None, None, None)
+        msg = xor_attack_surface_entity_ids_error(None, None, None, None, None, None)
         self.assertIsNotNone(msg)
         self.assertEqual(msg, ATTACK_SURFACE_ENTITY_XOR_MESSAGE)
         self.assertIn("exactly one", msg.lower())
-        self.assertIsNotNone(xor_attack_surface_entity_ids_error(1, 2, None, None, None))
-        self.assertIsNotNone(xor_attack_surface_entity_ids_error(1, None, 3, None, None))
+        self.assertIsNotNone(xor_attack_surface_entity_ids_error(1, 2, None, None, None, None))
+        self.assertIsNotNone(xor_attack_surface_entity_ids_error(1, None, 3, None, None, None))
+        self.assertIsNotNone(xor_attack_surface_entity_ids_error(1, None, None, None, None, 7))
 
     def test_xor_attack_surface_entity_ids_ignores_non_positive_ints(self) -> None:
-        self.assertIsNotNone(xor_attack_surface_entity_ids_error(0, None, None, None, None))
-        self.assertIsNotNone(xor_attack_surface_entity_ids_error(None, -1, None, None, None))
-        self.assertIsNone(xor_attack_surface_entity_ids_error(1, -1, None, None, None))
+        self.assertIsNotNone(xor_attack_surface_entity_ids_error(0, None, None, None, None, None))
+        self.assertIsNotNone(xor_attack_surface_entity_ids_error(None, -1, None, None, None, None))
+        self.assertIsNone(xor_attack_surface_entity_ids_error(1, -1, None, None, None, None))
 
     def test_attack_surface_query_params_reject_non_positive_when_present(self) -> None:
         q = QueryDict("target_id=0&organization_id=5")
@@ -90,14 +114,18 @@ class SubdomainIpXorHelpersTests(SimpleTestCase):
 
     def test_resolve_attack_surface_entity_kind_and_pk_single(self) -> None:
         self.assertEqual(
-            resolve_attack_surface_entity_kind_and_pk(1, None, None, None, None),
+            resolve_attack_surface_entity_kind_and_pk(1, None, None, None, None, None),
             (ATTACK_SURFACE_KIND_SUBDOMAIN, 1),
         )
         self.assertEqual(
-            resolve_attack_surface_entity_kind_and_pk(None, None, None, None, 99),
+            resolve_attack_surface_entity_kind_and_pk(None, None, None, None, 99, None),
             (ATTACK_SURFACE_KIND_ORGANIZATION, 99),
+        )
+        self.assertEqual(
+            resolve_attack_surface_entity_kind_and_pk(None, None, None, None, None, 123),
+            (ATTACK_SURFACE_KIND_SCAN_HISTORY, 123),
         )
 
     def test_resolve_attack_surface_entity_kind_and_pk_none_or_ambiguous(self) -> None:
-        self.assertIsNone(resolve_attack_surface_entity_kind_and_pk(None, None, None, None, None))
-        self.assertIsNone(resolve_attack_surface_entity_kind_and_pk(1, 2, None, None, None))
+        self.assertIsNone(resolve_attack_surface_entity_kind_and_pk(None, None, None, None, None, None))
+        self.assertIsNone(resolve_attack_surface_entity_kind_and_pk(1, 2, None, None, None, None))

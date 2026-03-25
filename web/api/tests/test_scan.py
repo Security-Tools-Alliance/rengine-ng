@@ -5,6 +5,7 @@ This file contains the test cases for the API views.
 import json
 from unittest.mock import patch
 
+from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -18,6 +19,7 @@ from reNgine.services.scan_finding_metrics import (
 from startScan.models import (
     Domain,
     IpAddress,
+    LlmAttackSurfaceAnalysis,
     ScanHistory,
     SecatorRunner,
     Subdomain,
@@ -115,6 +117,38 @@ class TestListScanHistory(BaseTestCase):
         ids = {row["id"] for row in response.data.get("data", [])}
         self.assertIn(scan_with_scope.id, ids)
         self.assertNotIn(scan_no_scope.id, ids)
+
+    def test_list_scan_history_datatable_includes_attack_surface_counts(self) -> None:
+        scan = self.data_generator.scan_history
+        ct = ContentType.objects.get_for_model(ScanHistory)
+        LlmAttackSurfaceAnalysis.objects.create(
+            content_type=ct,
+            object_id=scan.id,
+            llm_model="unit-scan-history-model-a",
+            body_markdown="A",
+        )
+        LlmAttackSurfaceAnalysis.objects.create(
+            content_type=ct,
+            object_id=scan.id,
+            llm_model="unit-scan-history-model-b",
+            body_markdown="B",
+        )
+
+        url = reverse("api:listScanHistory")
+        response = self.client.get(
+            url,
+            {
+                "project": self.data_generator.project.slug,
+                "start": 0,
+                "length": 50,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = response.data.get("data") or []
+        row = next((r for r in rows if r.get("id") == scan.id), None)
+        self.assertIsNotNone(row)
+        self.assertTrue(row.get("attack_surface"))
+        self.assertEqual(row.get("attack_surface_count"), 2)
 
 
 class TestScanHistoryFilterChoices(BaseTestCase):

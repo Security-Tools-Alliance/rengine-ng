@@ -99,6 +99,7 @@ from api.helpers.ip_action_response import (
 from api.helpers.llm_attack_surface_access import (
     get_ip_address_for_llm_attack_surface,
     get_organization_for_llm_attack_surface,
+    get_scan_history_for_llm_attack_surface,
     get_scope_for_llm_attack_surface,
     get_subdomain_for_llm_attack_surface,
     get_target_for_llm_attack_surface,
@@ -125,6 +126,7 @@ from api.helpers.subdomain_ip_xor import (
     ATTACK_SURFACE_ENTITY_XOR_MESSAGE,
     ATTACK_SURFACE_KIND_IP,
     ATTACK_SURFACE_KIND_ORGANIZATION,
+    ATTACK_SURFACE_KIND_SCAN_HISTORY,
     ATTACK_SURFACE_KIND_SCOPE,
     ATTACK_SURFACE_KIND_SUBDOMAIN,
     ATTACK_SURFACE_KIND_TARGET,
@@ -161,6 +163,7 @@ from reNgine.definitions import (
 )
 from reNgine.llm.attack_surface_context import (
     build_context_for_organization,
+    build_context_for_scan_history,
     build_context_for_scope,
     build_context_for_target,
 )
@@ -664,6 +667,7 @@ class LLMAttackSuggestion(APIView):
         target_id = safe_int_cast(req.query_params.get("target_id"))
         scope_id = safe_int_cast(req.query_params.get("scope_id"))
         organization_id = safe_int_cast(req.query_params.get("organization_id"))
+        scan_history_id = safe_int_cast(req.query_params.get("scan_history_id"))
         force_regenerate = req.query_params.get("force_regenerate") == "true"
         check_only = req.query_params.get("check_only") == "true"
         selected_model = req.query_params.get("llm_model")
@@ -675,6 +679,7 @@ class LLMAttackSuggestion(APIView):
             target_id,
             scope_id,
             organization_id,
+            scan_history_id,
         ):
             return Response({"status": False, "error": err}, status=HTTP_400_BAD_REQUEST)
 
@@ -684,6 +689,7 @@ class LLMAttackSuggestion(APIView):
             target_id,
             scope_id,
             organization_id,
+            scan_history_id,
         )
         if resolved is None:
             return Response(
@@ -717,6 +723,7 @@ class LLMAttackSuggestion(APIView):
             ATTACK_SURFACE_KIND_TARGET: self._get_for_target,
             ATTACK_SURFACE_KIND_SCOPE: self._get_for_scope,
             ATTACK_SURFACE_KIND_ORGANIZATION: self._get_for_organization,
+            ATTACK_SURFACE_KIND_SCAN_HISTORY: self._get_for_scan_history,
         }
         handler = dispatch.get(kind)
         if handler is None:
@@ -980,6 +987,51 @@ class LLMAttackSuggestion(APIView):
         self._persist_attack_surface_llm_result(organization, response, selected_model)
         return Response(response)
 
+    def _get_for_scan_history(
+        self,
+        user,
+        scan_history_id: int,
+        force_regenerate: bool,
+        check_only: bool,
+        selected_model: str | None,
+        attack_surface_analysis_id: int | None,
+    ) -> Response:
+        scan = get_scan_history_for_llm_attack_surface(user, scan_history_id)
+        if scan is None:
+            return Response({"status": False, "error": "Scan history not found"}, status=HTTP_404_NOT_FOUND)
+
+        display_name = "ScanHistory: %s" % (scan.id,)
+        if scan.target and scan.target.value:
+            display_name = "ScanHistory: %s (%s)" % (scan.id, scan.target.value)
+
+        cached = self._maybe_return_cached_attack_surface(
+            scan,
+            display_name,
+            force_regenerate,
+            check_only,
+            attack_surface_analysis_id,
+        )
+        if cached is not None:
+            return cached
+
+        if check_only:
+            return Response(
+                {
+                    "status": True,
+                    "subdomain_name": display_name,
+                    "description": None,
+                    "saved_analyses": [],
+                    "selected_analysis_id": None,
+                }
+            )
+
+        input_data = build_context_for_scan_history(scan)
+        llm = LLMAttackSuggestionGenerator()
+        response = llm.get_attack_suggestion(input_data, selected_model, prompt_key="scan_history")
+        response["subdomain_name"] = display_name
+        self._persist_attack_surface_llm_result(scan, response, selected_model)
+        return Response(response)
+
     def _delete_attack_surface_entity(
         self,
         user,
@@ -993,6 +1045,7 @@ class LLMAttackSuggestion(APIView):
             ATTACK_SURFACE_KIND_TARGET: get_target_for_llm_attack_surface,
             ATTACK_SURFACE_KIND_SCOPE: get_scope_for_llm_attack_surface,
             ATTACK_SURFACE_KIND_ORGANIZATION: get_organization_for_llm_attack_surface,
+            ATTACK_SURFACE_KIND_SCAN_HISTORY: get_scan_history_for_llm_attack_surface,
         }
         getter = getters.get(kind)
         if getter is None:
@@ -1029,6 +1082,7 @@ class LLMAttackSuggestion(APIView):
         target_id = safe_int_cast(request.query_params.get("target_id"))
         scope_id = safe_int_cast(request.query_params.get("scope_id"))
         organization_id = safe_int_cast(request.query_params.get("organization_id"))
+        scan_history_id = safe_int_cast(request.query_params.get("scan_history_id"))
         attack_surface_analysis_id = safe_int_cast(request.query_params.get("attack_surface_analysis_id"))
 
         if err := xor_attack_surface_entity_ids_error(
@@ -1037,6 +1091,7 @@ class LLMAttackSuggestion(APIView):
             target_id,
             scope_id,
             organization_id,
+            scan_history_id,
         ):
             return Response({"status": False, "error": err}, status=400)
         resolved = resolve_attack_surface_entity_kind_and_pk(
@@ -1045,6 +1100,7 @@ class LLMAttackSuggestion(APIView):
             target_id,
             scope_id,
             organization_id,
+            scan_history_id,
         )
         if resolved is None:
             return Response({"status": False, "error": ATTACK_SURFACE_ENTITY_XOR_MESSAGE}, status=400)
@@ -4224,6 +4280,7 @@ class ListScanHistory(APIView):
             qs = qs.distinct()
             total_count = qs.count()
             page_qs = qs[pagination["start"] : pagination["start"] + pagination["length"]]
+            page_qs = annotate_queryset_with_llm_attack_surface_count(page_qs, ScanHistory)
             page_scans = list(page_qs)
             attach_ip_metrics_to_scans(page_scans)
             serializer = ScanHistoryDatatableSerializer(page_scans, many=True)

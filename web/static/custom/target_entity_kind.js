@@ -10,6 +10,7 @@
   var DEFAULT_TARGET = "target";
   var DEFAULT_SCOPE = "scope";
   var DEFAULT_ORGANIZATION = "organization";
+  var DEFAULT_SCAN_HISTORY = "scan_history";
 
   if (typeof window.RENGINE_ATTACK_SURFACE_ENTITY_SUBDOMAIN === "undefined") {
     window.RENGINE_ATTACK_SURFACE_ENTITY_SUBDOMAIN = DEFAULT_SUBDOMAIN;
@@ -25,6 +26,9 @@
   }
   if (typeof window.RENGINE_ATTACK_SURFACE_ENTITY_ORGANIZATION === "undefined") {
     window.RENGINE_ATTACK_SURFACE_ENTITY_ORGANIZATION = DEFAULT_ORGANIZATION;
+  }
+  if (typeof window.RENGINE_ATTACK_SURFACE_ENTITY_SCAN_HISTORY === "undefined") {
+    window.RENGINE_ATTACK_SURFACE_ENTITY_SCAN_HISTORY = DEFAULT_SCAN_HISTORY;
   }
 
   window.RengineTargetEntityKind = {
@@ -43,6 +47,9 @@
     organization: function () {
       return window.RENGINE_ATTACK_SURFACE_ENTITY_ORGANIZATION;
     },
+    scan_history: function () {
+      return window.RENGINE_ATTACK_SURFACE_ENTITY_SCAN_HISTORY;
+    },
     /**
      * Protocol kinds for LLM / API XOR must stay the literals below. Do not compare kind
      * to this.ip() / this.subdomain() — window globals can be mis-set to the same value.
@@ -54,17 +61,25 @@
       return kind === DEFAULT_SUBDOMAIN;
     },
     llmQueryParamForKind: function (kind) {
+      var KIND_IP = window.RENGINE_ATTACK_SURFACE_ENTITY_IP;
+      var KIND_TARGET = window.RENGINE_ATTACK_SURFACE_ENTITY_TARGET;
+      var KIND_SCOPE = window.RENGINE_ATTACK_SURFACE_ENTITY_SCOPE;
+      var KIND_ORGANIZATION = window.RENGINE_ATTACK_SURFACE_ENTITY_ORGANIZATION;
+      var KIND_SUBDOMAIN = window.RENGINE_ATTACK_SURFACE_ENTITY_SUBDOMAIN;
+      var KIND_SCAN_HISTORY = window.RENGINE_ATTACK_SURFACE_ENTITY_SCAN_HISTORY;
       switch (kind) {
-        case DEFAULT_IP:
+        case KIND_IP:
           return "ip_address_id";
-        case DEFAULT_TARGET:
+        case KIND_TARGET:
           return "target_id";
-        case DEFAULT_SCOPE:
+        case KIND_SCOPE:
           return "scope_id";
-        case DEFAULT_ORGANIZATION:
+        case KIND_ORGANIZATION:
           return "organization_id";
-        case DEFAULT_SUBDOMAIN:
+        case KIND_SUBDOMAIN:
           return "subdomain_id";
+        case KIND_SCAN_HISTORY:
+          return "scan_history_id";
         default:
           return null;
       }

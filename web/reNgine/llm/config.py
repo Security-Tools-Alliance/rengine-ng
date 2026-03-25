@@ -140,11 +140,27 @@ Provide:
 Do not invent findings. When the vulnerability list is summary-only, treat it as indicative, not exhaustive.
 """
 
+ATTACK_SUGGESTION_SCAN_HISTORY_AGGREGATE_PROMPT = """
+You are an advanced penetration tester. You receive structured reconnaissance for a single ScanHistory run
+(one scan execution against a target). The header includes scan metadata and a scan_config summary.
+
+Sections may be empty or truncated—acknowledge gaps; do not fabricate results that are not present in the data.
+
+Provide:
+1. SINGLE-SCAN ATTACK SURFACE — what exposed entry points were observed during this scan run.
+2. PRIORITIZED ATTACK VECTORS — ranked by feasibility and impact, tied to observed signals.
+3. OPERATIONAL CONSIDERATIONS — what to validate next (within the same scan’s evidence bounds).
+4. RELEVANT SECURITY CONTEXT — only when tied to observed technologies/services; verified HTTP/HTTPS URLs only.
+
+Stay evidence-based and aligned with the supplied recon sections.
+"""
+
 ATTACK_PROMPTS_BY_KEY: Dict[str, str] = {
     "asset": ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT,
     "target": ATTACK_SUGGESTION_TARGET_AGGREGATE_PROMPT,
     "scope": ATTACK_SUGGESTION_SCOPE_AGGREGATE_PROMPT,
     "organization": ATTACK_SUGGESTION_ORGANIZATION_AGGREGATE_PROMPT,
+    "scan_history": ATTACK_SUGGESTION_SCAN_HISTORY_AGGREGATE_PROMPT,
 }
 
 ###############################################################################
@@ -154,6 +170,10 @@ ATTACK_PROMPTS_BY_KEY: Dict[str, str] = {
 # Default max output tokens for aggregate attack-surface prompts (target / scope / organization).
 DEFAULT_OPENAI_MAX_TOKENS_AGGREGATE = 6000
 
+# ``scan_history`` contexts can be significantly larger than target/scope/organization.
+# Use a tighter output token budget to reduce the risk of truncation / API errors.
+DEFAULT_OPENAI_MAX_TOKENS_SCAN_HISTORY = 2000
+
 LLM_CONFIG: Dict[str, Any] = {
     "providers": {
         "openai": {
@@ -162,6 +182,7 @@ LLM_CONFIG: Dict[str, Any] = {
             "api_version": "2024-02-15",
             "max_tokens": 2000,
             "max_tokens_aggregate": DEFAULT_OPENAI_MAX_TOKENS_AGGREGATE,
+            "max_tokens_scan_history": DEFAULT_OPENAI_MAX_TOKENS_SCAN_HISTORY,
             "temperature": 0.7,
         },
         "ollama": {

@@ -6,7 +6,7 @@ to avoid ambiguous host targeting. Centralizing the checks keeps error messages 
 semantics consistent across LLM, Secator subtasks, and recon notes.
 
 ``LLMAttackSuggestion`` additionally accepts exactly one of ``target_id``, ``scope_id``,
-or ``organization_id`` together with the host-level ids; see
+``organization_id``, or ``scan_history_id`` together with the host-level ids; see
 ``xor_attack_surface_entity_ids_error`` and
 ``attack_surface_entity_query_params_invalid_error``.
 
@@ -20,7 +20,7 @@ Related helpers (request shape vs scan membership; reuse instead of duplicating 
 
 from __future__ import annotations
 
-from typing import Optional, Sequence, Tuple
+from typing import Iterable, Optional, Sequence, Tuple
 
 
 def xor_subdomain_ip_single_ids_error(
@@ -83,7 +83,7 @@ def subdomain_ids_conflict_when_ip_address_ids_requested_error(
 
 
 ATTACK_SURFACE_ENTITY_XOR_MESSAGE = (
-    "Provide exactly one of subdomain_id, ip_address_id, target_id, scope_id, or organization_id"
+    "Provide exactly one of subdomain_id, ip_address_id, target_id, scope_id, organization_id, or scan_history_id"
 )
 
 # Protocol kinds for LLM attack-surface API dispatch. Keep aligned with
@@ -94,6 +94,7 @@ ATTACK_SURFACE_KIND_IP = "ip"
 ATTACK_SURFACE_KIND_TARGET = "target"
 ATTACK_SURFACE_KIND_SCOPE = "scope"
 ATTACK_SURFACE_KIND_ORGANIZATION = "organization"
+ATTACK_SURFACE_KIND_SCAN_HISTORY = "scan_history"
 
 ATTACK_SURFACE_ENTITY_KINDS: frozenset[str] = frozenset(
     {
@@ -102,8 +103,46 @@ ATTACK_SURFACE_ENTITY_KINDS: frozenset[str] = frozenset(
         ATTACK_SURFACE_KIND_TARGET,
         ATTACK_SURFACE_KIND_SCOPE,
         ATTACK_SURFACE_KIND_ORGANIZATION,
+        ATTACK_SURFACE_KIND_SCAN_HISTORY,
     }
 )
+
+ATTACK_SURFACE_QUERY_ID_KIND_BY_KEY: Tuple[Tuple[str, str], ...] = (
+    ("subdomain_id", ATTACK_SURFACE_KIND_SUBDOMAIN),
+    ("ip_address_id", ATTACK_SURFACE_KIND_IP),
+    ("target_id", ATTACK_SURFACE_KIND_TARGET),
+    ("scope_id", ATTACK_SURFACE_KIND_SCOPE),
+    ("organization_id", ATTACK_SURFACE_KIND_ORGANIZATION),
+    ("scan_history_id", ATTACK_SURFACE_KIND_SCAN_HISTORY),
+)
+
+ATTACK_SURFACE_ENTITY_QUERY_ID_KEYS = tuple(key for key, _ in ATTACK_SURFACE_QUERY_ID_KIND_BY_KEY)
+
+
+def iter_attack_surface_entity_kinds_and_ids(
+    subdomain_id: Optional[int],
+    ip_address_id: Optional[int],
+    target_id: Optional[int],
+    scope_id: Optional[int],
+    organization_id: Optional[int],
+    scan_history_id: Optional[int],
+) -> Iterable[Tuple[str, Optional[int]]]:
+    """
+    Yield (kind, id) pairs for supported attack-surface aggregate entity ids.
+
+    Centralizes enumeration so XOR validation and dispatch resolution stay consistent
+    as new kinds are added (e.g. ``scan_history_id``).
+    """
+    id_by_key = {
+        "subdomain_id": subdomain_id,
+        "ip_address_id": ip_address_id,
+        "target_id": target_id,
+        "scope_id": scope_id,
+        "organization_id": organization_id,
+        "scan_history_id": scan_history_id,
+    }
+    for key, kind in ATTACK_SURFACE_QUERY_ID_KIND_BY_KEY:
+        yield kind, id_by_key[key]
 
 
 def xor_attack_surface_entity_ids_error(
@@ -112,6 +151,7 @@ def xor_attack_surface_entity_ids_error(
     target_id: Optional[int],
     scope_id: Optional[int],
     organization_id: Optional[int],
+    scan_history_id: Optional[int],
     *,
     message: str = ATTACK_SURFACE_ENTITY_XOR_MESSAGE,
 ) -> Optional[str]:
@@ -125,20 +165,21 @@ def xor_attack_surface_entity_ids_error(
     PK validation elsewhere (``0`` and negative values are ignored).
     """
     count = sum(
-        1 for x in (subdomain_id, ip_address_id, target_id, scope_id, organization_id) if isinstance(x, int) and x > 0
+        1
+        for _, pk in iter_attack_surface_entity_kinds_and_ids(
+            subdomain_id=subdomain_id,
+            ip_address_id=ip_address_id,
+            target_id=target_id,
+            scope_id=scope_id,
+            organization_id=organization_id,
+            scan_history_id=scan_history_id,
+        )
+        if isinstance(pk, int) and pk > 0
     )
     if count != 1:
         return message
     return None
 
-
-ATTACK_SURFACE_ENTITY_QUERY_ID_KEYS = (
-    "subdomain_id",
-    "ip_address_id",
-    "target_id",
-    "scope_id",
-    "organization_id",
-)
 
 ATTACK_SURFACE_OPTIONAL_POSITIVE_INT_KEYS = ("attack_surface_analysis_id",)
 
@@ -184,26 +225,32 @@ def resolve_attack_surface_entity_kind_and_pk(
     target_id: Optional[int],
     scope_id: Optional[int],
     organization_id: Optional[int],
+    scan_history_id: Optional[int],
 ) -> Optional[Tuple[str, int]]:
     """
-    Return ``(kind, pk)`` for the single positive entity id, or ``None`` if none or multiple.
+    Return ``(kind, pk)`` for the single positive entity id (or ``None`` if none/multiple).
+
+    Supported positive ids are mutually exclusive:
+    ``subdomain_id``, ``ip_address_id``, ``target_id``, ``scope_id``,
+    ``organization_id``, and ``scan_history_id``.
 
     ``kind`` is one of the ``ATTACK_SURFACE_KIND_*`` constants (same strings as the JS UI).
-    After ``xor_attack_surface_entity_ids_error`` returns no error, this should return
-    exactly one pair; ``None`` indicates an inconsistent state and callers should respond
+    After ``xor_attack_surface_entity_ids_error`` returns no error, this should return exactly
+    one ``(kind, pk)`` pair; ``None`` indicates an inconsistent state and callers must respond
     with 400 using ``ATTACK_SURFACE_ENTITY_XOR_MESSAGE``.
     """
-    pairs: list[Tuple[str, int]] = []
-    if isinstance(subdomain_id, int) and subdomain_id > 0:
-        pairs.append((ATTACK_SURFACE_KIND_SUBDOMAIN, subdomain_id))
-    if isinstance(ip_address_id, int) and ip_address_id > 0:
-        pairs.append((ATTACK_SURFACE_KIND_IP, ip_address_id))
-    if isinstance(target_id, int) and target_id > 0:
-        pairs.append((ATTACK_SURFACE_KIND_TARGET, target_id))
-    if isinstance(scope_id, int) and scope_id > 0:
-        pairs.append((ATTACK_SURFACE_KIND_SCOPE, scope_id))
-    if isinstance(organization_id, int) and organization_id > 0:
-        pairs.append((ATTACK_SURFACE_KIND_ORGANIZATION, organization_id))
-    if len(pairs) != 1:
+    positive_pairs: list[Tuple[str, int]] = [
+        (kind, pk)
+        for kind, pk in iter_attack_surface_entity_kinds_and_ids(
+            subdomain_id=subdomain_id,
+            ip_address_id=ip_address_id,
+            target_id=target_id,
+            scope_id=scope_id,
+            organization_id=organization_id,
+            scan_history_id=scan_history_id,
+        )
+        if isinstance(pk, int) and pk > 0
+    ]
+    if len(positive_pairs) != 1:
         return None
-    return pairs[0]
+    return positive_pairs[0]

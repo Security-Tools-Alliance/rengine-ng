@@ -350,7 +350,34 @@ window.SCAN_HISTORY_CAN_MODIFY_RESULTS = {{ user|can:'modify_scan_results'|yesno
             const idEnc = window.safeAttr(String(row.id));
             const detailUrl = window.SCAN_HISTORY_DETAIL_SCAN_BASE + idEnc;
             const status = row.scan_status;
+            const attackUrl =
+              window.RengineTargetEntityKind &&
+              typeof window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls === 'function'
+                ? window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls()
+                : (() => {
+                    if (window.console && typeof window.console.warn === 'function') {
+                      window.console.warn(
+                        'RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls is not available; LLM attack surface button will not render.',
+                        { RengineTargetEntityKind: window.RengineTargetEntityKind }
+                      );
+                    }
+                    return null;
+                  })();
+            const llmBtn =
+              window.RengineDatatableActionRenderers &&
+              typeof window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton === 'function'
+                ? window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton(attackUrl || '', row.id, 'scan_history', row)
+                : (() => {
+                    if (window.console && typeof window.console.warn === 'function') {
+                      window.console.warn(
+                        'RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton is not available; LLM attack surface button will not render.',
+                        { RengineDatatableActionRenderers: window.RengineDatatableActionRenderers }
+                      );
+                    }
+                    return '';
+                  })();
             let html = '<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">';
+            html += llmBtn;
             html += '<a href="' + detailUrl + '" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" title="View Results"><i class="fe-eye"></i></a>';
             if (window.SCAN_HISTORY_CAN_INITIATE) {
               if ((status === 0 || status === 2 || status === 3) && row.target_id) {

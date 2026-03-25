@@ -1043,17 +1043,16 @@ class ScopeDatatableSerializer(serializers.ModelSerializer):
         c = getattr(obj, "llm_attack_surface_count", None)
         if c is not None:
             return int(c) > 0
-        from reNgine.llm.attack_surface_storage import parent_has_llm_attack_surface_analyses
-
-        return parent_has_llm_attack_surface_analyses(obj)
+        # DataTables queries should annotate `llm_attack_surface_count`; returning 0 avoids
+        # per-row DB access when this serializer is used on un-annotated instances.
+        return False
 
     def get_attack_surface_count(self, obj):
         c = getattr(obj, "llm_attack_surface_count", None)
         if c is not None:
             return int(c)
-        from reNgine.llm.attack_surface_storage import count_llm_attack_surface_analyses_for_parent
-
-        return count_llm_attack_surface_analyses_for_parent(obj)
+        # See `get_attack_surface` for rationale.
+        return 0
 
 
 class OrganizationDatatableSerializer(serializers.ModelSerializer):
@@ -1086,17 +1085,17 @@ class OrganizationDatatableSerializer(serializers.ModelSerializer):
         c = getattr(obj, "llm_attack_surface_count", None)
         if c is not None:
             return int(c) > 0
-        from reNgine.llm.attack_surface_storage import parent_has_llm_attack_surface_analyses
-
-        return parent_has_llm_attack_surface_analyses(obj)
+        # DataTables queries should annotate `llm_attack_surface_count`; returning `False`
+        # avoids per-row database access when this serializer is used without annotation.
+        return False
 
     def get_attack_surface_count(self, obj):
         c = getattr(obj, "llm_attack_surface_count", None)
         if c is not None:
             return int(c)
-        from reNgine.llm.attack_surface_storage import count_llm_attack_surface_analyses_for_parent
-
-        return count_llm_attack_surface_analyses_for_parent(obj)
+        # DataTables queries should annotate `llm_attack_surface_count`; returning `0`
+        # avoids per-row database access when this serializer is used without annotation.
+        return 0
 
 
 class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
@@ -1114,6 +1113,8 @@ class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
     status_text = serializers.SerializerMethodField()
     progress = serializers.SerializerMethodField()
     scope_name = serializers.SerializerMethodField()
+    attack_surface = serializers.SerializerMethodField()
+    attack_surface_count = serializers.SerializerMethodField()
 
     class Meta:
         model = ScanHistory
@@ -1132,6 +1133,8 @@ class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
             "scan_status",
             "progress",
             "scope_name",
+            "attack_surface",
+            "attack_surface_count",
         ]
 
     def get_target_value(self, obj):
@@ -1199,6 +1202,21 @@ class ScanHistoryDatatableSerializer(serializers.ModelSerializer):
 
     def get_progress(self, obj):
         return obj.get_progress() if callable(getattr(obj, "get_progress", None)) else 0
+
+    def get_attack_surface(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c) > 0
+        # DataTables queries should annotate `llm_attack_surface_count`; returning False
+        # avoids per-row DB access when this serializer is used without annotation.
+        return False
+
+    def get_attack_surface_count(self, obj):
+        c = getattr(obj, "llm_attack_surface_count", None)
+        if c is not None:
+            return int(c)
+        # See `get_attack_surface` for rationale.
+        return 0
 
     def get_scope_name(self, obj):
         if not obj.target:

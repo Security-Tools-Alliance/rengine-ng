@@ -3789,12 +3789,14 @@ const ATTACK_SURFACE_ENTITY_IP = 'ip';
 const ATTACK_SURFACE_ENTITY_TARGET = 'target';
 const ATTACK_SURFACE_ENTITY_SCOPE = 'scope';
 const ATTACK_SURFACE_ENTITY_ORGANIZATION = 'organization';
+const ATTACK_SURFACE_ENTITY_SCAN_HISTORY = 'scan_history';
 if (typeof window !== 'undefined') {
     window.RENGINE_ATTACK_SURFACE_ENTITY_SUBDOMAIN = ATTACK_SURFACE_ENTITY_SUBDOMAIN;
     window.RENGINE_ATTACK_SURFACE_ENTITY_IP = ATTACK_SURFACE_ENTITY_IP;
     window.RENGINE_ATTACK_SURFACE_ENTITY_TARGET = ATTACK_SURFACE_ENTITY_TARGET;
     window.RENGINE_ATTACK_SURFACE_ENTITY_SCOPE = ATTACK_SURFACE_ENTITY_SCOPE;
     window.RENGINE_ATTACK_SURFACE_ENTITY_ORGANIZATION = ATTACK_SURFACE_ENTITY_ORGANIZATION;
+    window.RENGINE_ATTACK_SURFACE_ENTITY_SCAN_HISTORY = ATTACK_SURFACE_ENTITY_SCAN_HISTORY;
 }
 
 function requireAttackEntityForLlm(attackEntity) {
@@ -3803,14 +3805,15 @@ function requireAttackEntityForLlm(attackEntity) {
         attackEntity === ATTACK_SURFACE_ENTITY_IP ||
         attackEntity === ATTACK_SURFACE_ENTITY_TARGET ||
         attackEntity === ATTACK_SURFACE_ENTITY_SCOPE ||
-        attackEntity === ATTACK_SURFACE_ENTITY_ORGANIZATION
+        attackEntity === ATTACK_SURFACE_ENTITY_ORGANIZATION ||
+        attackEntity === ATTACK_SURFACE_ENTITY_SCAN_HISTORY
     ) {
         return attackEntity;
     }
     throw new Error(
         'Invalid attackEntity "' +
             String(attackEntity) +
-            '". Expected subdomain, ip, target, scope, or organization.'
+            '". Expected subdomain, ip, target, scope, organization, or scan_history.'
     );
 }
 

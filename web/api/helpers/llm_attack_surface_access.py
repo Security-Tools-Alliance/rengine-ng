@@ -8,7 +8,7 @@ from __future__ import annotations
 from django.contrib.auth.models import AbstractUser
 from django.db.models import Q
 
-from startScan.models import IpAddress, Subdomain
+from startScan.models import IpAddress, ScanHistory, Subdomain
 from targetApp.models import Organization, Scope, Target
 
 
@@ -16,6 +16,13 @@ def get_target_for_llm_attack_surface(user: AbstractUser, pk: int) -> Target | N
     qs = Target.objects.filter(pk=pk)
     if not user.is_superuser:
         qs = qs.filter(project__users=user)
+    return qs.first()
+
+
+def get_scan_history_for_llm_attack_surface(user: AbstractUser, pk: int) -> ScanHistory | None:
+    qs = ScanHistory.objects.filter(pk=pk).select_related("target")
+    if not user.is_superuser:
+        qs = qs.filter(target__project__users=user)
     return qs.first()
 
 
