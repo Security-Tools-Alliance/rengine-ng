@@ -1,9 +1,15 @@
 # Multi-stage build to get PostgreSQL 12 binaries
-FROM postgres:12-bookworm as pg12
+FROM postgres:12-bookworm AS pg12
 FROM postgres:17-bookworm
 
-# Install ICU and LDAP libraries for Bookworm, plus iproute2 for network detection
-RUN apt update && apt install -y libicu72 libldap-2.5-0 libldap-common libldap-dev procps iproute2
+# Install ICU and LDAP libraries for Bookworm, plus iproute2 for network detection.
+# On arm64+qemu, apt metadata parsing can be memory-sensitive, so we disable
+# heavy index/language downloads and add retries.
+RUN rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /var/lib/apt/lists/partial \
+    && apt-get -o Acquire::Retries=5 -o Acquire::Languages=none -o Acquire::GzipIndexes=false update \
+    && apt-get install -y --no-install-recommends libicu72 libldap-2.5-0 libldap-common libldap-dev procps iproute2 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy PostgreSQL 12 binaries from the pg12 stage
 COPY --from=pg12 /usr/lib/postgresql/12/bin/pg_* /usr/local/pgsql-12/bin/
@@ -32,7 +38,7 @@ COPY --from=pg12 /usr/lib/libicu*.so.* /usr/lib/
 # Set environment variables
 ENV PGBINOLD=/usr/local/pgsql-12/bin
 ENV PGBINNEW=/usr/lib/postgresql/17/bin
-ENV LD_LIBRARY_PATH=/usr/local/pgsql-12/lib:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/usr/local/pgsql-12/lib:/usr/local/lib:/usr/lib
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
