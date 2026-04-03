@@ -136,7 +136,10 @@ def sanitize_html_for_display(html_content: str) -> str:
         return ""
     soup = BeautifulSoup(html_content, "html.parser")
     for tag in list(soup.find_all(True)):
-        name_lower = tag.name.lower()
+        tag_name = getattr(tag, "name", None)
+        if not isinstance(tag_name, str):
+            continue
+        name_lower = tag_name.lower()
         if name_lower not in ALLOWED_HTML_TAGS:
             if name_lower in HIGH_RISK_TAGS:
                 tag.decompose()
