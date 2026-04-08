@@ -841,7 +841,9 @@ def duplicate_workflow(request, workflow_id, slug=None):
         tags=workflow.tags or [],
     )
     messages.add_message(request, messages.SUCCESS, f"Workflow '{workflow.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(_reverse_with_project(request, "workflow_detail", duplicated_workflow.id))
+    return http.HttpResponseRedirect(
+        _reverse_with_project(request, "workflow_detail", workflow_id=duplicated_workflow.id)
+    )
 
 
 @login_required
@@ -980,7 +982,7 @@ def duplicate_scan(request, scan_id, slug=None):
         scan_type=scan.scan_type,
     )
     messages.add_message(request, messages.SUCCESS, f"Scan '{scan.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(_reverse_with_project(request, "scan_detail", duplicated_scan.id))
+    return http.HttpResponseRedirect(_reverse_with_project(request, "scan_detail", scan_id=duplicated_scan.id))
 
 
 @login_required
@@ -1228,7 +1230,9 @@ def duplicate_profile(request, profile_id, slug=None):
         is_default=False,
     )
     messages.add_message(request, messages.SUCCESS, f"Profile '{profile.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(_reverse_with_project(request, "profile_detail", duplicated_profile.id))
+    return http.HttpResponseRedirect(
+        _reverse_with_project(request, "profile_detail", profile_id=duplicated_profile.id)
+    )
 
 
 @login_required
@@ -1390,7 +1394,7 @@ def duplicate_task(request, task_id, slug=None):
         is_active=task.is_active,
     )
     messages.add_message(request, messages.SUCCESS, f"Task '{task.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(_reverse_with_project(request, "task_detail", duplicated_task.id))
+    return http.HttpResponseRedirect(_reverse_with_project(request, "task_detail", task_id=duplicated_task.id))
 
 
 @login_required
@@ -1432,7 +1436,7 @@ def duplicate_worker(request, worker_id, slug=None):
         https_pull_verify_ssl=worker.https_pull_verify_ssl,
     )
     messages.add_message(request, messages.SUCCESS, f"Worker '{worker.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(_reverse_with_project(request, "worker_update", duplicated_worker.id))
+    return http.HttpResponseRedirect(_reverse_with_project(request, "worker_update", worker_id=duplicated_worker.id))
 
 
 @login_required

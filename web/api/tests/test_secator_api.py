@@ -490,6 +490,7 @@ class TestSecatorFindingCreate(BaseTestCase):
             "name": "net_interface",
             "match": "eth0",
             "value": "eth0",
+            "_source": "netdetect",
             "_context": {
                 "scan_history_id": self.data_generator.scan_history.id,
                 "target_id": self.data_generator.target.id,

@@ -6823,9 +6823,9 @@ class SecatorFindingCreate(SecatorAPIBase):
             if not finding_type:
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
 
-            # Centralized tag routing (whois, url_pattern, asn, ignored, fallback to Technology)
+            # Centralized tag dispatch (whois, ASN, url_pattern, secrets, Nuclei tech, ignored, Technology fallback)
             if finding_type == "tag":
-                from reNgine.secator.tag_routing import dispatch_secator_tag
+                from reNgine.secator.tag_dispatch import dispatch_secator_tag
 
                 def _validate_tag_context(sh_id, t_id):
                     return self.validate_scan_context(sh_id, t_id, "tag")
@@ -7052,9 +7052,9 @@ class SecatorFindingUpdate(SecatorAPIBase):
                 )
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
 
-            # Centralized tag routing (whois, url_pattern, asn, ignored, fallback to Technology)
+            # Centralized tag dispatch (whois, ASN, url_pattern, secrets, Nuclei tech, ignored, Technology fallback)
             if finding_type == "tag":
-                from reNgine.secator.tag_routing import dispatch_secator_tag
+                from reNgine.secator.tag_dispatch import dispatch_secator_tag
 
                 def _validate_tag_context_update(sh_id, t_id):
                     return self.validate_scan_context(sh_id, t_id, "tag", prefix=self.logger.PREFIX_FINDING)

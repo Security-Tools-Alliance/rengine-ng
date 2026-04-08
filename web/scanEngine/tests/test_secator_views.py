@@ -6,6 +6,7 @@ This file contains unit tests for the Secator views and forms.
 
 from django.urls import reverse
 import yaml
+from unittest.mock import patch
 
 from scanEngine.forms import SecatorProfileForm, SecatorScanForm, SecatorWorkflowForm
 from scanEngine.models import SecatorProfile, SecatorScan, SecatorTask, SecatorWorkflow
@@ -530,6 +531,12 @@ class TestSecatorProfileViews(BaseTestCase):
         self.assertEqual(duplicated.profile_type, "custom")
         self.assertFalse(duplicated.is_default)
         self.assertEqual(duplicated.category, self.builtin_profile.category)
+
+    def test_duplicate_profile_with_project_slug_in_request_does_not_error(self):
+        """Duplicating a profile works when a project slug is injected by request context."""
+        with patch("scanEngine.views._project_slug_from_request", return_value="demo-project"):
+            response = self.client.get(reverse("duplicate_profile", args=[self.builtin_profile.id]))
+        self.assertEqual(response.status_code, 302)
 
     def test_secator_profile_form_validation(self):
         """Test SecatorProfileForm validation."""

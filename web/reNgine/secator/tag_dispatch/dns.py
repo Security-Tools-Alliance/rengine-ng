@@ -1,10 +1,11 @@
 """
-Handlers for Secator tag routing that delegate to repositories.
+WHOIS, ASN, and related infrastructure tags from Secator (_type=tag).
 
-Kept in a separate module to avoid circular imports between tag_routing and repositories.
+This module is not for Secator DNS ``record`` findings (those use DnsRepository).
+It groups tag handlers that enrich domain or IP context (raw WHOIS, ASN metadata).
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from reNgine.core.validators import is_valid_ip
 from reNgine.utilities.logger import get_module_logger
@@ -12,6 +13,8 @@ from startScan.models import IpAddress
 
 
 logger = get_module_logger(__name__)
+
+TagHandlerResult = Tuple[Optional[Any], Optional[int]]
 
 
 def save_asn_from_secator_tag(
@@ -66,3 +69,21 @@ def save_asn_from_secator_tag(
 
     domain_info = DomainRepository().save_asn_from_secator_tag(scan_history_id, target_id, match, value)
     return domain_info
+
+
+def handle_whois_tag(data: Dict[str, Any], scan_history_id: int, target_id: int) -> TagHandlerResult:
+    from reNgine.services.repositories.domain_repository import DomainRepository
+
+    domain_name = (data.get("match") or "").strip()
+    value = data.get("value") or ""
+    obj = DomainRepository().save_raw_whois_from_secator_tag(scan_history_id, target_id, domain_name, value)
+    if obj is not None:
+        return (obj, None)
+    return (None, 422)
+
+
+def handle_asn_tag(data: Dict[str, Any], scan_history_id: int, target_id: int) -> TagHandlerResult:
+    obj = save_asn_from_secator_tag(data, scan_history_id, target_id)
+    if obj is not None:
+        return (obj, None)
+    return (None, 422)
