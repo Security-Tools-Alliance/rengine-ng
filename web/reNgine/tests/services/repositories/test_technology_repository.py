@@ -3,7 +3,7 @@ Tests for Technology repository functionality.
 """
 
 from reNgine.services.repositories.technology_repository import TechnologyRepository
-from startScan.models import SubdomainTechnology
+from startScan.models import EndPoint, Subdomain, SubdomainTechnology
 from utils.test_base import BaseTestCase
 
 
@@ -106,6 +106,34 @@ class TestTechnologyRepository(BaseTestCase):
         # Verify association with endpoint
         endpoint.refresh_from_db()
         self.assertIn(result, endpoint.techs.all())
+
+    def test_save_from_secator_with_url_match_creates_endpoint_and_subdomain_when_missing(self):
+        """Tag URL ingestion creates endpoint and links DNS host subdomain when absent."""
+        host = "created-tech.example.com"
+        subdomain = self.data_generator.create_subdomain(
+            name=host,
+            scan_history=self.scan_history,
+            domain=self.domain,
+        )
+        match_url = f"https://{host}/admin"
+        item = {
+            "_type": "tag",
+            "name": "caddy",
+            "match": match_url,
+            "_source": "nuclei",
+        }
+
+        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+
+        self.assertIsNotNone(result)
+        endpoint = EndPoint.objects.filter(http_url=match_url, scan_history_id=self.scan_history.id).first()
+        self.assertIsNotNone(endpoint)
+        self.assertIsNotNone(endpoint.subdomain_id)
+        self.assertIsNone(endpoint.ip_address_id)
+        self.assertEqual(endpoint.subdomain.name, host)
+        self.assertEqual(endpoint.subdomain_id, subdomain.id)
+        self.assertIn(result, endpoint.techs.all())
+        self.assertTrue(Subdomain.objects.filter(name=host, scan_history_id=self.scan_history.id).exists())
 
     def test_save_from_secator_missing_name(self):
         """Test handling missing technology name."""

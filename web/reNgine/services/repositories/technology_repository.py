@@ -16,6 +16,7 @@ from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.secator.subdomain_technology_link import upsert_subdomain_technology_link
 from reNgine.services.repositories.ip_repository import IpRepository, normalize_ip_address_string
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
+from reNgine.utilities.scan_lookups import get_or_create_endpoint_in_scan_for_ingestion
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import EndPoint, ScanHistory, Subdomain, Technology
@@ -291,7 +292,16 @@ class TechnologyRepository:
 
             tech_obj, _ = Technology.objects.get_or_create(name=normalized_name)
 
-            endpoint = EndPoint.objects.get(http_url=endpoint_url, scan_history_id=scan_history_id)
+            endpoint = get_or_create_endpoint_in_scan_for_ingestion(endpoint_url, scan_history_id)
+            if not endpoint:
+                logger.log_line(
+                    PREFIX_TECH_REPO,
+                    "ASSOCIATE_TECH_TO_ENDPOINT",
+                    "Endpoint not found/created in scan: url=%s scan_id=%s"
+                    % (endpoint_url[:80] if endpoint_url else "", scan_history_id),
+                    level="warning",
+                )
+                return False
             endpoint.techs.add(tech_obj)
             logger.log_line(
                 PREFIX_TECH_REPO,
@@ -301,15 +311,6 @@ class TechnologyRepository:
             )
             return True
 
-        except EndPoint.DoesNotExist:
-            logger.log_line(
-                PREFIX_TECH_REPO,
-                "ASSOCIATE_TECH_TO_ENDPOINT",
-                "Endpoint not found in scan: url=%s scan_id=%s"
-                % (endpoint_url[:80] if endpoint_url else "", scan_history_id),
-                level="warning",
-            )
-            return False
         except MultipleObjectsReturned:
             logger.log_line(
                 PREFIX_TECH_REPO,
@@ -414,8 +415,8 @@ class TechnologyRepository:
             # Check if match_target is a URL
             if match_target.startswith(("http://", "https://")):
                 if is_valid_url(match_target):
-                    try:
-                        endpoint = EndPoint.objects.get(http_url=match_target, scan_history_id=scan_history_id)
+                    endpoint = get_or_create_endpoint_in_scan_for_ingestion(match_target, scan_history_id)
+                    if endpoint:
                         endpoint.techs.add(tech_obj)
                         logger.log_line(
                             PREFIX_TECH_REPO,
@@ -425,24 +426,13 @@ class TechnologyRepository:
                             level="debug",
                         )
                         return
-                    except EndPoint.DoesNotExist:
-                        logger.log_line(
-                            PREFIX_TECH_REPO,
-                            "ASSOCIATE_TECH_TO_TARGET",
-                            "Endpoint not found for match_target, trying subdomain: %s"
-                            % (match_target[:80] if match_target else "",),
-                            level="debug",
-                        )
-                    except MultipleObjectsReturned:
-                        logger.log_line(
-                            PREFIX_TECH_REPO,
-                            "ASSOCIATE_TECH_TO_TARGET",
-                            "Multiple endpoints for same URL, skipping: match_target=%s scan_id=%s"
-                            % (match_target[:80] if match_target else "", scan_history_id),
-                            level="error",
-                        )
-                        return
-
+                    logger.log_line(
+                        PREFIX_TECH_REPO,
+                        "ASSOCIATE_TECH_TO_TARGET",
+                        "Endpoint not found/created for match_target, trying subdomain: %s"
+                        % (match_target[:80] if match_target else "",),
+                        level="debug",
+                    )
                     if hostname := urlparse(match_target).hostname:
                         self._associate_with_subdomain_by_hostname(tech_obj, hostname, scan_history_id, source)
             elif is_acceptable_subdomain_name(match_target):

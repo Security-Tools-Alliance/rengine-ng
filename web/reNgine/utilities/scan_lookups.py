@@ -15,12 +15,20 @@ see tests in reNgine/tests/utilities/test_scan_lookups.py.
 """
 
 from typing import Iterable, Optional
+from urllib.parse import urlparse
 
 from django.db.models import Q
 
 from reNgine.core.ip_literal import normalize_ip_address_text
+from reNgine.core.validators import is_valid_url
 from reNgine.services.scan_finding_metrics import ip_address_id_linked_to_scan
-from startScan.models import EndPoint, IpAddress, Port, Subdomain
+from reNgine.utilities.domain import get_or_create_domain_for_target
+from reNgine.utilities.logger import get_module_logger
+from startScan.models import Domain, EndPoint, IpAddress, Port, ScanHistory, Subdomain
+
+
+PREFIX_SCAN_LOOKUPS = "[SCAN_LOOKUPS]"
+logger = get_module_logger(__name__)
 
 
 def get_ip_linked_to_scan_ids(address: str, scan_ids: Iterable[int]) -> Optional[IpAddress]:
@@ -62,6 +70,87 @@ def get_endpoint_in_scan(http_url: str, scan_history_id: int) -> Optional[EndPoi
     ).first()
 
 
+def get_or_create_endpoint_in_scan_for_ingestion(
+    http_url: str,
+    scan_history_id: int,
+    target_id: Optional[int] = None,
+) -> Optional[EndPoint]:
+    """
+    Resolve endpoint in-scan for ingestion flows, creating it when missing.
+
+    This helper is for write paths only (repositories processing Secator findings). It
+    keeps lookup/creation policy centralized and reuses ``EndpointRepository.get_or_create``
+    so host assignment (subdomain vs ip) follows existing endpoint repository contracts.
+    """
+    normalized_url = (http_url or "").strip()
+    if not normalized_url or not is_valid_url(normalized_url):
+        return None
+    if endpoint := get_endpoint_in_scan(normalized_url, scan_history_id):
+        return endpoint
+    scan_target_id = ScanHistory.objects.filter(id=scan_history_id).values_list("target_id", flat=True).first()
+    resolved_target_id = scan_target_id or target_id
+    if target_id and scan_target_id and target_id != scan_target_id:
+        logger.log_line(
+            PREFIX_SCAN_LOOKUPS,
+            "ENDPOINT_CREATE",
+            f"Using scan target_id={scan_target_id} over caller target_id={target_id} for scan_id={scan_history_id}",
+            level="debug",
+        )
+    if not resolved_target_id:
+        logger.log_line(
+            PREFIX_SCAN_LOOKUPS,
+            "ENDPOINT_CREATE",
+            f"Cannot create endpoint without target: scan_id={scan_history_id} url={normalized_url[:120]}",
+            level="warning",
+        )
+        return None
+    domain = None
+    hostname = (urlparse(normalized_url).hostname or "").strip().lower()
+    if hostname:
+        if subdomain := Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).order_by("id").first():
+            domain = subdomain.domain
+        if not domain:
+            host_parts = hostname.split(".")
+            candidate_domain_names = [".".join(host_parts[i:]) for i in range(len(host_parts) - 1)]
+            matched_domains = Domain.objects.filter(
+                scan_history_id=scan_history_id,
+                name__in=candidate_domain_names,
+            )
+            domain = max(matched_domains, key=lambda item: len(item.name), default=None)
+        if not domain:
+            logger.log_line(
+                PREFIX_SCAN_LOOKUPS,
+                "ENDPOINT_CREATE",
+                (
+                    "No scan-scoped domain inferred from hostname: "
+                    f"scan_id={scan_history_id} hostname={hostname[:120]} url={normalized_url[:120]}"
+                ),
+                level="warning",
+            )
+    else:
+        domain = Domain.objects.filter(scan_history_id=scan_history_id).order_by("id").first()
+    if not domain:
+        domain = get_or_create_domain_for_target(resolved_target_id, scan_history_id)
+    if not domain:
+        logger.log_line(
+            PREFIX_SCAN_LOOKUPS,
+            "ENDPOINT_CREATE",
+            (
+                "Cannot create endpoint without domain: "
+                f"scan_id={scan_history_id} "
+                f"resolved_target_id={resolved_target_id} "
+                f"url={normalized_url[:120]}"
+            ),
+            level="warning",
+        )
+        return None
+    # Local import avoids repository import cycles at module load time.
+    from reNgine.services.repositories.endpoint_repository import EndpointRepository
+
+    endpoint, _ = EndpointRepository().get_or_create(normalized_url, scan_history_id, domain.id)
+    return endpoint
+
+
 def get_subdomain_in_scan_by_name(name: str, scan_history_id: int) -> Optional[Subdomain]:
     """Return Subdomain with given name (normalized) in the scan, or None."""
     if normalized := (name or "").strip().lower():
@@ -97,7 +186,7 @@ def ip_exists_in_scan(ip_address_id: Optional[int], scan_history_id: int) -> boo
     """Return True if ip_address_id is an IpAddress linked to the scan (delegates to scan_finding_metrics)."""
     if ip_address_id is None:
         return False
-    return ip_address_id_linked_to_scan(int(ip_address_id), int(scan_history_id))
+    return ip_address_id_linked_to_scan(ip_address_id, scan_history_id)
 
 
 def get_port_for_ip(ip_address: IpAddress, port_number: int) -> Optional[Port]:

@@ -2641,7 +2641,11 @@ class SubdomainSerializer(DefaultEndpointTechnologyMixin, serializers.ModelSeria
         return obj._default_endpoint
 
     def get_technologies(self, obj):
-        return self._serialize_unique_technologies(self._default_endpoints_for_subdomain_serialization(obj))
+        endpoint_technologies = self._serialize_unique_technologies(self._default_endpoints_for_subdomain_serialization(obj))
+        if endpoint_technologies:
+            return endpoint_technologies
+        # Fallback for Secator findings linked directly on SubdomainTechnology when no default endpoint exists.
+        return [self._serialize_technology_payload(tech) for tech in obj.technologies.all()]
 
     def get_endpoint_defaults_by_port(self, obj):
         return self._serialize_endpoint_defaults_by_port(self._default_endpoints_for_subdomain_serialization(obj))

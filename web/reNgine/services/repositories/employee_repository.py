@@ -15,6 +15,7 @@ from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.utilities.domain import get_domain_by_id, get_or_create_domain_for_target
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
+from reNgine.utilities.scan_lookups import get_endpoint_in_scan
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import Email, Employee, EndPoint, ScanHistory, Subdomain
 from targetApp.models import Target
@@ -477,7 +478,7 @@ class EmployeeRepository:
                 )
                 return
 
-            if endpoint := EndPoint.objects.filter(http_url=url, scan_history_id=scan_history_id).first():
+            if endpoint := get_endpoint_in_scan(url, scan_history_id):
                 employee.endpoint = endpoint
                 employee.save(update_fields=["endpoint"])
                 logger.log_line(
@@ -489,7 +490,7 @@ class EmployeeRepository:
                 )
                 return
 
-            # If no endpoint found, try subdomain association
+            # If endpoint could not be resolved, try subdomain association
             hostname = urlparse(url).hostname
             if hostname and is_acceptable_subdomain_name(hostname):
                 subdomain = None

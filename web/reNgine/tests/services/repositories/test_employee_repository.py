@@ -3,6 +3,7 @@ Tests for Employee repository functionality.
 """
 
 from reNgine.services.repositories.employee_repository import EmployeeRepository
+from startScan.models import EndPoint
 from utils.test_base import BaseTestCase
 
 
@@ -108,7 +109,7 @@ class TestEmployeeRepository(BaseTestCase):
         self.assertIsNone(result)
 
     def test_save_from_secator_with_subdomain_association(self):
-        """Test saving employee with subdomain association."""
+        """Test saving employee creates endpoint and keeps DNS host association."""
         # Create subdomain first
         subdomain = self.data_generator.create_subdomain(
             name="test.example.com",
@@ -128,7 +129,8 @@ class TestEmployeeRepository(BaseTestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result.username, "john.doe")
-        self.assertEqual(result.subdomain, subdomain)
+        self.assertIsNotNone(result.endpoint_id)
+        self.assertEqual(result.endpoint.subdomain_id, subdomain.id)
 
     def test_save_from_secator_with_endpoint_association(self):
         """Test saving employee with endpoint association."""
@@ -159,6 +161,31 @@ class TestEmployeeRepository(BaseTestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.username, "john.doe")
         self.assertEqual(result.endpoint, endpoint)
+
+    def test_save_from_secator_missing_endpoint_falls_back_to_subdomain_association(self):
+        """UserAccount URL without existing endpoint associates employee to subdomain only."""
+        host = "created-employee.example.com"
+        subdomain = self.data_generator.create_subdomain(
+            name=host,
+            scan_history=self.scan_history,
+            domain=self.domain,
+        )
+        url = f"https://{host}/profile/alice.ops"
+        item = {
+            "_type": "user_account",
+            "username": "alice.ops",
+            "email": "alice.ops@example.invalid",
+            "site_name": "example.com",
+            "url": url,
+        }
+
+        result = self.employee_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+
+        self.assertIsNotNone(result)
+        endpoint = EndPoint.objects.filter(http_url=item["url"], scan_history_id=self.scan_history.id).first()
+        self.assertIsNone(endpoint)
+        self.assertEqual(result.subdomain_id, subdomain.id)
+        self.assertIsNone(result.endpoint_id)
 
     def test_get_or_create_existing_employee_by_username_site(self):
         """Test get_or_create with existing employee by username and site."""

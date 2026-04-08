@@ -306,6 +306,31 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
         tech_names = {t.get("name") for t in row.get("technologies", [])}
         self.assertIn("Caddy", tech_names)
 
+    def test_datatable_falls_back_to_subdomain_technologies_without_default_endpoint(self):
+        """When no default endpoint exists, DataTables technologies fallback to SubdomainTechnology links."""
+        subdomain = self.data_generator.subdomain
+        tech = Technology.objects.create(name="Nginx")
+        subdomain.technologies.add(tech)
+        EndPoint.objects.filter(subdomain=subdomain, scan_history=self.data_generator.scan_history).delete()
+
+        api_url = reverse("api:subdomain-datatable-list")
+        response = self.client.get(
+            api_url,
+            {
+                "scan_id": self.data_generator.scan_history.id,
+                "project": self.data_generator.project.slug,
+                "start": "0",
+                "length": "20",
+                "draw": "1",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = next((x for x in response.data["data"] if x["id"] == subdomain.id), None)
+        self.assertIsNotNone(row)
+        self.assertEqual(row.get("endpoint_defaults_by_port"), [])
+        tech_names = {t.get("name") for t in row.get("technologies", [])}
+        self.assertIn("Nginx", tech_names)
+
 
 class TestInterestingSubdomainViewSet(BaseTestCase):
     """Test case for the Interesting Subdomain ViewSet API."""

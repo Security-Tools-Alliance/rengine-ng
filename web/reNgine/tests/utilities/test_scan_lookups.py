@@ -12,8 +12,9 @@ from django.utils import timezone
 from reNgine.utilities.scan_lookups import (
     filter_ports_queryset_by_scan_ids,
     get_ip_linked_to_scan_ids,
+    get_or_create_endpoint_in_scan_for_ingestion,
 )
-from startScan.models import EndPoint, IpAddress, Port, Subdomain
+from startScan.models import Domain, EndPoint, IpAddress, Port, Subdomain
 from utils.test_base import BaseTestCase
 
 
@@ -84,3 +85,26 @@ class TestScanLookupsScanScopedQueries(BaseTestCase):
         port = Port.objects.create(number=19999, ip_address=ip, service_name="test-svc")
         qs = filter_ports_queryset_by_scan_ids(Port.objects.all(), [scan.id])
         self.assertTrue(qs.filter(pk=port.pk).exists())
+
+    def test_get_or_create_endpoint_prefers_hostname_suffix_domain(self):
+        dg = self.data_generator
+        scan = dg.scan_history
+        Domain.objects.create(
+            name="unrelated.example.net",
+            scan_history=scan,
+            insert_date=timezone.now(),
+        )
+        expected_domain = Domain.objects.create(
+            name="example.com",
+            scan_history=scan,
+            insert_date=timezone.now(),
+        )
+
+        endpoint = get_or_create_endpoint_in_scan_for_ingestion(
+            "https://app.api.example.com/login",
+            scan.id,
+            dg.target.id,
+        )
+
+        self.assertIsNotNone(endpoint)
+        self.assertEqual(endpoint.domain_id, expected_domain.id)
