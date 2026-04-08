@@ -274,7 +274,7 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
         ip = IpAddress.objects.create(address="203.0.113.140")
         subdomain.ip_addresses.add(ip)
         port = Port.objects.create(number=8443, ip_address=ip, service_name="https-alt")
-        tech = Technology.objects.create(name="Caddy")
+        tech = Technology.objects.create(name="Caddy", scan_history=self.data_generator.scan_history)
         endpoint = EndPoint.objects.create(
             scan_history=self.data_generator.scan_history,
             domain=self.data_generator.domain,
@@ -309,7 +309,7 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
     def test_datatable_falls_back_to_subdomain_technologies_without_default_endpoint(self):
         """When no default endpoint exists, DataTables technologies fallback to SubdomainTechnology links."""
         subdomain = self.data_generator.subdomain
-        tech = Technology.objects.create(name="Nginx")
+        tech = Technology.objects.create(name="Nginx", scan_history=self.data_generator.scan_history)
         subdomain.technologies.add(tech)
         EndPoint.objects.filter(subdomain=subdomain, scan_history=self.data_generator.scan_history).delete()
 

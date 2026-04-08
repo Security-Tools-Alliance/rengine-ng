@@ -2128,6 +2128,13 @@ class Waf(models.Model):
 
 class Technology(models.Model):
     id = models.AutoField(primary_key=True)
+    scan_history = models.ForeignKey(
+        ScanHistory,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="technologies",
+    )
     name = models.CharField(max_length=500, blank=True, null=True)
     value = models.CharField(max_length=500, null=True, blank=True)
     category = models.CharField(max_length=200, null=True, blank=True)
@@ -2157,6 +2164,15 @@ class Technology(models.Model):
             .annotate(count=Count("name"))
             .order_by("-count")[:limit]
         )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["scan_history", "name"],
+                condition=models.Q(scan_history__isnull=False, name__isnull=False),
+                name="ss_technology_scan_name_uniq",
+            )
+        ]
 
 
 class SubdomainTechnology(models.Model):

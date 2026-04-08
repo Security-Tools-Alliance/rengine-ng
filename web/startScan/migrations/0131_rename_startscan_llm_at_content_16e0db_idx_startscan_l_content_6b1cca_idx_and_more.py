@@ -3,16 +3,43 @@
 from django.db import migrations, models
 
 
+def _safe_rename_llm_content_index(apps, schema_editor):
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM pg_class
+                    WHERE relkind = 'i'
+                      AND relname = 'startScan_llm_at_content_16e0db_idx'
+                ) THEN
+                    ALTER INDEX "startScan_llm_at_content_16e0db_idx"
+                    RENAME TO "startScan_l_content_6b1cca_idx";
+                END IF;
+            END $$;
+            """
+        )
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("startScan", "0130_endpoint_port_fk_and_backfill"),
     ]
 
     operations = [
-        migrations.RenameIndex(
-            model_name="llmattacksurfaceanalysis",
-            new_name="startScan_l_content_6b1cca_idx",
-            old_name="startScan_llm_at_content_16e0db_idx",
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunPython(_safe_rename_llm_content_index, migrations.RunPython.noop),
+            ],
+            state_operations=[
+                migrations.RenameIndex(
+                    model_name="llmattacksurfaceanalysis",
+                    new_name="startScan_l_content_6b1cca_idx",
+                    old_name="startScan_llm_at_content_16e0db_idx",
+                ),
+            ],
         ),
         migrations.AlterField(
             model_name="llmattacksurfaceanalysis",

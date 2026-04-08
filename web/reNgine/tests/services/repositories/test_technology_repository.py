@@ -174,17 +174,17 @@ class TestTechnologyRepository(BaseTestCase):
     def test_get_or_create_existing_technology(self):
         """Test get_or_create with existing technology."""
         # Create technology first
-        tech1, created1 = self.tech_repo.get_or_create("nginx")
+        tech1, created1 = self.tech_repo.get_or_create("nginx", scan_history_id=self.scan_history.id)
         self.assertTrue(created1)
 
         # Try to create same technology again
-        tech2, created2 = self.tech_repo.get_or_create("nginx")
+        tech2, created2 = self.tech_repo.get_or_create("nginx", scan_history_id=self.scan_history.id)
         self.assertFalse(created2)
         self.assertEqual(tech1.id, tech2.id)
 
     def test_get_or_create_new_technology(self):
         """Test get_or_create with new technology."""
-        tech, created = self.tech_repo.get_or_create("apache")
+        tech, created = self.tech_repo.get_or_create("apache", scan_history_id=self.scan_history.id)
 
         self.assertIsNotNone(tech)
         self.assertTrue(created)
@@ -194,7 +194,7 @@ class TestTechnologyRepository(BaseTestCase):
         """Test bulk creation of technologies."""
         tech_names = ["nginx", "apache", "mysql", "php"]
 
-        result = self.tech_repo.bulk_create(tech_names)
+        result = self.tech_repo.bulk_create(tech_names, scan_history_id=self.scan_history.id)
 
         self.assertEqual(len(result), 4)
         created_names = [tech.name for tech in result]
@@ -205,7 +205,7 @@ class TestTechnologyRepository(BaseTestCase):
         """Test bulk creation with duplicate technology names."""
         tech_names = ["nginx", "apache", "nginx", "mysql"]  # nginx appears twice
 
-        result = self.tech_repo.bulk_create(tech_names)
+        result = self.tech_repo.bulk_create(tech_names, scan_history_id=self.scan_history.id)
 
         # Should only create unique technologies
         self.assertEqual(len(result), 3)
@@ -213,6 +213,19 @@ class TestTechnologyRepository(BaseTestCase):
         self.assertIn("nginx", created_names)
         self.assertIn("apache", created_names)
         self.assertIn("mysql", created_names)
+
+    def test_get_or_create_same_name_isolated_per_scan(self):
+        """Same technology name must create one row per scan."""
+        other_scan = self.data_generator.create_scan_history()
+
+        first, created_first = self.tech_repo.get_or_create("nginx", scan_history_id=self.scan_history.id)
+        second, created_second = self.tech_repo.get_or_create("nginx", scan_history_id=other_scan.id)
+
+        self.assertTrue(created_first)
+        self.assertTrue(created_second)
+        self.assertNotEqual(first.id, second.id)
+        self.assertEqual(first.scan_history_id, self.scan_history.id)
+        self.assertEqual(second.scan_history_id, other_scan.id)
 
     # Tests for private methods removed - these methods no longer exist in the repository
 

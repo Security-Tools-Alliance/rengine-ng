@@ -108,6 +108,7 @@ class TechnologyRepository:
             strip_secator_reports_prefix(raw_stored_path, max_length=path_max_length) if raw_stored_path else ""
         )
         tech_obj, created = Technology.objects.get_or_create(
+            scan_history_id=scan_history_id,
             name=tech_name,
             defaults={
                 "value": item.get("value", ""),
@@ -136,7 +137,7 @@ class TechnologyRepository:
 
         return tech_obj
 
-    def get_or_create(self, name: str, **kwargs) -> Tuple[Optional[Technology], bool]:
+    def get_or_create(self, name: str, scan_history_id: int, **kwargs) -> Tuple[Optional[Technology], bool]:
         """
         Get or create a technology.
 
@@ -157,7 +158,10 @@ class TechnologyRepository:
                 )
                 return None, False
 
-            tech_obj, created = Technology.objects.get_or_create(name=name.strip())
+            tech_obj, created = Technology.objects.get_or_create(
+                scan_history_id=scan_history_id,
+                name=name.strip(),
+            )
 
             return tech_obj, created
 
@@ -170,7 +174,7 @@ class TechnologyRepository:
             )
             return None, False
 
-    def bulk_create(self, technologies: List[str]) -> List[Technology]:
+    def bulk_create(self, technologies: List[str], scan_history_id: int) -> List[Technology]:
         """
         Bulk create technologies efficiently.
 
@@ -195,9 +199,11 @@ class TechnologyRepository:
             return []
 
         try:
-            existing_technologies = list(Technology.objects.filter(name__in=normalized_names))
+            existing_technologies = list(
+                Technology.objects.filter(scan_history_id=scan_history_id, name__in=normalized_names)
+            )
             if missing_names := normalized_names - {tech.name for tech in existing_technologies}:
-                new_instances = [Technology(name=name) for name in missing_names]
+                new_instances = [Technology(scan_history_id=scan_history_id, name=name) for name in missing_names]
                 Technology.objects.bulk_create(new_instances)
                 logger.log_line(
                     PREFIX_TECH_REPO,
@@ -207,7 +213,7 @@ class TechnologyRepository:
                     level="info",
                 )
 
-            return list(Technology.objects.filter(name__in=normalized_names))
+            return list(Technology.objects.filter(scan_history_id=scan_history_id, name__in=normalized_names))
 
         except DatabaseError as e:
             logger.log_line(
@@ -233,7 +239,7 @@ class TechnologyRepository:
             bool: True if successful, False otherwise
         """
         try:
-            tech_obj, _ = Technology.objects.get_or_create(name=tech_name)
+            tech_obj, _ = Technology.objects.get_or_create(scan_history_id=scan_history_id, name=tech_name)
 
             if subdomain := Subdomain.objects.filter(name=subdomain_name, scan_history_id=scan_history_id).first():
                 upsert_subdomain_technology_link(subdomain, tech_obj, source)
@@ -290,7 +296,7 @@ class TechnologyRepository:
                 )
                 return False
 
-            tech_obj, _ = Technology.objects.get_or_create(name=normalized_name)
+            tech_obj, _ = Technology.objects.get_or_create(scan_history_id=scan_history_id, name=normalized_name)
 
             endpoint = get_or_create_endpoint_in_scan_for_ingestion(endpoint_url, scan_history_id)
             if not endpoint:
@@ -528,7 +534,7 @@ class TechnologyRepository:
                 level="error",
             )
 
-    def extract_technologies_from_list(self, tech_list: List[str]) -> List[Technology]:
+    def extract_technologies_from_list(self, tech_list: List[str], scan_history_id: int) -> List[Technology]:
         """
         Extract and create technologies from a list of technology names.
 
@@ -542,7 +548,10 @@ class TechnologyRepository:
             technologies = []
             for tech_name in tech_list:
                 if tech_name and tech_name.strip():
-                    tech_obj, _ = Technology.objects.get_or_create(name=tech_name.strip())
+                    tech_obj, _ = Technology.objects.get_or_create(
+                        scan_history_id=scan_history_id,
+                        name=tech_name.strip(),
+                    )
                     technologies.append(tech_obj)
 
             return technologies

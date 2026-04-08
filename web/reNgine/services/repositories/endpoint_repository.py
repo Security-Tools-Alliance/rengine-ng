@@ -1180,7 +1180,10 @@ class EndpointRepository:
 
             for tech_name in technologies:
                 if tech_name and isinstance(tech_name, str):
-                    tech_obj, _ = Technology.objects.get_or_create(name=tech_name.strip())
+                    tech_obj, _ = Technology.objects.get_or_create(
+                        scan_history_id=endpoint.scan_history_id,
+                        name=tech_name.strip(),
+                    )
                     endpoint.techs.add(tech_obj)
                     logger.log_line(
                         PREFIX_ENDPOINT_REPO,
@@ -1200,7 +1203,7 @@ class EndpointRepository:
                 level="error",
             )
 
-    def extract_technologies_from_list(self, tech_list: List[str]) -> List[Technology]:
+    def extract_technologies_from_list(self, tech_list: List[str], scan_history_id: int) -> List[Technology]:
         """
         Extract and create technologies from a list of technology names.
 
@@ -1214,7 +1217,10 @@ class EndpointRepository:
             technologies = []
             for tech_name in tech_list:
                 if tech_name and tech_name.strip():
-                    tech_obj, _ = Technology.objects.get_or_create(name=tech_name.strip())
+                    tech_obj, _ = Technology.objects.get_or_create(
+                        scan_history_id=scan_history_id,
+                        name=tech_name.strip(),
+                    )
                     technologies.append(tech_obj)
 
             return technologies
