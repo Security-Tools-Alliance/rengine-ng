@@ -129,7 +129,15 @@ $(document).ready(function() {
 							});
 						}
 						if (!tech_badge && row['technologies']){
-							tech_badge = '<div>' + parse_technology('{% url "api:querySubdomains" %}', row['technologies'], "primary", scan_id=null, domain_id=null) + '</div>';
+							var scanIdForTech = null;
+							if (row['scan_history'] != null) {
+								scanIdForTech = (typeof row['scan_history'] === 'object' && row['scan_history'].id != null) ? row['scan_history'].id : row['scan_history'];
+							}
+							var domainIdForTech = null;
+							if (row['domain'] != null) {
+								domainIdForTech = (typeof row['domain'] === 'object' && row['domain'].id != null) ? row['domain'].id : row['domain'];
+							}
+							tech_badge = '<div>' + parse_technology('{% url "api:querySubdomains" %}', row['technologies'], "primary", scanIdForTech, domainIdForTech) + '</div>';
 						}
 						if(row['is_interesting'])
 						{

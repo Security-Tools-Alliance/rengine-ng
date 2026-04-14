@@ -110,6 +110,177 @@ class TestListSubdomains(BaseTestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row.get("services_for_request_port"), "jetty")
 
+    def test_query_subdomains_tech_param_matches_endpoint_only_tech_secator(self):
+        """tech= filter includes Secator subdomains where the name matches only via EndPoint.techs."""
+        dg = self.data_generator
+        scan = dg.scan_history
+        self.assertFalse(getattr(scan, "is_legacy_scan", True))
+        subdomain = dg.subdomain
+        host = subdomain.name
+        tech = Technology.objects.create(name="EpOnlyTechFilter", scan_history=scan, value="", category="")
+        ep = dg.create_endpoint(
+            http_url=f"https://{host}/path-only",
+            scan_history=scan,
+            domain=dg.domain,
+            subdomain=subdomain,
+            is_default=False,
+        )
+        ep.techs.add(tech)
+
+        url = reverse("api:querySubdomains")
+        response = self.client.get(
+            url,
+            {
+                "scan_id": scan.id,
+                "project": dg.project.slug,
+                "tech": "EpOnlyTechFilter",
+                "start": "0",
+                "length": "50",
+                "draw": "1",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = [row.get("name") for row in response.data.get("data", [])]
+        self.assertIn(host, names)
+
+    def test_query_subdomains_keeps_latest_row_per_name(self):
+        """ListSubdomains keeps one row per name and selects the latest scan row."""
+        current_scan = self.data_generator.scan_history
+        target = self.data_generator.target
+        project_slug = self.data_generator.project.slug
+        shared_name = "dup-host.example.com"
+
+        older_scan = ScanHistory.objects.create(
+            target=target,
+            start_scan_date=current_scan.start_scan_date - timedelta(days=2),
+            scan_status=2,
+            tasks=current_scan.tasks,
+            is_legacy_scan=False,
+        )
+        newer_scan = ScanHistory.objects.create(
+            target=target,
+            start_scan_date=current_scan.start_scan_date + timedelta(days=1),
+            scan_status=2,
+            tasks=current_scan.tasks,
+            is_legacy_scan=False,
+        )
+        older_domain = self.data_generator.create_domain(scan_history=older_scan)
+        newer_domain = self.data_generator.create_domain(scan_history=newer_scan)
+        older_subdomain = self.data_generator.create_subdomain(
+            name=shared_name,
+            scan_history=older_scan,
+            domain=older_domain,
+        )
+        newer_subdomain = self.data_generator.create_subdomain(
+            name=shared_name,
+            scan_history=newer_scan,
+            domain=newer_domain,
+        )
+
+        url = reverse("api:querySubdomains")
+        response = self.client.get(
+            url,
+            {
+                "target_id": target.id,
+                "project": project_slug,
+                "start": "0",
+                "length": "200",
+                "draw": "1",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = [row for row in response.data.get("data", []) if row.get("name") == shared_name]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], newer_subdomain.id)
+        self.assertNotEqual(rows[0]["id"], older_subdomain.id)
+
+    def test_query_subdomains_scan_scope_does_not_mix_endpoint_technologies(self):
+        """Subdomain technologies from endpoint aggregation stay scoped to the requested scan row."""
+        dg = self.data_generator
+        scan = dg.scan_history
+        domain = dg.domain
+        subdomain = dg.create_subdomain(
+            name="scope-tech.example.com",
+            scan_history=scan,
+            domain=domain,
+        )
+        local_endpoint = dg.create_endpoint(
+            http_url="https://scope-tech.example.com/",
+            scan_history=scan,
+            domain=domain,
+            subdomain=subdomain,
+        )
+        local_tech = Technology.objects.create(scan_history=scan, name="local-tech", value="", category="")
+        local_endpoint.techs.add(local_tech)
+
+        other_scan = ScanHistory.objects.create(
+            target=scan.target,
+            start_scan_date=scan.start_scan_date + timedelta(days=3),
+            scan_status=2,
+            tasks=scan.tasks,
+            is_legacy_scan=False,
+        )
+        other_domain = dg.create_domain(scan_history=other_scan)
+        other_subdomain = dg.create_subdomain(
+            name="scope-tech.example.com",
+            scan_history=other_scan,
+            domain=other_domain,
+        )
+        other_endpoint = dg.create_endpoint(
+            http_url="https://scope-tech.example.com/other",
+            scan_history=other_scan,
+            domain=other_domain,
+            subdomain=other_subdomain,
+        )
+        foreign_tech = Technology.objects.create(scan_history=other_scan, name="foreign-tech", value="", category="")
+        other_endpoint.techs.add(foreign_tech)
+
+        url = reverse("api:querySubdomains")
+        response = self.client.get(
+            url,
+            {
+                "scan_id": scan.id,
+                "project": dg.project.slug,
+                "start": "0",
+                "length": "50",
+                "draw": "1",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = next((item for item in response.data.get("data", []) if item.get("id") == subdomain.id), None)
+        self.assertIsNotNone(row)
+        tech_names = {item.get("name") for item in (row.get("technologies") or [])}
+        self.assertIn("local-tech", tech_names)
+        self.assertNotIn("foreign-tech", tech_names)
+
+    def test_query_subdomains_nonlegacy_without_endpoint_techs_skips_m2m_fallback(self):
+        """For non-legacy scans, technologies come from endpoints only (no M2M fallback)."""
+        dg = self.data_generator
+        scan = dg.scan_history
+        subdomain = dg.create_subdomain(
+            name="no-endpoint-tech.example.com",
+            scan_history=scan,
+            domain=dg.domain,
+        )
+        stale_m2m_tech = Technology.objects.create(scan_history=scan, name="stale-m2m-tech", value="", category="")
+        subdomain.technologies.add(stale_m2m_tech)
+
+        url = reverse("api:querySubdomains")
+        response = self.client.get(
+            url,
+            {
+                "scan_id": scan.id,
+                "project": dg.project.slug,
+                "start": "0",
+                "length": "50",
+                "draw": "1",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = next((item for item in response.data.get("data", []) if item.get("id") == subdomain.id), None)
+        self.assertIsNotNone(row)
+        self.assertEqual(row.get("technologies"), [])
+
 
 class TestSubdomainsViewSet(BaseTestCase):
     """Test case for subdomains viewset."""
@@ -306,19 +477,72 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
         tech_names = {t.get("name") for t in row.get("technologies", [])}
         self.assertIn("Caddy", tech_names)
 
-    def test_datatable_falls_back_to_subdomain_technologies_without_default_endpoint(self):
-        """When no default endpoint exists, DataTables technologies fallback to SubdomainTechnology links."""
-        subdomain = self.data_generator.subdomain
-        tech = Technology.objects.create(name="Nginx", scan_history=self.data_generator.scan_history)
-        subdomain.technologies.add(tech)
-        EndPoint.objects.filter(subdomain=subdomain, scan_history=self.data_generator.scan_history).delete()
+    def test_datatable_secator_technologies_aggregate_all_endpoints(self):
+        """Secator: flat technologies list unions techs from all endpoints for the subdomain, not only defaults."""
+        dg = self.data_generator
+        scan = dg.scan_history
+        self.assertFalse(getattr(scan, "is_legacy_scan", True))
+        domain = dg.domain
+        subdomain = dg.subdomain
+        host = subdomain.name
+        tech_default = Technology.objects.create(name="FromDefaultEp", scan_history=scan, value="", category="")
+        tech_other = Technology.objects.create(name="FromOtherEp", scan_history=scan, value="", category="")
+        ep_default = dg.create_endpoint(
+            http_url=f"https://{host}/",
+            scan_history=scan,
+            domain=domain,
+            subdomain=subdomain,
+            is_default=True,
+        )
+        ep_other = dg.create_endpoint(
+            http_url=f"https://{host}/admin/extra",
+            scan_history=scan,
+            domain=domain,
+            subdomain=subdomain,
+            is_default=False,
+        )
+        ep_default.techs.add(tech_default)
+        ep_other.techs.add(tech_other)
 
         api_url = reverse("api:subdomain-datatable-list")
         response = self.client.get(
             api_url,
             {
-                "scan_id": self.data_generator.scan_history.id,
-                "project": self.data_generator.project.slug,
+                "scan_id": scan.id,
+                "project": dg.project.slug,
+                "start": "0",
+                "length": "50",
+                "draw": "1",
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = next((x for x in response.data["data"] if x["id"] == subdomain.id), None)
+        self.assertIsNotNone(row)
+        tech_names = {t.get("name") for t in row.get("technologies", [])}
+        self.assertIn("FromDefaultEp", tech_names)
+        self.assertIn("FromOtherEp", tech_names)
+
+    def test_datatable_falls_back_to_subdomain_technologies_without_default_endpoint(self):
+        """Legacy scans: when no default endpoint exists, technologies fall back to SubdomainTechnology M2M."""
+        dg = self.data_generator
+        legacy_scan = dg.create_scan_history(is_legacy=True)
+        dg.domain.scan_history = legacy_scan
+        dg.domain.save(update_fields=["scan_history_id"])
+        subdomain = dg.create_subdomain(
+            name="legacy-no-default.example.invalid",
+            scan_history=legacy_scan,
+            domain=dg.domain,
+        )
+        tech = Technology.objects.create(name="Nginx", scan_history=legacy_scan)
+        subdomain.technologies.add(tech)
+        EndPoint.objects.filter(subdomain=subdomain, scan_history=legacy_scan).delete()
+
+        api_url = reverse("api:subdomain-datatable-list")
+        response = self.client.get(
+            api_url,
+            {
+                "scan_id": legacy_scan.id,
+                "project": dg.project.slug,
                 "start": "0",
                 "length": "20",
                 "draw": "1",

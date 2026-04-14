@@ -12,9 +12,10 @@ from api.helpers.advanced_search import (
     validate_expression_for_context,
 )
 from api.helpers.advanced_search_eval import boolean_field_value_from_token
-from api.helpers.advanced_search_values import _base_queryset_for_context
+from api.helpers.advanced_search_values import _base_queryset_for_context, _subdomain_distinct_technology_values
 from api.helpers.query import build_vulnerability_datatable_base_queryset, parse_subdomain_datatable_request
 from api.views import ListSubdomains
+from startScan.models import Subdomain, Technology
 from utils.test_base import BaseTestCase
 
 
@@ -318,6 +319,63 @@ class TestAdvancedSearchParser(BaseTestCase):
         qs, err = _base_queryset_for_context(DummyRequest(), "unknown_ctx")
         self.assertIsNone(qs)
         self.assertEqual(err, "unknown_context")
+
+    def test_subdomain_distinct_technology_values_deduplicates_union_before_limit(self):
+        scan = self.data_generator.scan_history
+        domain = self.data_generator.domain
+        subdomain = self.data_generator.create_subdomain(
+            name="adv-tech.example.invalid",
+            scan_history=scan,
+            domain=domain,
+        )
+        m2m_tech = Technology.objects.create(scan_history=scan, name="django")
+        endpoint_only_tech = Technology.objects.create(scan_history=scan, name="flask")
+        subdomain.technologies.add(m2m_tech)
+        endpoint = self.data_generator.create_endpoint(
+            http_url="https://adv-tech.example.invalid/",
+            scan_history=scan,
+            domain=domain,
+            subdomain=subdomain,
+        )
+        endpoint.techs.add(m2m_tech, endpoint_only_tech)
+
+        values = _subdomain_distinct_technology_values(
+            Subdomain.objects.filter(id=subdomain.id),
+            q_prefix="",
+            lim=2,
+        )
+
+        self.assertEqual(values, ["django", "flask"])
+
+    def test_subdomain_distinct_technology_values_subdomain_cap_limits_scope(self):
+        scan = self.data_generator.scan_history
+        domain = self.data_generator.domain
+        sub_a = self.data_generator.create_subdomain(
+            name="cap-a.example.invalid",
+            scan_history=scan,
+            domain=domain,
+        )
+        sub_b = self.data_generator.create_subdomain(
+            name="cap-b.example.invalid",
+            scan_history=scan,
+            domain=domain,
+        )
+        tech_a = Technology.objects.create(scan_history=scan, name="tech-only-on-a")
+        tech_b = Technology.objects.create(scan_history=scan, name="tech-only-on-b")
+        sub_a.technologies.add(tech_a)
+        sub_b.technologies.add(tech_b)
+        qs = Subdomain.objects.filter(id__in=[sub_a.id, sub_b.id])
+        capped = _subdomain_distinct_technology_values(qs, "", 10, subdomain_cap=1)
+        if sub_a.scan_history_id > sub_b.scan_history_id:
+            self.assertEqual(capped, ["tech-only-on-a"])
+        elif sub_b.scan_history_id > sub_a.scan_history_id:
+            self.assertEqual(capped, ["tech-only-on-b"])
+        elif sub_a.id > sub_b.id:
+            self.assertEqual(capped, ["tech-only-on-a"])
+        else:
+            self.assertEqual(capped, ["tech-only-on-b"])
+        uncapped = _subdomain_distinct_technology_values(qs, "", 10, subdomain_cap=0)
+        self.assertEqual(set(uncapped), {"tech-only-on-a", "tech-only-on-b"})
 
     def test_advanced_search_invalid_boolean_atom_does_not_filter(self):
         view = ListSubdomains()

@@ -167,7 +167,9 @@
     const techData = row.techs || row.technologies;
     let techBadge = "";
     if (techData && (Array.isArray(techData) ? techData.length > 0 : Object.keys(techData).length > 0) && parseTechnologyAvailable() && endpointSubdomainUrl) {
-      techBadge = "</br>" + window.parse_technology(endpointSubdomainUrl, techData, "primary", true, false, true);
+      const scanId = row.scan_history_id != null ? row.scan_history_id : null;
+      const domainId = row.domain_id != null ? row.domain_id : null;
+      techBadge = "</br>" + window.parse_technology(endpointSubdomainUrl, techData, "primary", scanId, domainId, true);
     }
     let webServer = "";
     if (row.webserver) {

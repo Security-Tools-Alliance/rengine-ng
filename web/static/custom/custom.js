@@ -796,22 +796,95 @@ function get_response_time_text(response_time) {
 	return '';
 }
 
+function getTechnologyTextEncoder() {
+	const minimalHtmlEscape = function (s) {
+		if (s == null) {
+			return "";
+		}
+		return String(s)
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;");
+	};
+	if (typeof safeHtmlEncode === "function") {
+		return safeHtmlEncode;
+	}
+	if (typeof htmlEncode === "function") {
+		return htmlEncode;
+	}
+	return minimalHtmlEscape;
+}
+
+function ensureTechnologyDetailsClickHandlerBound() {
+	if (window.__techDetailsHandlerBound) {
+		return;
+	}
+	window.__techDetailsHandlerBound = true;
+	$(document).on("click", ".js-tech-details", function (ev) {
+		ev.preventDefault();
+		const endpointUrl = this.getAttribute("data-endpoint-url") || "";
+		const techName = this.getAttribute("data-tech-name") || "";
+		const scanAttr = this.getAttribute("data-scan-id");
+		const domainAttr = this.getAttribute("data-domain-id");
+		const scanId = scanAttr ? scanAttr : null;
+		const domainId = domainAttr ? domainAttr : null;
+		get_tech_details(endpointUrl, techName, scanId, domainId);
+	});
+}
+
+function buildTechnologyBadgeHtml({
+	name,
+	color,
+	tooltip,
+	endpointUrl = "",
+	scanId = null,
+	domainId = null,
+	link = true,
+	extraClasses = "",
+}) {
+	const enc = getTechnologyTextEncoder();
+	const colorToken = color == null || color === "" ? "primary" : String(color);
+	const classes = `badge-link badge badge-soft-${colorToken} mt-1 me-1 ${extraClasses} ${
+		link ? "js-tech-details" : ""
+	}`.trim();
+	const attrs = [
+		`class="${classes}"`,
+		'data-toggle="tooltip"',
+		`title="${enc(tooltip)}"`,
+	];
+	if (link) {
+		attrs.push('role="button"');
+		attrs.push('tabindex="0"');
+		attrs.push(`data-endpoint-url="${enc(endpointUrl)}"`);
+		attrs.push(`data-tech-name="${enc(name)}"`);
+		attrs.push(`data-scan-id="${enc(scanId == null ? "" : scanId)}"`);
+		attrs.push(`data-domain-id="${enc(domainId == null ? "" : domainId)}"`);
+	}
+	return `<span ${attrs.join(" ")}>${enc(name)}</span>`;
+}
+
 function parse_technology(endpoint_url, data, color, scan_id = null, domain_id=null, link=true) {
-	const badge = `<span data-toggle="tooltip" title="Technology" class='badge-link badge badge-soft-` + color + ` mt-1 me-1'`;
+	const enc = getTechnologyTextEncoder();
+	ensureTechnologyDetailsClickHandlerBound();
 	let data_with_span = "";
 	for (let key in data) {
-		let onclick = '';
-		let tooltip = `Technology: ${data[key]['name']}`;
+		let tooltip = `Technology: ${enc(data[key]['name'])}`;
 		if (data[key]['value']) {
-			tooltip += `\nValue: ${data[key]['value']}`;
+			tooltip += `\nValue: ${enc(data[key]['value'])}`;
 		}
 		if (data[key]['category']) {
-			tooltip += `\nCategory: ${data[key]['category']}`;
+			tooltip += `\nCategory: ${enc(data[key]['category'])}`;
 		}
-		if(link) {
-			onclick = ` onclick="get_tech_details('${endpoint_url}', '${data[key]['name']}', ${scan_id}, domain_id=null)"`
-		}
-		data_with_span += badge.replace('title="Technology"', `title="${tooltip}"`) + onclick + `>` + data[key]['name'] + "</span>";
+		data_with_span += buildTechnologyBadgeHtml({
+			name: data[key]["name"],
+			color,
+			tooltip,
+			endpointUrl: endpoint_url,
+			scanId: scan_id,
+			domainId: domain_id,
+			link,
+		});
 	}
 	return data_with_span;
 }
@@ -1201,9 +1274,21 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 			},
 			{
 				targets: [5, "technologies"],
-				render: function (data) {
+				render: function (data, type, row) {
 					if (!data || !querySubdomainsUrl || typeof window.parse_technology !== "function") return (typeof window.safeText === "function" ? window.safeText(data) : data) || "";
-					return "<div>" + window.parse_technology(querySubdomainsUrl, data, "primary", null, null, true) + "</div>";
+					let scanId = null;
+					let domainId = null;
+					if (row) {
+						const sh = row.scan_history;
+						if (sh != null) {
+							scanId = (typeof sh === "object" && sh !== null && sh.id != null) ? sh.id : sh;
+						}
+						const dom = row.domain;
+						if (dom != null) {
+							domainId = (typeof dom === "object" && dom !== null && dom.id != null) ? dom.id : dom;
+						}
+					}
+					return "<div>" + window.parse_technology(querySubdomainsUrl, data, "primary", scanId, domainId, true) + "</div>";
 				}
 			},
 			{
@@ -2588,6 +2673,7 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 
 function get_technologies(endpoint_url, subdomain_endpoint_url, scan_id=null, domain_id=null){
 	// this function will fetch and render tech in widget
+	ensureTechnologyDetailsClickHandlerBound();
 	const params = [];
 	if (scan_id) {
 		params.push(`scan_id=${scan_id}`);
@@ -2602,12 +2688,19 @@ function get_technologies(endpoint_url, subdomain_endpoint_url, scan_id=null, do
 		$('#technologies-count').empty();
 		for (let val in data['technologies']){
 			const tech = data['technologies'][val]
-			if (scan_id) {
-				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${subdomain_endpoint_url}', '${tech['name']}', scan_id=${scan_id}, domain_id=null)">${tech['name']}</span>`);
-			}
-			else if (domain_id) {
-				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${subdomain_endpoint_url}', '${tech['name']}', scan_id=null, domain_id=${domain_id})">${tech['name']}</span>`);
-			}
+			const tooltip = `${tech['count']} Subdomains use this technology.`;
+			$("#technologies").append(
+				buildTechnologyBadgeHtml({
+					name: tech["name"],
+					color: "primary",
+					tooltip,
+					endpointUrl: subdomain_endpoint_url,
+					scanId: scan_id,
+					domainId: domain_id,
+					link: Boolean(scan_id || domain_id),
+					extraClasses: "m-1",
+				})
+			);
 		}
 		const totalCount = data['total_count'] !== undefined ? data['total_count'] : data['technologies'].length;
 		const countLabel = totalCount > data['technologies'].length

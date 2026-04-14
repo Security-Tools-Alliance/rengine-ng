@@ -317,3 +317,39 @@ class AdvancedSearchMixin:
                 return queryset.exclude(**{field_path: lookup_content})
 
         return queryset
+
+
+class SubdomainTechnologySearchMixin:
+    """
+    Extends advanced-search ``technology`` atoms and special lookups to include Secator
+    endpoint-linked technologies (see ``api.helpers.subdomain_technology_filter``).
+
+    **Use with subdomain list UIs:** mix this into views whose queryset is ``Subdomain`` and
+    that expose technology filtering—typically ``ListSubdomains`` (``querySubdomains``) and
+    ``SubdomainDatatableViewSet``—so ``search[value]`` / special-field ``technology`` uses the
+    same M2M + non-legacy endpoint union as the ``tech`` query param
+    (``subdomain_technology_exact_q`` / ``subdomain_technology_icontains_q``). Autocomplete values
+    for the Build filter should stay aligned via ``advanced_search_values`` (same scope).
+
+    When adding a new subdomain listing endpoint with technology search, either inherit this
+    mixin or call the helpers in ``subdomain_technology_filter`` explicitly to avoid drift.
+    """
+
+    def _special_lookup_q(self, term: str) -> Q:
+        cfg = self.search_config
+        if not cfg:
+            return Q()
+        parsed_term, term_err = parse_advanced_search_term(term)
+        if term_err == "invalid_quoted_value":
+            return Q(pk__in=[])
+        if not parsed_term:
+            return Q()
+        lookup_title, operator, lookup_content = parsed_term
+        if lookup_title == "technology":
+            from api.helpers.subdomain_technology_filter import subdomain_technology_special_q
+
+            return subdomain_technology_special_q(operator, lookup_content)
+        parent_special_lookup = getattr(super(), "_special_lookup_q", None)
+        if callable(parent_special_lookup):
+            return parent_special_lookup(term)
+        return Q()

@@ -4,9 +4,10 @@ test_secator_views.py
 This file contains unit tests for the Secator views and forms.
 """
 
+from unittest.mock import patch
+
 from django.urls import reverse
 import yaml
-from unittest.mock import patch
 
 from scanEngine.forms import SecatorProfileForm, SecatorScanForm, SecatorWorkflowForm
 from scanEngine.models import SecatorProfile, SecatorScan, SecatorTask, SecatorWorkflow

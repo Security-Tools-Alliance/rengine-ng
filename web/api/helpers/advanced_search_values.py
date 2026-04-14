@@ -20,11 +20,15 @@ from api.helpers.query import (
     build_vulnerability_datatable_base_queryset,
     subdomain_datatable_from_request,
 )
+from api.helpers.subdomain_technology_filter import technology_scope_q_for_subdomains
 from reNgine.definitions import NUCLEI_REVERSE_SEVERITY_MAP
-from startScan.models import EndPoint
+from startScan.models import EndPoint, Technology
 
 
 SUBDOMAIN_DISPLAY_VALUE_FIELDS = frozenset({"page_title", "http_status", "content_length"})
+
+# Cap subdomains considered for technology autocomplete to limit join size on huge scans.
+_SUBDOMAIN_DISTINCT_TECH_SUBDOMAIN_CAP_DEFAULT = 500
 
 
 def _catalog_field_names(context: str) -> set[str]:
@@ -139,11 +143,45 @@ def _subdomain_distinct_display_values(qs: QuerySet, field: str, q_prefix: str, 
     return _finalize_scalar_like_values(raw, lim, field)
 
 
-def _scalar_m2m_raw_values(qs: QuerySet, db_path: str, q_prefix: str) -> list[Any]:
+def _scalar_m2m_raw_values(qs: QuerySet, db_path: str, q_prefix: str, *, limit: Optional[int] = None) -> list[Any]:
     fqs = qs
     if q_prefix:
         fqs = fqs.filter(**{f"{db_path}__istartswith": q_prefix})
-    return list(fqs.values_list(db_path, flat=True).distinct())
+    values_qs = fqs.values_list(db_path, flat=True).distinct()
+    if limit is not None:
+        values_qs = values_qs[:limit]
+    return list(values_qs)
+
+
+def _subdomain_distinct_technology_values(
+    qs: QuerySet,
+    q_prefix: str,
+    lim: int,
+    *,
+    subdomain_cap: int = _SUBDOMAIN_DISTINCT_TECH_SUBDOMAIN_CAP_DEFAULT,
+) -> list[str]:
+    """
+    Distinct technology names for subdomains in ``qs``.
+
+    Uses the same M2M + Secator endpoint scope as list/search filters
+    (``technology_scope_q_for_subdomains``) so advanced-search suggestions stay aligned.
+
+    When ``subdomain_cap`` > 0, only the newest ``subdomain_cap`` rows (by ``scan_history_id``
+    then primary key descending) from ``qs`` are used to build that scope, so autocomplete stays
+    bounded on very large scans while favoring recent scan data.
+    Pass ``subdomain_cap=0`` to disable capping (not recommended for production-scale data).
+    """
+    if lim <= 0:
+        return []
+    if subdomain_cap > 0:
+        capped_pks = Subquery(qs.order_by("-scan_history_id", "-pk").values("pk")[:subdomain_cap])
+        qs = qs.model.objects.filter(pk__in=capped_pks)
+    fetch_limit = lim * 2
+    tech_qs = Technology.objects.filter(technology_scope_q_for_subdomains(qs))
+    if q_prefix:
+        tech_qs = tech_qs.filter(name__istartswith=q_prefix)
+    combined_raw = list(tech_qs.values_list("name", flat=True).distinct()[:fetch_limit])
+    return _finalize_scalar_like_values(combined_raw, lim, "technology")
 
 
 def _finalize_scalar_like_values(
@@ -152,7 +190,7 @@ def _finalize_scalar_like_values(
     fld: str,
 ) -> list[str]:
     out = _dedupe_normalized_list(raw, lim)
-    numeric_sort = fld in ("http_status", "content_length", "cvss_score", "port")
+    numeric_sort = fld in {"http_status", "content_length", "cvss_score", "port"}
     out = _sort_values(out, "text", numeric_sort=numeric_sort)
     if len(out) > lim:
         out = out[:lim]
@@ -201,6 +239,8 @@ def distinct_values_for_context_field(
         assert db_path is not None
         if ctx == "subdomains" and fld in SUBDOMAIN_DISPLAY_VALUE_FIELDS:
             return _subdomain_distinct_display_values(qs, fld, q_prefix, lim), None
+        if ctx == "subdomains" and fld == "technology":
+            return _subdomain_distinct_technology_values(qs, q_prefix, lim), None
         raw = _scalar_m2m_raw_values(qs, db_path, q_prefix)
         return _finalize_scalar_like_values(raw, lim, fld), None
     return None, "unknown_field"

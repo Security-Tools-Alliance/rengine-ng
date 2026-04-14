@@ -18,6 +18,7 @@ from reNgine.services.scan_finding_metrics import (
 )
 from startScan.models import (
     Domain,
+    EndPoint,
     IpAddress,
     LlmAttackSurfaceAnalysis,
     ScanHistory,
@@ -956,6 +957,37 @@ class TestListTechnology(BaseTestCase):
         tech_names_2 = {t["name"] for t in response2.data["technologies"]}
         self.assertIn("Other Technology", tech_names_2)
         self.assertNotIn(self.data_generator.technology.name, tech_names_2)
+
+    def test_list_technology_includes_endpoint_linked_non_legacy_count(self):
+        """Tech present on both links for one subdomain is counted once."""
+        scan = self.data_generator.scan_history
+        domain = self.data_generator.domain
+        subdomain = self.data_generator.create_subdomain(
+            name="stack.example.com",
+            scan_history=scan,
+            domain=domain,
+        )
+        endpoint = EndPoint.objects.create(
+            scan_history=scan,
+            domain=domain,
+            subdomain=subdomain,
+            http_url="https://stack.example.com/",
+            discovered_date=timezone.now(),
+        )
+        endpoint_only_tech = Technology.objects.create(
+            scan_history=scan,
+            name="endpoint-only-tech",
+        )
+        endpoint.techs.add(endpoint_only_tech)
+        subdomain.technologies.add(endpoint_only_tech)
+
+        url = reverse("api:listTechnologies")
+        response = self.client.get(url, {"scan_id": scan.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        by_name = {row["name"]: int(row["count"]) for row in response.data["technologies"]}
+        self.assertIn("endpoint-only-tech", by_name)
+        self.assertEqual(by_name["endpoint-only-tech"], 1)
 
 
 class TestDirectoryViewSet(BaseTestCase):

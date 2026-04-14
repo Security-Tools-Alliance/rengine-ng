@@ -1230,9 +1230,7 @@ def duplicate_profile(request, profile_id, slug=None):
         is_default=False,
     )
     messages.add_message(request, messages.SUCCESS, f"Profile '{profile.name}' duplicated as '{duplicated_name}'.")
-    return http.HttpResponseRedirect(
-        _reverse_with_project(request, "profile_detail", profile_id=duplicated_profile.id)
-    )
+    return http.HttpResponseRedirect(_reverse_with_project(request, "profile_detail", profile_id=duplicated_profile.id))
 
 
 @login_required

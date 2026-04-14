@@ -64,7 +64,9 @@ function buildEndpointUrlCellHtml(row, endpointSubdomainUrl) {
 	}
 	let techBadge = "";
 	if (row["techs"]) {
-		techBadge = "</br>" + parse_technology(endpointSubdomainUrl, row["techs"], "primary", true, false, true);
+		const scanId = row["scan_history_id"] != null ? row["scan_history_id"] : null;
+		const domainId = row["domain_id"] != null ? row["domain_id"] : null;
+		techBadge = "</br>" + parse_technology(endpointSubdomainUrl, row["techs"], "primary", scanId, domainId, true);
 	}
 	let webServer = "";
 	if (row["webserver"]) {

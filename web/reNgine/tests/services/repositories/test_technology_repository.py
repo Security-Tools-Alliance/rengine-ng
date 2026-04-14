@@ -38,6 +38,76 @@ class TestTechnologyRepository(BaseTestCase):
         subdomain.refresh_from_db()
         self.assertIn(result, subdomain.technologies.all())
 
+    def test_save_from_secator_hostname_secator_skips_m2m_when_endpoints_exist(self):
+        """Secator: hostname match attaches tech to subdomain endpoints and skips SubdomainTechnology rows."""
+        subdomain = self.data_generator.create_subdomain(name="s1.example.com")
+        ep = self.data_generator.create_endpoint(
+            http_url="https://s1.example.com/",
+            scan_history=self.scan_history,
+            domain=self.domain,
+            subdomain=subdomain,
+        )
+        item = {"_type": "tag", "name": "only-ep-link", "match": "s1.example.com"}
+        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        ep.refresh_from_db()
+        self.assertIn(result, ep.techs.all())
+        self.assertFalse(subdomain.technologies.filter(pk=result.pk).exists())
+
+    def test_save_from_secator_hostname_secator_links_all_subdomain_endpoints(self):
+        """Secator: hostname match links technology to all existing endpoints of the subdomain."""
+        subdomain = self.data_generator.create_subdomain(name="many.example.com")
+        endpoints = [
+            self.data_generator.create_endpoint(
+                http_url="https://many.example.com/",
+                scan_history=self.scan_history,
+                domain=self.domain,
+                subdomain=subdomain,
+            ),
+            self.data_generator.create_endpoint(
+                http_url="https://many.example.com/login",
+                scan_history=self.scan_history,
+                domain=self.domain,
+                subdomain=subdomain,
+            ),
+            self.data_generator.create_endpoint(
+                http_url="https://many.example.com/admin",
+                scan_history=self.scan_history,
+                domain=self.domain,
+                subdomain=subdomain,
+            ),
+        ]
+        item = {"_type": "tag", "name": "linked-to-all-endpoints", "match": "many.example.com"}
+
+        result = self.tech_repo.save_from_secator(item, self.scan_history.id, self.data_generator.target.id)
+
+        self.assertIsNotNone(result)
+        for endpoint in endpoints:
+            endpoint.refresh_from_db()
+            self.assertIn(result, endpoint.techs.all())
+        self.assertFalse(subdomain.technologies.filter(pk=result.pk).exists())
+
+    def test_save_from_secator_hostname_legacy_still_uses_m2m_when_endpoints_exist(self):
+        """Legacy scans keep SubdomainTechnology links even when endpoints exist for the host."""
+        legacy_scan = self.data_generator.create_scan_history(is_legacy=True)
+        domain = self.data_generator.create_domain(scan_history=legacy_scan)
+        subdomain = self.data_generator.create_subdomain(
+            name="leg.example.com",
+            scan_history=legacy_scan,
+            domain=domain,
+        )
+        self.data_generator.create_endpoint(
+            http_url="https://leg.example.com/",
+            scan_history=legacy_scan,
+            domain=domain,
+            subdomain=subdomain,
+        )
+        item = {"_type": "tag", "name": "legacy-m2m-tech", "match": "leg.example.com"}
+        result = self.tech_repo.save_from_secator(item, legacy_scan.id, self.data_generator.target.id)
+        self.assertIsNotNone(result)
+        subdomain.refresh_from_db()
+        self.assertIn(result, subdomain.technologies.all())
+
     def test_save_from_secator_persists_through_source(self) -> None:
         subdomain = self.data_generator.create_subdomain(
             name="tech-src.example.com",

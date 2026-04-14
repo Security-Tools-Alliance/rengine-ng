@@ -25,6 +25,7 @@ from reNgine.services.scan_finding_metrics import ip_address_id_linked_to_scan
 from reNgine.utilities.domain import get_or_create_domain_for_target
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import Domain, EndPoint, IpAddress, Port, ScanHistory, Subdomain
+from targetApp.models import Target
 
 
 PREFIX_SCAN_LOOKUPS = "[SCAN_LOOKUPS]"
@@ -130,7 +131,8 @@ def get_or_create_endpoint_in_scan_for_ingestion(
     else:
         domain = Domain.objects.filter(scan_history_id=scan_history_id).order_by("id").first()
     if not domain:
-        domain = get_or_create_domain_for_target(resolved_target_id, scan_history_id)
+        target_value = Target.objects.filter(id=resolved_target_id).values_list("value", flat=True).first() or ""
+        domain = get_or_create_domain_for_target(scan_history_id, target_value) if target_value else None
     if not domain:
         logger.log_line(
             PREFIX_SCAN_LOOKUPS,

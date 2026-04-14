@@ -3,6 +3,7 @@ Technology Repository - Data access for technology operations.
 Handles Technology database operations with ManyToMany associations from Secator Tag.
 """
 
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -16,8 +17,8 @@ from reNgine.secator.source_extraction import extract_secator_tool_source
 from reNgine.secator.subdomain_technology_link import upsert_subdomain_technology_link
 from reNgine.services.repositories.ip_repository import IpRepository, normalize_ip_address_string
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
-from reNgine.utilities.scan_lookups import get_or_create_endpoint_in_scan_for_ingestion
 from reNgine.utilities.logger import format_exception_for_log, get_module_logger
+from reNgine.utilities.scan_lookups import get_or_create_endpoint_in_scan_for_ingestion
 from reNgine.utilities.url import is_acceptable_subdomain_name
 from startScan.models import EndPoint, ScanHistory, Subdomain, Technology
 
@@ -25,9 +26,164 @@ from startScan.models import EndPoint, ScanHistory, Subdomain, Technology
 PREFIX_TECH_REPO = "[TECH_REPO]"
 logger = get_module_logger(__name__)
 
+_MAX_IS_LEGACY_SCAN_CACHE = 512
+
+
+def _secator_prefers_endpoint_tech_links(*, is_legacy_scan: bool) -> bool:
+    return not is_legacy_scan
+
+
+def _endpoint_ids_for_subdomain_scan(
+    *,
+    scan_history_id: int,
+    subdomain_id: int,
+    precomputed_endpoint_ids: Optional[list[int]],
+) -> list[int]:
+    if precomputed_endpoint_ids is not None:
+        return precomputed_endpoint_ids
+    return list(
+        EndPoint.objects.filter(scan_history_id=scan_history_id, subdomain_id=subdomain_id)
+        .only("id")
+        .values_list("id", flat=True)
+    )
+
+
+def _bulk_link_technology_to_endpoints_through(
+    tech_obj: Technology,
+    endpoint_ids: list[int],
+    existing_endpoint_tech_links: Optional[set[tuple[int, int]]],
+) -> None:
+    through = EndPoint.techs.through
+    if existing_endpoint_tech_links is not None:
+        desired_pairs = {(endpoint_id, tech_obj.id) for endpoint_id in endpoint_ids}
+        missing_pairs = desired_pairs.difference(existing_endpoint_tech_links)
+        if not missing_pairs:
+            return
+        through.objects.bulk_create(
+            [
+                through(endpoint_id=endpoint_id, technology_id=technology_id)
+                for endpoint_id, technology_id in missing_pairs
+            ],
+            ignore_conflicts=True,
+        )
+        existing_endpoint_tech_links.update(missing_pairs)
+        return
+    through.objects.bulk_create(
+        [through(endpoint_id=endpoint_id, technology_id=tech_obj.id) for endpoint_id in endpoint_ids],
+        ignore_conflicts=True,
+    )
+
+
+def _log_technology_linked_to_subdomain_endpoints(
+    tech_obj: Technology,
+    subdomain: Subdomain,
+    scan_history_id: int,
+) -> None:
+    logger.log_line(
+        PREFIX_TECH_REPO,
+        "ASSOCIATE_TECH_TO_ENDPOINT",
+        "Technology %s linked to subdomain endpoints (Secator; subdomain M2M skipped): subdomain=%s scan_id=%s"
+        % (tech_obj.name, subdomain.name, scan_history_id),
+        level="debug",
+    )
+
+
+def _upsert_subdomain_m2m_technology_with_log(
+    subdomain: Subdomain,
+    tech_obj: Technology,
+    source: Optional[str],
+    scan_history_id: int,
+    fallback_reason: str,
+) -> None:
+    upsert_subdomain_technology_link(subdomain, tech_obj, source)
+    logger.log_line(
+        PREFIX_TECH_REPO,
+        "ASSOCIATE_TECH_TO_SUBDOMAIN",
+        ("Technology %s linked to subdomain via legacy M2M (%s): subdomain=%s scan_id=%s")
+        % (tech_obj.name, fallback_reason, subdomain.name, scan_history_id),
+        level="debug",
+    )
+
+
+def _link_technology_to_subdomain_via_endpoints_or_m2m(
+    subdomain: Subdomain,
+    tech_obj: Technology,
+    scan_history_id: int,
+    source: Optional[str],
+    *,
+    is_legacy_scan: bool,
+    precomputed_endpoint_ids: Optional[list[int]] = None,
+    existing_endpoint_tech_links: Optional[set[tuple[int, int]]] = None,
+) -> None:
+    """
+    For Secator scans, attach technologies to all endpoints of the subdomain when any exist,
+    avoiding redundant SubdomainTechnology rows. Otherwise upsert the M2M through row
+    (legacy scans, or no endpoints yet).
+
+    Usage:
+    - Default (both optional args omitted): load endpoint ids for this subdomain/scan, then
+      ``bulk_create`` through rows with ``ignore_conflicts=True``.
+    - ``precomputed_endpoint_ids``: skip the endpoint query when a caller already has the id list
+      (e.g. batch ingestion over one scan).
+    - ``existing_endpoint_tech_links``: mutable set of ``(endpoint_id, technology_id)`` pairs
+      already inserted in the current batch; when set, only missing pairs are created and the set
+      is updated, avoiding redundant inserts while still using ``ignore_conflicts`` for safety.
+    """
+    if _secator_prefers_endpoint_tech_links(is_legacy_scan=is_legacy_scan):
+        endpoint_ids = _endpoint_ids_for_subdomain_scan(
+            scan_history_id=scan_history_id,
+            subdomain_id=subdomain.id,
+            precomputed_endpoint_ids=precomputed_endpoint_ids,
+        )
+        if endpoint_ids:
+            _bulk_link_technology_to_endpoints_through(tech_obj, endpoint_ids, existing_endpoint_tech_links)
+            _log_technology_linked_to_subdomain_endpoints(tech_obj, subdomain, scan_history_id)
+            return
+        fallback_reason = "no endpoints fallback"
+    else:
+        fallback_reason = "legacy scan fallback"
+    _upsert_subdomain_m2m_technology_with_log(subdomain, tech_obj, source, scan_history_id, fallback_reason)
+
 
 class TechnologyRepository:
     """Repository for technology-related database operations."""
+
+    def __init__(self) -> None:
+        self._is_legacy_scan_by_id: OrderedDict[int, bool] = OrderedDict()
+
+    def _cache_is_legacy_scan(self, scan_history_id: int, value: bool) -> None:
+        self._is_legacy_scan_by_id[scan_history_id] = value
+        self._is_legacy_scan_by_id.move_to_end(scan_history_id)
+        while len(self._is_legacy_scan_by_id) > _MAX_IS_LEGACY_SCAN_CACHE:
+            self._is_legacy_scan_by_id.popitem(last=False)
+
+    def _prime_is_legacy_scan_cache(self, scan_history_ids: List[int]) -> None:
+        """
+        Bulk-prime ``is_legacy_scan`` cache for unknown scan ids in one query.
+
+        Useful for ingestion loops that repeatedly resolve scan mode.
+        """
+        unknown_ids = [sid for sid in scan_history_ids if sid not in self._is_legacy_scan_by_id]
+        if not unknown_ids:
+            return
+        scans_by_id = ScanHistory.objects.only("id", "is_legacy_scan").in_bulk(unknown_ids)
+        for sid in unknown_ids:
+            scan = scans_by_id.get(sid)
+            if scan is None:
+                logger.log_line(
+                    PREFIX_TECH_REPO,
+                    "SCAN_LOOKUP",
+                    "ScanHistory not found while resolving is_legacy_scan: scan_id=%s" % (sid,),
+                    level="warning",
+                )
+                self._cache_is_legacy_scan(sid, False)
+                continue
+            self._cache_is_legacy_scan(sid, bool(getattr(scan, "is_legacy_scan", False)))
+
+    def _get_is_legacy_scan(self, scan_history_id: int) -> bool:
+        self._prime_is_legacy_scan_cache([scan_history_id])
+        self._is_legacy_scan_by_id.move_to_end(scan_history_id)
+        return self._is_legacy_scan_by_id[scan_history_id]
 
     def save_from_secator(
         self,
@@ -133,7 +289,14 @@ class TechnologyRepository:
             )
 
         tool_source = extract_secator_tool_source(item, include_provider=False, max_length=200)
-        self._associate_technology(tech_obj, match_target, scan_history_id, tool_source)
+        is_legacy_scan = self._get_is_legacy_scan(scan_history_id)
+        self._associate_technology(
+            tech_obj,
+            match_target,
+            scan_history_id,
+            tool_source,
+            is_legacy_scan=is_legacy_scan,
+        )
 
         return tech_obj
 
@@ -241,13 +404,14 @@ class TechnologyRepository:
         try:
             tech_obj, _ = Technology.objects.get_or_create(scan_history_id=scan_history_id, name=tech_name)
 
+            is_legacy_scan = self._get_is_legacy_scan(scan_history_id)
             if subdomain := Subdomain.objects.filter(name=subdomain_name, scan_history_id=scan_history_id).first():
-                upsert_subdomain_technology_link(subdomain, tech_obj, source)
-                logger.log_line(
-                    PREFIX_TECH_REPO,
-                    "ASSOCIATE_TECH_TO_SUBDOMAIN",
-                    "Technology %s linked to subdomain %s" % (tech_name, subdomain_name),
-                    level="debug",
+                _link_technology_to_subdomain_via_endpoints_or_m2m(
+                    subdomain,
+                    tech_obj,
+                    scan_history_id,
+                    source,
+                    is_legacy_scan=is_legacy_scan,
                 )
                 return True
             else:
@@ -405,6 +569,8 @@ class TechnologyRepository:
         match_target: str,
         scan_history_id: int,
         source: Optional[str] = None,
+        *,
+        is_legacy_scan: bool,
     ) -> None:
         """
         Associate technology with subdomain or endpoint based on match target.
@@ -440,9 +606,21 @@ class TechnologyRepository:
                         level="debug",
                     )
                     if hostname := urlparse(match_target).hostname:
-                        self._associate_with_subdomain_by_hostname(tech_obj, hostname, scan_history_id, source)
+                        self._associate_with_subdomain_by_hostname(
+                            tech_obj,
+                            hostname,
+                            scan_history_id,
+                            source,
+                            is_legacy_scan=is_legacy_scan,
+                        )
             elif is_acceptable_subdomain_name(match_target):
-                self._associate_with_subdomain_by_hostname(tech_obj, match_target, scan_history_id, source)
+                self._associate_with_subdomain_by_hostname(
+                    tech_obj,
+                    match_target,
+                    scan_history_id,
+                    source,
+                    is_legacy_scan=is_legacy_scan,
+                )
             else:
                 logger.log_line(
                     PREFIX_TECH_REPO,
@@ -467,6 +645,8 @@ class TechnologyRepository:
         hostname: str,
         scan_history_id: int,
         source: Optional[str] = None,
+        *,
+        is_legacy_scan: bool,
     ) -> None:
         """Associate technology with subdomain (DNS) or endpoints tied to an IP host."""
         try:
@@ -501,12 +681,12 @@ class TechnologyRepository:
                     name=hostname.strip().lower(), scan_history_id=scan_history_id
                 ).first()
             if subdomain:
-                upsert_subdomain_technology_link(subdomain, tech_obj, source)
-                logger.log_line(
-                    PREFIX_TECH_REPO,
-                    "ASSOCIATE_TECH_TO_SUBDOMAIN",
-                    "Technology %s linked to subdomain %s" % (tech_obj.name, hostname),
-                    level="debug",
+                _link_technology_to_subdomain_via_endpoints_or_m2m(
+                    subdomain,
+                    tech_obj,
+                    scan_history_id,
+                    source,
+                    is_legacy_scan=is_legacy_scan,
                 )
             else:
                 logger.log_line(

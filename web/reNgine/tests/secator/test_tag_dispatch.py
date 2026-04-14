@@ -82,14 +82,10 @@ class TestNucleiTagClassification(BaseTestCase):
     """Unit tests for Nuclei tag classification helpers."""
 
     def test_is_nuclei_tag_true_when_source_nuclei(self):
-        self.assertTrue(
-            nuclei_mod.is_nuclei_tag({"_source": "nuclei", "category": "info", "name": "x"})
-        )
+        self.assertTrue(nuclei_mod.is_nuclei_tag({"_source": "nuclei", "category": "info", "name": "x"}))
 
     def test_is_nuclei_tag_false_other_source(self):
-        self.assertFalse(
-            nuclei_mod.is_nuclei_tag({"_source": "wappalyzer", "category": "info", "name": "x"})
-        )
+        self.assertFalse(nuclei_mod.is_nuclei_tag({"_source": "wappalyzer", "category": "info", "name": "x"}))
 
     def test_is_nuclei_technology_tag_allowlist_intersection(self):
         payload = {

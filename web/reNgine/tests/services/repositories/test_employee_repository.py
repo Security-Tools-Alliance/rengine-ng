@@ -109,7 +109,7 @@ class TestEmployeeRepository(BaseTestCase):
         self.assertIsNone(result)
 
     def test_save_from_secator_with_subdomain_association(self):
-        """Test saving employee creates endpoint and keeps DNS host association."""
+        """Test saving employee associates the URL host to an existing subdomain (no synthetic endpoint row)."""
         # Create subdomain first
         subdomain = self.data_generator.create_subdomain(
             name="test.example.com",
@@ -129,8 +129,10 @@ class TestEmployeeRepository(BaseTestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result.username, "john.doe")
-        self.assertIsNotNone(result.endpoint_id)
-        self.assertEqual(result.endpoint.subdomain_id, subdomain.id)
+        self.assertIsNone(result.endpoint_id)
+        self.assertEqual(result.subdomain_id, subdomain.id)
+        endpoint = EndPoint.objects.filter(http_url=item["url"], scan_history_id=self.scan_history.id).first()
+        self.assertIsNone(endpoint)
 
     def test_save_from_secator_with_endpoint_association(self):
         """Test saving employee with endpoint association."""

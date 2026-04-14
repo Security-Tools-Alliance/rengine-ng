@@ -2088,6 +2088,7 @@ def _format_service_labels_tuple(labels: tuple[str, ...]) -> str:
 _CTX_WARN_ENDPOINT_TECHS_NOT_PREFETCHED = "_warned_endpoint_techs_not_prefetched"
 _CTX_WARN_DEFAULT_ENDPOINT_LIST_TECHS = "_warned_default_endpoint_list_missing_techs_prefetch"
 _CTX_EVALUATED_DEFAULT_ENDPOINTS_BY_IP_ID = "_evaluated_default_endpoints_by_ip_id"
+_CTX_PREFETCHED_ENDPOINTS_BY_SUBDOMAIN_SCAN = "_prefetched_endpoints_by_subdomain_scan"
 _SERVICE_LABELS_BY_IP_PORT_CACHE_WARN_KEY = "__ports_prefetch_warning_emitted__"
 
 
@@ -2115,10 +2116,13 @@ class DefaultEndpointTechnologyMixin:
       by port then endpoint id. Each dict has ``id``, ``http_url``, ``port`` (``int | None`` from the
       ``Port`` FK), ``content_type``, ``webserver``, and ``technologies`` (list of technology dicts:
       ``id``, ``name``, ``value``, ``category``, ``stored_response_path``, ``stored_response_url``).
-    - ``technologies`` on the same serializers: flat aggregate of unique technologies across default
-      endpoints (legacy / summary column). When ``endpoint_defaults_by_port`` is missing or not an
-      array (older servers), the UI falls back to rendering this flat list once per row with a
-      one-time console warning.
+    - ``technologies`` on ``SubdomainSerializer``: for non-legacy (Secator) scans, flat aggregate
+      of unique technologies across **all** endpoints for that subdomain in the scan only (no M2M
+      fallback when endpoints have no techs); for legacy scans, default endpoints first, then M2M
+      ``Subdomain.technologies``.
+    - ``technologies`` on ``IpSerializer``: flat aggregate across default endpoints (unchanged).
+      When ``endpoint_defaults_by_port`` is missing or not an array (older servers), the UI falls
+      back to rendering this flat list once per row with a one-time console warning.
     """
 
     def _iter_endpoint_tech_instances_for_serialization(self, endpoint: Any) -> list[Any]:
@@ -2178,6 +2182,13 @@ class DefaultEndpointTechnologyMixin:
         if hasattr(subdomain, cache_attr):
             return getattr(subdomain, cache_attr)
 
+        if hasattr(subdomain, "all_endpoints_for_tech_list"):
+            endpoints = [endpoint for endpoint in (subdomain.all_endpoints_for_tech_list or []) if endpoint.is_default]
+            if endpoints:
+                self._warn_if_default_endpoint_list_missing_techs_prefetch(endpoints)
+            setattr(subdomain, cache_attr, endpoints)
+            return endpoints
+
         if hasattr(subdomain, "default_endpoint_list"):
             endpoints = list(subdomain.default_endpoint_list or [])
             if endpoints:
@@ -2190,6 +2201,50 @@ class DefaultEndpointTechnologyMixin:
             return []
 
         qs = apply_endpoint_port_and_techs_related(EndPoint.objects.filter(subdomain=subdomain, is_default=True))
+        endpoints = list(qs)
+        setattr(subdomain, cache_attr, endpoints)
+        return endpoints
+
+    def _all_endpoints_for_subdomain_tech_aggregate(self, subdomain: Any) -> list[Any]:
+        """
+        All ``EndPoint`` rows for this subdomain in the same scan, for flat ``technologies`` on
+        Secator rows. Prefer ``all_endpoints_for_tech_list`` from prefetch to avoid N+1.
+        """
+        cache_attr = "_cached_all_endpoints_for_tech_aggregate"
+        if hasattr(subdomain, cache_attr):
+            return getattr(subdomain, cache_attr)
+
+        if hasattr(subdomain, "all_endpoints_for_tech_list"):
+            subdomain_id = getattr(subdomain, "id", None)
+            scan_history_id = getattr(subdomain, "scan_history_id", None)
+            prefetched_endpoints = list(subdomain.all_endpoints_for_tech_list or [])
+            # Prefetch queryset already scopes by scan via ``subdomain_all_endpoints_for_tech_queryset``;
+            # re-filter by subdomain_id and scan_history_id to guard against: wrong ``Prefetch.queryset``
+            # or ``to_attr`` wiring, manual reuse of ``all_endpoints_for_tech_list`` on another
+            # subdomain instance, or a future prefetch that stops correlating by parent row.
+            grouped_by_sub_scan = self.context.setdefault(_CTX_PREFETCHED_ENDPOINTS_BY_SUBDOMAIN_SCAN, {})
+            list_cache_key = id(prefetched_endpoints)
+            endpoint_map = grouped_by_sub_scan.get(list_cache_key)
+            if endpoint_map is None:
+                endpoint_map = {}
+                for endpoint in prefetched_endpoints:
+                    key = (endpoint.subdomain_id, endpoint.scan_history_id)
+                    endpoint_map.setdefault(key, []).append(endpoint)
+                grouped_by_sub_scan[list_cache_key] = endpoint_map
+            endpoints = endpoint_map.get((subdomain_id, scan_history_id), [])
+            if endpoints:
+                self._warn_if_default_endpoint_list_missing_techs_prefetch(endpoints)
+            setattr(subdomain, cache_attr, endpoints)
+            return endpoints
+
+        scan_history_id = getattr(subdomain, "scan_history_id", None)
+        if not scan_history_id:
+            setattr(subdomain, cache_attr, [])
+            return []
+
+        qs = apply_endpoint_port_and_techs_related(
+            EndPoint.objects.filter(subdomain=subdomain, scan_history_id=scan_history_id)
+        )
         endpoints = list(qs)
         setattr(subdomain, cache_attr, endpoints)
         return endpoints
@@ -2634,17 +2689,21 @@ class SubdomainSerializer(DefaultEndpointTechnologyMixin, serializers.ModelSeria
         Get the default endpoint for this subdomain from prefetched data.
         Falls back to HybridProperty if prefetch was not used.
         """
-        # Check if default_endpoint_list was prefetched
-        if hasattr(obj, "default_endpoint_list") and obj.default_endpoint_list:
-            return obj.default_endpoint_list[0]
+        if default_endpoints := self._default_endpoints_for_subdomain_serialization(obj):
+            return default_endpoints[0]
         # Fallback to HybridProperty for backward compatibility
         return obj._default_endpoint
 
     def get_technologies(self, obj):
-        endpoint_technologies = self._serialize_unique_technologies(self._default_endpoints_for_subdomain_serialization(obj))
+        scan_history = getattr(obj, "scan_history", None)
+        if scan_history is not None and not getattr(scan_history, "is_legacy_scan", True):
+            from_endpoints = self._serialize_unique_technologies(self._all_endpoints_for_subdomain_tech_aggregate(obj))
+            return from_endpoints
+        endpoint_technologies = self._serialize_unique_technologies(
+            self._default_endpoints_for_subdomain_serialization(obj)
+        )
         if endpoint_technologies:
             return endpoint_technologies
-        # Fallback for Secator findings linked directly on SubdomainTechnology when no default endpoint exists.
         return [self._serialize_technology_payload(tech) for tech in obj.technologies.all()]
 
     def get_endpoint_defaults_by_port(self, obj):

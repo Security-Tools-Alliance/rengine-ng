@@ -9,8 +9,21 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings as django_settings
 from django.core.cache import cache
-from django.db.models import Case, CharField, Count, F, IntegerField, OuterRef, Prefetch, Q, Subquery, Value, When
-from django.db.models.functions import Coalesce
+from django.db.models import (
+    Case,
+    CharField,
+    Count,
+    F,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    Value,
+    When,
+    Window,
+)
+from django.db.models.functions import Coalesce, RowNumber
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.template.defaultfilters import slugify
@@ -137,10 +150,17 @@ from api.helpers.subdomain_ip_xor import (
     xor_attack_surface_entity_ids_error,
     xor_subdomain_ids_or_ip_address_ids_error,
 )
+from api.helpers.subdomain_technology_filter import (
+    list_technology_subdomain_count_values_subquery,
+    subdomain_technology_exact_q,
+    subdomain_technology_icontains_q,
+    technology_scope_q_for_subdomains,
+)
 from api.mixins import (
     AdvancedSearchMixin,
     DatatableListMixin,
     DatatablePaginationMixin,
+    SubdomainTechnologySearchMixin,
     build_datatables_serverside_response,
 )
 from api.pagination import parse_limit_from_request, parse_pagination_params
@@ -189,6 +209,7 @@ from reNgine.secator.synthetic_id import synthetic_id_skipped_scope
 from reNgine.services.default_endpoint_queryset import (
     apply_endpoint_port_and_techs_related,
     apply_endpoint_techs_prefetch,
+    subdomain_all_endpoints_for_tech_queryset,
 )
 from reNgine.services.repositories.ip_repository import normalize_ip_address_string
 from reNgine.services.scan_finding_metrics import (  # IP PKs in-scan; bulk IP for scan/target DataTables
@@ -1670,8 +1691,10 @@ class FetchMostVulnerable(APIView):
                         else [
                             Prefetch(
                                 "endpoint_set",
-                                queryset=EndPoint.objects.filter(is_default=True),
-                                to_attr="default_endpoint_list",
+                                queryset=apply_endpoint_port_and_techs_related(
+                                    subdomain_all_endpoints_for_tech_queryset()
+                                ),
+                                to_attr="all_endpoints_for_tech_list",
                             ),
                         ]
                     ),
@@ -2059,6 +2082,11 @@ class FetchSubscanResults(APIView):
                 "directories",
                 "scan_history",
                 "domain",
+                Prefetch(
+                    "endpoint_set",
+                    queryset=apply_endpoint_port_and_techs_related(subdomain_all_endpoints_for_tech_queryset()),
+                    to_attr="all_endpoints_for_tech_list",
+                ),
             )
             subscan_results = SubdomainSerializer(subdomains_in_subscan, many=True).data
 
@@ -4427,19 +4455,17 @@ class ListTechnology(APIView):
         else:
             subdomain_filter = Subdomain.objects.all()
 
-        through = Subdomain.technologies.through
         subdomain_id_subquery = Subquery(subdomain_filter.values("id"))
-        # Scalar count subquery avoids cartesian products when counting tech usage per subdomain set.
-        tech_count_annot = count_subquery(
-            through,
-            "technology_id",
-            filter_kwargs={"subdomain_id__in": subdomain_id_subquery},
+        # Correlated subquery: OuterRef("pk") is resolved against Technology.pk (outer queryset),
+        # and the inner query counts distinct Subdomain rows carrying that technology.
+        tech_count_subquery = list_technology_subdomain_count_values_subquery(subdomain_id_subquery)
+        tech_count_annot = Coalesce(
+            Subquery(tech_count_subquery[:1]),
+            Value(0),
+            output_field=IntegerField(),
         )
-        tech_qs = (
-            Technology.objects.filter(technologies__in=subdomain_filter)
-            .annotate(count=tech_count_annot)
-            .order_by("-count")
-        )
+        tech_scope = technology_scope_q_for_subdomains(subdomain_filter)
+        tech_qs = Technology.objects.filter(tech_scope).distinct().annotate(count=tech_count_annot).order_by("-count")
         limit = parse_limit_from_request(request)
         total_count = tech_qs.count()
         tech = list(tech_qs[:limit])
@@ -4552,20 +4578,19 @@ class ListPorts(APIView):
         return Response({"ports": ports_data})
 
 
-class ListSubdomains(AdvancedSearchMixin, APIView):
+class ListSubdomains(SubdomainTechnologySearchMixin, AdvancedSearchMixin, APIView):
     search_config = {
         "general_fields": [
             lambda sv: Q(name__icontains=sv),
             lambda sv: Q(http_status__icontains=sv),
             lambda sv: Q(page_title__icontains=sv),
-            lambda sv: Q(technologies__name__icontains=sv),
+            lambda sv: subdomain_technology_icontains_q(sv),
             lambda sv: Q(webserver__icontains=sv),
             lambda sv: Q(ip_addresses__address__icontains=sv),
         ],
         "special_fields": {
             "name": "name__icontains",
             "page_title": "page_title__icontains",
-            "technology": "technologies__name__icontains",
             "webserver": "webserver__icontains",
         },
         "numeric_fields": {
@@ -4592,20 +4617,20 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
         )
 
         if scan_id:
-            subdomain_query = subdomains.filter(scan_history__id=scan_id).distinct("name")
+            subdomain_query = subdomains.filter(scan_history__id=scan_id)
         elif target_id:
-            subdomain_query = subdomains.filter(domain__scan_history__target_id=target_id).distinct("name")
+            subdomain_query = subdomains.filter(domain__scan_history__target_id=target_id)
         else:
-            subdomain_query = subdomains.all().distinct("name")
+            subdomain_query = subdomains.all()
 
         if ip_address:
             subdomain_query = subdomain_query.filter(ip_addresses__address=ip_address)
 
         if tech:
-            subdomain_query = subdomain_query.filter(technologies__name=tech)
+            subdomain_query = subdomain_query.filter(subdomain_technology_exact_q(tech))
 
         if port:
-            subdomain_query = subdomain_query.filter(ip_addresses__ports__number=port).distinct("name")
+            subdomain_query = subdomain_query.filter(ip_addresses__ports__number=port)
 
         if "only_important" in req.query_params:
             subdomain_query = subdomain_query.filter(is_important=True)
@@ -4614,6 +4639,19 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
         search_value = req.GET.get("search[value]", None)
         if search_value:
             subdomain_query = self.apply_advanced_search(subdomain_query, search_value)
+
+        # One row per DNS name: keep the Subdomain from the latest scan (scan_history_id desc,
+        # then id desc). PostgreSQL-only DISTINCT ON is avoided for portability; the window runs
+        # before client order_by/pagination, so the DataTable may order rows differently from this
+        # tie-break while still showing at most one row per name for the filtered set.
+        subdomain_query = subdomain_query.annotate(
+            _name_rank=Window(
+                expression=RowNumber(),
+                partition_by=[F("name")],
+                order_by=[F("scan_history_id").desc(), F("id").desc()],
+            )
+        )
+        subdomain_query = subdomain_query.filter(_name_rank=1)
 
         # Optimize queries with select_related and prefetch_related to avoid N+1 queries
         subdomain_query = subdomain_query.select_related("scan_history", "domain").prefetch_related(
@@ -4624,8 +4662,8 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
             "directories",
             Prefetch(
                 "endpoint_set",
-                queryset=EndPoint.objects.filter(is_default=True),
-                to_attr="default_endpoint_list",
+                queryset=apply_endpoint_port_and_techs_related(subdomain_all_endpoints_for_tech_queryset()),
+                to_attr="all_endpoints_for_tech_list",
             ),
         )
 
@@ -4871,8 +4909,8 @@ class SubdomainsViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
                 "domain",
                 Prefetch(
                     "endpoint_set",
-                    queryset=apply_endpoint_port_and_techs_related(EndPoint.objects.filter(is_default=True)),
-                    to_attr="default_endpoint_list",
+                    queryset=apply_endpoint_port_and_techs_related(subdomain_all_endpoints_for_tech_queryset()),
+                    to_attr="all_endpoints_for_tech_list",
                 ),
             )
             return queryset
@@ -5026,9 +5064,7 @@ class EndPointChangesViewSet(DatatableListMixin, DatatablePaginationMixin, views
         scanned_host_q2 = EndPoint.objects.filter(scan_history__id=last_scan.id).values("http_url")
         added_endpoint = scanned_host_q1.difference(scanned_host_q2)
         removed_endpoints = scanned_host_q2.difference(scanned_host_q1)
-        endpoint_base = apply_endpoint_techs_prefetch(
-            EndPoint.objects.select_related("subdomain", "domain", "scan_history")
-        )
+        endpoint_base = apply_endpoint_techs_prefetch(EndPoint.objects.select_related("subdomain", "scan_history"))
         if changes == "added":
             return (
                 endpoint_base.filter(scan_history__id=scan_id)
@@ -5183,7 +5219,11 @@ class InterestingEndpointViewSet(DatatableListMixin, DatatablePaginationMixin, v
 
 
 class SubdomainDatatableViewSet(
-    DatatableListMixin, DatatablePaginationMixin, AdvancedSearchMixin, viewsets.ModelViewSet
+    DatatableListMixin,
+    DatatablePaginationMixin,
+    SubdomainTechnologySearchMixin,
+    AdvancedSearchMixin,
+    viewsets.ModelViewSet,
 ):
     queryset = Subdomain.objects.none()
     serializer_class = SubdomainSerializer
@@ -5215,7 +5255,7 @@ class SubdomainDatatableViewSet(
                 lambda sv: Q(name__icontains=sv),
                 lambda sv: Q(http_status__icontains=sv),
                 lambda sv: Q(page_title__icontains=sv),
-                lambda sv: Q(technologies__name__icontains=sv),
+                lambda sv: subdomain_technology_icontains_q(sv),
                 lambda sv: Q(webserver__icontains=sv),
                 lambda sv: Q(ip_addresses__address__icontains=sv),
                 lambda sv: Q(ip_addresses__ports__number__icontains=sv),
@@ -5227,7 +5267,6 @@ class SubdomainDatatableViewSet(
                 "page_title": "page_title__icontains",
                 "webserver": "webserver__icontains",
                 "ip_addresses": "ip_addresses__address__icontains",
-                "technology": "technologies__name__icontains",
             },
             "numeric_fields": {
                 "http_status": "http_status",
@@ -5284,7 +5323,7 @@ class SubdomainDatatableViewSet(
         qs = apply_filter_list_in(qs, "page_title__in", get_request_filter_list(self.request, FILTER_PARAM_PAGE_TITLE))
         qs = apply_filter_list_in(qs, "name__in", get_request_filter_list(self.request, FILTER_PARAM_SUBDOMAIN))
         order_str = get_datatables_order_column(self.request, self.datatable_column_map, default_order="content_length")
-        return qs.order_by(order_str)
+        return qs.distinct().order_by(order_str)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()

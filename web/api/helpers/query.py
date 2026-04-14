@@ -21,6 +21,7 @@ from reNgine.definitions import (
     SUCCESS_TASK,
 )
 from reNgine.llm.attack_surface_storage import annotate_queryset_with_llm_attack_surface_count
+from reNgine.services.default_endpoint_queryset import subdomain_all_endpoints_for_tech_queryset
 from reNgine.utilities.db import count_subquery, count_subquery_related
 from reNgine.utilities.subdomain import get_interesting_subdomains
 
@@ -293,8 +294,8 @@ def build_subdomain_datatable_queryset(
         "scan_history",
         Prefetch(
             "endpoint_set",
-            queryset=apply_endpoint_port_and_techs_related(EndPoint.objects.filter(is_default=True)),
-            to_attr="default_endpoint_list",
+            queryset=apply_endpoint_port_and_techs_related(subdomain_all_endpoints_for_tech_queryset()),
+            to_attr="all_endpoints_for_tech_list",
         ),
     )
     return queryset, datatable_interesting_names
