@@ -19,7 +19,7 @@ version: '3.8'
 # On ARM64 (aarch64), the Secator image is amd64-only; platform forces amd64 so Docker runs it via QEMU.
 services:
   secator-worker:
-    image: freelabz/secator:latest
+    image: freelabz/secator:0.26.1
     platform: linux/amd64
     container_name: ${SECATOR_WORKER_CONTAINER_NAME:-secator-worker}
     restart: unless-stopped
