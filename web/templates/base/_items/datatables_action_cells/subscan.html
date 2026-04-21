@@ -1,0 +1,16 @@
+{% load permission_tags %}
+<td class="text-center">
+  <div class="d-flex justify-content-center mb-2">
+    <div class="btn-group btn-group-sm" role="group">
+      <a href="#" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="View Results" aria-label="View results" onclick="show_subscan_results('{% url 'api:fetch_subscan_results' %}', {{ subscan.id }}); return false;"><i class="fe-eye"></i></a>
+      {% if user|can:'initiate_scans_subscans' %}
+        {% if subscan.status_code == 1 %}
+      <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Stop Subscan" aria-label="Stop subscan" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id=null, subscan_id={{ subscan.id }}, reload_scan_bar=false, reload_location=true); return false;"><i class="fe-alert-triangle"></i></a>
+        {% endif %}
+      {% endif %}
+      {% if user|can:'modify_scan_results' %}
+      <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Delete Subscan" aria-label="Delete subscan" onclick="delete_subscan('{% url 'api:delete_rows' %}', {{ subscan.id }}); return false;"><i class="fe-trash-2"></i></a>
+      {% endif %}
+    </div>
+  </div>
+</td>

@@ -168,8 +168,6 @@ remove_old_images() {
   fi
   
   declare -a old_images=(
-    "rengine-celery"
-    "rengine-celery-beat"
     "docker.pkg.github.com/yogeshojha/rengine/rengine"
     "rengine-certs",
     "nginx",
@@ -209,10 +207,8 @@ fix_volumes_permissions() {
   
   declare -a volumes=(
     "rengine_gf_patterns"
-    "rengine_github_repos"
     "rengine_nuclei_templates"
     "rengine_scan_results"
-    "rengine_tool_config"
     "rengine_wordlist"
   )
 
@@ -252,27 +248,17 @@ fix_project_ownership() {
 check_gpu_support() {
     log "Checking for GPU support..." $COLOR_CYAN
     
-    # Execute GPU detection with error handling
+    # Execute GPU detection with error handling (do not write to .env here; main() does a single remove+append)
     if ! GPU_TYPE=$(./scripts/gpu_support.sh 2>/dev/null); then
         log "GPU detection script failed, continuing with CPU-only setup" $COLOR_YELLOW
-        # Add default GPU configuration
-        {
-            echo "GPU=0"
-            echo "GPU_TYPE=none"
-            echo "DOCKER_RUNTIME=none"
-        } >> .env
+        GPU_TYPE=none
         return 1
     fi
-    
+
     # Validate GPU_TYPE output
     if [[ ! "$GPU_TYPE" =~ ^(nvidia|amd|none)$ ]]; then
         log "Invalid GPU type detected: $GPU_TYPE, continuing with CPU-only setup" $COLOR_YELLOW
-        # Add default GPU configuration
-        {
-            echo "GPU=0"
-            echo "GPU_TYPE=none"
-            echo "DOCKER_RUNTIME=none"
-        } >> .env
+        GPU_TYPE=none
         return 1
     fi
     
@@ -372,21 +358,7 @@ check_gpu_support() {
     esac
 }
 
-# Check for root privileges
-if [ $EUID -eq 0 ]; then
-  if [ "$SUDO_USER" = "root" ] || [ "$SUDO_USER" = "" ]; then
-    log "Error: Do not run this script as root user. Use 'sudo' with a non-root user." $COLOR_RED
-    log "Example: 'sudo ./install.sh'" $COLOR_RED
-    exit 1
-  fi
-fi
-
-# Check if the script is run with sudo
-if [ -z "$SUDO_USER" ]; then
-  log "Error: This script must be run with sudo." $COLOR_RED
-  log "Example: 'sudo ./install.sh'" $COLOR_RED
-  exit 1
-fi
+require_sudo_from_non_root
 
 usageFunction()
 {
@@ -432,6 +404,14 @@ main() {
     esac
   done
 
+  # Ensure .env exists and add any missing keys from .env-dist (e.g. PGBOUNCER, new options)
+  if [ ! -f .env ]; then
+    cp .env-dist .env
+    log "Created .env from .env-dist" $COLOR_GREEN
+  elif [ -f .env-dist ]; then
+    merge_env_from_dist_at_root "$(pwd)"
+  fi
+
   log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
 
   install_curl
@@ -439,19 +419,19 @@ main() {
   check_docker
   check_docker_compose
 
-  # Add GPU support check here
+  # Add GPU support check here (always normalize .env: remove any existing GPU block then write once)
+  if [ -f .env ]; then
+    sed -i '/^GPU=/d' .env
+    sed -i '/^GPU_TYPE=/d' .env
+    sed -i '/^DOCKER_RUNTIME=/d' .env
+  fi
   if check_gpu_support; then
     if [ $isNonInteractive = true ]; then
         # Load existing GPU configuration from .env
         if [ -f .env ]; then
             GPU_ENABLED=$(grep "^GPU=" .env | cut -d '=' -f2)
             if [ "$GPU_ENABLED" = "1" ]; then
-                # Remove existing GPU-related configurations
-                sed -i '/^GPU=/d' .env
-                sed -i '/^GPU_TYPE=/d' .env
-                sed -i '/^DOCKER_RUNTIME=/d' .env
-                
-                # Add GPU configuration to environment
+                # Add GPU configuration to environment (existing GPU vars already removed above)
                 {
                     echo "GPU=1"
                     echo "GPU_TYPE=$GPU_TYPE"
@@ -459,6 +439,11 @@ main() {
                 } >> .env
                 log "GPU support has been enabled from existing configuration" $COLOR_GREEN
             else
+                {
+                    echo "GPU=0"
+                    echo "GPU_TYPE=none"
+                    echo "DOCKER_RUNTIME=none"
+                } >> .env
                 log "GPU support is disabled in .env" $COLOR_YELLOW
             fi
         fi
@@ -467,12 +452,7 @@ main() {
         read -p "" gpu_choice
         case $gpu_choice in
             [Yy]* )
-                # Remove existing GPU-related configurations
-                sed -i '/^GPU=/d' .env
-                sed -i '/^GPU_TYPE=/d' .env
-                sed -i '/^DOCKER_RUNTIME=/d' .env
-                
-                # Add GPU configuration to environment
+                # Add GPU configuration to environment (existing GPU vars already removed above)
                 {
                     echo "GPU=1"
                     echo "GPU_TYPE=$GPU_TYPE"
@@ -481,11 +461,7 @@ main() {
                 log "GPU support will be enabled" $COLOR_GREEN
                 ;;
             * )
-                # Remove existing GPU-related configurations
-                sed -i '/^GPU=/d' .env
-                sed -i '/^GPU_TYPE=/d' .env
-                sed -i '/^DOCKER_RUNTIME=/d' .env
-                # Add default GPU configuration
+                # Add default GPU configuration (existing GPU vars already removed above)
                 {
                     echo "GPU=0"
                     echo "GPU_TYPE=none"
@@ -569,9 +545,12 @@ main() {
 
   # Non-interactive install
   if [ "$isNonInteractive" = true ]; then
+    # Preserve INSTALL_TYPE from command line (e.g. INSTALL_TYPE=source ./install.sh -n) so .env does not override it
+    SAVED_INSTALL_TYPE="${INSTALL_TYPE:-}"
     # Load and verify .env file
     if [ -f .env ]; then
         export $(grep -v '^#' .env | xargs)
+        [ -n "$SAVED_INSTALL_TYPE" ] && export INSTALL_TYPE="$SAVED_INSTALL_TYPE"
     else
         log "Error: .env file not found, copy/paste the .env-dist file to .env and edit it" $COLOR_RED
         exit 1
@@ -609,39 +588,15 @@ main() {
     make pull && log "Docker images have been pulled" $COLOR_GREEN || { log "Docker images pull failed!" $COLOR_RED; exit 1; }
   fi
 
-  log "Docker containers starting, please wait as starting the Celery container could take a while..." $COLOR_CYAN
+  log "Docker containers starting..." $COLOR_CYAN
   sleep 5
   make up && log "reNgine-ng is started!" $COLOR_GREEN || { log "reNgine-ng start failed!" $COLOR_RED; exit 1; }
 
-  # Add configuration files management
-  log "Setting up tool configurations..." $COLOR_CYAN
-  
-  config_files=(
-    "theHarvester/api-keys.yaml|docker/celery/config/the-harvester-api-keys.yaml"
-    "amass/config.ini|docker/celery/config/amass.ini"
-    "gau/config.toml|docker/celery/config/gau.toml"
-  )
-
-  for entry in "${config_files[@]}"; do
-    target="${entry%%|*}"
-    source_path="${entry#*|}"
-    target_path="/home/rengine/.config/$target"
-    
-    if [ ! -f "$target_path" ]; then
-      log "Copying $target configuration..." $COLOR_CYAN
-      docker exec -u rengine rengine-celery-1 mkdir -p "$(dirname "$target_path")"
-      docker cp "$(pwd)/$source_path" "rengine-celery-1:$target_path"
-      docker exec -u rengine rengine-celery-1 chmod 644 "$target_path"
-    else
-      log "Configuration file $target already exists, skipping..." $COLOR_YELLOW
-    fi
-  done
-
-  # Create symbolic link for theHarvester if it doesn't exist
-  docker exec -u rengine rengine-celery-1 bash -c '[ ! -L "/home/rengine/.theHarvester" ] && ln -s /home/rengine/.config/theHarvester /home/rengine/.theHarvester || true'
-
   log "Creating an account..." $COLOR_CYAN
   make superuser_create isNonInteractive=$isNonInteractive
+
+  log "Checking Secator API key..." $COLOR_CYAN
+  ensure_secator_api_key_in_env ".env" "$(pwd)"
 
   log "reNgine-ng is successfully installed and started!" $COLOR_GREEN
   log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN

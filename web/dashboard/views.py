@@ -1,9 +1,9 @@
 from datetime import timedelta
 import json
-import logging
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.signals import user_logged_in, user_logged_out
 from django.dispatch import receiver
@@ -15,12 +15,21 @@ from django.utils import timezone
 from rolepermissions.decorators import has_permission_decorator
 from rolepermissions.roles import assign_role, clear_roles
 
-from dashboard.forms import ProjectForm
+from dashboard.forms import InterfaceSettingsForm, ProjectForm
 from dashboard.models import NetlasAPIKey, OpenAiAPIKey, Project, UserAPIKey
+from dashboard.services.user_preferences import (
+    PREF_DATATABLES_DISPLAY,
+    PREF_DATATABLES_PAGE_LENGTH,
+    get_datatables_display,
+    get_datatables_page_length,
+    set_user_preference,
+)
 from dashboard.utils import get_oauth_provider_display_name, get_user_groups, get_user_projects, is_oauth_user
 from reNgine.definitions import FOUR_OH_FOUR_URL, PERM_MODIFY_SYSTEM_CONFIGURATIONS
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import (
     CountryISO,
+    Domain,
     EndPoint,
     IpAddress,
     Port,
@@ -31,10 +40,10 @@ from startScan.models import (
     Technology,
     Vulnerability,
 )
-from targetApp.models import Domain
 
 
-logger = logging.getLogger(__name__)
+PREFIX_DASHBOARD = "[DASHBOARD]"
+logger = get_module_logger(__name__)
 
 
 def index(request, slug):
@@ -45,8 +54,8 @@ def index(request, slug):
 
     # Get activity feed
     activity_feed = (
-        ScanActivity.objects.filter(scan_of__domain__project=project)
-        .select_related("scan_of", "scan_of__domain")
+        ScanActivity.objects.filter(scan_of__target__project=project)
+        .select_related("scan_of", "scan_of__target")
         .order_by("-time")[:50]
     )
 
@@ -59,6 +68,7 @@ def index(request, slug):
         "subdomains": Subdomain.get_project_timeline(project, date_range),
         "vulns": Vulnerability.get_project_timeline(project, date_range),
         "endpoints": EndPoint.get_project_timeline(project, date_range),
+        "ips": IpAddress.get_project_timeline(project, date_range),
         "scans": {
             "pending": ScanHistory.get_project_timeline(project, date_range, status=0),
             "running": ScanHistory.get_project_timeline(project, date_range, status=1),
@@ -88,6 +98,7 @@ def index(request, slug):
     endpoint_counts = EndPoint.get_project_counts(project)
     scan_history_counts = ScanHistory.get_project_counts(project)
     subscan_counts = SubScan.get_project_counts(project)
+    ip_counts = IpAddress.get_project_counts(project)
 
     context = {
         "dashboard_data_active": "active",
@@ -99,6 +110,8 @@ def index(request, slug):
         "alive_count": subdomain_counts["alive"],
         "endpoint_count": endpoint_counts["total"],
         "endpoint_alive_count": endpoint_counts["alive"],
+        "ip_address_count": ip_counts["total"],
+        "ip_alive_count": ip_counts["alive"],
         "info_count": subdomain_counts["vuln_info"],
         "low_count": subdomain_counts["vuln_low"],
         "medium_count": subdomain_counts["vuln_medium"],
@@ -118,6 +131,7 @@ def index(request, slug):
         "subdomains_in_last_week": timeline_data["subdomains"],
         "vulns_in_last_week": timeline_data["vulns"],
         "endpoints_in_last_week": timeline_data["endpoints"],
+        "ips_in_last_week": timeline_data["ips"],
         "scans_in_last_week": timeline_data["scans"],
         "subscans_in_last_week": timeline_data["subscans"],
         "most_common_cve": vulnerability_data["most_common_cve"],
@@ -141,6 +155,27 @@ def profile(request):
     else:
         form = PasswordChangeForm(request.user)
     return render(request, "dashboard/profile.html", {"form": form})
+
+
+@login_required
+def interface_settings(request):
+    """Display and save interface preferences (e.g. DataTables display mode)."""
+    if request.method == "POST":
+        form = InterfaceSettingsForm(request.POST)
+        if form.is_valid():
+            set_user_preference(request.user, PREF_DATATABLES_DISPLAY, form.cleaned_data["datatables_display"])
+            set_user_preference(request.user, PREF_DATATABLES_PAGE_LENGTH, form.cleaned_data["datatables_page_length"])
+            messages.success(request, "Interface settings saved.")
+            return redirect("interface_settings")
+        messages.error(request, "Please correct the error below.")
+    else:
+        form = InterfaceSettingsForm(
+            initial={
+                "datatables_display": get_datatables_display(request.user),
+                "datatables_page_length": get_datatables_page_length(request.user),
+            }
+        )
+    return render(request, "dashboard/interface_settings.html", {"form": form})
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
@@ -237,7 +272,12 @@ def handle_delete_user(request, user):
         messages.add_message(request, messages.INFO, f"User {user.username} successfully deleted.")
         return JsonResponse({"status": True})
     except (ValueError, KeyError) as e:
-        logger.error("Error deleting user: %s", e)
+        logger.log_line(
+            PREFIX_DASHBOARD,
+            "USER",
+            "Error deleting user: %s" % (e,),
+            level="error",
+        )
         return JsonResponse({"status": False, "error": "An error occurred while deleting the user"})
 
 
@@ -266,7 +306,12 @@ def handle_update_user(request, user):
         user.save()
         return JsonResponse({"status": True})
     except (ValueError, KeyError, TypeError) as e:
-        logger.error("Error updating user: %s", e)
+        logger.log_line(
+            PREFIX_DASHBOARD,
+            "USER",
+            "Error updating user: %s" % (e,),
+            level="error",
+        )
         return JsonResponse({"status": False, "error": "An error occurred while updating the user"})
 
 
@@ -288,7 +333,12 @@ def handle_create_user(request):
 
         return JsonResponse({"status": True})
     except (ValueError, KeyError) as e:
-        logger.error("Error creating user: %s", e)
+        logger.log_line(
+            PREFIX_DASHBOARD,
+            "USER",
+            "Error creating user: %s" % (e,),
+            level="error",
+        )
         return JsonResponse({"status": False, "error": "An error occurred while creating the user"})
 
 
@@ -358,7 +408,12 @@ def onboarding(request):
             if request.user.is_authenticated:
                 project.users.add(request.user)
         except Exception as e:
-            logger.error(f" Could not create project, Error: {e}")
+            logger.log_line(
+                PREFIX_DASHBOARD,
+                "PROJECT",
+                "Could not create project, Error: %s" % (e,),
+                level="error",
+            )
             error = "Could not create project, check logs for more details"
 
         try:
@@ -367,7 +422,12 @@ def onboarding(request):
                 user = User.objects.create_user(username=create_username, password=create_password)
                 assign_role(user, create_user_role)
         except Exception as e:
-            logger.error(f"Could not create User, Error: {e}")
+            logger.log_line(
+                PREFIX_DASHBOARD,
+                "USER",
+                "Could not create User, Error: %s" % (e,),
+                level="error",
+            )
             error = "Could not create User, check logs for more details"
 
         if key_openai:
@@ -474,12 +534,19 @@ def edit_project(request, slug):
 def set_current_project(request, slug):
     if request.method == "GET":
         project = get_object_or_404(Project, slug=slug)
-        response = HttpResponseRedirect(reverse("dashboardIndex", kwargs={"slug": slug}))
-        response.set_cookie(
-            "currentProjectId", project.id, path="/", samesite="Strict", httponly=True, secure=request.is_secure()
-        )
+        if not get_user_projects(request.user).filter(pk=project.pk).exists():
+            return HttpResponseRedirect(reverse("page_not_found"))
         messages.success(request, f"Project {project.name} set as current project.")
-        return response
+        dashboard_url = reverse("dashboardIndex", kwargs={"slug": slug})
+        return render(
+            request,
+            "dashboard/set_current_project_bridge.html",
+            {
+                "project_slug_json": json.dumps(slug),
+                "dashboard_url_json": json.dumps(dashboard_url),
+                "dashboard_url_escaped": dashboard_url,
+            },
+        )
     return HttpResponseBadRequest("Invalid request method. Only GET is allowed.", status=400)
 
 

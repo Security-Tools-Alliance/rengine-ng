@@ -1,0 +1,42 @@
+{% load secator_extras %}
+{% with task_limit=limit|default:6 %}
+<div class="workflow-tasks-compact">
+  {% for item in structured_tasks %}
+    {% if show_all or forloop.counter <= task_limit %}
+    {% if item.type == "group" %}
+      <div class="workflow-task-group">
+        <div class="workflow-task-group-header">
+          <i class="fas fa-layer-group text-primary me-1"></i>
+          <span class="workflow-task-group-name">{{ item.display_name|title }}</span>
+          <span class="workflow-task-group-count">({{ item.tasks|length }})</span>
+        </div>
+        <div class="workflow-task-group-items">
+          {% for task_name in item.tasks %}
+            {% get_task_info task_name as task_info %}
+            <span class="workflow-task-compact-item grouped" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task_info.name|title }}</strong><br>{{ task_info.description }}">
+              <i class="fas fa-{{ task_info.icon }} text-muted me-1"></i>
+              {{ task_info.name }}
+            </span>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div class="workflow-task-individual-wrapper">
+        {% get_task_info item.name as task_info %}
+        <span class="workflow-task-compact-item" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task_info.name|title }}</strong><br>{{ task_info.description }}">
+          <i class="fas fa-{{ task_info.icon }} text-muted me-1"></i>
+          {{ task_info.name }}
+        </span>
+      </div>
+    {% endif %}
+    {% endif %}
+  {% endfor %}
+  {% if not show_all and structured_tasks|length > task_limit %}
+    {% with remaining_items=structured_tasks|slice_from:task_limit %}
+      <span class="workflow-task-more-compact" data-bs-toggle="tooltip" data-bs-placement="top" title="Additional items: {% for item in remaining_items %}{% if item.type == "group" %}{{ item.display_name|title }}{% else %}{{ item.name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}">
+        +{{ structured_tasks|length|subtract:task_limit }} more
+      </span>
+    {% endwith %}
+  {% endif %}
+</div>
+{% endwith %}

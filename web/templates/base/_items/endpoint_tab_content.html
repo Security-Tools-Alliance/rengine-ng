@@ -1,20 +1,4 @@
-<div class="row justify-content-center">
-	<div class="col-xl-8 col-lg-8 col-sm-8">
-		<div class="<wrap></wrap>per">
-			<div class="search-input" id="endpoint-search-input">
-				<a href="" target="_blank" hidden></a>
-				<div class="input-group">
-					<input type="text" class="form-control" placeholder="Filter Endpoints" aria-label="Filter Endpoints" id="endpoints-search">
-					<div class="input-group-append">
-						<button id="endpoint-search-button" class="btn btn-primary" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Search</button>
-					</div>
-				</div>
-				<div class="autocom-box mt-container mx-auto endpoint-search" id="autocom-box">
-				</div>
-			</div>
-		</div>
-	</div>
-</div>
+{% include "base/_items/_datatable_advanced_search_block.html" with wrapper_id="endpoint-search-input" advanced_search_context="endpoints" input_id="endpoints-search" button_id="endpoint-search-button" autocom_box_id="endpoints-autocom-box" placeholder="Filter Endpoints" aria_label="Filter Endpoints" autocom_box_extra_classes="endpoint-search" %}
 <div class="row mt-4">
 	<div class="col-12">
 		<div class="card">
@@ -26,6 +10,12 @@
 								<i class="fe-layout"></i>
 							</button>
 							<div class="dropdown-menu" style="">
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="radio" id="endpoint_group_none" name="grouping_endpoint_row" class="form-check-input" value="" checked>
+										<label class="form-check-label" for="endpoint_group_none">None</label>
+									</div>
+								</div>
 								<div class="dropdown-item">
 									<div class="form-check">
 										<input type="radio" id="endpoint_page_title_grouping" name="grouping_endpoint_row" class="form-check-input" value="page_title">

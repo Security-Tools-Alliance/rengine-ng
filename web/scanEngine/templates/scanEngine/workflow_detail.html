@@ -1,0 +1,170 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}{{ workflow.get_display_name }} - Workflow Detail{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-tomorrow_night_eighties.min.js"></script>
+
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-project-diagram"></i> {{ workflow.get_display_name }}
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'duplicate_workflow' workflow.id %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-copy"></i> Copy
+                        </a>
+                        <a href="{% url 'workflows' current_project.slug %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Workflows
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5>Description</h5>
+                            <p>{{ workflow.description|default:"No description available." }}</p>
+                            
+                            <h5>YAML Configuration</h5>
+                            <div class="bg-light p-3 rounded">
+                                <div id="workflow-yaml-editor-readonly" data-yaml-config="{{ workflow.yaml_configuration|escape }}"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Workflow Information</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>Alias:</strong> 
+                                        {% if workflow.alias %}
+                                            <span class="badge badge-soft-info">{{ workflow.alias }}</span>
+                                        {% else %}
+                                            <span class="text-muted">None</span>
+                                        {% endif %}
+                                    </p>
+                                    <p><strong>Type:</strong> 
+                                        <span class="badge badge-soft-{% if workflow.workflow_type == 'builtin' %}success{% else %}info{% endif %}">
+                                            {{ workflow.workflow_type|title }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Tags:</strong>
+                                        {% if workflow.tags %}
+                                        {% for tag in workflow.tags %}
+                                        <span class="badge badge-soft-secondary me-1">{{ tag }}</span>
+                                        {% endfor %}
+                                        {% else %}
+                                        <span class="text-muted">None</span>
+                                        {% endif %}
+                                    </p>
+                                    <p><strong>Scan Type:</strong> {{ workflow.get_scan_type_display }}</p>
+                                    <p><strong>Status:</strong> 
+                                        <span class="badge badge-soft-{% if workflow.is_active %}success{% else %}danger{% endif %}">
+                                            {{ workflow.is_active|yesno:"Active,Inactive" }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Created:</strong> {{ workflow.created_at|date:"M d, Y H:i" }}</p>
+                                    <p><strong>Updated:</strong> {{ workflow.updated_at|date:"M d, Y H:i" }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if related_scans %}
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <h5>Related Scans</h5>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Type</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for scan in related_scans %}
+                                        <tr>
+                                            <td>{{ scan.name }}</td>
+                                            <td>{{ scan.scan_type|title }}</td>
+                                            <td>{{ scan.created_at|date:"M d, Y" }}</td>
+                                            <td>
+                                                <a href="{% url 'scan_detail' current_project.slug scan.id %}" class="btn btn-sm btn-info">
+                                                    <i class="fas fa-eye"></i> View
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_level_script %}
+<script type="text/javascript">
+$(document).ready(function() {
+    // Initialize ACE editor for YAML display (read-only)
+    const workflowEditorElement = document.getElementById("workflow-yaml-editor-readonly");
+    const editor = ace.edit("workflow-yaml-editor-readonly");
+    editor.setTheme("ace/theme/tomorrow_night_eighties");
+    editor.session.setMode("ace/mode/yaml");
+    editor.setReadOnly(true);
+    editor.session.setValue(workflowEditorElement.dataset.yamlConfig || "");
+    editor.setOptions({
+        fontSize: "14px",
+        showInvisibles: true,
+        highlightActiveLine: false,
+        highlightGutterLine: false
+    });
+    
+    // Calculate optimal height based on content and available space
+    function calculateEditorHeight() {
+        const editorElement = document.getElementById("workflow-yaml-editor-readonly");
+        const contentLines = editor.session.getLength();
+        const lineHeight = editor.renderer.lineHeight;
+        const minHeight = 200; // Minimum height in pixels
+        const viewportHeight = window.innerHeight;
+        const editorOffsetTop = editorElement.getBoundingClientRect().top;
+        const maxHeight = viewportHeight - editorOffsetTop - 50; // 50px padding from bottom
+        
+        // Calculate height based on content (with some padding)
+        const contentHeight = Math.max(contentLines * lineHeight + 40, minHeight);
+        
+        // Use the smaller of content height or max height
+        const finalHeight = Math.min(contentHeight, maxHeight);
+        
+        editorElement.style.height = finalHeight + "px";
+        editor.resize();
+    }
+    
+    // Calculate height after editor is initialized
+    setTimeout(calculateEditorHeight, 100);
+    
+    // Recalculate on window resize
+    $(window).on('resize', calculateEditorHeight);
+});
+</script>
+{% endblock %}

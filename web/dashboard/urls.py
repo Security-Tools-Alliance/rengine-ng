@@ -10,6 +10,7 @@ urlpatterns = [
     path("dashboard/<slug:slug>", views.index, name="dashboardIndex"),
     path("welcome/oauth/", views.oauth_welcome, name="oauth_welcome"),
     path("profile/", views.profile, name="profile"),
+    path("profile/interface/", views.interface_settings, name="interface_settings"),
     path("admin_interface/", views.admin_interface, name="admin_interface"),
     path("admin_interface/update", views.admin_interface_update, name="admin_interface_update"),
     path("search", views.search, name="search"),

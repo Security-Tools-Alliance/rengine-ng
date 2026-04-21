@@ -10,19 +10,14 @@ This module tests the batch geolocalization system including:
 
 import threading
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
 
+from reNgine.services.repositories.ip_repository import IpRepository
 from reNgine.tasks.geo import geo_localize_batch
-from reNgine.utilities.database import (
-    _collect_ip_for_geolocalization,
-    _thread_local,
-    save_ip_address,
-    trigger_batch_geolocalization,
-    with_batch_geolocalization,
-)
+from reNgine.utilities import dns
 from startScan.models import CountryISO, IpAddress
 from utils.test_utils import TestDataGenerator
 
@@ -47,98 +42,77 @@ class TestIPCollection(TestCase):
 
     def tearDown(self):
         """Clean up test data."""
-        # Clear thread-local storage
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
     def test_collect_public_ip(self):
         """Test collecting a public IP address."""
         public_ip = "8.8.8.8"
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
-        # Clear any existing collection
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        dns.collect_ip_for_geolocalization(public_ip)
 
-        _collect_ip_for_geolocalization(public_ip)
-
-        # Check if IP was collected
-        self.assertTrue(hasattr(_thread_local, "geo_ip_collection"))
-        self.assertIn(public_ip, _thread_local.geo_ip_collection)
+        self.assertTrue(hasattr(dns._thread_local, "geo_ip_collection"))
+        self.assertIn(public_ip, dns._thread_local.geo_ip_collection)
 
     def test_skip_private_ip(self):
         """Test that private IPs are not collected."""
         private_ips = [
-            "192.168.1.1",  # Private class C
-            "10.0.0.1",  # Private class A
-            "172.16.0.1",  # Private class B
-            "127.0.0.1",  # Loopback
-            "169.254.1.1",  # Link-local
+            "192.168.1.1",
+            "10.0.0.1",
+            "172.16.0.1",
+            "127.0.0.1",
+            "169.254.1.1",
         ]
-
         for private_ip in private_ips:
-            # Clear collection
-            if hasattr(_thread_local, "geo_ip_collection"):
-                delattr(_thread_local, "geo_ip_collection")
-
-            _collect_ip_for_geolocalization(private_ip)
-
-            # Check that IP was not collected
-            if hasattr(_thread_local, "geo_ip_collection"):
-                self.assertNotIn(private_ip, _thread_local.geo_ip_collection)
+            if hasattr(dns._thread_local, "geo_ip_collection"):
+                delattr(dns._thread_local, "geo_ip_collection")
+            dns.collect_ip_for_geolocalization(private_ip)
+            if hasattr(dns._thread_local, "geo_ip_collection"):
+                self.assertNotIn(private_ip, dns._thread_local.geo_ip_collection)
 
     def test_collect_duplicate_ips(self):
         """Test that duplicate IPs are handled correctly."""
         public_ip = "8.8.8.8"
-
-        # Clear collection
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
-
-        # Add same IP multiple times
-        _collect_ip_for_geolocalization(public_ip)
-        _collect_ip_for_geolocalization(public_ip)
-        _collect_ip_for_geolocalization(public_ip)
-
-        # Should only have one instance (set behavior)
-        self.assertEqual(len(_thread_local.geo_ip_collection), 1)
-        self.assertIn(public_ip, _thread_local.geo_ip_collection)
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
+        dns.collect_ip_for_geolocalization(public_ip)
+        dns.collect_ip_for_geolocalization(public_ip)
+        dns.collect_ip_for_geolocalization(public_ip)
+        self.assertEqual(len(dns._thread_local.geo_ip_collection), 1)
+        self.assertIn(public_ip, dns._thread_local.geo_ip_collection)
 
     def test_save_ip_address_collection(self):
-        """Test that save_ip_address properly collects IPs."""
+        """Test that IpRepository.get_or_create collects new IPs for geolocalization."""
         public_ip = "1.1.1.1"
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
-        # Clear collection
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        ip_obj, created = IpRepository().get_or_create(public_ip)
+        if ip_obj and self.subdomain:
+            self.subdomain.ip_addresses.add(ip_obj)
 
-        # Save IP address
-        ip_obj, created = save_ip_address(public_ip, subdomain=self.subdomain)
-
-        # Check that IP was created and collected
-        # IP might already exist from previous tests, so we just check it's not None
         self.assertIsNotNone(ip_obj)
-        if hasattr(_thread_local, "geo_ip_collection"):
-            self.assertIn(public_ip, _thread_local.geo_ip_collection)
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            self.assertIn(public_ip, dns._thread_local.geo_ip_collection)
 
     def test_save_ip_address_skip_existing(self):
         """Test that existing IPs are not collected again."""
         public_ip = "1.1.1.1"
+        ip_obj, _ = IpRepository().get_or_create(public_ip)
+        if ip_obj and self.subdomain:
+            self.subdomain.ip_addresses.add(ip_obj)
 
-        # Create IP first
-        ip_obj, _ = save_ip_address(public_ip, subdomain=self.subdomain)
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
-        # Clear collection
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        ip_obj2, created = IpRepository().get_or_create(public_ip)
 
-        # Save same IP again
-        ip_obj2, created = save_ip_address(public_ip, subdomain=self.subdomain)
-
-        # Should not be created again and not collected
         self.assertFalse(created)
         self.assertEqual(ip_obj, ip_obj2)
-        if hasattr(_thread_local, "geo_ip_collection"):
-            self.assertNotIn(public_ip, _thread_local.geo_ip_collection)
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            self.assertNotIn(public_ip, dns._thread_local.geo_ip_collection)
 
 
 class TestBatchGeolocalization(TestCase):
@@ -162,8 +136,8 @@ class TestBatchGeolocalization(TestCase):
     def tearDown(self):
         """Clean up test data."""
         # Clear thread-local storage
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
     @patch("reNgine.tasks.geo.geoiplookup")
     def test_geo_localize_batch_success(self, mock_geoiplookup):
@@ -233,7 +207,7 @@ class TestBatchGeolocalization(TestCase):
 
     def test_geoiplookup_injection_protection(self):
         """Test that geoiplookup protects against command injection."""
-        from reNgine.utilities.data import geoiplookup
+        from reNgine.core.data import geoiplookup
 
         # Test malicious IP addresses that could cause command injection
         malicious_ips = [
@@ -253,7 +227,7 @@ class TestBatchGeolocalization(TestCase):
 
     def test_geoiplookup_valid_ips(self):
         """Test that geoiplookup works with valid IP addresses."""
-        from reNgine.utilities.data import geoiplookup
+        from reNgine.core.data import geoiplookup
 
         # Test valid IP addresses
         valid_ips = [
@@ -404,34 +378,26 @@ class TestBatchGeolocalization(TestCase):
     def test_trigger_batch_geolocalization_no_ips(self):
         """Test trigger_batch_geolocalization with no collected IPs."""
         # Clear collection
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
-        result = trigger_batch_geolocalization()
+        result = dns.trigger_batch_geolocalization()
         self.assertIsNone(result)
 
-    @patch("reNgine.tasks.geo.geo_localize_batch.delay")
-    def test_trigger_batch_geolocalization_with_ips(self, mock_delay):
+    @patch("reNgine.tasks.geo.geo_localize_batch")
+    def test_trigger_batch_geolocalization_with_ips(self, mock_geo_batch):
         """Test trigger_batch_geolocalization with collected IPs."""
-        # Mock the delay method
-        mock_task = Mock()
-        mock_task.id = "test-task-id"
-        mock_delay.return_value = mock_task
+        dns._thread_local.geo_ip_collection = {"8.8.8.8", "1.1.1.1"}
 
-        # Set up collection
-        _thread_local.geo_ip_collection = {"8.8.8.8", "1.1.1.1"}
+        result = dns.trigger_batch_geolocalization()
 
-        result = trigger_batch_geolocalization()
-
-        # Check that task was triggered
-        self.assertEqual(result, "test-task-id")
-        # Check that the call was made with the correct IPs (order may vary due to set)
-        call_args = mock_delay.call_args[0][0]
+        self.assertEqual(result, {"count": 2})
+        mock_geo_batch.assert_called_once()
+        call_args = mock_geo_batch.call_args[0][0]
         self.assertEqual(set(call_args), {"8.8.8.8", "1.1.1.1"})
 
-        # Check that collection was cleared
-        if hasattr(_thread_local, "geo_ip_collection"):
-            self.assertEqual(len(_thread_local.geo_ip_collection), 0)
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            self.assertEqual(len(dns._thread_local.geo_ip_collection), 0)
 
 
 class TestDecorator(TestCase):
@@ -455,15 +421,15 @@ class TestDecorator(TestCase):
     def tearDown(self):
         """Clean up test data."""
         # Clear thread-local storage
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
-    @patch("reNgine.utilities.database.trigger_batch_geolocalization")
+    @patch("reNgine.utilities.dns.trigger_batch_geolocalization")
     def test_decorator_success(self, mock_trigger):
         """Test decorator with successful function execution."""
-        mock_trigger.return_value = "test-task-id"
+        mock_trigger.return_value = {"count": 2}
 
-        @with_batch_geolocalization
+        @dns.with_batch_geolocalization
         def test_function():
             return "success"
 
@@ -472,12 +438,12 @@ class TestDecorator(TestCase):
         self.assertEqual(result, "success")
         mock_trigger.assert_called_once()
 
-    @patch("reNgine.utilities.database.trigger_batch_geolocalization")
+    @patch("reNgine.utilities.dns.trigger_batch_geolocalization")
     def test_decorator_exception(self, mock_trigger):
         """Test decorator with function that raises exception."""
-        mock_trigger.return_value = "test-task-id"
+        mock_trigger.return_value = {"count": 0}
 
-        @with_batch_geolocalization
+        @dns.with_batch_geolocalization
         def test_function():
             raise ValueError("Test error")
 
@@ -487,12 +453,12 @@ class TestDecorator(TestCase):
         # Should still trigger geolocalization even after error
         mock_trigger.assert_called_once()
 
-    @patch("reNgine.utilities.database.trigger_batch_geolocalization")
+    @patch("reNgine.utilities.dns.trigger_batch_geolocalization")
     def test_decorator_no_ips_collected(self, mock_trigger):
         """Test decorator when no IPs are collected."""
         mock_trigger.return_value = None
 
-        @with_batch_geolocalization
+        @dns.with_batch_geolocalization
         def test_function():
             return "success"
 
@@ -501,20 +467,18 @@ class TestDecorator(TestCase):
         self.assertEqual(result, "success")
         mock_trigger.assert_called_once()
 
-    @patch("reNgine.utilities.database.trigger_batch_geolocalization")
+    @patch("reNgine.utilities.dns.trigger_batch_geolocalization")
     def test_decorator_geolocalization_error(self, mock_trigger):
-        """Test decorator when geolocalization trigger fails."""
+        """Test decorator when geolocalization trigger fails (exception propagates from finally)."""
         mock_trigger.side_effect = Exception("Geolocalization error")
 
-        @with_batch_geolocalization
+        @dns.with_batch_geolocalization
         def test_function():
             raise ValueError("Test error")
 
-        # Should raise the original exception, not the geolocalization error
-        with self.assertRaises(ValueError):
+        with self.assertRaises(Exception) as ctx:
             test_function()
-
-        # Should be called once in try block
+        self.assertIn("Geolocalization error", str(ctx.exception))
         self.assertEqual(mock_trigger.call_count, 1)
 
 
@@ -539,22 +503,18 @@ class TestIntegration(TestCase):
     def tearDown(self):
         """Clean up test data."""
         # Clear thread-local storage
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
     @patch("reNgine.tasks.geo.geoiplookup")
-    @patch("reNgine.tasks.geo.geo_localize_batch.delay")
-    def test_complete_workflow(self, mock_delay, mock_geoiplookup):
+    @patch("reNgine.tasks.geo.geo_localize_batch")
+    def test_complete_workflow(self, mock_geo_batch, mock_geoiplookup):
         """Test the complete workflow from IP collection to batch geolocalization."""
-        # Mock successful geolocalization
         mock_geoiplookup.return_value = (True, "US", "United States", None)
-        mock_task = Mock()
-        mock_task.id = "test-task-id"
-        mock_delay.return_value = mock_task
 
         # Clear collection
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
         # Simulate saving multiple IPs (mix of public and private)
         test_ips = [
@@ -565,50 +525,39 @@ class TestIntegration(TestCase):
         ]
 
         for ip, should_be_collected in test_ips:
-            ip_obj, created = save_ip_address(ip, subdomain=self.subdomain)
-            # Some IPs might already exist from previous tests
+            ip_obj, created = IpRepository().get_or_create(ip)
+            if ip_obj and self.subdomain:
+                self.subdomain.ip_addresses.add(ip_obj)
             if should_be_collected:
                 self.assertIsNotNone(ip_obj)
 
         # Check that only public IPs were collected
-        if hasattr(_thread_local, "geo_ip_collection"):
-            collected_ips = list(_thread_local.geo_ip_collection)
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            collected_ips = list(dns._thread_local.geo_ip_collection)
         else:
             collected_ips = []
-        # Some IPs might already exist from previous tests, so we check that we have at least the new ones
-        # If no IPs were collected, it means they all already existed, which is fine
-        if len(collected_ips) == 0:
-            # This is acceptable - all IPs already existed
-            pass
-        else:
-            self.assertGreaterEqual(len(collected_ips), 1)  # At least some IPs were collected
-        # Check that public IPs are in the collection
+        if collected_ips:
+            self.assertGreaterEqual(len(collected_ips), 1)
         public_ips = ["8.8.8.8", "1.1.1.1"]
         for ip in public_ips:
             if ip in collected_ips:
                 self.assertIn(ip, collected_ips)
-        # Check that private IPs are not in the collection
         private_ips = ["192.168.1.1", "10.0.0.1"]
         for ip in private_ips:
             self.assertNotIn(ip, collected_ips)
 
-        # Trigger batch geolocalization
-        task_id = trigger_batch_geolocalization()
-        # If no IPs were collected, task_id will be None, which is acceptable
-        if task_id is not None:
-            self.assertEqual(task_id, "test-task-id")
-        # Check that the call was made with the correct IPs (order may vary due to set)
-        if mock_delay.called:
-            call_args = mock_delay.call_args[0][0]
-            # Check that we have at least one public IP in the call
+        result = dns.trigger_batch_geolocalization()
+        if result is not None:
+            self.assertIn("count", result)
+            self.assertGreaterEqual(result["count"], 1)
+        if mock_geo_batch.called:
+            call_args = mock_geo_batch.call_args[0][0]
             self.assertGreater(len(call_args), 0)
-            # Check that all called IPs are public (not private)
             for ip in call_args:
                 self.assertNotIn(ip, ["192.168.1.1", "10.0.0.1", "172.16.0.1"])
 
-        # Check that collection was cleared
-        if hasattr(_thread_local, "geo_ip_collection"):
-            self.assertEqual(len(_thread_local.geo_ip_collection), 0)
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            self.assertEqual(len(dns._thread_local.geo_ip_collection), 0)
 
     def test_thread_isolation(self):
         """Test that IP collection is isolated between threads."""
@@ -616,17 +565,17 @@ class TestIntegration(TestCase):
         def collect_ips_in_thread(ips, results):
             """Helper function to collect IPs in a separate thread."""
             for ip in ips:
-                _collect_ip_for_geolocalization(ip)
+                dns.collect_ip_for_geolocalization(ip)
 
-            if hasattr(_thread_local, "geo_ip_collection"):
-                results.extend(list(_thread_local.geo_ip_collection))
+            if hasattr(dns._thread_local, "geo_ip_collection"):
+                results.extend(list(dns._thread_local.geo_ip_collection))
 
         # Clear main thread collection
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
         # Collect IPs in main thread
-        _collect_ip_for_geolocalization("8.8.8.8")
+        dns.collect_ip_for_geolocalization("8.8.8.8")
 
         # Collect IPs in separate thread
         thread_results = []
@@ -635,7 +584,7 @@ class TestIntegration(TestCase):
         thread.join()
 
         # Check isolation
-        main_collection = list(_thread_local.geo_ip_collection)
+        main_collection = list(dns._thread_local.geo_ip_collection)
         self.assertEqual(main_collection, ["8.8.8.8"])
         self.assertEqual(thread_results, ["1.1.1.1"])
 

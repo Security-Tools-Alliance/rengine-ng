@@ -1,0 +1,22 @@
+{# Simple options: Proxy, Delay #}
+{# Params: show_random_proxy (bool, optional), id_prefix (string, optional) #}
+<div class="simple-options mt-3">
+  <div class="row">
+    <div class="col-md-6">
+      <label>Proxy</label>
+      <input type="text" class="form-control" name="proxy" placeholder="socks5://host:port" id="{{ id_prefix|default:'' }}proxy-input">
+      {% if show_random_proxy %}
+      <div class="form-check mt-2">
+        <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useRandomProxy" name="use_random_proxy">
+        <label class="form-check-label" for="{{ id_prefix|default:'' }}useRandomProxy">
+          <small>Use random proxy from proxy settings</small>
+        </label>
+      </div>
+      {% endif %}
+    </div>
+    <div class="col-md-6">
+      <label>Delay</label>
+      <input type="number" class="form-control" name="delay" value="0" min="0">
+    </div>
+  </div>
+</div>

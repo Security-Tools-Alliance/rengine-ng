@@ -1,51 +1,40 @@
 {% load permission_tags %}
-
-<div class="row justify-content-center">
-	<div class="col-xl-8 col-lg-8 col-sm-8">
-		<div class="wrapper">
-			<div class="search-input">
-				<a href="" target="_blank" hidden></a>
-				<div class="input-group">
-					<input type="text" class="form-control" placeholder="Filter Subdomains" aria-label="Filter Subdomains" id="subdomains-search">
-					<div class="input-group-append">
-						<button id="subdomain-search-button" class="btn btn-primary" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Search</button>
-					</div>
-				</div>
-				<div class="autocom-box mt-container mx-auto" id="autocom-box">
-				</div>
-			</div>
-		</div>
-	</div>
-</div>
+<style>
+#subdomain_scan_results td.col-action,
+#subdomain_scan_results th.col-action,
+#subdomain_scan_results th:nth-child(24),
+#subdomain_scan_results td:nth-child(24) {
+	min-width: 180px;
+}
+.ports-popover .popover-body {
+	max-height: 18rem;
+	overflow-y: auto;
+}
+</style>
+{% include "base/_items/_datatable_advanced_search_block.html" with wrapper_id="subdomain-search-input" advanced_search_context="subdomains" input_id="subdomains-search" button_id="subdomain-search-button" autocom_box_id="subdomains-autocom-box" placeholder="Filter Subdomains" aria_label="Filter Subdomains" %}
 <div class="row">
 	<div class="col-12">
 		<div class="card">
 			<div class="card-body">
 				<div class="row">
-					<div class="col-6 float-start">
-						{% if user|can:'initiate_scans' %}
-						<a class="disabled btn btn-soft-primary ms-2" data-button="subdomain_btns" data-toggle="tooltip" data-placement="top" title="Initiate Multiple Subscans" onclick="initiateMultipleSubscan()">
-							<i class="fe-zap"></i>
-							Initiate Subscan
-						</a>
-						{% endif %}
-						<a class="disabled btn btn-soft-info" data-button="subdomain_btns" data-toggle="tooltip" data-placement="top" title="Download Selected Subdomains" onclick="downloadSelectedSubdomains('{{history.domain.name}}')">
-							<i class="fe-download"></i>
-							Download Selected Subdomains
-						</a>
-						{% if user|can:'initiate_scans' %}
-						<a class="disabled btn btn-soft-danger" data-button="subdomain_btns" data-toggle="tooltip" data-placement="top" title="Delete Multiple Subdomains" onclick="deleteMultipleSubdomains()">
-							<i class="fe-trash"></i>
-							Delete Multiple Subdomains
-						</a>
-						{% endif %}
-						<div class="ms-2 mt-2" id="">
-							<a href="#" class="badge badge-soft-primary" id="subdomain_selected_count" onclick="uncheckSubdomains()"  data-toggle="tooltip" data-placement="top" title="Clear Subdomains"></a>
+					<div class="col-8 float-start d-flex align-items-center flex-wrap gap-1">
+						<span class="small text-muted me-1">Bulk actions:</span>
+						<div class="btn-group" role="group">
+							{% if user|can:'initiate_scans' %}
+							<a class="btn btn-sm btn-soft-primary disabled" data-button="subdomain_btns" data-toggle="tooltip" title="Initiate multiple subscans" aria-label="Initiate multiple subscans" onclick="initiateMultipleSubscan(); return false;"><i class="fe-zap"></i></a>
+							{% endif %}
+							<a class="btn btn-sm btn-soft-info disabled" data-button="subdomain_btns" data-toggle="tooltip" title="Download selected subdomains" aria-label="Download selected subdomains" onclick="downloadSelectedSubdomains('{% if target_summary %}{{ target.value|escapejs }}{% else %}{{ scan_display_name|escapejs }}{% endif %}'); return false;"><i class="fe-download"></i></a>
+							{% if user|can:'initiate_scans' %}
+							<a class="btn btn-sm btn-soft-danger disabled" data-button="subdomain_btns" data-toggle="tooltip" title="Permanently delete selected subdomains and their dependent recon data" aria-label="Permanently delete selected subdomains and their dependent recon data" onclick="deleteMultipleSubdomains(); return false;"><i class="fe-trash-2"></i></a>
+							{% endif %}
+						</div>
+						<div class="ms-1">
+							<a href="#" class="badge badge-soft-primary" id="subdomain_selected_count" onclick="uncheckSubdomains(); return false;" data-toggle="tooltip" data-placement="top" title="Clear Subdomains" aria-label="Clear selection"></a>
 						</div>
 					</div>
-					<div class="col-6">
-						<div class="btn-group mb-2 float-end dropstart">
-							<button class="btn btn-soft-primary dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Filter Columns">
+					<div class="col-4">
+						<div class="btn-group btn-group-sm mb-2 float-end dropstart">
+							<button class="btn btn-sm btn-soft-primary dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Filter Columns" aria-label="Filter columns">
 								<i class="fe-filter"></i>
 							</button>
 							<div class="dropdown-menu" style="">
@@ -88,43 +77,27 @@
 
 							</div>
 
-							<a class="btn btn-soft-danger ms-1" data-toggle="tooltip" data-placement="top" title="Important Subdomains" id="load_important_subdomain_table_btn">
-								<i class="mdi mdi-alert-rhombus-outline"></i>
-							</a>
-
-							<a class="btn btn-soft-primary ms-2 me-2" data-toggle="tooltip" data-placement="top" title="Reload Subdomains" id="reload_subdomain_table_btn">
-								<i class="fe-refresh-cw"></i>
-							</a>
-
-							<button class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Download Subdomains">
+							<a class="btn btn-sm btn-soft-danger ms-1" data-toggle="tooltip" data-placement="top" title="Toggle important subdomains" id="load_important_subdomain_table_btn" aria-label="Toggle important subdomains" aria-pressed="false"><i class="mdi mdi-alert-rhombus-outline"></i></a>
+							<a class="btn btn-sm btn-soft-primary ms-2 me-2" data-toggle="tooltip" data-placement="top" title="Reload Subdomains" id="reload_subdomain_table_btn" aria-label="Reload"><i class="fe-refresh-cw"></i></a>
+							<button class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Download Subdomains" aria-label="Download">
 								<i class="fe-download"></i>
 							</button>
 							<div class="dropdown-menu" style="">
-								{% if detail_scan %}
-									<a class="dropdown-item" href="javascript:download_subdomains(scan_id={{scan_history_id}}, domain_id=null, domain_name='{{history.domain.name}}')">Download All Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_interesting_subdomains(scan_id={{scan_history_id}}, domain_id=null, domain_name='{{history.domain.name}}');">Download Interesting Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_important_subdomains(scan_id={{scan_history_id}}, domain_id=null, domain_name='{{history.domain.name}}');">Download Important Subdomains</a>
-								{% endif %}
-
-								{% if target_summary %}
-									<a class="dropdown-item" href="javascript:download_subdomains(scan_id=null, domain_id={{target.id}}, domain_name='{{target.name}}')">Download All Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_interesting_subdomains(scan_id=null, domain_id={{target.id}}, domain_name='{{target.name}}');">Download Interesting Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_important_subdomains(scan_id=null, domain_id={{target.id}}, domain_name='{{target.name}}');">Download Important Subdomains</a>
-								{% endif %}
-
-								{% if all_subdomains %}
-									<a class="dropdown-item" href="javascript:download_subdomains()">Download All Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_interesting_subdomains()">Download Interesting Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_important_subdomains()">Download Important Subdomains</a>
-								{% endif %}
+								{% include 'base/_items/_subdomain_download_links.html' %}
 							</div>
 
 						</div>
-						<div class="btn-group mb-2 float-end dropstart">
-							<button class="btn btn-soft-info dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Vulnerability Grouping">
+						<div class="btn-group btn-group-sm mb-2 float-end dropstart">
+							<button class="btn btn-sm btn-soft-info dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Vulnerability Grouping" aria-label="Grouping">
 								<i class="fe-layout"></i>
 							</button>
 							<div class="dropdown-menu" style="">
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="radio" id="subdomain_group_none" name="grouping_subd_row" class="form-check-input" value="" checked>
+										<label class="form-check-label" for="subdomain_group_none">None</label>
+									</div>
+								</div>
 								<div class="dropdown-item">
 									<div class="form-check">
 										<input type="radio" id="subdomain_page_title_grouping" name="grouping_subd_row" class="form-check-input" value="page_title">
@@ -169,11 +142,13 @@
 									<th>Is Important</th>
 									<th>Webserver</th>
 									<th>Content Type</th>
-									<th>Action</th>
+									<th class="col-action">Action</th>
 									<th>Directories Count</th>
 									<th>Subscan Count</th>
 									<th>WAF</th>
 									<th>Attack Surface</th>
+									<th>Verified</th>
+									<th>Sources</th>
 								</tr>
 							</thead>
 						</table>

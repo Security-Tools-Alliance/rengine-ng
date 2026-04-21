@@ -1,0 +1,105 @@
+{% load secator_extras %}
+<div class="workflow-selection">
+  <h5 class="mb-3">
+    <i class="fas fa-project-diagram text-primary me-2"></i>
+    Select Workflow
+  </h5>
+  
+  {% if workflows %}
+    {% with workflow_tags=workflows|workflow_tags_union %}
+    <div class="category-filter mb-4">
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="text-muted me-2">Filter by tag:</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary category-filter-btn active" data-category="all">
+          <i class="fas fa-th-large me-1"></i>All
+          <span class="badge badge-soft-secondary ms-1">{{ workflows|length }}</span>
+        </button>
+        {% for tag in workflow_tags %}
+          <button type="button" class="btn btn-sm category-filter-btn" data-category="{{ tag|lower }}">
+            <i class="fas fa-{{ tag|category_icon }} me-1"></i>
+            {{ tag|title }}
+            {% if tag == 'url' %}
+              <span class="badge badge-soft-primary ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'exploit' %}
+              <span class="badge badge-soft-info ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'ip' %}
+              <span class="badge badge-soft-success ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'dns' %}
+              <span class="badge badge-soft-warning ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'port' %}
+              <span class="badge badge-soft-danger ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'vuln' %}
+              <span class="badge badge-soft-dark ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'pattern' or tag == 'secret' or tag == 'user' or tag == 'waf' %}
+              <span class="badge badge-soft-secondary ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% else %}
+              <span class="badge badge-soft-primary ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% endif %}
+          </button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endwith %}
+
+    <div class="workflow-tiles-container">
+      {% for tag in workflows|workflow_tags_union %}
+        <div class="category-separator" data-category="{{ tag|lower }}">
+          <div class="category-separator-line"></div>
+          <div class="category-separator-label">
+            <i class="fas fa-{{ tag|category_icon }} me-2"></i>
+            {{ tag|title }}
+          </div>
+          <div class="category-separator-line"></div>
+        </div>
+
+        <div class="row mb-4" data-category="{{ tag|lower }}">
+          {% for workflow in workflows %}
+            {% if workflow|workflow_has_tag:tag %}
+              <div class="col-xxl-3 col-xl-4 col-lg-6 col-md-6 col-sm-12 mb-3">
+                <div class="workflow-tile" data-workflow-id="{{ workflow.id }}" data-secator-icon="{{ workflow.name|workflow_icon }}" data-tags="{% if workflow.tags %}{{ workflow.tags|join:' ' }}{% endif %}">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="workflow_id" id="workflow_{{ workflow.id }}_{{ tag }}" value="{{ workflow.id }}" required>
+                    <label class="form-check-label w-100" for="workflow_{{ workflow.id }}_{{ tag }}">
+                      <div class="workflow-tile-content">
+                        <div class="workflow-tile-header">
+                          <div class="tile-icon">
+                            <i class="fas fa-{{ workflow.name|workflow_icon }}"></i>
+                          </div>
+                        </div>
+                        
+                        <div class="workflow-tile-body">
+                          <div class="workflow-tile-title-row">
+                            <h6 class="workflow-tile-title" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ workflow.get_display_name|title }}</strong><br>{{ workflow.long_description }}">{{ workflow.get_display_name }}</h6>
+                            <div class="workflow-tasks-inline">
+                              <span class="workflow-tasks-count">{{ workflow.get_tasks_count }} tasks</span>
+                            </div>
+                          </div>
+                          <p class="workflow-tile-description">{{ workflow.description|truncatechars:80 }}</p>
+                          
+                          {% include "startScan/_items/_secator_tasks_compact.html" with structured_tasks=workflow|get_structured_tasks limit=4 %}
+                        </div>
+                        
+                        <div class="workflow-tile-footer">
+                          <div class="workflow-tile-meta">
+                            <span class="badge badge-soft-{% if workflow.workflow_type == 'builtin' %}primary{% else %}secondary{% endif %}">
+                              {{ workflow.get_workflow_type_display }}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="alert alert-warning">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      No workflows available for this scan type. Please select a different scan type or create custom workflows.
+    </div>
+  {% endif %}
+</div>

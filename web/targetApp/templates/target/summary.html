@@ -4,7 +4,7 @@
 {% load custom_filters %}
 {% block title %}
 {% load mathfilters %}
-Target Summary for {{target.name}}
+Target Summary for {{target.value}}
 {% endblock title %}
 
 {% block custom_js_css_link %}
@@ -13,12 +13,13 @@ Target Summary for {{target.name}}
 <link rel="stylesheet" type="text/css" href="{% static 'plugins/j-map/jquery-jvectormap.css' %}">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/6.6.3/css/flag-icons.min.css" integrity="sha512-uvXdJud8WaOlQFjlz9B15Yy2Au/bMAvz79F7Xa6OakCl2jvQPdHD0hb3dEqZRdSwG4/sknePXlE7GiarwA/9Wg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 <link href="{% static 'plugins/lightbox/css/lightbox.css' %}" rel="stylesheet" />
+<link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
 <li class="breadcrumb-item"><a href="{% url 'list_target' current_project.slug %}">Targets</a></li>
 <li class="breadcrumb-item active">Target Summary</li>
-<li class="breadcrumb-item active" aria-current="page">{{target.name}}</li>
+<li class="breadcrumb-item active" aria-current="page">{{target.value}}</li>
 {% endblock breadcrumb_title %}
 
 {% block page_title %}
@@ -26,28 +27,47 @@ Target Summary
 {% endblock page_title %}
 
 {% block main_content %}
-<span aria-current="page" style="display: none">{{target.name}}</span>
+<span aria-current="page" style="display: none">{{target.value}}</span>
 <div class="row">
 	<div class="col-12">
 		<div class="card">
 			<ul class="nav nav-tabs nav-bordered m-1">
 				<li class="nav-item">
-					<a class="nav-link active" id="pills-summary-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#summary-tab">Home</a>
+					<a class="nav-link active" id="pills-summary-tab" data-bs-toggle="tab" aria-expanded="false" href="#summary-tab">Home</a>
 				</li>
 				<li class="nav-item">
-					<a class="nav-link" id="pills-subdomain-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#subdomain-tab">Subdomains</a>
+					<a class="nav-link" id="pills-domain-tab" data-bs-toggle="tab" aria-expanded="false" href="#domain-tab">Domains</a>
 				</li>
 				<li class="nav-item">
-					<a class="nav-link" id="pills-endpoints-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#endpoints-tab">URLs</a>
+					<a class="nav-link" id="pills-subdomain-tab" data-bs-toggle="tab" aria-expanded="false" href="#subdomain-tab">Subdomains</a>
 				</li>
 				<li class="nav-item">
-					<a class="nav-link" id="pills-vulnerabilities-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#vulnerabilities-tab">Vulnerabilities</a>
+					<a class="nav-link" id="pills-endpoints-tab" data-bs-toggle="tab" aria-expanded="false" href="#endpoints-tab">URLs</a>
 				</li>
+				<li class="nav-item">
+					<a class="nav-link" id="pills-ip-tab" data-bs-toggle="tab" aria-expanded="false" href="#ip-tab">IP Addresses</a>
+				</li>
+				<li class="nav-item interesting-tab-show">
+					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" href="#interesting-tab">Interesting Recon</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" id="pills-vulnerabilities-tab" data-bs-toggle="tab" aria-expanded="false" href="#vulnerabilities-tab">Vulnerabilities</a>
+				</li>
+				{% if exploit_count %}
+				<li class="nav-item">
+					<a class="nav-link" id="pills-exploits-tab" data-bs-toggle="tab" aria-expanded="false" href="#exploits-tab">Exploits</a>
+				</li>
+				{% endif %}
 			</ul>
 		</div>
 	</div>
 </div>
 <input type="hidden" name="summary_identifier" value="{{target.id}}" id="summary_identifier_val">
+<div class="d-flex justify-content-end mb-2">
+	<button type="button" class="btn btn-sm btn-soft-primary" id="btn-target-summary-attack-surface">
+		<i class="mdi mdi-robot-outline me-1"></i> LLM attack surface
+	</button>
+</div>
 
 <div class="tab-content no-padding-tab">
 	<div class="tab-pane show active" id="summary-tab">
@@ -62,7 +82,7 @@ Target Summary
 								</h5>
 								<div class="mt-1">
 									<small>
-										Target <span class="badge badge-soft-primary">{{target.name}}</span> has been scanned <b>{{scan_count}}</b> times.
+										Target <span class="badge badge-soft-primary">{{target.value}}</span> has been scanned <b>{{scan_count}}</b> times.
 										<br>
 										<br>
 										{% if scan_count %}
@@ -76,7 +96,7 @@ Target Summary
 										<li class="completed">
 											<a href="{% url 'detail_scan' current_project.slug scan.id %}">
 												<h5 class="mt-0 mb-1">
-													{{scan.scan_type.engine_name}}
+													{{scan.display_runner_type}}: {{scan.display_scan_name}}
 													{% if scan.scan_status == -1 %}
 													<span class="badge badge-soft-warning float-end">Pending</span>
 													{% elif scan.scan_status == 0 %}
@@ -100,6 +120,8 @@ Target Summary
 													{% endif %}
 												{% endif %}
 												<p class="text-primary">
+													{{scan.get_domain_count}} Domains
+													<span class="me-2">·</span>
 													{{scan.get_subdomain_count}} Subdomains Discovered
 													<span class="float-end text-dark">
 														{% with next_element=recent_scans|next:forloop.counter0 %}
@@ -145,12 +167,13 @@ Target Summary
 										<span class="fe-link-2"></span></span>&nbsp;
 										Related Domains
 									</div>
+									{% if domain_info %}
 									<div class="sub-header">
-										{{target.domain_info.related_domains.all.count}} Domains related to {{target.name}}
+										{{domain_info.related_domains.all.count}} Domains related to {% if domains %}{{ domains.0.name }}{% else %}{{ target.value }}{% endif %}
 									</div>
 								</h5>
 								<div data-simplebar style="max-height: 550px;" class="p-2">
-									{% for domain in target.domain_info.related_domains.all %}
+									{% for domain in domain_info.related_domains.all %}
 										<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add {{domain}} as target." onclick="add_target('{% url 'api:addTarget' %}', '{{current_project.slug}}', '{{domain}}')">{{domain}}</span>
 									{% empty %}
 									<div class="alert alert-warning" role="alert">
@@ -158,6 +181,11 @@ Target Summary
 									</div>
 									{% endfor %}
 								</div>
+									{% else %}
+								<div class="sub-header">No WHOIS data for this target.</div>
+								</h5>
+								<div class="p-2"></div>
+									{% endif %}
 							</div>
 						</div>
 					</div>
@@ -172,12 +200,13 @@ Target Summary
 										<span class="fe-link-2"></span></span>&nbsp;
 										Related TLDs
 									</div>
+									{% if domain_info %}
 									<div class="sub-header">
-										{{target.domain_info.related_tlds.all.count}} TLDs related to {{target.name}}
+										{{domain_info.related_tlds.all.count}} TLDs related to {% if domains %}{{ domains.0.name }}{% else %}{{ target.value }}{% endif %}
 									</div>
 								</h5>
 								<div data-simplebar style="max-height: 450px;" class="p-2">
-									{% for domain in target.domain_info.related_tlds.all %}
+									{% for domain in domain_info.related_tlds.all %}
 										<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add {{domain}} as target." onclick="add_target('{% url 'api:addTarget' %}', '{{current_project.slug}}', '{{domain}}')">{{domain}}</span>
 									{% empty %}
 									<div class="alert alert-warning" role="alert">
@@ -185,6 +214,11 @@ Target Summary
 									</div>
 									{% endfor %}
 								</div>
+									{% else %}
+								<div class="sub-header">No WHOIS data for this target.</div>
+								</h5>
+								<div class="p-2"></div>
+									{% endif %}
 							</div>
 						</div>
 					</div>
@@ -192,10 +226,61 @@ Target Summary
 			</div>
 			<div class="col-xl-9 col-lg-8">
 				<div class="row">
-					<div class="col-xl-3 col-lg-3 col-6">
+					<div class="col-xl-8 col-lg-9 col-12">
+						<div class="card" id="tooltip-container-surface-summary">
+							<div class="card-body" data-stats-panel="attack-surface-summary">
+								<div class="d-flex align-items-center justify-content-between mb-3">
+									<h4 class="mt-0 mb-0 font-16">Attack Surface Summary</h4>
+									<i class="fa fa-info-circle text-muted" data-bs-container="#tooltip-container-surface-summary" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Consolidated metrics for discovered subdomains, endpoints, vulnerabilities and IP addresses."></i>
+								</div>
+								<div class="row g-2">
+									<div class="col-xl-3 col-lg-6 col-12 border-end">
+										<div data-stats-panel="subdomains">
+											<h5 class="font-14 mb-1">Subdomains</h5>
+											<h3 class="text-primary mb-1"><span data-plugin="counterup" data-stat="subdomain-count">{{subdomain_count|intcomma}}</span></h3>
+											<p class="mb-0"><span class="badge badge-soft-success" data-stat="alive-count">Alive: {{alive_count}}</span></p>
+										</div>
+									</div>
+									<div class="col-xl-3 col-lg-6 col-12 border-end">
+										<div data-stats-panel="endpoints">
+											<h5 class="font-14 mb-1">Endpoints</h5>
+											<h3 class="text-primary mb-1"><span data-plugin="counterup" data-stat="endpoint-count">{{endpoint_count|intcomma}}</span></h3>
+											<p class="mb-0"><span class="badge badge-soft-success" data-stat="endpoint-alive-count">Alive Endpoints: {{endpoint_alive_count}}</span></p>
+										</div>
+									</div>
+									<div class="col-xl-3 col-lg-6 col-12 border-end">
+										<div data-stats-panel="vulnerabilities">
+											<h5 class="font-14 mb-1">Vulnerabilities</h5>
+											<h3 class="text-danger mb-1"><span data-plugin="counterup" data-stat="vulnerability-count">{{vulnerability_count|intcomma}}</span></h3>
+											<div data-stat="vulnerability-severity">
+												{% if vulnerability_count > 0 %}
+												<p class="text-muted mb-0 small">
+													<span class="w-title text-danger" data-stat="critical-count">{{critical_count}}</span> Critical, <span class="w-title text-danger" data-stat="high-count">{{high_count}}</span> High, <span class="w-title text-danger" data-stat="medium-count">{{medium_count}}</span> Medium
+													<br>
+													<span class="w-title text-primary" data-stat="low-count">{{low_count}}</span> Low, <span class="w-title text-primary" data-stat="info-count">{{info_count}}</span> Info, <span class="w-title text-primary" data-stat="unknown-count">{{unknown_count}}</span> Unknown
+												</p>
+												{% else %}
+												<p class="text-muted mb-0 small">No vulnerabilities found.</p>
+												{% endif %}
+											</div>
+										</div>
+									</div>
+									<div class="col-xl-3 col-lg-6 col-12">
+										<div data-stats-panel="ips">
+											<h5 class="font-14 mb-1">IP Addresses</h5>
+											<h3 class="text-primary mb-1"><span data-plugin="counterup" data-stat="ip-address-count">{{ip_address_count|intcomma}}</span></h3>
+											<p class="mb-0"><span class="badge badge-soft-success" data-stat="ip-alive-count">Alive IPs: {{ip_alive_count}}</span></p>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="col-xl-4 col-lg-3 col-12">
 						<div class="card" id="tooltip-container">
 							<div class="card-body">
-								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container" data-bs-toggle="tooltip" data-bs-placement="bottom" title="The total times {{target.name}} is scanned."></i>
+								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container" data-bs-toggle="tooltip" data-bs-placement="bottom" title="The total times {{ target.value }} is scanned."></i>
 								<h4 class="mt-0 font-16">Times target is scanned</h4>
 								<h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{scan_count|intcomma}}</span></h2>
 								<br>
@@ -204,356 +289,15 @@ Target Summary
 						</div>
 					</div>
 
-					<div class="col-xl-3 col-lg-3 col-6">
-						<div class="card" id="tooltip-container">
-							<div class="card-body">
-								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Subdomains Discovered by reNgine-ng during this scan"></i>
-								<h4 class="mt-0 font-16">Subdomains Discovered</h4>
-								<h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{subdomain_count|intcomma}}</span></h2>
-								<br>
-								<p class="mb-0"><span class="badge badge-soft-success">Alive Subdomains: {{alive_count}}</span></p>
-							</div>
-						</div>
-					</div>
-
-					<div class="col-xl-3 col-lg-3 col-6">
-						<div class="card" id="tooltip-container1">
-							<div class="card-body">
-								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Endpoints discovered for this target. This includes any URLs discovered."></i>
-								<h4 class="mt-0 font-16">Endpoints Discovered</h4>
-								<h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{endpoint_count|intcomma}}</span></h2>
-								<br>
-								<p class="text-success mb-0"><span class="badge badge-soft-success">Alive Endpoints: {{endpoint_alive_count}}</span></p>
-							</div>
-						</div>
-					</div>
-
-					<div class="col-xl-3 col-lg-3 col-6">
-						<div class="card" id="tooltip-container2">
-							<div class="card-body">
-								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container2" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Vulnerabilities discovered for this target. This will be populated only if vulnerability scan is performed during any scan."></i>
-								<h4 class="mt-0 font-16">Vulnerabilities Discovered</h4>
-								<h2 class="text-danger my-3 text-center"><span data-plugin="counterup">{{vulnerability_count|intcomma}}</span></h2>
-								<p class="text-muted mb-0">
-									<span class="w-title text-danger">{{critical_count}} Critical, {{high_count}} High, {{medium_count}} Medium</span>
-									<br>
-									<span class="w-title text-primary">{{low_count}} Low, {{info_count}} Info Vulnerabilities</span>
-								</p>
-							</div>
-						</div>
-					</div>
-
 				</div>
 				<div class="row">
 					<div class="col-xl-7 col-lg-7 col-12">
-						<div class="card" style="height: 95%">
-							<div class="card-body">
-								<div class="card-widgets">
-									<a href="javascript: fetch_whois( '{% url 'api:whois' %}', '{{target.name}}', true);" data-toggle="tooltip" title="Reload Whois"><i class="mdi mdi-refresh"></i></a>
-								</div>
-								<h4 class="header-title mb-0"><span class="text-primary"><i class="fe-activity"></i></span>&nbsp;Target Information</h4>
-								<div class="row mt-3">
-									<div class="col-sm-3">
-										<div class="nav flex-column nav-pills nav-pills-tab" id="v-pills-tab" role="tablist" aria-orientation="vertical">
-											<a class="nav-link active show mb-1" id="v-pills-domain-tab" data-bs-toggle="pill" href="#v-pills-domain" role="tab" aria-controls="v-pills-domain-tab" aria-selected="true">Domain info</a>
-											<a class="nav-link mb-1" id="v-pills-whois-tab" data-bs-toggle="pill" href="#v-pills-whois" role="tab" aria-controls="v-pills-whois" aria-selected="false">Whois</a>
-											<a class="nav-link mb-1" id="v-pills-dns-tab" data-bs-toggle="pill" href="#v-pills-dns" role="tab" aria-controls="v-pills-dns" aria-selected="false">DNS Records</a>
-											<a class="nav-link mb-1" id="v-pills-nameserver-tab" data-bs-toggle="pill" href="#v-pills-nameserver" role="tab" aria-controls="v-pills-nameserver"aria-selected="false">Nameservers</a>
-											<a class="nav-link mb-1" id="v-pills-history-tab" data-bs-toggle="pill" href="#v-pills-history" role="tab" aria-controls="v-pills-history"aria-selected="false">Historical Ips</a>
-										</div>
-									</div> <!-- end col-->
-									<div class="col-sm-9">
-										<div class="tab-content pt-0">
-											<div class="tab-pane fade active show" id="v-pills-domain" role="tabpanel" aria-labelledby="v-pills-domain-tab" data-simplebar style="min-height: 300px;">
-												{% if not target.domain_info %}
-												<div class="alert alert-danger alert-dismissible fade show" role="alert" id="whois_not_fetched_alert">
-													<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-													WHOIS Record Has not been fetched, would you like to <a href="javascript: fetch_whois('{% url 'api:whois' %}', '{{target.name}}', true);">fetch it now?</a>
-												</div>
-												{% endif %}
-												<div class="alert alert-info alert-dismissible fade show" role="alert" id="whois_fetching_alert" style="display: none">
-													Fetching WHOIS records, Please wait...
-													<div class="spinner-border spinner-border-sm float-end" role="status"></div>
-												</div>
-												<div class="alert alert-success alert-dismissible fade show" role="alert" id="whois_fetched_alert" style="display: none">
-													WHOIS Records have been fetched, please <a href="javascript:location.reload();">reload the page.</a>
-												</div>
-												<div class="row">
-													<div class="col-4">
-														<small class="sub-header">Domain</small>
-														<h5>{{target.name}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Dnssec</small>
-														<h5>{{target.domain_info.dnssec}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Geolocation</small>
-														<h5>{{target.domain_info.geolocation_iso|upper}}<span class="ms-2 fi fi-{{target.domain_info.geolocation_iso|lower}}"></span></h5>
-													</div>
-												</div>
-												<div class="row">
-													<div class="col-4">
-														<small class="sub-header">Created</small>
-														<h5>{{target.domain_info.created}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Updated</small>
-														<h5>{{target.domain_info.updated}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Expires</small>
-														<h5>{{target.domain_info.expires}}</h5>
-													</div>
-												</div>
-												<div class="row">
-													<div class="col-6">
-														<small class="sub-header">Whois Server</small>
-														<h5>{{target.domain_info.whois_server}}</h5>
-													</div>
-												</div>
-												<div class="row">
-													<div class="col-4">
-														<small class="sub-header">Registrar Name</small>
-														<h5>{{target.domain_info.registrar.name}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Registrar Phone</small>
-														<h5>{{target.domain_info.registrar.phone}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Registrar Email</small>
-														<h5>{{target.domain_info.registrar.email}}</h5>
-													</div>
-												</div>
-												{% for status in target.domain_info.domain_statuses.all %}
-													{% if 'prohibited' in status.name %}
-														<span class="badge badge-soft-danger mt-1">{{status.name}}</span>
-													{% else %}
-														<span class="badge badge-soft-success mt-1">{{status.name}}</span>
-													{% endif %}
-												{% endfor %}
-											</div>
-											<div class="tab-pane fade" id="v-pills-whois" role="tabpanel" aria-labelledby="v-pills-whois-tab">
-												<ul class="nav nav-tabs nav-bordered nav-justified">
-													<li class="nav-item">
-														<a href="#registrant-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link active">
-															Registrant
-														</a>
-													</li>
-													<li class="nav-item">
-														<a href="#admin-tab" data-bs-toggle="tab" aria-expanded="true" class="nav-link">
-															Administrative
-														</a>
-													</li>
-													<li class="nav-item">
-														<a href="#technical-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-															Technical
-														</a>
-													</li>
-												</ul>
-												<div class="tab-content">
-													<div class="tab-pane active" id="registrant-tab">
-														<div class="table-responsive">
-															<table class="table mb-0">
-																<tbody>
-																	<tr class="table-info">
-																		<td><b>ID</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{target.domain_info.registrant.id_str}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Name</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{target.domain_info.registrant.name}}</td>
-																	</tr>
-																	<tr class="table-primary">
-																		<td><b>Organization</b></td>
-																		<td><span class="fe-briefcase"></span>&nbsp;{{target.domain_info.registrant.organization}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Email</b></td>
-																		<td><span class="fe-mail"></span>&nbsp;{{target.domain_info.registrant.email}}</td>
-																	</tr>
-																	<tr class="table-info">
-																		<td><b>Phone/Fax</b></td>
-																		<td>
-																			{% if target.domain_info.registrant.phone %}
-																			<span class="fe-phone"></span>&nbsp;{{target.domain_info.registrant.phone}}
-																			{% endif %}
-																			{% if target.domain_info.registrant.fax %}
-																			<span class="fe-printer"></span>&nbsp;{{target.domain_info.registrant.fax}}
-																			{% endif %}
-																		</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Address</b></td>
-																		<td><span class="fe-home"></span>&nbsp;{{target.domain_info.registrant.address}}</td>
-																	</tr>
-																	<tr class="table-danger">
-																		<td><b>Address</b></td>
-																		<td><b>City: </b>{{target.domain_info.registrant.city}} <b>State: </b>{{target.domain_info.registrant.state}} <b>Zip Code: </b>{{target.domain_info.registrant.zip_code}} <b>Country:
-																		</b>{{target.domain_info.registrant.country}} </td>
-																	</tr>
-																</tbody>
-															</table>
-														</div>
-													</div>
-													<div class="tab-pane" id="admin-tab">
-														<div class="table-responsive">
-															<table class="table mb-0">
-																<tbody>
-																	<tr class="table-info">
-																		<td><b>ID</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{target.domain_info.admin.id_str}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Name</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{target.domain_info.admin.name}}</td>
-																	</tr>
-																	<tr class="table-primary">
-																		<td><b>Organization</b></td>
-																		<td><span class="fe-briefcase"></span>&nbsp;{{target.domain_info.admin.organization}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Email</b></td>
-																		<td><span class="fe-mail"></span>&nbsp;{{target.domain_info.admin.email}}</td>
-																	</tr>
-																	<tr class="table-info">
-																		<td><b>Phone/Fax</b></td>
-																		<td>
-																			{% if target.domain_info.admin.phone %}
-																			<span class="fe-phone"></span>&nbsp;{{target.domain_info.admin.phone}}
-																			{% endif %}
-																			{% if target.domain_info.admin.fax %}
-																			<span class="fe-printer"></span>&nbsp;{{target.domain_info.admin.fax}}
-																		</td>
-																		{% endif %}
-																	</tr>
-																	<tr class="">
-																		<td><b>Address</b></td>
-																		<td><span class="fe-home"></span>&nbsp;{{target.domain_info.admin.address}}</td>
-																	</tr>
-																	<tr class="table-danger">
-																		<td><b>Address</b></td>
-																		<td><b>City: </b>{{target.domain_info.admin.city}} <b>State: </b>{{target.domain_info.admin.state}} <b>Zip Code: </b>{{target.domain_info.admin.zip_code}} <b>Country:
-																		</b>{{target.domain_info.admin.country}} </td>
-																	</tr>
-																</tbody>
-															</table>
-														</div>
-													</div>
-													<div class="tab-pane" id="technical-tab">
-														<div class="table-responsive">
-															<table class="table mb-0">
-																<tbody>
-																	<tr class="table-info">
-																		<td><b>ID</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{target.domain_info.admin.id_str}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Name</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{target.domain_info.admin.name}}</td>
-																	</tr>
-																	<tr class="table-primary">
-																		<td><b>Organization</b></td>
-																		<td><span class="fe-briefcase"></span>&nbsp;{{target.domain_info.admin.organization}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Email</b></td>
-																		<td><span class="fe-mail"></span>&nbsp;{{target.domain_info.admin.email}}</td>
-																	</tr>
-																	<tr class="table-info">
-																		<td><b>Phone/Fax</b></td>
-																		<td>
-																			{% if target.domain_info.admin.phone %}
-																			<span class="fe-phone"></span>&nbsp;{{target.domain_info.admin.phone}}
-																			{% endif %}
-																			{% if target.domain_info.admin.fax %}
-																			<span class="fe-printer"></span>&nbsp;{{target.domain_info.admin.fax}}
-																		</td>
-																		{% endif %}
-																	</tr>
-																	<tr class="">
-																		<td><b>Address</b></td>
-																		<td><span class="fe-home"></span>&nbsp;{{target.domain_info.admin.address}}</td>
-																	</tr>
-																	<tr class="table-danger">
-																		<td><b>Address</b></td>
-																		<td><b>City: </b>{{target.domain_info.tech.city}} <b>State: </b>{{target.domain_info.tech.state}} <b>Zip Code: </b>{{target.domain_info.tech.zip_code}} <b>Country:
-																		</b>{{target.domain_info.tech.country}} </td>
-																	</tr>
-																</tbody>
-															</table>
-														</div>
-													</div>
-												</div>
-											</div>
-											<div class="tab-pane fade" id="v-pills-history" role="tabpanel" aria-labelledby="v-pills-history-tab" data-simplebar style="max-height: 300px; min-height: 300px;">
-												{% if target.domain_info.historical_ips.all %}
-												<div class="alert alert-success">{{target.domain_info.historical_ips.all.count}} Historical Ips</div>
-												<table id="basic-datatable" class="table dt-responsive w-100">
-													<thead>
-															<tr>
-																	<th>IP</th>
-																	<th>Location</th>
-																	<th>Owner</th>
-																	<th>Last Seen</th>
-															</tr>
-													</thead>
-													<tbody>
-														{% for ip in target.domain_info.historical_ips.all %}
-														<tr>
-															<td><b>{{ip.ip}}</b></td>
-															<td>{{ip.location}}</td>
-															<td>{{ip.owner}}</td>
-															<td>{{ip.last_seen}}</td>
-														</tr>
-														{% endfor %}
-													</tbody>
-												</table>
-												{% else %}
-												<div class="alert alert-info">No historical IPs found!</div>
-												{% endif %}
-											</div>
-											<div class="tab-pane fade" id="v-pills-dns" role="tabpanel" aria-labelledby="v-pills-dns-tab" data-simplebar style="min-height: 300px;">
-												<h4>A Records</h4>
-												{% for dns in target.domain_info.dns_records.all %}
-													{% if dns.type == 'a' %}
-														<span class="badge badge-soft-primary me-1 mt-1">{{ dns }}</span>
-													{% endif %}
-												{% endfor %}
-												<h4>MX Records</h4>
-												{% for dns in target.domain_info.dns_records.all %}
-													{% if dns.type == 'mx' %}
-														<span class="badge badge-soft-primary me-1 mt-1">{{ dns }}</span>
-													{% endif %}
-												{% endfor %}
-												<h4>TXT Records</h4>
-												{% for dns in target.domain_info.dns_records.all %}
-													{% if dns.type == 'txt' %}
-														<span class="badge badge-soft-secondary me-1 mt-1">{{ dns }}</span>
-													{% endif %}
-												{% endfor %}
-											</div>
-											<div class="tab-pane fade" id="v-pills-nameserver" role="tabpanel" aria-labelledby="v-pills-nameserver-tab" data-simplebar style="max-height: 300px; min-height: 300px;">
-												{% if target.domain_info.name_servers.all %}
-													<div class="alert alert-success">{{target.domain_info.name_servers.all.count}} NameServers identified</div>
-													{% for nameserver in target.domain_info.name_servers.all %}
-														<span class="badge badge-soft-primary me-1 mt-1">{{ nameserver}}</span>
-													{% endfor %}
-												{% else %}
-													<div class="alert alert-info">No NameServers identified</div>
-												{% endif %}
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
+						{% include 'base/_items/domain_summary_table.html' with domains=domains title="Target domains" card_style="height: 95%" %}
 					</div>
 					<div class="col-xl-5 col-lg-5 col-12">
 						<div class="card" style="height: 95%">
 							<div class="card-body">
-								<h4 class="header-title mb-0">HTTP Status Breakdown</h4>
+								<h4 class="header-title mb-0">HTTP Status (web server endpoints)</h4>
 								<div id="http_status_chart" class="apex-charts"></div>
 							</div>
 						</div>
@@ -713,9 +457,104 @@ Target Summary
 <div class="tab-pane" id="endpoints-tab">
 	{% include 'base/_items/endpoint_tab_content.html' with target_summary=True%}
 </div>
+<div class="tab-pane" id="ip-tab">
+	{% include 'base/_items/ip_address_tab_content.html' with target_summary=True %}
+</div>
+
+{% if exploit_count %}
+<div class="tab-pane" id="exploits-tab">
+	<div class="card">
+		<div class="card-body">
+			<h4 class="header-title mb-0">Exploits</h4>
+			{% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='exploitQuickSearch' %}
+			<table id="exploit_results" class="table dt-responsive w-100">
+				<thead>
+					<tr>
+						<th>ID</th>
+						<th>Name</th>
+						<th>Exploit ID</th>
+						<th>Provider</th>
+						<th>Discovered</th>
+						<th>URL</th>
+						<th>IP</th>
+						<th>Domain</th>
+						<th>CVE IDs</th>
+						<th>Tags</th>
+						<th>Extra</th>
+					</tr>
+				</thead>
+				<tfoot>
+					<tr>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="0" placeholder="ID" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="1" placeholder="Name" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="2" placeholder="Exploit ID" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="3" placeholder="Provider" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="4" placeholder="Discovered" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="5" placeholder="URL" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="6" placeholder="IP" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="7" placeholder="Domain" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="8" placeholder="CVE IDs" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="9" placeholder="Tags" type="text"></th>
+						<th><input class="form-control form-control-sm datatable-column-search" data-column-index="10" placeholder="Extra" type="text"></th>
+					</tr>
+				</tfoot>
+			</table>
+		</div>
+	</div>
+</div>
+{% endif %}
+
+<div class="tab-pane interesting-tab-show" id="interesting-tab">
+	<div class="row">
+		<div class="col-xl-12">
+			<div class="card" id="interesting_subdomain_div">
+				<div class="card-body">
+					<h4 class="header-title mb-0"><span id="interesting_subdomain_count_badge"><span class="spinner-border spinner-border-sm me-1"></span></span> Interesting Subdomains</h4>
+					<table id="interesting_subdomains" class="table dt-responsive w-100">
+						<thead>
+							<tr>
+								<th>Subdomain</th>
+								<th>Page Title</th>
+								<th>HTTP Status</th>
+								<th>Content Length</th>
+								<th>HTTP URL</th>
+								<th>Tech Stack</th>
+							</tr>
+						</thead>
+					</table>
+				</div>
+			</div>
+		</div>
+		<div class="col-xl-12" id="interesting_endpoint_div">
+			<div class="card">
+				<div class="card-body">
+					<h4 class="header-title mb-0"><span id="interesting_endpoint_count_badge"><span class="spinner-border spinner-border-sm me-1"></span></span> Interesting Endpoints</h4>
+					<table id="interesting_endpoints" class="table dt-responsive w-100">
+						<thead>
+							<tr>
+								<th>URL</th>
+								<th>Page Title</th>
+								<th>HTTP Status</th>
+								<th>Tags</th>
+								<th>Content Type</th>
+								<th>Content Length</th>
+								<th>Response Time</th>
+								<th>Screenshot</th>
+							</tr>
+						</thead>
+					</table>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
 
 <div class="tab-pane" id="vulnerabilities-tab">
 	{% include 'base/_items/vulnerability_tab_content.html' %}
+</div>
+
+<div class="tab-pane" id="domain-tab">
+	{% include 'base/_items/domain_cards_tab.html' with domains=domains %}
 </div>
 
 </div>
@@ -723,38 +562,87 @@ Target Summary
 {% include "base/_items/recon_note_modal.html" %}
 {% include "base/_items/subscan_modal.html" %}
 
-{# for passing subdomain id to initiate subtask scan #}
+{# for passing subdomain id and target id to subscan modal (launch uses target_id only) #}
 <input type="hidden" name="subtask_subdomain_id" id="subtask_subdomain_id" value="0">
+<input type="hidden" name="subtask_ip_address_id" id="subtask_ip_address_id" value="0">
+<input type="hidden" name="target_id" id="context_target_id" value="{{ target.id }}">
 
 {% endblock main_content %}
 
 {% block page_level_script %}
+<script>
+window.DETAIL_SCAN_API_CERTIFICATES_LIST = "{% url 'api:certificates_list' %}";
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.29.0/apexcharts.min.js" integrity="sha512-fe6OklXva8AWoqdwgkE7Ni4uWgHGWxFQWZx4lYehzY2Qrst5YfogjAbnLd6egsoTrnjGI9/LYt1Ont2cKNbP2A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://apexcharts.com/samples/assets/irregular-data-series.js"></script>
 <script src="https://apexcharts.com/samples/assets/ohlc.js"></script>
-<script src="{% static 'custom/custom.js' %}"></script>
 <script src="{% static 'custom/subdomain.js' %}"></script>
 <script src="{% static 'custom/todo.js' %}"></script>
 <script src="{% static 'note/js/todo.js' %}"></script>
 <script src="{% static 'assets/js/clipboard.min.js' %}"></script>
 <script src="{% static 'targetApp/js/target_summary.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
-<script src="{% static 'startScan/js/subdomains-suggestions.js' %}"></script>
-<script src="{% static 'startScan/js/endpoint-datatables-suggestions.js' %}"></script>
+<script src="{% static 'plugins/select2/select2.min.js' %}"></script>
+{% include 'shared/_advanced_search_scripts.html' %}
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
+<script src="{% static 'custom/datatables/ip_scan_table_handlers.js' %}"></script>
+<script src="{% static 'custom/datatables/selection_helpers.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_detail_ip_table.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_target_subdomain_table.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_target_exploit_table.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_target_vulnerability_table.js' %}"></script>
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
-<script src="{% static 'startScan/js/vulnerability-datatables-suggestions.js' %}"></script>
 <script src="{% static 'plugins/j-map/jquery-jvectormap.min.js' %}"></script>
 <script src="{% static 'plugins/j-map/maps/jquery-jvectormap-world-mill-en.js' %}"></script>
-<script src="{% static 'custom/vuln_datatables.js' %}"></script>
-<script src="{% static 'custom/subdomain_datatable.js' %}"></script>
+{{ ip_addresses_payload|json_script:"rengine-target-summary-ip-addresses" }}
 <script type="text/javascript">
+const subdomain_datatable_columns = (window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS || []).map(function(col) {
+	if (col && col.name === 'vuln_count') return Object.assign({}, col, { visible: false });
+	return col;
+});
+const vuln_datatable_columns = window.RENGINE_VULN_DATATABLE_COLUMNS || [];
+const exploit_datatable_columns = window.RENGINE_EXPLOIT_DATATABLE_COLUMNS || [];
+const subdomain_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
+const vuln_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
+
 $(document).ready(function(){
 	{% include 'base/_items/most_common_cve_cwe_tags.js' %}
+	$('#btn-target-summary-attack-surface').on('click', function () {
+		const endpoint = window.RengineTargetEntityKind && typeof window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls === 'function'
+			? window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls()
+			: null;
+		if (!endpoint || typeof show_attack_surface_modal !== 'function') {
+			return;
+		}
+		const tid = $('#summary_identifier_val').val();
+		show_attack_surface_modal(endpoint, tid, 'target');
+	});
 	const ps = new PerfectScrollbar(document.querySelector('.mt-container'));
 	const ps1 = new PerfectScrollbar(document.querySelector('.endpoint-search'));
 	const ps2 = new PerfectScrollbar(document.querySelector('.vulnerability-search'));
-	$('[data-toggle="tooltip"]').tooltip();
+	if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('[data-toggle="tooltip"]'));
+
+	$('a[href="#interesting-tab"]').on('shown.bs.tab', function () {
+		if (window._interestingTablesInitialized) return;
+		window._interestingTablesInitialized = true;
+		if (typeof get_interesting_subdomains === 'function') {
+			get_interesting_subdomains('{% url "api:interesting-subdomains-list" %}', '{{ current_project.slug|escapejs }}', {{ target.id }}, null, { querySubdomainsUrl: '{% url "api:querySubdomains" %}' });
+		}
+		if (typeof get_interesting_endpoints === 'function') {
+			get_interesting_endpoints('{% url "api:interesting-endpoints-list" %}', '{{ current_project.slug|escapejs }}', {{ target.id }}, null, { endpointSubdomainUrl: '{% url "api:querySubdomains" %}' });
+		}
+	});
 	// HTTP STATUS Breakdown chart
 	// depending on http_status_breakdown, generate color
 	var colors = [
@@ -772,9 +660,9 @@ $(document).ready(function(){
 	// http_status chart
 	var options = {
 		series: [{
-			name: 'Subdomains',
+			name: 'Web server endpoints',
 			data: [{% for status in http_status_breakdown %}
-				{{status.http_status__count}},
+				{{ status.http_status__count|floatformat:0 }},
 				{% endfor %}]
 			}],
 			chart: {
@@ -810,6 +698,11 @@ $(document).ready(function(){
 						colors: colors,
 						fontSize: '12px'
 					}
+				}
+			},
+			yaxis: {
+				labels: {
+					formatter: function(val) { return Math.round(val); }
 				}
 			}
 		};
@@ -903,762 +796,78 @@ $(document).ready(function(){
 		options
 	);
 	chart.render()
-
-	$("#pills-subdomain-tab").click(function() {
-		// prevent table loading twice
-		// https://datatables.net/manual/tech-notes/3
-		if ( $.fn.dataTable.isDataTable( '#subdomain_scan_results' ) ) {
-			return false;
-		}
-		var subdomain_ajax_url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&target_id={{target.id}}&format=datatables';
-		var is_subd_grouping = false;
-		var subd_grouping_col = 8;
-		var subdomain_datatables = $('#subdomain_scan_results').DataTable({
-			"headerCallback": function(e, a, t, n, s) {
-				e.getElementsByTagName("th")[0].innerHTML='<div class="form-check ms-1 form-check-primary"><input type="checkbox" class="float-start form-check-input chk-parent" id="head_checkbox" onclick=mainCheckBoxSelected(this)>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>\n'
-			},
-			"destroy": false,
-			"processing": true,
-			"oLanguage": subdomain_oLanguage,
-			"fnCreatedRow": function (nRow, aData, iDataIndex) {
-				$(nRow).attr('id', 'subdomain_row_' + aData['id']);
-			},
-			"stripeClasses": [],
-			"lengthMenu": subdomain_datatable_length_menu,
-			"pageLength": subdomain_datatable_page_length,
-			'serverSide': true,
-			"ajax": {
-					'url': subdomain_ajax_url,
-			},
-			"rowGroup": {
-				"startRender": function(rows, group) {
-					return group + ' (' + rows.count() + ' Subdomains)';
-				}
-			},
-			"order": [[ 8, "desc" ]],
-			"columns": subdomain_datatable_columns,
-			"columnDefs": [
-				{ 
-					"orderable": false, 
-					"targets": [
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns),
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns) + 1,
-						get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
-						get_datatable_col_index('ip_addresses', subdomain_datatable_columns) + 1,
-						get_datatable_col_index('content_length', subdomain_datatable_columns)
-					]
-				},
-				{
-					"targets": [ 
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns),
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns) + 1,
-						get_datatable_col_index('technologies', subdomain_datatable_columns),
-						get_datatable_col_index('http_url', subdomain_datatable_columns),
-						get_datatable_col_index('cname', subdomain_datatable_columns),
-						get_datatable_col_index('is_interesting', subdomain_datatable_columns),
-						get_datatable_col_index('info_count', subdomain_datatable_columns),
-						get_datatable_col_index('low_count', subdomain_datatable_columns),
-						get_datatable_col_index('medium_count', subdomain_datatable_columns),
-						get_datatable_col_index('high_count', subdomain_datatable_columns),
-						get_datatable_col_index('critical_count', subdomain_datatable_columns),
-						get_datatable_col_index('todos_count', subdomain_datatable_columns),
-						get_datatable_col_index('webserver', subdomain_datatable_columns),
-						get_datatable_col_index('content_type', subdomain_datatable_columns),
-						get_datatable_col_index('directories_count', subdomain_datatable_columns),
-						get_datatable_col_index('subscan_count', subdomain_datatable_columns),
-						get_datatable_col_index('waf', subdomain_datatable_columns),
-						get_datatable_col_index('attack_surface', subdomain_datatable_columns)
-					],
-					"visible": false,
-					"searchable": false,
-				},
-				{
-					"targets": [ 
-						get_datatable_col_index('technologies', subdomain_datatable_columns),
-						get_datatable_col_index('cname', subdomain_datatable_columns),
-						get_datatable_col_index('is_important', subdomain_datatable_columns),
-						get_datatable_col_index('webserver', subdomain_datatable_columns),
-						get_datatable_col_index('content_type', subdomain_datatable_columns)
-					],
-					"visible": false,
-					"searchable": true,
-				},
-				{
-					"className": "text-center", 
-					"targets": [
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns),
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns) + 1,
-						get_datatable_col_index('http_status', subdomain_datatable_columns),
-						get_datatable_col_index('content_length', subdomain_datatable_columns),
-						get_datatable_col_index('response_time', subdomain_datatable_columns)
-					]
-				},
-				// checkbox
-				{
-					"targets":0, "width":"20px", "className":"", "orderable":!1, render:function(e, a, t, n) {
-						return'<div class="form-check ms-1 form-check-primary"><input type="checkbox" name="subdomain_checkbox['+ e + ']" class="float-start form-check-input subdomain_checkbox" value="' + e + '" onchange=toggleMultipleSubdomainButton()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>';
-					}},
-					// subdomain Name
-					{
-						"render": function ( data, type, row ) {
-							var badges = '';
-							var tech_badge = '';
-							var interesting_badge = '';
-							var content_type = '';
-							var web_server = '';
-							var waf_badge = '';
-							if (row['technologies']){
-								tech_badge = '<div>' + parse_technology('{% url 'api:querySubdomains' %}', row['technologies'], "primary", scan_id=null, domain_id=null) + '</div>';
-							}
-							if(row['is_interesting'])
-							{
-								interesting_badge = `<div><span class='me-1 badge badge-soft-danger' data-toggle="tooltip" data-placement="top" title="Interesting Subdomain">Interesting</span></div>`;
-							}
-
-							if (row['content_type']) {
-								content_type = `<div><span class='mt-1 badge badge-soft-blue bs-tooltip' title="Content Type">${row['content_type']}</span></div>`;
-							}
-
-							if (row['webserver']) {
-								web_server = `<div><span class='mt-1 badge badge-soft-info bs-tooltip' title="Web Server">${row['webserver']}</span></div>`;
-							}
-
-							if (interesting_badge) {
-								badges =   interesting_badge;
-							}
-
-							todo_icon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e7515a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`;
-							todo_badge = '';
-
-							if (row['todos_count']) {
-								todo_badge = `<span class="text-danger badge badge-link badge-soft-danger float-end mt-1" onclick="list_subdomain_todos(${row['id']}, '${row['name']}')">${todo_icon}&nbsp;${row['todos_count']} Todos&nbsp;</span>`
-							}
-
-							endpoint_count_badge = '';
-							if (row['endpoint_count']) {
-								endpoint_count_badge = `<span class="pl-2 pr-2 me-1 badge badge-soft-primary badge-link bs-tooltip" title="Endpoints" onclick="get_endpoint_modal('{% url 'api:endpoints-list' %}', '{{current_project.slug}}', null, ${row['id']}, '${row['name']}')">${row['endpoint_count']} <i class=" fas fa-link"></i></span>`;
-							}
-
-							if(row['waf'].length){
-								waf_badge = `<div><span class="pl-2 pr-2 my-1 badge badge-soft-danger" bs-tooltip" title="WAF Detected by wafw00f!""><i class="fe-cloud-lightning mx-1"></i>WAF Detected</span>`;
-								for (var waf in row['waf']) {
-									var waf_object = row['waf'][waf];
-									waf_badge += `<span class="mx-1 my-1 badge badge-soft-danger" bs-tooltip" title="WAF Manufacturer: ${waf_object.manufacturer}">${waf_object.name}</span>`;
-								}
-								waf_badge += `</div>`;
-							}
-
-							vuln_count_badge = '';
-							total_vuln_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link' title="All Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count']} <i class="fas fa-bug"></i></span>`;
-							info_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-info bs-tooltip badge-link' title="Informational Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=0, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count']} Info</span>`;
-							low_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-low bs-tooltip badge-link' title=" Low Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=1, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['low_count']} Low</span>`;
-							medium_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-warning bs-tooltip badge-link' title="Medium Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=2, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['medium_count']} Med</span>`;
-							high_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-danger bs-tooltip badge-link' title="High Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=3, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['high_count']} High</span>`;
-							critical_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link' title="Critical Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=4, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['critical_count']} Critical</span>`;
-							vuln_count_badge = `<div class="">` + (row['info_count'] > 0? info_badge : '') + (row['low_count'] > 0? low_badge : '') + (row['medium_count'] > 0? medium_badge : '') + (row['high_count'] > 0? high_badge : '') + (row['critical_count'] > 0? critical_badge : '') + `</div>`;
-
-							vuln_count_badge = (row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count'] > 0? total_vuln_badge : '') + vuln_count_badge;
-
-							copy_icon = `
-							<a href="javascript:;" data-clipboard-action="copy" class="action-icon copyable" data-toggle="tooltip" data-placement="top" title="Copy Subdomain!" data-clipboard-target="#subdomain-${row['id']}" id="#subdomain-${row['id']}" onclick="setTooltip(this.id, 'Copied!')"> <i class="text-primary mdi mdi-content-copy"></i></a>
-							`;
-
-							var directory_count_badge = '';
-							if (row['directories_count']){
-								directory_count_badge = `<span class="me-1 badge badge-soft-primary badge-link bs-tooltip" title="Directories" onclick="get_directory_modal('{% url 'api:directories-list' %}', scan_id=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['directories_count']} <i class="far fa-folder"></i></span>`;
-							}
-
-							var subscan_count_badge = '';
-							if (row['subscan_count']){
-								subscan_count_badge = `<span class="badge me-1 badge-soft-blue badge-link bs-tooltip" title="SubScans" onclick="get_and_render_subscan_history('{% url 'api:listSubScans' %}', ${row['id']}, '${row['name']}')">${row['subscan_count']} <i class="fas fa-history"></i></span>`;
-							}
-
-							tech_badge += content_type;
-							tech_badge += web_server;
-
-							end_vuln_badge = '<div class="">' + subscan_count_badge + endpoint_count_badge + directory_count_badge + vuln_count_badge + '</div>';
-
-							if (row['http_url']) {
-								if (row['cname']) {
-									cname_badge = `<div><span class="text-dark">CNAME<br><span class="text-warning"> ❯ </span>` + row['cname'].replace(',', '<br><span class="text-warning"> ❯ </span>') + `</div>`;
-									return badges + `<div class="clipboard copy-txt"><a href="`+row['http_url']+`" class="text-primary" target="_blank"><span id='subdomain-${row['id']}'>` + data  +`${copy_icon} </span></a>`+ `</div>` + cname_badge + waf_badge  + end_vuln_badge + tech_badge + todo_badge;
-								}
-								return badges + `<div class="clipboard copy-txt"><a href="`+row['http_url']+`" class="text-primary" target="_blank"><span id='subdomain-${row['id']}'>` + data + `${copy_icon} </span></a>` + `</div>` + waf_badge + end_vuln_badge + tech_badge + todo_badge;
-							}
-							return badges + `<div class="clipboard copy-txt"><a href="https://`+data+`" class="text-primary" target="_blank"><span id='subdomain-${row['id']}'>` + data + `${copy_icon} </span></a>` + `</div>` + waf_badge + end_vuln_badge + tech_badge + todo_badge;
-						},
-						"targets": 1
-					},
-					// vulnerability count
-					{
-						"render": function ( data, type, row ) {
-							if (row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count'] > 0) {
-								return `<span class='badge badge-critical bs-tooltip badge-link' title="All Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count']} <i class="fas fa-bug"></i></span>`;
-							}
-							return "";
-						},
-						"targets": get_datatable_col_index('vuln_count', subdomain_datatable_columns),
-					},
-					// http_status
-					{
-						"render": function ( data, type, row ) {
-							// display badge based on http status
-							// green for http status 2XX, orange for 3XX and warning for everything else
-							if (data >= 200 && data < 300) {
-								return "<span class='badge bg-success'>"+data+"</span>";
-							}
-							else if (data >= 300 && data < 400) {
-								return "<span class='badge bg-warning'>"+data+"</span>";
-							}
-							else if (data == 0){
-								// datatable throws error when no data is returned
-								return "";
-							}
-							return `<span class='badge bg-danger'>`+data+`</span>`;
-						},
-						"targets": get_datatable_col_index('http_status', subdomain_datatable_columns),
-					},
-					// page title
-					{
-						"render": function ( data, type, row ) {
-							if (data){
-								return htmlEncode(data);
-							}
-							return "";
-						},
-						"targets": get_datatable_col_index('page_title', subdomain_datatable_columns),
-					},
-					// ip address
-					{
-						"render": function ( data, type, row ) {
-							ip_badge = ''
-							if (data)
-							{
-								Object.entries(data).forEach(([key, value]) => {
-									if (value['is_cdn']) {
-										ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', null, {{target.id}})">${value.address}</span>`
-									}
-									else{
-											ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', null, {{target.id}})">${value.address}</span>`
-									}
-								});
-								return ip_badge;
-							}
-							return "";
-						},
-						"targets": get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
-					},
-					// open ports
-					{
-						"render": function ( data, type, row ) {
-							return renderBadge(data, {
-								api_ips_url: '{% url 'api:listIPs' %}',
-								api_subdomains_url: '{% url 'api:querySubdomains' %}',
-								scan_id: null,
-								domain_id: {{target.id}}
-							});
-						},
-						"targets": get_datatable_col_index('ip_addresses', subdomain_datatable_columns) + 1,
-					},
-					{
-						"render": function ( data, type, row ) {
-							if (data){
-								//return lightbox with caption as http link
-								return data;
-							}
-							return 0;
-						},
-						"targets": get_datatable_col_index('content_length', subdomain_datatable_columns),
-					},
-
-					// response_time
-					{
-						"render": function ( data, type, row ) {
-							if (data){
-								return get_response_time_text(data);
-							}
-							return "";
-						},
-						"targets": get_datatable_col_index('response_time', subdomain_datatable_columns),
-					},
-					// Action
-					{
-						"render": function ( data, type, row ) {
-							const cms_detector_http_url = row['http_url'] ? row['http_url'] : 'https://' + row['name'];
-							return `
-							<div class="btn-group mt-2">
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal('{% url 'api:llm_get_possible_attacks' %}', ${row['id']})"><i class="fe-eye"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" class="btn btn-primary btn-scan-subdomain me-1" id="${row['id']}"><i class="fe-zap"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" class="btn btn-primary me-1" id="${row['id']}" onclick="add_note_for_subdomain(${row['id']}, '${row['name']}', '{{current_project.slug}}')"><i class="fe-file-plus"></i></button>
-							<button class="btn btn-primary me-1 dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-horizontal"></i></button>
-							<div class="dropdown-menu dropdown-menu-end">
-							<a class="dropdown-item" href="#" onclick="mark_important_subdomain('{% url 'api:toggle_subdomain' %}', this, ${row['id']})" id="${row['id']}"><i class="mdi mdi-alert-rhombus-outline me-2 text-muted font-18 vertical-middle"></i>Mark Important Subdomain</a>
-							<a class="dropdown-item detect_subdomain_cms_link" href="#" data-http-status="${row['http_status']}" data-cms-url="${cms_detector_http_url}" data-url="{% url 'api:cms_detector' %}"><i class="fe-grid me-2 text-muted font-18 vertical-middle"></i>Detect CMS</a>
-							<a class="text-danger dropdown-item btn-delete-subdomain" href="#" id="${row['id']}"><i class="text-danger mdi mdi-delete-forever-outline me-2 font-18 vertical-middle"></i>Delete Subdomain</a>
-							</div>
-							</div>
-							`;
-						},
-						"targets": get_datatable_col_index('action', subdomain_datatable_columns),
-					},
-				],
-				"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-				"<'table-responsive'tr>" +
-				"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
-				"initComplete": function(settings, json) {
-					api = this.api();
-					subdomain_datatable_col_visibility(subdomain_datatables);
-					$(".dtrg-group th:contains('No group')").remove();
-				},
-				"drawCallback": function () {
-					$('.badge').tooltip({ template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' })
-					$('.bs-tooltip').tooltip();
-					$('.dtrg-group').remove();
-					drawCallback_api = this.api();
-					setTimeout(function() {
-						$(".dtrg-group th:contains('No group')").remove();
-					}, 1);
-				},
-				"rowCallback": function( row, data, dataIndex ) {
-					if (data['is_important']){
-						$(row).addClass('table-danger');
-					}
-				},
-			});
-
-			var radioGroup = document.getElementsByName('grouping_subd_row');
-			radioGroup.forEach(function(radioButton) {
-				radioButton.addEventListener('change', function() {
-					if (this.checked) {
-						var groupRows = document.querySelectorAll('tr.group');
-						var col_index = get_datatable_col_index(this.value, subdomain_datatable_columns);
-						api.page.len(-1).draw();
-						api.order([col_index, 'asc']).draw();
-						subdomain_datatables.rowGroup().dataSrc(this.value);
-						Snackbar.show({
-							text: 'Subdomains grouped by ' + this.value,
-							pos: 'top-right',
-							duration: 2500
-						});
-					}
-				});
-			});
-			
-		$('#reload_subdomain_table_btn').click(function() {
-			subdomain_datatables.ajax.reload();
-		});
-
-		$('#subdomain-search-button').click(function() {
-			subdomain_datatables.search($("#subdomains-search").val()).draw();
-		});
-
-		$('#load_important_subdomain_table_btn').click(function() {
-			subdomain_datatables.search('is_important=true').draw();
-		});
-
-		// Use the helper function from subdomain_datatable.js
-		subdomain_datatable_col_visibility(subdomain_datatables);
-
-		$("#subdomain_scan_results").on('click', '.btn-delete-subdomain', function() {
-			var subdomain_id = $(this).attr('id');
-			var data = {
-				'subdomain_ids': [subdomain_id]
-			};
-			var row = this;
-			Swal.fire({
-				showCancelButton: true,
-				title: 'Delete Subdomain!',
-				text: 'Do you really want to delete this subdomain? This action cannot be undone.',
-				icon: 'error',
-				confirmButtonText: 'Delete',
-			}).then((result) => {
-				if (result.isConfirmed) {
-					Swal.fire({
-						title: 'Deleting Subdomain...',
-						allowOutsideClick: false
-					});
-					swal.showLoading();
-					fetch('/api/action/subdomain/delete/', {
-							method: 'POST',
-							credentials: "same-origin",
-							headers: {
-								"X-CSRFToken": getCookie("csrftoken"),
-								'Content-Type': 'application/json'
-							},
-							body: JSON.stringify(data)
-						})
-						.then(response => response.json())
-						.then(function(response) {
-							swal.close();
-							if (response['status']) {
-								$(row).parent().parent().parent().remove();
-								Snackbar.show({
-									text: 'Subdomain successfully deleted!',
-									pos: 'top-right',
-									duration: 2500
-								});
-							} else {
-								Swal.fire({
-									title: 'Could not delete Subdomain!',
-									icon: 'fail',
-								});
-							}
-						});
-				}
-			});;
-			$('a[data-toggle="tooltip"]').tooltip("hide")
-		});
-
-		$("#subdomain_scan_results").on('click', '.btn-scan-subdomain', function() {
-			$('input[type=checkbox]').prop('checked', false);
-			$('#subscan-modal').modal('show');
-			var subdomain_id = $(this).attr('id');
-			$('a[data-toggle="tooltip"]').tooltip("hide")
-			$('#subtask_subdomain_id').val(subdomain_id);
-			// to distinguish multiple subscan or single, put a extra attribute on button
-			$('#btn-initiate-subtask').attr('multiple-subscan', false);
-		});
-
+	window.registerScanTargetSubdomainTab({
+		mode: 'target',
+		ajaxUrl: '{% url "api:subdomain-datatable-list" %}?project={{ current_project.slug|escapejs }}&target_id={{ target.id }}&format=datatables',
+		projectSlug: '{{ current_project.slug|escapejs }}',
+		columns: subdomain_datatable_columns,
+		lengthMenu: subdomain_datatable_length_menu,
+		nameColumnTarget: 'name:name',
+		useInlineNote: false,
+		scanHistoryId: null,
+		endpointModalScanId: null,
+		certificateScanId: null,
+		targetId: {{ target.id }},
+		registerAdvancedSearch: false,
+		clearSubtaskIpOnSubscan: false,
+		deleteRemoveParentDepth: 3,
+		swalDeleteFailIcon: 'fail',
+		urls: {
+			querySubdomains: '{% url "api:querySubdomains" %}',
+			endpointsList: '{% url "api:endpoints-list" %}',
+			vulnerabilitiesList: '{% url "api:vulnerabilities-list" %}',
+			directoriesList: '{% url "api:directories-list" %}',
+			listSubScans: '{% url "api:listSubScans" %}',
+			getIpDetails: '{% url "api:getIpDetails" %}',
+			listIPs: '{% url "api:listIPs" %}',
+		},
 	});
 
 	$("#pills-endpoints-tab").click(function() {
-		get_endpoints('{% url 'api:endpoints-list' %}', '{% url 'api:subdomains-list' %}', project='{{current_project.slug}}', scan_history=null, domain_id={{target.id}}, gf_tags=null);
+		get_endpoints('{% url "api:endpoints-list" %}', '{% url "api:subdomains-list" %}', project='{{current_project.slug}}', scan_history=null, domain_id={{target.id}}, gf_tags=null);
 	});
 
-	$("#pills-vulnerabilities-tab").click(function() {
-		// prevent table loading twice
-		// https://datatables.net/manual/tech-notes/3
-		if ( $.fn.dataTable.isDataTable( '#vulnerability_results' ) ) {
-			return false;
-		}
-		var is_grouping = false;
-		var grouping_col = 3;
-		var vuln_ajax_url = '{% url 'api:vulnerabilities-list' %}?target_id={{target.id}}&format=datatables';
-		var vulnerability_table = $('#vulnerability_results').DataTable({
-			"destroy": false,
-			"oLanguage": {
-				"oPaginate": {
-					"sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
-					"sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>'
-				},
-				"sInfo": "Showing page _PAGE_ of _PAGES_",
-				"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-				"sSearchPlaceholder": "Search...",
-				"sLengthMenu": "Results :  _MENU_",
-			},
-			"processing": true,
-			"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-			"<'table-responsive'tr>" +
-			"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
-			"stripeClasses": [],
-			"lengthMenu": vuln_datatable_length_menu,
-			"pageLength": vuln_datatable_page_length,
-			'serverSide': true,
-			"ajax": {
-					'url': vuln_ajax_url,
-			},
-			"order": [[ 7, "desc" ]],
-			"columns": vuln_datatable_columns,
-			"columnDefs": [
-			{ "orderable": false, "targets": [get_datatable_col_index('action', vuln_datatable_columns)]},
-			{
-				"targets": [
-					get_datatable_col_index('type', vuln_datatable_columns),
-					get_datatable_col_index('cvss_metrics', vuln_datatable_columns),
-					get_datatable_col_index('tags', vuln_datatable_columns),
-					get_datatable_col_index('hackerone_report_id', vuln_datatable_columns),
-					get_datatable_col_index('cvss_score', vuln_datatable_columns),
-					get_datatable_col_index('cve_ids', vuln_datatable_columns),
-					get_datatable_col_index('cwe_ids', vuln_datatable_columns),
-					get_datatable_col_index('description', vuln_datatable_columns),
-					get_datatable_col_index('references', vuln_datatable_columns),
-					get_datatable_col_index('discovered_date', vuln_datatable_columns),
-					get_datatable_col_index('extracted_results', vuln_datatable_columns),
-					get_datatable_col_index('curl_command', vuln_datatable_columns),
-					get_datatable_col_index('matcher_name', vuln_datatable_columns)
-				],
-				"visible": false,
-				"searchable": true,
-			},
-			{
-				"className": "text-center",
-				"targets": []
-			},
-			{
-				"render": function(data, type, row) {
-					if (row['open_status']) {
-						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('{% url 'change_vuln_status' current_project.slug 0 %}\', this, ` + data + `);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
-					} else {
-						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('{% url 'change_vuln_status' current_project.slug 0 %}\', this, ` + data + `);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
-					}
-				},
-				"targets": get_datatable_col_index('id', vuln_datatable_columns),
-			},
-			{
-				"render": function(data, type, row) {
-					if (data) {
-						return `<span class="badge badge-outline-primary">&nbsp;&nbsp;${data.toUpperCase()}&nbsp;&nbsp;</span>`;
-					}
-				},
-				"targets": get_datatable_col_index('source', vuln_datatable_columns),
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data) {
-						return `<span class="badge badge-soft-primary">&nbsp;&nbsp;${data.toUpperCase()}&nbsp;&nbsp;</span>`;
-					}
-				},
-				"targets": get_datatable_col_index('type', vuln_datatable_columns),
-			},
-			{
-				"render": function(data, type, row) {
-					var tags = '';
-					var cvss_metrics_badge = '';
-					var cve_cwe_badge = '';
-					switch (row['severity']) {
-						case 'Info':
-							color = 'primary';
-							badge_color = 'soft-primary';
-							break;
-						case 'Low':
-							color = 'low';
-							badge_color = 'soft-warning';
-							break;
-						case 'Medium':
-							color = 'warning';
-							badge_color = 'soft-warning';
-							break;
-						case 'High':
-							color = 'danger';
-							badge_color = 'soft-danger';
-							break;
-						case 'Critical':
-							color = 'critical';
-							badge_color = 'critical';
-							break;
-						case 'Unknown':
-							color = 'info';
-							badge_color = 'soft-info';
-							break;
-						default:
-					}
-					if (row['tags']) {
-						tags = '<div>';
-						row['tags'].forEach(tag => {
-							tags += `<span class="badge badge-${badge_color} me-1 mt-1" data-toggle="tooltip" data-placement="top" title="Tags">${tag.name}</span>`;
-						});
-						tags += '</div>';
-					}
-					if (row['cvss_metrics']) {
-						cvss_metrics_badge = `<div><span class="badge badge-outline-primary mt-1" data-toggle="tooltip" data-placement="top" title="CVSS Metrics">${row['cvss_metrics']}</span></div>`;
-					}
-					if (row['cve_ids'] || row['cwe_ids']) {
-						cve_cwe_badge += '<br>';
-					}
-					if (row['cve_ids']) {
-						row['cve_ids'].forEach(cve => {
-							cve_cwe_badge += `<a href="#" onclick="get_and_render_cve_details('{% url 'api:cve_details' %}', '${cve.name.toUpperCase()}')" class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${cve.name.toUpperCase()}</a>`;
-						});
-					}
-					if (row['cwe_ids']) {
-						row['cwe_ids'].forEach(cwe => {
-							cve_cwe_badge += `<a href="https://google.com/search?q=${cwe.name.toUpperCase()}" target="_blank" class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CWE ID">${cwe.name.toUpperCase()}</a>`;
-						});
-					}
-					// if (cve_cwe_badge != "") {
-					// 	cve_cwe_badge
-					// }
-					hackerone_report = row['hackerone_report_id'] ? `<div><a class="badge badge-soft-danger mt-1 me-1" href="https://hackerone.com/reports/${row['hackerone_report_id']}" target="_blank">Reported to hackerone</a></div>` : "";
-					return `<b class="text-${color}">` + data + `</b>` + cvss_metrics_badge + cve_cwe_badge + tags + hackerone_report;
-				},
-				"targets": get_datatable_col_index('name', vuln_datatable_columns),
-			},
-			{
-				"render": function(data, type, row) {
-					return get_severity_badge(data);
-				},
-				"targets": get_datatable_col_index('severity', vuln_datatable_columns),
-			},
-			{
-				"render": function(data, type, row) {
-					if (data) {
-						if (data > 0.1 && data <= 3.9) {
-							badge = 'info';
-						} else if (data > 3.9 && data <= 6.9) {
-							badge = 'warning';
-						} else if (data > 6.9 && data <= 8.9) {
-							badge = 'danger';
-						} else {
-							badge = 'danger';
-						}
-						return `<span class="badge badge-outline-${badge}" data-toggle="tooltip" data-placement="top" title="CVSS Score">${data}</span>`;
-					}
-					return '';
-				},
-				"targets": get_datatable_col_index('cvss_score', vuln_datatable_columns),
-			},
-			{
-				"render": function(data, type, row) {
-					if (data && data.includes('http')) {
-						return "<a href='" + htmlEncode(data) + "' target='_blank' class='text-danger'>" + split_into_lines(htmlEncode(data), 150) + "</a>";
-					}
-					return data || '';
-				},
-				"targets": get_datatable_col_index('http_url', vuln_datatable_columns),
-			},
-			{
-				"render": function(data, type, row) {
-					if (data) {
-						return '<span class="badge badge-soft-danger">&nbsp;&nbsp;OPEN&nbsp;&nbsp;</span>'
-					} else {
-						return '<span class="badge badge-soft-success">&nbsp;&nbsp;RESOLVED&nbsp;&nbsp;</span>'
-					}
-				},
-				"targets": get_datatable_col_index('open_status', vuln_datatable_columns),
-			},
-			{
-				"render": function(data, type, row) {
-					if (!data) {
-						return `
-									<div class="btn-group mb-2 dropstart">
-									<a href="#" class="text-dark dropdown-toggle float-end" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-									<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-horizontal"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-									</a>
-									<div class="dropdown-menu" style="">
-									<a class="dropdown-item" href="javascript:fetch_llm_vuln_details('{% url 'api:llm_vulnerability_report_generator' %}', ${row['id']}, '${row['name']}');">Fetch LLM Vulnerability Details</a>
-									<a class="dropdown-item" href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${row['id']}, '${row['severity']}');">Report to Hackerone</a>
-									<a class="text-danger dropdown-item btn-delete-vulnerability" href="#" id="${row['id']}" data-url="{% url 'api:delete_vulnerability' %}">Delete Vulnerability</a>
-									</div>
-									</div>`;
-					} else {
-						return '';
-					}
-				},
-				"targets": get_datatable_col_index('action', vuln_datatable_columns),
-			},
-		],
-		"initComplete": function(settings, json) {
-			api = this.api();
-			// row grouping
-			// vulnerability_datatable_grouping(vulnerability_table, drawCallback_api, vuln_datatable_columns);
-			var radioGroup = document.getElementsByName('grouping_vuln_row');
-			radioGroup.forEach(function(radioButton) {
-				radioButton.addEventListener('change', function() {
-					if (this.checked) {
-						var groupRows = document.querySelectorAll('tr.group');
-						// Remove each group row
-						groupRows.forEach(function(row) {
-							row.parentNode.removeChild(row);
-						});
-						var col_index = get_datatable_col_index(this.value, vuln_datatable_columns);
-						api.page.len(-1).draw();
-						api.order([col_index, 'asc']).draw();
-						is_grouping = true;
-						grouping_col = col_index;
-						Snackbar.show({
-							text: 'Vulnerabilities grouped by ' + this.value,
-							pos: 'top-right',
-							duration: 2500
-						});
-					}
-				});
-			});
-			$('#reload_vulnerabilities_table_btn').click(function() {
-				vulnerability_table.ajax.reload();
-			});
-			// column visibility
-			vulnerability_datatable_col_visibility(vulnerability_table);
-		},
-		drawCallback: function (settings) {
-			drawCallback_api = this.api();
-			var last = null;
-			var rows = drawCallback_api.rows({ page: 'current' }).nodes();
-
-			if (is_grouping) {
-				drawCallback_api.column(grouping_col)
-				.data()
-				.each(function (group, i) {
-					console.log(group);
-					if (last !== group) {
-						$(rows)
-						.eq(i)
-						.before(
-							'<tr class="group"><td colspan="7"><b class="text-primary">' +
-							group +
-							'</b></td></tr>'
-						);
-						last = group;
-					}
-				});
-			}
-
-		},
-		createdRow: function( row, data, dataIndex ) {
-			if (!data['open_status']){
-				$(row).addClass('table-success text-strike');
-			}
-		},
-		});
-		$('#vulnerability-search-button').click(function() {
-			vulnerability_table.search($('#vulnerability-search').val()).draw();
-		});
-
-		$('input[name=vuln_source_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				vulnerability_table.column(get_datatable_col_index('source', vuln_datatable_columns)).visible(true);
-			} else {
-				vulnerability_table.column(get_datatable_col_index('source', vuln_datatable_columns)).visible(false);
-			}
-			window.localStorage.setItem('vuln_source_checkbox', $(this).is(':checked'));
-		});
-
-		$('input[name=vuln_severity_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				vulnerability_table.column(get_datatable_col_index('severity', vuln_datatable_columns)).visible(true);
-			} else {
-				vulnerability_table.column(get_datatable_col_index('severity', vuln_datatable_columns)).visible(false);
-			}
-			window.localStorage.setItem('vuln_severity_checkbox', $(this).is(':checked'));
-		});
-
-		$('input[name=vuln_vulnerable_url_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				vulnerability_table.column(get_datatable_col_index('http_url', vuln_datatable_columns)).visible(true);
-			} else {
-				vulnerability_table.column(get_datatable_col_index('http_url', vuln_datatable_columns)).visible(false);
-			}
-			window.localStorage.setItem('vuln_vulnerable_url_checkbox', $(this).is(':checked'));
-		});
-
-		$('input[name=vuln_status_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				vulnerability_table.column(get_datatable_col_index('open_status', vuln_datatable_columns)).visible(true);
-			} else {
-				vulnerability_table.column(get_datatable_col_index('open_status', vuln_datatable_columns)).visible(false);
-			}
-			window.localStorage.setItem('vuln_status_checkbox', $(this).is(':checked'));
-		});
-
-		$('#vulnerability_results').on('click', 'tr' , function (e) {
-			if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('span')) {
-				return;
-			}
-			var data = vulnerability_table.row(this).data();
-			if (data) {
-				render_vuln_offcanvas(data);
-			}
-		});
+	window.registerDetailScanLazyIpTab({
+		tableSelector: "#ip_scan_results",
+		ajaxUrl: "{% url 'api:listIPs' %}?target_id={{ target.id }}",
+		scanHistoryId: 0,
+		domainId: {{ target.id }},
+		projectSlug: "{{ current_project.slug|escapejs }}",
+		getIpDetailsUrl: "{% url 'api:getIpDetails' %}",
+		querySubdomainsUrl: "{% url 'api:querySubdomains' %}",
+		listIPsUrl: "{% url 'api:listIPs' %}",
+		downloadFilename: "selected-ips-target-{{ target.id }}.txt",
+	});
+	{% if exploit_count %}
+	window.registerScanTargetExploitTab({
+		ajaxUrl: "{% url 'api:exploits-list' %}?target_id={{ target.id }}&format=datatables",
+		columns: exploit_datatable_columns,
+	});
+	{% endif %}
+	window.registerTargetSummaryVulnerabilityTab({
+		ajaxUrl: '{% url "api:vulnerabilities-list" %}?target_id={{target.id}}&format=datatables',
+		columns: vuln_datatable_columns,
+		changeVulnStatusUrlTemplate: '{% url "change_vuln_status" current_project.slug 0 %}',
 	});
 
 	// load scan history widget
-	loadSubscanHistoryWidget('{% url 'api:listSubScans' %}', scan_history_id=null, domain_id={{target.id}});
+	loadSubscanHistoryWidget('{% url "api:listSubScans" %}', scan_history_id=null, domain_id={{target.id}});
 
-	get_important_subdomains('{% url 'api:querySubdomains' %}', target_id={{target.id}}, scan_history_id=null);
-	get_recon_notes('{% url 'api:listTodoNotes' %}', target_id={{target.id}}, scan_history_id=null);
+	get_important_subdomains('{% url "api:querySubdomains" %}', target_id={{target.id}}, scan_history_id=null);
+	get_recon_notes('{% url "api:listTodoNotes" %}', target_id={{target.id}}, scan_history_id=null);
 
-	get_ips('{{ ip_addresses|safe }}', '{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
-	get_technologies('{% url 'api:listTechnologies' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
-	get_ports('{{ ip_addresses }}', '{% url 'api:listIPs' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
+	var rengineTargetSummaryIpAddresses = [];
+	var rengineTargetSummaryIpEl = document.getElementById("rengine-target-summary-ip-addresses");
+	if (rengineTargetSummaryIpEl && rengineTargetSummaryIpEl.textContent) {
+		try {
+			rengineTargetSummaryIpAddresses = JSON.parse(rengineTargetSummaryIpEl.textContent);
+		} catch (e) {
+			console.error("Error parsing target summary IP payload:", e);
+		}
+	}
+	get_ips(rengineTargetSummaryIpAddresses, '{% url "api:getIpDetails" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
+	get_technologies('{% url "api:listTechnologies" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
+	get_ports(rengineTargetSummaryIpAddresses, '{% url "api:listIPs" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
 
 	var clipboard = new Clipboard('.copyable');
 	clipboard.on('success', function(e) {
@@ -1666,7 +875,7 @@ $(document).ready(function(){
 		hideTooltip(e.trigger);
 	});
 
-	get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
+	get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
 	// listener for info checkbox on most vulnerable target
 	$('#ignore_info_most_vuln_checkbox').change(function() {
 		if (this.checked) {
@@ -1675,7 +884,7 @@ $(document).ready(function(){
 		else{
 			var text_msg = 'Informational Vulnerabilities included in Most Vulnerable Targets.';
 		}
-		get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
+		get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',
@@ -1683,7 +892,7 @@ $(document).ready(function(){
 		});
 	});
 
-	get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
+	get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
 	// listener for info checkbox on most vulnerable target
 	$('#ignore_info_most_common_vuln_checkbox').change(function() {
 		if (this.checked) {
@@ -1692,7 +901,7 @@ $(document).ready(function(){
 		else{
 			var text_msg = 'Informational Vulnerabilities included for Most Common Vulnerabilities.';
 		}
-		get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
+		get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',
@@ -1733,7 +942,7 @@ $(document).ready(function(){
 
 	var countriesData = {
 		{% for country in asset_countries %}
-			"{{country.iso}}": {{country.count}},
+			"{{country.iso}}": {{country.count}}{% if not forloop.last %},{% endif %}
 		{% endfor %}
 	};
 

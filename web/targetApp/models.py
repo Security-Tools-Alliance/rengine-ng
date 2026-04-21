@@ -1,122 +1,132 @@
 from datetime import datetime
 
-from django.apps import apps
 from django.db import models
-from django.db.models import Count
-from django.db.models.functions import TruncDay
-from django.utils import timezone
+from django.db.models import OuterRef, Subquery
 
 from dashboard.models import Project
+from reNgine.utilities.logger import get_module_logger
+from targetApp.constants import SCOPE_TYPE_CHOICES, TARGET_TYPE_CHOICES
 
 
-class HistoricalIP(models.Model):
+_scope_logger = get_module_logger(__name__)
+
+
+class TargetQuerySet(models.QuerySet):
+    """QuerySet with project-scoped filtering."""
+
+    def for_project(self, project_or_slug):
+        """Return targets for the given project (Project instance or slug string)."""
+        if hasattr(project_or_slug, "pk"):
+            return self.filter(project=project_or_slug)
+        return self.filter(project__slug=project_or_slug)
+
+    def with_last_scan_date(self):
+        """
+        Annotate each target with the start date of its most recent scan.
+
+        The annotation is exposed via the private attribute `last_scan_start_date_annot`
+        and reused by Target.start_scan_date to avoid N+1 queries in lists.
+        """
+        from startScan.models import ScanHistory
+
+        latest_scan = (
+            ScanHistory.objects.filter(target_id=OuterRef("pk"))
+            .order_by("-start_scan_date")
+            .values("start_scan_date")[:1]
+        )
+        return self.annotate(last_scan_start_date_annot=Subquery(latest_scan))
+
+
+class TargetManager(models.Manager):
+    """Manager that uses TargetQuerySet and exposes for_project."""
+
+    def get_queryset(self):
+        return TargetQuerySet(self.model, using=self._db)
+
+    def for_project(self, project_or_slug):
+        return self.get_queryset().for_project(project_or_slug)
+
+
+class Target(models.Model):
+    """
+    Entity representing a scannable target (domain, IP, URL, email, etc.).
+    Project is linked exclusively to Target; Domain lives in startScan and optionally belongs to a Target.
+    """
+
     id = models.AutoField(primary_key=True)
-    ip = models.CharField(max_length=150)
-    location = models.CharField(max_length=500)
-    owner = models.CharField(max_length=500)
-    last_seen = models.CharField(max_length=500)
-
-    def __str__(self):
-        return self.name
-
-
-class RelatedDomain(models.Model):
-    id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=250)
-
-    def __str__(self):
-        return self.name
-
-
-class Registrar(models.Model):
-    id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=500, null=True, blank=True)
-    phone = models.CharField(max_length=150, null=True, blank=True)
-    email = models.CharField(max_length=350, null=True, blank=True)
-    url = models.CharField(max_length=1000, null=True, blank=True)
-
-    def __str__(self):
-        return self.name
-
-
-class DomainRegistration(models.Model):
-    id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=500, null=True, blank=True)
-    organization = models.CharField(max_length=500, null=True, blank=True)
-    address = models.CharField(max_length=500, null=True, blank=True)
-    city = models.CharField(max_length=100, null=True, blank=True)
-    state = models.CharField(max_length=100, null=True, blank=True)
-    zip_code = models.CharField(max_length=100, null=True, blank=True)
-    country = models.CharField(max_length=100, null=True, blank=True)
-    email = models.CharField(max_length=500, null=True, blank=True)
-    phone = models.CharField(max_length=150, null=True, blank=True)
-    fax = models.CharField(max_length=150, null=True, blank=True)
-    id_str = models.CharField(max_length=500, null=True, blank=True)
-
-    def __str__(self):
-        return self.name
-
-
-class WhoisStatus(models.Model):
-    id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=500)
-
-    def __str__(self):
-        return self.name
-
-
-class NameServer(models.Model):
-    id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=500)
-
-    def __str__(self):
-        return self.name
-
-
-class DNSRecord(models.Model):
-    id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=500)
-    type = models.CharField(max_length=50)
-
-    def __str__(self):
-        return self.name
-
-
-class DomainInfo(models.Model):
-    id = models.AutoField(primary_key=True)
-    dnssec = models.BooleanField(default=False)
-    # dates
-    created = models.DateTimeField(null=True, blank=True)
-    updated = models.DateTimeField(null=True, blank=True)
-    expires = models.DateTimeField(null=True, blank=True)
-    # geolocation
-    geolocation_iso = models.CharField(max_length=10, null=True, blank=True)
-    # registrar
-    registrar = models.ForeignKey(Registrar, blank=True, on_delete=models.CASCADE, null=True)
-    # registrant
-    registrant = models.ForeignKey(
-        DomainRegistration, blank=True, null=True, on_delete=models.CASCADE, related_name="registrant"
+    value = models.CharField(max_length=2000)
+    target_type = models.CharField(max_length=50, choices=TARGET_TYPE_CHOICES)
+    port = models.CharField(max_length=20, blank=True, null=True)
+    custom_dns_servers = models.CharField(max_length=500, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    h1_team_handle = models.CharField(max_length=100, blank=True, null=True)
+    insert_date = models.DateTimeField(null=True)
+    scan_config = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Per-target scan parameter overrides and profiles",
     )
-    # admin
-    admin = models.ForeignKey(DomainRegistration, blank=True, null=True, on_delete=models.CASCADE, related_name="admin")
-    # tech
-    tech = models.ForeignKey(DomainRegistration, blank=True, null=True, on_delete=models.CASCADE, related_name="tech")
-    # status
-    status = models.ManyToManyField(WhoisStatus, blank=True)
-    # ns
-    name_servers = models.ManyToManyField(NameServer, blank=True)
-    dns_records = models.ManyToManyField(DNSRecord, blank=True)
-    # whois server
-    whois_server = models.CharField(max_length=150, null=True, blank=True)
-    # associated/similer domains
-    related_domains = models.ManyToManyField(RelatedDomain, blank=True, related_name="associated_domains")
-    related_tlds = models.ManyToManyField(RelatedDomain, blank=True, related_name="related_tlds")
-    similar_domains = models.ManyToManyField(RelatedDomain, blank=True, related_name="similar_domains")
-    # historical ips
-    historical_ips = models.ManyToManyField(HistoricalIP, blank=True, related_name="similar_domains")
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True, blank=False)
+
+    objects = TargetManager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project_id", "value", "target_type"],
+                name="targetApp_target_project_value_type_uniq",
+            )
+        ]
+        ordering = ["-insert_date"]
 
     def __str__(self):
-        return str(self.id)
+        return f"{self.value} ({self.target_type})"
+
+    def get_organization(self):
+        return self.organizations.all()
+
+    @property
+    def start_scan_date(self) -> datetime | None:
+        """
+        Return the start date of the most recent scan for this target.
+
+        The value is derived from ScanHistory and does not depend on any legacy
+        database column. When querysets are annotated with a last scan date
+        (see TargetQuerySet.with_last_scan_date), this property will reuse the
+        annotation to avoid additional queries.
+        """
+        annotated = getattr(self, "last_scan_start_date_annot", None)
+        if annotated is not None:
+            return annotated
+
+        from startScan.models import ScanHistory
+
+        last_scan = (
+            ScanHistory.objects.filter(target_id=self.id).order_by("-start_scan_date").only("start_scan_date").first()
+        )
+        if last_scan is None:
+            return None
+        return last_scan.start_scan_date
+
+
+class OrganizationQuerySet(models.QuerySet):
+    """QuerySet with project-scoped filtering."""
+
+    def for_project(self, project_or_slug):
+        """Return organizations for the given project (Project instance or slug string)."""
+        if hasattr(project_or_slug, "pk"):
+            return self.filter(project=project_or_slug)
+        return self.filter(project__slug=project_or_slug)
+
+
+class OrganizationManager(models.Manager):
+    """Manager that uses OrganizationQuerySet and exposes for_project."""
+
+    def get_queryset(self):
+        return OrganizationQuerySet(self.model, using=self._db)
+
+    def for_project(self, project_or_slug):
+        return self.get_queryset().for_project(project_or_slug)
 
 
 class Organization(models.Model):
@@ -124,104 +134,135 @@ class Organization(models.Model):
     name = models.CharField(max_length=300, unique=True)
     description = models.TextField(blank=True, null=True)
     insert_date = models.DateTimeField()
-    domains = models.ManyToManyField("Domain", related_name="domains")
+    scan_config = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Organization-level scan parameter defaults and profiles",
+    )
+    targets = models.ManyToManyField("Target", related_name="organizations", blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True, blank=False)
+
+    objects = OrganizationManager()
 
     def __str__(self):
         return self.name
 
     def get_domains(self):
-        return Domain.objects.filter(domains__in=Organization.objects.filter(id=self.id))
+        from startScan.models import Domain
+
+        return Domain.objects.filter(scan_history__target__organizations=self)
+
+    def get_targets(self):
+        """
+        Return all targets scannable for this organization.
+
+        Union of (1) targets linked directly on the organization (legacy:
+        used by older scans with is_legacy_scan) and (2) targets from all
+        scopes of this organization. In the scope-based model, targets are
+        attached to scopes; this method aggregates them for organization-level
+        scan and schedule flows. Duplicates are removed.
+        """
+        from django.db.models import Q
+
+        direct = self.targets.all()
+        via_scopes = Target.objects.filter(scopes__organization=self).distinct()
+        if not direct.exists():
+            return via_scopes
+        if not via_scopes.exists():
+            return direct
+        return Target.objects.filter(
+            Q(pk__in=direct.values_list("pk", flat=True)) | Q(pk__in=via_scopes.values_list("pk", flat=True))
+        ).distinct()
 
 
-class Domain(models.Model):
+class Scope(models.Model):
+    """
+    Groups targets under an organization with shared scan parameters.
+    Represents a bug bounty program, an engagement (internal/external/OSINT/red team), etc.
+
+    scan_config is a JSON object with the same structure as Organization.scan_config
+    and Target.scan_config: keys from PARAM_KEYS + "profiles" + "extra_config".
+    Only present keys act as overrides for this scope.
+    """
+
     id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=300, unique=True)
-    h1_team_handle = models.CharField(max_length=100, blank=True, null=True)
-    ip_address_cidr = models.CharField(max_length=100, blank=True, null=True)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="scopes")
+    name = models.CharField(max_length=300)
+    scope_type = models.CharField(max_length=30, choices=SCOPE_TYPE_CHOICES)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
     description = models.TextField(blank=True, null=True)
-    insert_date = models.DateTimeField(null=True)
-    start_scan_date = models.DateTimeField(null=True)
-    request_headers = models.JSONField(null=True, blank=True)
-    domain_info = models.ForeignKey(DomainInfo, on_delete=models.CASCADE, null=True, blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True, blank=False)
-    # Custom DNS servers for internal scans (comma-separated list: "10.0.0.1,10.0.0.2")
-    custom_dns_servers = models.CharField(max_length=500, blank=True, null=True)
+    scan_config = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Scope-level scan parameter defaults and profiles",
+    )
 
-    def get_organization(self):
-        return Organization.objects.filter(domains__id=self.id)
+    targets = models.ManyToManyField("Target", related_name="scopes", blank=True)
+    workers = models.ManyToManyField(
+        "scanEngine.SecatorWorker",
+        related_name="scopes",
+        blank=True,
+    )
+    allow_local_worker = models.BooleanField(
+        default=True,
+        help_text="If True, Local (this server) is in the allowed workers list for this scope.",
+    )
+    default_worker = models.ForeignKey(
+        "scanEngine.SecatorWorker",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="scopes_as_default",
+        help_text="Default worker when the scope has 2+ allowed workers; null means Local.",
+    )
+    restrict_findings_to_target = models.BooleanField(
+        default=False,
+        help_text="If True, only findings whose domain/host is the target or in the allowed list are created.",
+    )
+    allowed_finding_domains = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of domain names (e.g. ['example.com']) allowed in addition to the target when restrict_findings_to_target is True.",
+    )
+    allowed_finding_hosts = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="When restrict_findings_to_target is True and this list is non-empty, only these hostnames and IPs are accepted for Subdomain/Domain creation.",
+    )
+    insert_date = models.DateTimeField(auto_now_add=True)
 
-    def get_recent_scan_id(self):
-        scan_history = apps.get_model("startScan.ScanHistory")
-        if obj := scan_history.objects.filter(domain__id=self.id).order_by("-id"):
-            return obj[0].id
-
-    def get_dns_servers(self):
-        """
-        Get custom DNS servers as a list.
-
-        Returns:
-            list: List of DNS server IPs, or empty list if none configured
-        """
-        if self.custom_dns_servers:
-            return [dns.strip() for dns in self.custom_dns_servers.split(",") if dns.strip()]
-        return []
-
-    def set_dns_servers(self, dns_servers):
-        """
-        Set custom DNS servers from a list.
-
-        Args:
-            dns_servers (list or str): List of DNS server IPs or comma-separated string
-        """
-        if isinstance(dns_servers, list):
-            self.custom_dns_servers = ",".join(dns_servers)
-        elif isinstance(dns_servers, str):
-            self.custom_dns_servers = dns_servers
-        else:
-            self.custom_dns_servers = None
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="targetapp_scope_org_name_uniq",
+            )
+        ]
+        ordering = ["-insert_date"]
 
     def __str__(self):
-        return str(self.name)
+        return f"{self.name} ({self.get_scope_type_display()})"
 
-    @classmethod
-    def get_all_counts(cls, queryset):
-        return queryset.aggregate(
-            total=Count("id"),
-        )
+    def save(self, *args, **kwargs):
+        from reNgine.utilities.domain import normalize_allowed_hosts_from_list
 
-    @classmethod
-    def get_project_counts(cls, project):
-        """Get all counts for a specific project"""
-        return cls.get_all_counts(cls.objects.filter(project=project))
-
-    @classmethod
-    def get_project_data(cls, project):
-        """Get domain data for a specific project"""
-        queryset = cls.objects.filter(project=project)
-        return {"total_count": queryset.count(), "recent_domains": queryset.order_by("-insert_date")[:10]}
-
-    @staticmethod
-    def get_counts_by_date(queryset, date_field, since_date):
-        """Get daily domain counts for a queryset"""
-        counts = (
-            queryset.filter(**{f"{date_field}__gte": since_date})
-            .annotate(date=TruncDay(date_field))
-            .values("date")
-            .annotate(count=Count("id"))
-            .order_by("date")
-        )
-
-        return {item["date"]: item["count"] for item in counts}
-
-    @classmethod
-    def get_project_timeline(cls, project, date_range):
-        """Get domain timeline data for a specific project"""
-        raw_data = cls.get_counts_by_date(cls.objects.filter(project=project), "insert_date", date_range[0])
-
-        results = []
-        for date in date_range:
-            aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
-            results.append(raw_data.get(aware_date, 0))
-
-        return results[::-1]  # Reverse to match chart order
+        if isinstance(self.allowed_finding_hosts, list):
+            self.allowed_finding_hosts = normalize_allowed_hosts_from_list(self.allowed_finding_hosts)
+        elif isinstance(self.allowed_finding_hosts, str) and self.allowed_finding_hosts.strip():
+            parts = []
+            for line in self.allowed_finding_hosts.splitlines():
+                parts.extend(line.split(","))
+            items = [p.strip() for p in parts if p.strip()]
+            self.allowed_finding_hosts = normalize_allowed_hosts_from_list(items)
+        else:
+            if self.allowed_finding_hosts is not None and not isinstance(self.allowed_finding_hosts, list):
+                _scope_logger.log_line(
+                    "[SCOPE]",
+                    "SAVE",
+                    "Scope.allowed_finding_hosts was not a list or string (type=%s), reset to []"
+                    % (type(self.allowed_finding_hosts).__name__,),
+                    level="warning",
+                )
+            self.allowed_finding_hosts = []
+        super().save(*args, **kwargs)

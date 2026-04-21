@@ -20,7 +20,6 @@ schema_view = get_schema_view(
     public=True,
     permission_classes=[permissions.AllowAny],
 )
-
 urlpatterns = (
     [
         re_path(r"^swagger(?P<format>\.json|\.yaml)$", schema_view.without_ui(cache_timeout=0), name="schema-json"),
@@ -28,7 +27,12 @@ urlpatterns = (
         path("admin/", admin.site.urls),
         path("", include("dashboard.urls")),
         path("target/", include("targetApp.urls")),
+        # Keep both prefixes for backward compatibility:
+        # - /scanEngine/<slug>/... is the canonical project-scoped route
+        # - /scanEngine/... remains available for global/settings pages and legacy links
+        # Views should prefer project-aware reversing when a current project exists.
         path("scanEngine/", include("scanEngine.urls")),
+        path("scanEngine/<slug:slug>/", include("scanEngine.urls")),
         path("scan/", include("startScan.urls")),
         path("recon_note/", include("recon_note.urls")),
         path("login/", auth_views.LoginView.as_view(template_name="base/login.html"), name="login"),

@@ -42,6 +42,29 @@ class TestDashboardViews(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "dashboard/profile.html")
 
+    def test_interface_settings_view_get(self):
+        """Test the interface settings view GET."""
+        response = self.client.get(reverse("interface_settings"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "dashboard/interface_settings.html")
+        self.assertIn("form", response.context)
+
+    def test_interface_settings_view_post_saves_preference(self):
+        """Test the interface settings view POST saves preference and redirects."""
+        from dashboard.models import DATATABLES_PAGE_LENGTH_DEFAULT
+        from dashboard.services.user_preferences import get_datatables_display
+
+        response = self.client.post(
+            reverse("interface_settings"),
+            {
+                "datatables_display": "scroller",
+                "datatables_page_length": str(DATATABLES_PAGE_LENGTH_DEFAULT),
+            },
+            follow=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(get_datatables_display(self.user), "scroller")
+
     @patch("dashboard.views.get_user_model")
     def test_admin_interface_view(self, mock_get_user_model):
         """Test the admin interface view."""
@@ -66,13 +89,13 @@ class TestDashboardViews(BaseTestCase):
 
     def test_edit_project_view(self):
         """Test the edit project view."""
-        response = self.client.get(reverse("edit_project", kwargs={"slug": "test-project"}))
+        response = self.client.get(reverse("edit_project", kwargs={"slug": self.data_generator.project.slug}))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "dashboard/edit_project.html")
 
         # Test POST with valid data
         response = self.client.post(
-            reverse("edit_project", kwargs={"slug": "test-project"}),
+            reverse("edit_project", kwargs={"slug": self.data_generator.project.slug}),
             {"name": "Updated Project", "description": "Updated description", "insert_date": timezone.now()},
         )
         self.assertRedirects(response, reverse("list_projects"))

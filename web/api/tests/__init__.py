@@ -1,18 +1,22 @@
 from utils.test_base import BaseTestCase
 
+from .test_advanced_search import TestAdvancedSearchParser
 from .test_endpoint import (
     TestEndPointChangesViewSet,
     TestEndPointViewSet,
     TestInterestingEndpointViewSet,
 )
 from .test_ip import (
-    TestDomainIPHistory,
+    TestGetIpDetails,
+    TestIpActionApiResponses,
     TestIpAddressViewSet,
-    TestIPToDomain,
     TestListIPs,
     TestListPorts,
-    TestReverseWhois,
-    TestWhois,
+)
+from .test_ip_discovery import (
+    TestCidrDiscoveryApi,
+    TestIpDiscoveryServiceHelpers,
+    TestPingHostsV2Api,
 )
 from .test_organization import (
     TestListOrganizations,
@@ -35,14 +39,16 @@ from .test_project import (
 from .test_scan import (
     TestDirectoryViewSet,
     TestFetchSubscanResults,
-    TestInitiateSubTask,
     TestListActivityLogsViewSet,
     TestListEngines,
     TestListInterestingKeywords,
+    TestListS3BucketsDatatable,
+    TestListScanEnginesDatatable,
     TestListScanHistory,
     TestListScanLogsViewSet,
     TestListSubScans,
     TestListTechnology,
+    TestListWordlistsDatatable,
     TestScanStatus,
     TestStopScan,
     TestVisualiseData,
@@ -51,6 +57,14 @@ from .test_search import (
     TestSearchHistoryView,
     TestUniversalSearch,
 )
+from .test_secator_api import (
+    TestSecatorAPIAuthentication,
+    TestSecatorFindingCreate,
+    TestSecatorFindingUpdate,
+    TestSecatorRunnerCreate,
+    TestSecatorRunnerUpdate,
+)
+from .test_start_scan import TestStartScanAPI
 from .test_subdomain import (
     TestDeleteSubdomain,
     TestInterestingSubdomainViewSet,
@@ -61,25 +75,18 @@ from .test_subdomain import (
     TestSubdomainsViewSet,
     TestToggleSubdomainImportantStatus,
 )
+from .test_subdomain_ip_xor import SubdomainIpXorHelpersTests
 from .test_target import (
     TestAddTarget,
     TestListTargetsDatatableViewSet,
 )
 from .test_tools import (
-    TestCMSDetector,
     TestDeleteMultipleRows,
-    TestGetExternalToolCurrentVersion,
     TestGetFileContents,
-    TestGfList,
-    TestGithubToolCheckGetLatestRelease,
     TestOllamaManager,
     TestRengineUpdateCheck,
-    TestUninstallTool,
-    TestUpdateTool,
-    TestWafDetector,
 )
 from .test_vulnerability import (
-    TestCVEDetails,
     TestDeleteVulnerability,
     TestFetchMostCommonVulnerability,
     TestFetchMostVulnerable,
@@ -87,23 +94,28 @@ from .test_vulnerability import (
     TestVulnerabilityReport,
     TestVulnerabilityViewSet,
 )
+from .test_worker_pull import TestWorkerPullApi
 
 
 __all__ = [
     # Base
     "BaseTestCase",
+    # test_advanced_search
+    "TestAdvancedSearchParser",
     # test_endpoint
     "TestEndPointChangesViewSet",
     "TestEndPointViewSet",
     "TestInterestingEndpointViewSet",
     # test_ip
-    "TestDomainIPHistory",
+    "TestGetIpDetails",
+    "TestIpActionApiResponses",
     "TestIpAddressViewSet",
-    "TestIPToDomain",
     "TestListIPs",
     "TestListPorts",
-    "TestReverseWhois",
-    "TestWhois",
+    # test_ip_discovery
+    "TestCidrDiscoveryApi",
+    "TestIpDiscoveryServiceHelpers",
+    "TestPingHostsV2Api",
     # test_organization
     "TestListOrganizations",
     "TestListTargetsInOrganization",
@@ -122,20 +134,32 @@ __all__ = [
     # test_scan
     "TestDirectoryViewSet",
     "TestFetchSubscanResults",
-    "TestInitiateSubTask",
     "TestListActivityLogsViewSet",
     "TestListEngines",
     "TestListInterestingKeywords",
+    "TestListS3BucketsDatatable",
+    "TestListScanEnginesDatatable",
     "TestListScanHistory",
     "TestListScanLogsViewSet",
     "TestListSubScans",
     "TestListTechnology",
+    "TestListWordlistsDatatable",
     "TestScanStatus",
     "TestStopScan",
     "TestVisualiseData",
+    # test_start_scan
+    "TestStartScanAPI",
+    # test_subdomain_ip_xor
+    "SubdomainIpXorHelpersTests",
     # test_search
     "TestSearchHistoryView",
     "TestUniversalSearch",
+    # test_secator_api
+    "TestSecatorAPIAuthentication",
+    "TestSecatorFindingCreate",
+    "TestSecatorFindingUpdate",
+    "TestSecatorRunnerCreate",
+    "TestSecatorRunnerUpdate",
     # test_subdomain
     "TestDeleteSubdomain",
     "TestInterestingSubdomainViewSet",
@@ -149,19 +173,13 @@ __all__ = [
     "TestAddTarget",
     "TestListTargetsDatatableViewSet",
     # test_tools
-    "TestCMSDetector",
     "TestDeleteMultipleRows",
-    "TestGetExternalToolCurrentVersion",
     "TestGetFileContents",
-    "TestGfList",
-    "TestGithubToolCheckGetLatestRelease",
     "TestOllamaManager",
     "TestRengineUpdateCheck",
-    "TestUninstallTool",
-    "TestUpdateTool",
-    "TestWafDetector",
+    # test_worker_pull
+    "TestWorkerPullApi",
     # test_vulnerability
-    "TestCVEDetails",
     "TestDeleteVulnerability",
     "TestFetchMostCommonVulnerability",
     "TestFetchMostVulnerable",

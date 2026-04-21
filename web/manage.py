@@ -18,10 +18,9 @@ if UI_REMOTE_DEBUG and len(sys.argv) > 1 and sys.argv[1] == "runserver":
 def main():
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "reNgine.settings")
 
-    # List of commands that should not display the rengine artwork
-    skip_art_commands = ["test", "dumpdata"]
+    # List of commands that should not display the rengine artwork (avoids duplicate in container: entrypoint_setup + background run_scheduled_scans; avoids polluting stdout when scripts capture output e.g. generate_secator_api_key --raw-key)
+    skip_art_commands = ["test", "dumpdata", "entrypoint_setup", "run_scheduled_scans", "generate_secator_api_key"]
 
-    # Do not show rengine artwork if we are running tests
     if all(cmd not in sys.argv for cmd in skip_art_commands):
         # show rengine artwork
         try:

@@ -1,13 +1,14 @@
-import logging
 import traceback
 
 from django.http import HttpResponseServerError
 from django.template.loader import render_to_string
 
 from reNgine.settings import DEBUG, UI_ERROR_LOGGING
+from reNgine.utilities.logger import get_module_logger
 
 
-logger = logging.getLogger(__name__)
+PREFIX_MIDDLEWARE = "[MIDDLEWARE]"
+logger = get_module_logger(__name__)
 
 
 class CustomErrorMiddleware:
@@ -74,7 +75,12 @@ class CustomErrorMiddleware:
                 }
 
                 # Log detailed error information
-                logger.error(f"500 Error Details: {error_details}")
+                logger.log_line(
+                    PREFIX_MIDDLEWARE,
+                    "500_ERROR",
+                    "500 Error Details: %s" % (error_details,),
+                    level="error",
+                )
 
                 # Also print to console for immediate visibility
                 print(f"\n{'=' * 80}")
@@ -91,9 +97,18 @@ class CustomErrorMiddleware:
                 print(f"{'=' * 80}\n")
 
             except Exception as logging_error:
-                # If logging fails, at least log the basic error
-                logger.error(f"Failed to log detailed error information: {logging_error}")
-                logger.error(f"Original exception: {exception}")
+                logger.log_line(
+                    PREFIX_MIDDLEWARE,
+                    "500_ERROR",
+                    "Failed to log detailed error information: %s" % (logging_error,),
+                    level="error",
+                )
+                logger.log_line(
+                    PREFIX_MIDDLEWARE,
+                    "500_ERROR",
+                    "Original exception: %s" % (exception,),
+                    level="error",
+                )
 
         # Try to render custom error page
         try:
@@ -110,8 +125,12 @@ class CustomErrorMiddleware:
             return HttpResponseServerError(html_content)
 
         except Exception as template_error:
-            # If custom template fails, fall back to simple error page
-            logger.error(f"Failed to render custom error template: {template_error}")
+            logger.log_line(
+                PREFIX_MIDDLEWARE,
+                "500_ERROR",
+                "Failed to render custom error template: %s" % (template_error,),
+                level="error",
+            )
 
             # Return a simple HTML error page
             simple_html = """

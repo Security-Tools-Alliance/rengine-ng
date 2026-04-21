@@ -1,11 +1,10 @@
 import os
 
-from celery.utils.log import get_task_logger
 from discord_webhook import DiscordWebhook
 import requests
 
-from reNgine.celery import app
 from reNgine.definitions import NUCLEI_SEVERITY_MAP, STATUS_TO_SEVERITIES
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.notification import (
     enrich_notification,
     get_scan_fields,
@@ -21,10 +20,9 @@ from scanEngine.models import EngineType, Hackerone, Notification
 from startScan.models import ScanActivity, ScanHistory, SubScan, Vulnerability
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
-@app.task(name="send_notif", bind=False, queue="send_notif_queue")
 def send_notif(message, scan_history_id=None, subscan_id=None, **options):
     if "title" not in options:
         message = enrich_notification(message, scan_history_id, subscan_id)
@@ -34,7 +32,6 @@ def send_notif(message, scan_history_id=None, subscan_id=None, **options):
     send_telegram_message(message)
 
 
-@app.task(name="send_scan_notif", bind=False, queue="send_notif_queue")
 def send_scan_notif(scan_history_id, subscan_id=None, engine_id=None, status="RUNNING"):
     """Send scan status notification. Works for scan or a subscan if subscan_id
     is passed.
@@ -70,7 +67,6 @@ def send_scan_notif(scan_history_id, subscan_id=None, engine_id=None, status="RU
     send_notif(msg, scan_history_id, subscan_id, **opts)
 
 
-@app.task(name="send_task_notif", bind=False, queue="send_notif_queue")
 def send_task_notif(
     task_name,
     status=None,
@@ -156,7 +152,8 @@ def send_task_notif(
     send_notif(msg, scan_history_id=scan_history_id, subscan_id=subscan_id, **opts)
 
 
-@app.task(name="send_file_to_discord", bind=False, queue="send_notif_queue")
+# TODO Use secator to launch this task
+# @app.task(name="send_file_to_discord", bind=False, queue="io")
 def send_file_to_discord(file_path, title=None):
     notif = Notification.objects.first()
     do_send = notif and notif.send_to_discord and notif.discord_hook_url
@@ -172,7 +169,8 @@ def send_file_to_discord(file_path, title=None):
     webhook.execute()
 
 
-@app.task(name="send_hackerone_report", bind=False, queue="send_notif_queue")
+# TODO Use secator to launch this task
+# @app.task(name="send_hackerone_report", bind=False, queue="io")
 def send_hackerone_report(vulnerability_id):
     """Send HackerOne vulnerability report.
 
@@ -185,7 +183,7 @@ def send_hackerone_report(vulnerability_id):
     vulnerability = Vulnerability.objects.get(id=vulnerability_id)
     severities = {v: k for k, v in NUCLEI_SEVERITY_MAP.items()}
     # can only send vulnerability report if team_handle exists
-    if len(vulnerability.target_domain.h1_team_handle) != 0:
+    if len(vulnerability.domain.h1_team_handle) != 0:
         hackerone_query = Hackerone.objects.all()
         if hackerone_query.exists():
             hackerone = Hackerone.objects.first()
@@ -204,7 +202,7 @@ def send_hackerone_report(vulnerability_id):
                 "data": {
                     "type": "report",
                     "attributes": {
-                        "team_handle": vulnerability.target_domain.h1_team_handle,
+                        "team_handle": vulnerability.domain.h1_team_handle,
                         "title": f"{vulnerability.name} found in {vulnerability.http_url}",
                         "vulnerability_information": tpl,
                         "severity_rating": severity_value,

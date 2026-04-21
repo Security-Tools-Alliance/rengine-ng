@@ -1,0 +1,104 @@
+<div class="alert alert-info">
+    <h6><i class="fas fa-info-circle"></i> Scan Configuration Help</h6>
+    <p>
+        <code>Scans</code> define the overall reconnaissance strategy and can include multiple workflows and tasks.
+        They allow you to create reusable configurations for different types of security assessments.
+    </p>
+    <p>
+        For detailed information on creating scan configurations, see the 
+        <a href="https://docs.freelabz.com/for-developers/writing-scans-wip" target="_blank" class="alert-link">
+            <i class="fas fa-external-link-alt"></i> Secator scans documentation
+        </a>.
+    </p>
+</div>
+
+<div class="form-group">
+    <label for="{{ form.name.id_for_label }}">Scan Name *</label>
+    {{ form.name }}
+    {% if form.name.errors %}
+        <div class="text-danger">
+            {% for error in form.name.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="form-group">
+    <label for="{{ form.description.id_for_label }}">Description</label>
+    {{ form.description }}
+    {% if form.description.errors %}
+        <div class="text-danger">
+            {% for error in form.description.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="form-group">
+            <label for="{{ form.scan_type.id_for_label }}">Scan Type *</label>
+            {{ form.scan_type }}
+            {% if form.scan_type.help_text %}
+                <small class="form-text text-muted">{{ form.scan_type.help_text }}</small>
+            {% endif %}
+            {% if form.scan_type.errors %}
+                <div class="text-danger">
+                    {% for error in form.scan_type.errors %}
+                        <small>{{ error }}</small>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="form-group">
+    <label for="{{ form.yaml_configuration.id_for_label }}">YAML Configuration *</label>
+    {{ form.yaml_configuration }}
+    {% if form.yaml_configuration.help_text %}
+        <small class="form-text text-muted">{{ form.yaml_configuration.help_text|safe }}</small>
+    {% endif %}
+    {% if form.yaml_configuration.errors %}
+        <div class="text-danger">
+            {% for error in form.yaml_configuration.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="form-check">
+            {{ form.is_default }}
+            <label class="form-check-label" for="{{ form.is_default.id_for_label }}">
+                Set as Default
+            </label>
+            {% if form.is_default.errors %}
+                <div class="text-danger">
+                    {% for error in form.is_default.errors %}
+                        <small>{{ error }}</small>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="form-check">
+            {{ form.is_active }}
+            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                Active
+            </label>
+            {% if form.is_active.errors %}
+                <div class="text-danger">
+                    {% for error in form.is_active.errors %}
+                        <small>{{ error }}</small>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>

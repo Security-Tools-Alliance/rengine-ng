@@ -48,205 +48,6 @@ Scan Engine
           text-align: center;
         }
 
-/* Styles pour les badges de tâches */
-.task-badges {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 3px;
-  margin-bottom: 4px;
-}
-
-.task-badge {
-  font-size: 0.7rem;
-  padding: 3px 6px;
-  border-radius: 4px;
-  white-space: nowrap;
-  font-weight: 500;
-}
-
-.task-badge i {
-  font-size: 0.6rem;
-  margin-right: 3px;
-}
-
-.config-badge {
-  cursor: pointer;
-  border: 1px solid rgba(128, 0, 128, 0.3) !important;
-}
-
-.config-badge:hover {
-  background-color: rgba(128, 0, 128, 0.2) !important;
-  border-color: rgba(128, 0, 128, 0.5) !important;
-}
-
-.config-count {
-  background-color: rgba(128, 0, 128, 0.3);
-  color: white;
-  border-radius: 50%;
-  padding: 1px 4px;
-  font-size: 0.6rem;
-  font-weight: bold;
-  margin-right: 3px;
-  min-width: 12px;
-  text-align: center;
-  display: inline-block;
-}
-
-.task-summary {
-  font-size: 0.75rem;
-  color: #6c757d;
-  font-weight: 400;
-  margin-top: 2px;
-}
-
-.badge-soft-info {
-  background-color: rgba(13, 202, 240, 0.1);
-  color: #0dcaf0;
-  border: 1px solid rgba(13, 202, 240, 0.2);
-}
-
-.badge-soft-orange {
-  background-color: rgba(255, 165, 0, 0.1);
-  color: #ff8c00;
-  border: 1px solid rgba(255, 165, 0, 0.2);
-}
-
-.badge-soft-purple {
-  background-color: rgba(128, 0, 128, 0.1);
-  color: #8b008b;
-  border: 1px solid rgba(128, 0, 128, 0.2);
-}
-
-/* Adaptation pour le mode sombre de reNgine */
-.dark-theme .badge-soft-orange {
-  background-color: rgba(255, 165, 0, 0.2) !important;
-  color: #ffb84d !important;
-  border: 1px solid rgba(255, 165, 0, 0.4) !important;
-}
-
-.dark-theme .badge-soft-purple {
-  background-color: rgba(128, 0, 128, 0.3) !important;
-  color: #dda0dd !important;
-  border: 1px solid rgba(128, 0, 128, 0.5) !important;
-}
-
-.dark-theme .badge-soft-info {
-  background-color: rgba(13, 202, 240, 0.2) !important;
-  color: #4dd4f7 !important;
-  border: 1px solid rgba(13, 202, 240, 0.4) !important;
-}
-
-.dark-theme .badge-soft-warning {
-  background-color: rgba(255, 193, 7, 0.2) !important;
-  color: #ffd43b !important;
-  border: 1px solid rgba(255, 193, 7, 0.4) !important;
-}
-
-.dark-theme .badge-soft-success {
-  background-color: rgba(25, 135, 84, 0.2) !important;
-  color: #4caf50 !important;
-  border: 1px solid rgba(25, 135, 84, 0.4) !important;
-}
-
-.dark-theme .badge-soft-danger {
-  background-color: rgba(220, 53, 69, 0.2) !important;
-  color: #f56565 !important;
-  border: 1px solid rgba(220, 53, 69, 0.4) !important;
-}
-
-.dark-theme .badge-soft-primary {
-  background-color: rgba(13, 110, 253, 0.2) !important;
-  color: #4dabf7 !important;
-  border: 1px solid rgba(13, 110, 253, 0.4) !important;
-}
-
-.dark-theme .badge-soft-secondary {
-  background-color: rgba(108, 117, 125, 0.3) !important;
-  color: #e9ecef !important;
-  border: 1px solid rgba(108, 117, 125, 0.5) !important;
-}
-
-.dark-theme .badge-soft-dark {
-  background-color: rgba(33, 37, 41, 0.3) !important;
-  color: #f8f9fa !important;
-  border: 1px solid rgba(33, 37, 41, 0.5) !important;
-}
-
-.dark-theme .config-badge {
-  border: 1px solid rgba(128, 0, 128, 0.6) !important;
-  background-color: rgba(128, 0, 128, 0.2) !important;
-  color: #dda0dd !important;
-}
-
-.dark-theme .config-badge:hover {
-  background-color: rgba(128, 0, 128, 0.4) !important;
-  border-color: rgba(128, 0, 128, 0.8) !important;
-}
-
-.dark-theme .config-count {
-  background-color: rgba(128, 0, 128, 0.6) !important;
-}
-
-.badge-soft-warning {
-  background-color: rgba(255, 193, 7, 0.1);
-  color: #ffc107;
-  border: 1px solid rgba(255, 193, 7, 0.2);
-}
-
-/* Scan Type Filter Buttons */
-.scan-type-filter {
-  transition: all 0.3s ease;
-  font-weight: 500;
-  opacity: 0.7;
-  transform: scale(0.95);
-}
-
-.scan-type-filter:hover {
-  opacity: 0.9;
-  transform: scale(1) translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.scan-type-filter.active {
-  opacity: 1;
-  transform: scale(1.05) translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-}
-
-.scan-type-filter i {
-  font-size: 0.9rem;
-}
-
-.badge-soft-primary {
-  background-color: rgba(13, 110, 253, 0.1);
-  color: #0d6efd;
-  border: 1px solid rgba(13, 110, 253, 0.2);
-}
-
-.badge-soft-danger {
-  background-color: rgba(220, 53, 69, 0.1);
-  color: #dc3545;
-  border: 1px solid rgba(220, 53, 69, 0.2);
-}
-
-.badge-soft-success {
-  background-color: rgba(25, 135, 84, 0.1);
-  color: #198754;
-  border: 1px solid rgba(25, 135, 84, 0.2);
-}
-
-.badge-soft-secondary {
-  background-color: rgba(108, 117, 125, 0.1);
-  color: #6c757d;
-  border: 1px solid rgba(108, 117, 125, 0.2);
-}
-
-.badge-soft-dark {
-  background-color: rgba(33, 37, 41, 0.1);
-  color: #212529;
-  border: 1px solid rgba(33, 37, 41, 0.2);
-}
 
 @media (max-width: 768px) {
   #scan_engine_table th:nth-child(1),
@@ -274,42 +75,50 @@ Scan Engine
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
-<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' %}">Engines</a></li>
+<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' current_project.slug %}">Engines</a></li>
 <li class="breadcrumb-item active">All Scan Engines</li>
 {% endblock breadcrumb_title %}
 
 {% block page_title %}
-Scan Engines
+Scan Engines <small class="text-muted">(Legacy)</small>
 {% endblock page_title %}
 
 {% block main_content %}
 <div class="row">
   <div class="col-12">
+    <!-- Legacy Warning Alert -->
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      <strong>Legacy Feature:</strong> Scan Engines are deprecated in favor of the new Secator system. 
+      Please use <a href="{% url 'scans' current_project.slug %}" class="alert-link">Scans</a>, 
+      <a href="{% url 'workflows' current_project.slug %}" class="alert-link">Workflows</a>, and 
+      <a href="{% url 'tasks' current_project.slug %}" class="alert-link">Tasks</a> instead.
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    
     <div class="card">
-              <!-- Scan Type Filter Buttons -->
-              <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-sm btn-secondary scan-type-filter" data-filter="all">
-                      <i class="fas fa-list me-1"></i>All
-                    </button>
-                    <button type="button" class="btn btn-sm btn-info scan-type-filter" data-filter="bug_bounty">
-                      <i class="fas fa-bug me-1"></i>Bug Bounty
-                    </button>
-                    <button type="button" class="btn btn-sm btn-warning scan-type-filter" data-filter="internal_network">
-                      <i class="fas fa-network-wired me-1"></i>Internal Network
-                    </button>
-                  </div>
-                  <div>
-                    {% if user|can:'add_modify_scan_settings' %}
-                    <a class="btn btn-soft-primary btn-sm" href="{% url 'add_engine' %}">
-                      <i class="fas fa-plus me-1"></i>Add Scan Engine
-                    </a>
-                    {% endif %}
-                  </div>
-                </div>
-              </div>
-      <table id="scan_engine_table" class="table dt-responsive w-100">
+      <!-- Scan Type Filter Buttons -->
+      <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-secondary scan-type-filter" data-filter="all">
+              <i class="fas fa-list me-1"></i>All
+            </button>
+            <button type="button" class="btn btn-sm btn-info scan-type-filter" data-filter="internet">
+              <i class="fas fa-globe me-1"></i>Internet
+            </button>
+            <button type="button" class="btn btn-sm btn-warning scan-type-filter" data-filter="internal_network">
+              <i class="fas fa-network-wired me-1"></i>Internal Network
+            </button>
+          </div>
+          <div>
+            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scan_engine.html' id_prefix='scanEngine' filtering_text_id='scanEngineFilteringTextHidden' %}
+            <div id="scanEngineFilteringText" class="w-100 d-flex flex-wrap gap-1 mt-2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <table id="scan_engine_table" class="table dt-responsive w-100">
         <thead>
           <tr>
             <th>ID</th>
@@ -321,113 +130,9 @@ Scan Engines
           </tr>
         </thead>
         <tbody>
-          {% for engine in engine_type %}
-          <tr>
-            <td>{{engine.id}}</td>
-            <td class="text-primary">
-              <a href="{% url 'update_engine' engine.id %}" class="open-domain">
-                {{engine.engine_name}}
-              </a>
-            </td>
-            <td class="text-center">
-              {% if engine.default_engine %}
-              <span class="badge badge-soft-primary p-1">Default</span>
-              {% else %}
-              <span class="badge badge-soft-danger p-1">Custom</span>
-              {% endif %}
-            </td>
-            <td class="text-center">
-              {% if engine.scan_type == 'bug_bounty' %}
-              <span class="badge badge-soft-info p-1">Bug Bounty</span>
-              {% elif engine.scan_type == 'internal_network' %}
-              <span class="badge badge-soft-warning p-1">Internal Network</span>
-              {% else %}
-              <span class="badge badge-soft-secondary p-1">{{ engine.scan_type|title }}</span>
-              {% endif %}
-            </td>
-            <td class="text-center">
-              <div class="task-badges">
-                {% if 'subdomain_discovery' in engine.tasks %}
-                <span class="badge badge-soft-success task-badge" data-toggle="tooltip" title="Subdomain Discovery">
-                  <i class="fas fa-search"></i> SD
-                </span>
-                {% endif %}
-                {% if 'waf_detection' in engine.tasks %}
-                <span class="badge badge-soft-info task-badge" data-toggle="tooltip" title="WAF Detection">
-                  <i class="fas fa-shield-alt"></i> WAF
-                </span>
-                {% endif %}
-                {% if 'screenshot' in engine.tasks %}
-                <span class="badge badge-soft-primary task-badge" data-toggle="tooltip" title="Screenshot">
-                  <i class="fas fa-camera"></i> SS
-                </span>
-                {% endif %}
-                {% if 'osint' in engine.tasks %}
-                <span class="badge badge-soft-warning task-badge" data-toggle="tooltip" title="OSINT">
-                  <i class="fas fa-globe"></i> OSINT
-                </span>
-                {% endif %}
-                {% if 'port_scan' in engine.tasks %}
-                <span class="badge badge-soft-danger task-badge" data-toggle="tooltip" title="Port Scan">
-                  <i class="fas fa-network-wired"></i> PS
-                </span>
-                {% endif %}
-                {% if 'dir_file_fuzz' in engine.tasks %}
-                <span class="badge badge-soft-secondary task-badge" data-toggle="tooltip" title="Directory & Files Discovery">
-                  <i class="fas fa-folder-open"></i> DF
-                </span>
-                {% endif %}
-                {% if 'fetch_url' in engine.tasks %}
-                <span class="badge badge-soft-dark task-badge" data-toggle="tooltip" title="Fetch URLs">
-                  <i class="fas fa-link"></i> URL
-                </span>
-                {% endif %}
-                {% if 'vulnerability_scan' in engine.tasks %}
-                <span class="badge badge-soft-orange task-badge" data-toggle="tooltip" title="Vulnerability Scan">
-                  <i class="fas fa-bug"></i> VULN
-                </span>
-                {% endif %}
-                {% if engine.get_config_parameters %}
-                <span class="badge badge-soft-purple task-badge config-badge" 
-                      data-toggle="tooltip" 
-                      data-placement="top" 
-                      data-html="true"
-                      title="{{ engine.get_config_parameters_display|safe }}">
-                  <span class="config-count">{{ engine.get_config_parameters|length }}</span>
-                  <i class="fas fa-cog"></i> CONFIG
-                </span>
-                {% endif %}
-              </div>
-              <div class="task-summary">
-                {{ engine.get_tasks_count }} task{{ engine.get_tasks_count|pluralize }} enabled
-              </div>
-            </td>
-            <td class="text-center">
-              {% if user|can:'add_modify_scan_settings' %}
-                <a href="{% url 'update_engine' engine.id %}" class="open-domain" data-toggle="tooltip" data-placement="top" title="Edit Engine">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-edit feather-edit-2">
-                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-                  </svg>
-                </a>
-                <a href="{% url 'duplicate_engine' engine.id %}" class="text-info" data-toggle="tooltip" data-placement="top" title="Duplicate {{engine.engine_name}} Engine">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-copy feather-copy">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                  </svg>
-                </a>
-                <a onclick="delete_api({{ engine.id }}, '{{ engine.engine_name }}', 'scanEngine')" class="btnDelDomain text-danger" href="#" data-toggle="tooltip" data-placement="top" title="Delete {{engine.engine_name}} Engine">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-delete feather-x-circle">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                  </svg>
-                </a>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </div>
@@ -436,6 +141,7 @@ Scan Engines
 
 {% block page_level_script %}
 <script src="{% static 'scanEngine/js/custom_scan_engine.js' %}"></script>
+{{ datatable_filter_select_to_param|json_script:"datatable-filter-params" }}
         <script type="text/javascript">
           function checkDarkMode() {
             if (localStorage.getItem('rengine-theme') === 'dark') {
@@ -448,95 +154,92 @@ Scan Engines
           checkDarkMode();
           
           $('#dark-mode-check').on('change', function() {
-            setTimeout(checkDarkMode, 100); // Petit délai pour laisser le temps au changement
+            setTimeout(checkDarkMode, 100); // Small delay to allow time for the change
           });
           
           $(document).ready(function() {
-    var scan_engine_table = $('#scan_engine_table').DataTable({
-      "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center mt-sm-0 mt-3'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" +
-      "<'table-responsive'tr>" +
-      "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
-      "oLanguage": {
-        "oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-        "sInfo": "Showing page _PAGE_ of _PAGES_",
-        "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-        "sSearchPlaceholder": "Search...",
-        "sLengthMenu": "Results :  _MENU_",
-      },
-      "columnDefs":[
-      { 'visible': false, 'targets': [0] },
-      { 'width': '60px', 'targets': [0] },
-      { 'width': '30%', 'targets': [1] },
-      { 'width': '100px', 'targets': [2] },
-      { 'width': '120px', 'targets': [3] },
-      { 'width': '40%', 'targets': [4] },
-      { 'width': '80px', 'targets': [5], 'orderable': false },
-      ],
-      "order": [[ 1, "asc" ]],
-      "stripeClasses": [],
-      "lengthMenu": [20, 30, 40, 50],
-      "pageLength": 20,
-      "autoWidth": false,
-      "responsive": true,
-      "initComplete": function(settings, json) {
-        $('[data-toggle="tooltip"]').tooltip({
-          html: true,
-          container: 'body'
-        });
-      }
-    });
-
-    // Reinitialize tooltips after each table redraw (pagination, filtering, etc.)
-    scan_engine_table.on('draw.dt', function() {
-      // Dispose old tooltips to avoid memory leaks
-      $('[data-toggle="tooltip"]').tooltip('dispose');
-      // Reinitialize tooltips for new DOM elements
-      $('[data-toggle="tooltip"]').tooltip({
-        html: true,
-        container: 'body'
-      });
-    });
-
-            // Scan Type Filter Functionality
-            function applyFilter(filter) {
-              // Update button states - remove active class from all buttons
-              $('.scan-type-filter').removeClass('active');
-              
-              // Add active class to clicked button
-              $('.scan-type-filter[data-filter="' + filter + '"]').addClass('active');
-              
-              // Apply filter based on button clicked
-              if (filter === 'all') {
-                scan_engine_table.column(3).search('').draw(); // Clear the Scan Type column filter
-              } else if (filter === 'bug_bounty') {
-                scan_engine_table.column(3).search('Bug Bounty').draw();
-              } else if (filter === 'internal_network') {
-                scan_engine_table.column(3).search('Internal Network').draw();
-              }
-              
-              // Save filter to cookie
-              document.cookie = "scan_engine_filter=" + filter + "; path=/; max-age=31536000"; // 1 year
-            }
-            
-            $('.scan-type-filter').on('click', function() {
-              var filter = $(this).data('filter');
-              applyFilter(filter);
+    var scan_engine_ajax_url = '{% url "api:listScanEngines" %}';
+    var scanEngineFilter = 'all';
+    var scan_engine_columns = [
+      { data: 'id', name: 'id' },
+      { data: 'engine_name_display', name: 'engine_name' },
+      { data: 'engine_type_display', name: 'engine_type_display' },
+      { data: 'scan_type_display', name: 'scan_type_display' },
+      { data: 'tasks_html', name: 'tasks_html', orderable: false },
+      { data: 'action', name: 'action', orderable: false }
+    ];
+    var scanEngineFilterParamsEl = document.getElementById('datatable-filter-params');
+    var scanEngineFilterSelectToParam = scanEngineFilterParamsEl ? JSON.parse(scanEngineFilterParamsEl.textContent) : {};
+    var scan_engine_table = window.initServerSideDataTable('#scan_engine_table', window.getRengineDatatableConfig('#scan_engine_table', {
+      ajax: {
+        url: scan_engine_ajax_url,
+        data: function(d) {
+          d.filter_scan_type = scanEngineFilter;
+          if (window.buildDatatableFilterPayload) {
+            var payload = window.buildDatatableFilterPayload(scanEngineFilterSelectToParam);
+            Object.keys(payload).forEach(function(key) {
+              d[key] = payload[key];
             });
+          }
+        }
+      },
+      columns: scan_engine_columns,
+      order: window.getRengineDatatableOrderFromNames(scan_engine_columns, [['engine_name', 'asc']]),
+      lengthMenu: [20, 30, 40, 50],
+      columnDefs: [
+        { targets: 'id:name', visible: false },
+        { targets: 'engine_name:name', width: '30%', render: function(data) { return data || ''; } },
+        { targets: 'engine_type_display:name', width: '100px', className: 'text-center' },
+        { targets: 'scan_type_display:name', width: '120px', className: 'text-center' },
+        { targets: 'tasks_html:name', width: '40%', className: 'text-center', render: function(data) { return data || ''; } },
+        { targets: 'action:name', width: '80px', className: 'text-center', render: function(data) { return data || ''; } }
+      ],
+      initComplete: function() {
+        if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('[data-toggle="tooltip"]'), { html: true, container: 'body' });
+      }
+    }));
 
-            // Load saved filter from cookie
-            function getCookie(name) {
-              var value = "; " + document.cookie;
-              var parts = value.split("; " + name + "=");
-              if (parts.length == 2) return parts.pop().split(";").shift();
-            }
-            
-            var savedFilter = getCookie('scan_engine_filter');
-            if (savedFilter && ['all', 'bug_bounty', 'internal_network'].includes(savedFilter)) {
-              applyFilter(savedFilter);
-            } else {
-              // Set default active state for "All" button
-              applyFilter('all');
-            }
+    scan_engine_table.on('draw.dt', function() {
+      if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('#scan_engine_table [data-toggle="tooltip"]'), { html: true, container: 'body' });
+    });
+
+    function applyFilter(filter) {
+      $('.scan-type-filter').removeClass('active');
+      $('.scan-type-filter[data-filter="' + filter + '"]').addClass('active');
+      scanEngineFilter = filter;
+      try {
+        if (window.rengineStorage && typeof window.rengineStorage.set === 'function') {
+          window.rengineStorage.set('scan_engine_filter', filter);
+        }
+      } catch (e) {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn('Failed to persist scan_engine_filter', e);
+        }
+      }
+      scan_engine_table.ajax.reload();
+    }
+
+    $('.scan-type-filter').on('click', function() {
+      applyFilter($(this).data('filter'));
+    });
+
+    var savedFilter = null;
+    try {
+      if (window.rengineStorage && typeof window.rengineStorage.get === 'function') {
+        savedFilter = window.rengineStorage.get('scan_engine_filter');
+      }
+    } catch (e) {
+      savedFilter = null;
+    }
+    if (savedFilter && ['all', 'internet', 'internal_network'].indexOf(savedFilter) !== -1) {
+      applyFilter(savedFilter);
+    } else {
+      applyFilter('all');
+    }
+
+    if (window.attachDatatableFilters) {
+      window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('scan_engine_list', scan_engine_table, { onApply: function() { scan_engine_table.draw(); } }));
+    }
   });
 
 </script>

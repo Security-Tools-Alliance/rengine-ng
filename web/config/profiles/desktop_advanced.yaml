@@ -1,0 +1,10 @@
+type: profile
+name: desktop_advanced
+category: speed
+description: "Advanced desktop (e.g. i7 / 16GB RAM)"
+opts:
+  threads: 12
+  rate_limit: 120
+  delay: 0
+  timeout: 8
+  retries: 2

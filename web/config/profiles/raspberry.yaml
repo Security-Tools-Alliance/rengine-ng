@@ -1,0 +1,10 @@
+type: profile
+name: raspberry
+category: speed
+description: "Light node (e.g. Raspberry Pi), low CPU/RAM"
+opts:
+  threads: 2
+  rate_limit: 15
+  delay: 0.5
+  timeout: 15
+  retries: 3

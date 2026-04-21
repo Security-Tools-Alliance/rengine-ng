@@ -1,0 +1,13 @@
+{% load permission_tags %}
+<td class="text-center">
+  <div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
+    {% if user|can:'initiate_scans_subscans' %}
+    <a href="{% url 'start_organization_scan' current_project.slug organization.id %}" class="btn btn-sm btn-soft-success" data-toggle="tooltip" data-placement="top" title="Quick Scan Entire Organization"><i class="fe-zap"></i></a>
+    <a href="{% url 'schedule_organization_scan' current_project.slug organization.id %}" class="btn btn-sm btn-soft-info open-domain" data-toggle="tooltip" data-placement="top" title="Schedule Scan"><i class="fe-clock"></i></a>
+    {% endif %}
+    {% if user|can:'modify_targets' %}
+    <a href="{% url 'update_organization' current_project.slug organization.id %}" class="btn btn-sm btn-soft-primary open-domain" data-toggle="tooltip" data-placement="top" title="Update Organization"><i class="fe-edit-2"></i></a>
+    <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Delete Organization" onclick="delete_organization('{% url 'delete_organization' current_project.slug organization.id %}'); return false;"><i class="fe-trash-2"></i></a>
+    {% endif %}
+  </div>
+</td>

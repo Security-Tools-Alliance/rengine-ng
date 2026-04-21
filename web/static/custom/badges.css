@@ -1,0 +1,204 @@
+/* 
+ * Badge Styles for reNgine
+ * Custom badge styles for scan engines and tasks
+ */
+
+.task-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+
+.task-badge {
+  font-size: 0.7rem;
+  padding: 3px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.task-badge i {
+  font-size: 0.6rem;
+  margin-right: 3px;
+}
+
+.config-badge {
+  cursor: pointer;
+  border: 1px solid rgba(128, 0, 128, 0.3) !important;
+}
+
+.config-badge:hover {
+  background-color: rgba(128, 0, 128, 0.2) !important;
+  border-color: rgba(128, 0, 128, 0.5) !important;
+}
+
+.config-count {
+  background-color: rgba(128, 0, 128, 0.3);
+  color: white;
+  border-radius: 50%;
+  padding: 1px 4px;
+  font-size: 0.6rem;
+  font-weight: bold;
+  margin-right: 3px;
+  min-width: 12px;
+  text-align: center;
+  display: inline-block;
+}
+
+.task-summary {
+  font-size: 0.75rem;
+  color: #6c757d;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+/* Soft Badge Styles - Light Theme */
+.badge-soft-info {
+  background-color: rgba(13, 202, 240, 0.1);
+  color: #0dcaf0;
+  border: 1px solid rgba(13, 202, 240, 0.2);
+}
+
+.badge-soft-orange {
+  background-color: rgba(255, 165, 0, 0.1);
+  color: #ff8c00;
+  border: 1px solid rgba(255, 165, 0, 0.2);
+}
+
+.badge-soft-purple {
+  background-color: rgba(128, 0, 128, 0.1);
+  color: #8b008b;
+  border: 1px solid rgba(128, 0, 128, 0.2);
+}
+
+.badge-soft-warning {
+  background-color: rgba(255, 193, 7, 0.1);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.2);
+}
+
+.badge-soft-primary {
+  background-color: rgba(13, 110, 253, 0.1);
+  color: #0d6efd;
+  border: 1px solid rgba(13, 110, 253, 0.2);
+}
+
+.badge-soft-danger {
+  background-color: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.2);
+}
+
+.badge-soft-success {
+  background-color: rgba(25, 135, 84, 0.1);
+  color: #198754;
+  border: 1px solid rgba(25, 135, 84, 0.2);
+}
+
+.badge-soft-secondary {
+  background-color: rgba(108, 117, 125, 0.1);
+  color: #6c757d;
+  border: 1px solid rgba(108, 117, 125, 0.2);
+}
+
+.badge-soft-dark {
+  background-color: rgba(33, 37, 41, 0.1);
+  color: #212529;
+  border: 1px solid rgba(33, 37, 41, 0.2);
+}
+
+/* Dark Theme Adaptations */
+.dark-theme .badge-soft-orange {
+  background-color: rgba(255, 165, 0, 0.2) !important;
+  color: #ffb84d !important;
+  border: 1px solid rgba(255, 165, 0, 0.4) !important;
+}
+
+.dark-theme .badge-soft-purple {
+  background-color: rgba(128, 0, 128, 0.3) !important;
+  color: #dda0dd !important;
+  border: 1px solid rgba(128, 0, 128, 0.5) !important;
+}
+
+.dark-theme .badge-soft-info {
+  background-color: rgba(13, 202, 240, 0.2) !important;
+  color: #4dd4f7 !important;
+  border: 1px solid rgba(13, 202, 240, 0.4) !important;
+}
+
+.dark-theme .badge-soft-warning {
+  background-color: rgba(255, 193, 7, 0.2) !important;
+  color: #ffd43b !important;
+  border: 1px solid rgba(255, 193, 7, 0.4) !important;
+}
+
+.dark-theme .badge-soft-success {
+  background-color: rgba(25, 135, 84, 0.2) !important;
+  color: #4caf50 !important;
+  border: 1px solid rgba(25, 135, 84, 0.4) !important;
+}
+
+.dark-theme .badge-soft-danger {
+  background-color: rgba(220, 53, 69, 0.2) !important;
+  color: #f56565 !important;
+  border: 1px solid rgba(220, 53, 69, 0.4) !important;
+}
+
+.dark-theme .badge-soft-primary {
+  background-color: rgba(13, 110, 253, 0.2) !important;
+  color: #8cc8ff !important;
+  border: 1px solid rgba(13, 110, 253, 0.4) !important;
+}
+
+.dark-theme .badge-soft-secondary {
+  background-color: rgba(108, 117, 125, 0.3) !important;
+  color: #e9ecef !important;
+  border: 1px solid rgba(108, 117, 125, 0.5) !important;
+}
+
+.dark-theme .badge-soft-dark {
+  background-color: rgba(33, 37, 41, 0.3) !important;
+  color: #f8f9fa !important;
+  border: 1px solid rgba(33, 37, 41, 0.5) !important;
+}
+
+.dark-theme .config-badge {
+  border: 1px solid rgba(128, 0, 128, 0.6) !important;
+  background-color: rgba(128, 0, 128, 0.2) !important;
+  color: #dda0dd !important;
+}
+
+.dark-theme .config-badge:hover {
+  background-color: rgba(128, 0, 128, 0.4) !important;
+  border-color: rgba(128, 0, 128, 0.8) !important;
+}
+
+.dark-theme .config-count {
+  background-color: rgba(128, 0, 128, 0.6) !important;
+}
+
+/* Scan Type Filter Buttons */
+.scan-type-filter {
+  transition: all 0.3s ease;
+  font-weight: 500;
+  opacity: 0.7;
+  transform: scale(0.95);
+}
+
+.scan-type-filter:hover {
+  opacity: 0.9;
+  transform: scale(1) translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.scan-type-filter.active {
+  opacity: 1;
+  transform: scale(1.05) translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.scan-type-filter i {
+  font-size: 0.9rem;
+}

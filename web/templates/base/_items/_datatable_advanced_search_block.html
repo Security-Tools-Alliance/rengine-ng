@@ -1,0 +1,21 @@
+{# Shared advanced-search row for DataTable tabs. Required context: wrapper_id, advanced_search_context, input_id, button_id, autocom_box_id, placeholder, aria_label. Optional: autocom_box_extra_classes (space-separated CSS classes on the suggestion box). #}
+<div class="row justify-content-center">
+	<div class="col-xl-8 col-lg-8 col-sm-8">
+		<div class="wrapper">
+			<div class="search-input" id="{{ wrapper_id }}" data-advanced-search="{{ advanced_search_context }}">
+				<a href="" target="_blank" hidden></a>
+				<div class="input-group input-group-sm">
+					<input type="text" class="form-control form-control-sm" placeholder="{{ placeholder }}" aria-label="{{ aria_label }}" id="{{ input_id }}">
+					<div class="input-group-append">
+						<button id="{{ button_id }}" class="btn btn-primary btn-sm" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search align-text-bottom me-1"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>Search</button>
+					</div>
+				</div>
+				<div class="autocom-box mt-container mx-auto{% if autocom_box_extra_classes %} {{ autocom_box_extra_classes }}{% endif %}" id="{{ autocom_box_id }}">
+				</div>
+				<small class="text-muted d-block mt-1 px-3">
+					<code>field=value</code>, <code>field!=value</code> or <code>field!value</code>, <code>field&gt;</code> / <code>field&lt;</code>. Combine with <code>&amp;</code>, <code>|</code>, <code>AND</code>, <code>OR</code> (AND binds before OR; use parentheses to group). Expand <strong>Build filter</strong> to append clauses (use <strong>Then</strong> AND or OR before Append). Avoid raw <code>&amp;</code> inside URL values.
+				</small>
+			</div>
+		</div>
+	</div>
+</div>

@@ -1,0 +1,182 @@
+{% comment %}
+  Shared Scan Parameters & Profiles Block
+  Context variables:
+    - scan_params_level: "organization"|"scope"|"target" (controls labels/help text)
+    - scan_params_effective: dict from build_effective_params_display() (optional)
+    - scan_params_values: dict of current values for this level (from scan_config or {}).
+      Backend must set scan_params_values.profiles (dict, possibly empty) to avoid VariableDoesNotExist.
+      Backend may set scan_params_values.header as a dict; use header_initial for the textarea.
+    - header_initial: optional string value for the HTTP Headers textarea (when set, use instead of pv.header)
+    - scan_params_prefix: form field name prefix ("override_" for target, "" for scope/org)
+    - id_prefix: for unique element IDs (optional)
+    - default_profiles: dict for secator_profiles.html (category -> profile name)
+    - custom_profiles_by_category: dict for secator_profiles.html
+    - speed_rengine_builtin_profiles: list of dicts (name, description, icon) for hardware-tier speed profiles
+{% endcomment %}
+{% load static %}
+
+{# Profile hidden inputs (must be inside the <form> for JS to find them). Use default_profiles when entity has no scan_config so custom defaults are available to JS. #}
+<input type="hidden" name="speed_profile" id="{{ id_prefix|default:'' }}speed_profile"
+       value="{{ scan_params_values.profiles.speed|default:default_profiles.speed|default:'' }}">
+<input type="hidden" name="stealth_profile" id="{{ id_prefix|default:'' }}stealth_profile"
+       value="{{ scan_params_values.profiles.evasion|default:default_profiles.evasion|default:'' }}">
+<input type="hidden" name="general_profile" id="{{ id_prefix|default:'' }}general_profile"
+       value="{{ scan_params_values.profiles.general|default:default_profiles.general|default:'' }}">
+<input type="hidden" name="network_profile" id="{{ id_prefix|default:'' }}network_profile"
+       value="{{ scan_params_values.profiles.network|default:default_profiles.network|default:'' }}">
+
+{# --- 1. Effective Parameters Display (single source: shared partial) --- #}
+{% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_effective_ordered=scan_params_effective_ordered scan_params_level=scan_params_level %}
+
+{# --- 2. Profiles Selection (first, per Secator creator's recommendation) --- #}
+<h5 class="mb-1">Profiles <small class="text-muted fw-normal">
+  {% if scan_params_level == "organization" %}(leave unchecked to use system defaults)
+  {% elif scan_params_level == "scope" %}(leave unchecked to inherit from organization or system defaults)
+  {% elif scan_params_level == "target" %}(leave unchecked to inherit from scope or system defaults)
+  {% else %}(optional){% endif %}
+</small></h5>
+<p class="text-muted small mb-3">
+  Profiles define scan presets (speed, evasion strategy, etc.).
+  {% if scan_params_level == "scope" %}Selecting a profile here sets the default for all scans in this scope. Targets and scan launch overrides take precedence.{% endif %}
+  {% if scan_params_level == "target" %}Selecting a profile here overrides the scope/organization default for this target.{% endif %}
+</p>
+
+{% include "startScan/_items/secator_profiles.html" with id_prefix=id_prefix|default:'' default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category speed_rengine_builtin_profiles=speed_rengine_builtin_profiles %}
+
+{# --- 3. Scan Parameters Form Inputs (overrides after profiles) --- #}
+<hr>
+<h5 class="mb-1">Scan Parameters <small class="text-muted">
+  {% if scan_params_level == "organization" %}(leave blank to use system defaults)
+  {% elif scan_params_level == "scope" %}(leave blank to inherit from organization or system defaults)
+  {% elif scan_params_level == "target" %}(leave blank to inherit from scope / organization / system defaults)
+  {% else %}(leave blank to inherit){% endif %}
+</small></h5>
+<p class="text-muted small mb-3">
+  {% if scan_params_level == "organization" %}Values defined here set defaults for all scopes, targets, and scans in this organization.
+  {% elif scan_params_level == "scope" %}Values defined here override organization defaults for all scans using this scope. Targets can further override.
+  {% elif scan_params_level == "target" %}Filled values override the scope and organization for this target only.
+  {% endif %}
+</p>
+
+{% with pv=scan_params_values eff=scan_params_effective pfx=scan_params_prefix %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="mb-3">
+      <label class="form-label">Threads
+        {% if eff.threads and eff.threads.source != "default" %}<small class="text-muted">({{ eff.threads.source }}: {{ eff.threads.value }})</small>{% endif %}
+      </label>
+      <input type="number" name="{{ pfx }}threads" class="form-control"
+             placeholder="{% if eff.threads %}{{ eff.threads.value|default:'30' }}{% else %}Default: 30{% endif %}" min="1"
+             value="{{ pv.threads|default_if_none:'' }}">
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="mb-3">
+      <label class="form-label">Rate Limit (req/s)
+        {% if eff.rate_limit and eff.rate_limit.source != "default" %}<small class="text-muted">({{ eff.rate_limit.source }}: {{ eff.rate_limit.value }})</small>{% endif %}
+      </label>
+      <input type="number" name="{{ pfx }}rate_limit" class="form-control"
+             placeholder="{% if eff.rate_limit %}{{ eff.rate_limit.value|default:'150' }}{% else %}Default: 150{% endif %}" min="1"
+             value="{{ pv.rate_limit|default_if_none:'' }}">
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="mb-3">
+      <label class="form-label">Timeout (s)
+        {% if eff.timeout and eff.timeout.source != "default" %}<small class="text-muted">({{ eff.timeout.source }}: {{ eff.timeout.value }})</small>{% endif %}
+      </label>
+      <input type="number" name="{{ pfx }}timeout" class="form-control"
+             placeholder="{% if eff.timeout %}{{ eff.timeout.value|default:'5' }}{% else %}Default: 5{% endif %}" min="1"
+             value="{{ pv.timeout|default_if_none:'' }}">
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="mb-3">
+      <label class="form-label">Retries
+        {% if eff.retries and eff.retries.source != "default" %}<small class="text-muted">({{ eff.retries.source }}: {{ eff.retries.value }})</small>{% endif %}
+      </label>
+      <input type="number" name="{{ pfx }}retries" class="form-control"
+             placeholder="{% if eff.retries %}{{ eff.retries.value|default:'1' }}{% else %}Default: 1{% endif %}" min="0"
+             value="{{ pv.retries|default_if_none:'' }}">
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-3">
+    <div class="mb-3">
+      <label class="form-label">Delay (s)
+        {% if eff.delay and eff.delay.source != "default" %}<small class="text-muted">({{ eff.delay.source }}: {{ eff.delay.value }})</small>{% endif %}
+      </label>
+      <input type="number" step="0.1" name="{{ pfx }}delay" class="form-control"
+             placeholder="{% if eff.delay %}{{ eff.delay.value|default:'0' }}{% else %}Default: 0{% endif %}" min="0"
+             value="{{ pv.delay|default_if_none:'' }}">
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="mb-3">
+      <label class="form-label">Depth
+        {% if eff.depth and eff.depth.source != "default" %}<small class="text-muted">({{ eff.depth.source }}: {{ eff.depth.value }})</small>{% endif %}
+      </label>
+      <input type="number" name="{{ pfx }}depth" class="form-control"
+             placeholder="No limit" min="0"
+             value="{{ pv.depth|default_if_none:'' }}">
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="mb-3">
+      <label class="form-label">Follow Redirects
+        {% if eff.follow_redirect and eff.follow_redirect.source != "default" %}<small class="text-muted">({{ eff.follow_redirect.source }}: {{ eff.follow_redirect.value|yesno:"Yes,No" }})</small>{% endif %}
+      </label>
+      <select name="{{ pfx }}follow_redirect" class="form-control">
+        <option value="">Inherit</option>
+        <option value="True" {% if pv.follow_redirect == True or pv.follow_redirect == 'True' or pv.follow_redirect == 'true' or pv.follow_redirect == '1' %}selected{% endif %}>Yes</option>
+        <option value="False" {% if pv.follow_redirect == False or pv.follow_redirect == 'False' or pv.follow_redirect == 'false' or pv.follow_redirect == '0' %}selected{% endif %}>No</option>
+      </select>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="mb-3">
+      <label class="form-label">Proxy
+        {% if eff.proxy and eff.proxy.source != "default" %}<small class="text-muted">({{ eff.proxy.source }})</small>{% endif %}
+      </label>
+      <input type="text" name="{{ pfx }}proxy" id="{{ id_prefix|default:'' }}proxy-input" class="form-control"
+             placeholder="socks5://host:port or http://host:port"
+             value="{{ pv.proxy|default_if_none:'' }}">
+      {% if show_use_random_proxy %}
+      <div class="form-check mt-2">
+        <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useRandomProxy" name="use_random_proxy">
+        <label class="form-check-label" for="{{ id_prefix|default:'' }}useRandomProxy">
+          <small>Use random proxy from proxy settings</small>
+        </label>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-6">
+    <div class="mb-3">
+      <label class="form-label">User Agent
+        {% if eff.user_agent and eff.user_agent.source != "default" %}<small class="text-muted">({{ eff.user_agent.source }})</small>{% endif %}
+      </label>
+      <input type="text" name="{{ pfx }}user_agent" class="form-control"
+             placeholder="Custom User-Agent"
+             value="{{ pv.user_agent|default_if_none:'' }}">
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="mb-3">
+      <label class="form-label">
+        HTTP Headers <small class="text-muted">(one per line: "Name": "value")</small>
+        {% if eff.header and eff.header.source != "default" %}
+        <small class="text-muted">({{ eff.header.source }} defined)</small>
+        {% endif %}
+      </label>
+      <textarea name="{{ pfx }}header" class="form-control" rows="3"
+                placeholder='"X-Api-Key": "secret"&#10;"Cookie": "session=abc"'>{{ header_initial|default:""|escape }}</textarea>
+    </div>
+  </div>
+</div>
+{% endwith %}

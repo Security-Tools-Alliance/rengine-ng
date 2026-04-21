@@ -1,0 +1,22 @@
+{# Import Subdomains card #}
+{# Params: domain_name (string), id_prefix (string, optional) #}
+<div class="col-lg-6 mb-4">
+  <div class="card border-0 bg-soft-primary h-100">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="fas fa-download text-info me-2"></i>
+        Import Subdomains
+      </h5>
+      <p class="card-text small">
+        Import subdomains for <b>{{ domain_name }}</b> using your private recon tools.
+      </p>
+      
+      <div class="alert bg-soft-primary border-0 mt-1 mb-2 small" role="alert">
+        <span>Separate the subdomains using <b>new line</b>. If the subdomain does not belong to <b>{{ domain_name }}</b> it will be skipped.</span>
+      </div>
+      
+      <label for="{{ id_prefix|default:'' }}importSubdomainFormControlTextarea" class="form-label small">Subdomains List</label>
+      <textarea class="form-control" id="{{ id_prefix|default:'' }}importSubdomainFormControlTextarea" name="importSubdomainTextArea" rows="4" spellcheck="false"></textarea>
+    </div>
+  </div>
+</div>

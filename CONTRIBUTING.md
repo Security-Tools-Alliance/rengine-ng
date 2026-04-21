@@ -27,17 +27,17 @@ You can have this valuable information by following these steps:
 * Then you can start `make logs` and run into your issue, you should now have a more detailed log (stack trace ...)
 * To deactivate the dev environment, run `make dev_down`, then restart the prod with `make up`
 
-Example with the tool arsenal version check API bug.
+Example: after enabling debug, you might see a real error in the logs, e.g., a traceback like:
 
 ```bash
-web_1          |   File "/usr/local/lib/python3/dist-packages/celery/app/task.py", line 411, in __call__
-web_1          |     return self.run(*args, **kwargs)
-web_1          | TypeError: run_command() got an unexpected keyword argument 'echo'
+web_1          |   File ".../api/views.py", line 123, in get
+web_1          |     value = response.data["results"]
+web_1          | KeyError: 'results'
 ```
 
-Now you know the real error is `TypeError: run_command() got an unexpected keyword argument 'echo'`, and you can post the full stack trace to your newly created issue to help developers to track the root cause of the bug and correct the bug easily.
+Now you know the real error is `KeyError: 'results'`, and you can post the full stack trace to your newly created issue to help developers track the root cause and fix the bug.
 
-**Activating debug like this also give you the Django Debug Toolbar on the left side & full stack trace in the browser** instead of an error 500 without any details.
+**Activating debug like this also gives you the Django Debug Toolbar on the left side & full stack trace in the browser** instead of an error 500 without any details.
 So don't forget to open the developer console and check for any XHR request with error 500.
 If there's any, check the response of this request to get your detailed error.
 
@@ -130,3 +130,11 @@ pre-commit install --config docker/web/pre-commit-config.yaml
 With this setup, all Python files will be automatically checked and formatted according to the project rules before each commit.  
 
 This alternative method is convenient for contributors who do not run the full Docker stack locally.
+
+## Developer documentation
+
+To understand the **architecture 3.0**, **centralized behaviour** (scan config, DataTables, paths, logging, HTML escaping), and how to use **AI-assisted coding** (Cursor / Claude) with the project's rules and skills, see the **Developer guide** in the wiki:
+
+**[Developer guide](https://github.com/Security-Tools-Alliance/rengine-ng/wiki/dev-guide)**
+
+The repository includes Cursor rules in `.cursor/rules/` and a context skill in `.cursor/skills/rengine-ng-context/`. The wiki contains a [rules and skills reference](https://github.com/Security-Tools-Alliance/rengine-ng/wiki/dev-rules-reference) and guides for DataTables, security centralization, and AI-assisted coding.

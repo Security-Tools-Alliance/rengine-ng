@@ -1,0 +1,29 @@
+{# Scan Options Accordion - Contains Import Subdomains, Out of Scope, Path Filters #}
+{# Params: domain_name (string), id_prefix (string, optional), id_suffix (string, optional), path_filters_only (bool, optional) - when True only show Path Filters (e.g. for subscan modal) #}
+<div class="scan-options-section mt-4">
+  <div class="accordion">
+    <div class="accordion-item">
+      <div class="accordion-header">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix|default:'' }}scanOptions" aria-expanded="false" aria-controls="{{ id_prefix|default:'' }}scanOptions">
+          <i class="fas fa-cog me-2"></i> Scan Options
+        </button>
+      </div>
+      <div id="{{ id_prefix|default:'' }}scanOptions" class="accordion-collapse collapse">
+        <div class="accordion-body">
+          <div class="row">
+            {% if not path_filters_only %}
+            <!-- Import Subdomains -->
+            {% include 'startScan/_items/secator_import_subdomains.html' with domain_name=domain_name id_prefix=id_prefix|default:'' %}
+
+            <!-- Out of Scope Subdomains -->
+            {% include 'startScan/_items/secator_out_of_scope_subdomains.html' with id_prefix=id_prefix|default:'' %}
+            {% endif %}
+
+            <!-- Path Filters -->
+            {% include 'startScan/_items/secator_path_filters.html' with domain_name=domain_name|default:'selected target(s)' id_prefix=id_prefix|default:'' %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

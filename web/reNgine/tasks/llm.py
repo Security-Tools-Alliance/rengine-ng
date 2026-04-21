@@ -1,9 +1,6 @@
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
-from celery.utils.log import get_task_logger
-
-from reNgine.celery import app
 from reNgine.llm.llm import LLMVulnerabilityReportGenerator
 from reNgine.llm.utils import (
     convert_markdown_to_html,
@@ -11,13 +8,15 @@ from reNgine.llm.utils import (
     is_empty_llm_report,
     is_empty_text,
 )
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import LLMVulnerabilityReport, Vulnerability
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
-@app.task(name="llm_vulnerability_report", bind=False, queue="cpu_queue")
+# TODO Use secator to launch this task
+# @app.task(name="llm_vulnerability_report", bind=False, queue="cpu")
 def llm_vulnerability_report(
     vulnerability_id: Optional[int] = None,
     vuln_tuple: Optional[Tuple[str, str]] = None,

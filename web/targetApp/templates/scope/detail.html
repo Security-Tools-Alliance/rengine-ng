@@ -1,0 +1,149 @@
+{% extends 'base/base.html' %}
+{% load static %}
+{% load humanize %}
+{% load permission_tags %}
+
+{% block title %}
+Scope: {{ scope.name }}
+{% endblock title %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'list_scope' current_project.slug %}">Scopes</a></li>
+<li class="breadcrumb-item active">{{ scope.name }}</li>
+{% endblock breadcrumb_title %}
+
+{% block page_title %}
+{{ scope.name }}
+{% endblock page_title %}
+
+{% block main_content %}
+
+{# Scope info card #}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-6">
+            <h5>Details</h5>
+            <table class="table table-sm table-borderless mb-0">
+              <tr><td class="text-muted" style="width:140px">Organization</td><td>{{ scope.organization.name }}</td></tr>
+              <tr><td class="text-muted">Type</td><td><span class="badge bg-info">{{ scope.get_scope_type_display }}</span></td></tr>
+              <tr><td class="text-muted">Start Date</td><td>{% if scope.start_date %}{{ scope.start_date }}{% else %}-{% endif %}</td></tr>
+              <tr><td class="text-muted">End Date</td><td>{% if scope.end_date %}{{ scope.end_date }}{% else %}-{% endif %}</td></tr>
+              <tr><td class="text-muted">Description</td><td>{% if scope.description %}{{ scope.description }}{% else %}-{% endif %}</td></tr>
+              <tr><td class="text-muted">Created</td><td>{{ scope.insert_date|naturaltime }}</td></tr>
+            </table>
+          </div>
+          <div class="col-md-6">
+            <h5>Profiles</h5>
+            {% with profiles=scope_scan_config.profiles %}
+            {% if profiles %}
+            <div class="mb-2">
+              {% for category, profile_name in profiles.items %}
+              <div class="d-flex align-items-center mb-1">
+                <span class="text-muted me-2" style="width:80px;font-size:0.85em;text-transform:capitalize">{{ category }}</span>
+                <span class="badge bg-primary">{{ profile_name }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No profiles defined — inherits from organization or Secator defaults.</p>
+            {% endif %}
+            {% endwith %}
+          </div>
+        </div>
+        <div class="mt-3">
+          {% if user|can:'modify_targets' %}
+          <a href="{% url 'update_scope' current_project.slug scope.id %}" class="btn btn-soft-primary btn-sm">Edit Scope</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Effective Parameters card #}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        {% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_level="scope" %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Workers card #}
+<div class="row">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-body">
+        <h5>Workers <span class="badge bg-secondary">{{ scope.workers.count }}</span></h5>
+        {% if scope.workers.count %}
+        <ul class="list-group list-group-flush">
+          {% for worker in scope.workers.all %}
+          <li class="list-group-item">{{ worker.name }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-muted mb-0">Local worker (default)</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Targets card #}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <h5>Targets <span class="badge bg-primary">{{ scope.targets.count }}</span></h5>
+        {% if scope.targets.count %}
+        <table id="scope_targets_table" class="table dt-responsive w-100">
+          <thead>
+            <tr>
+              <th>Value</th>
+              <th class="text-center">Type</th>
+              <th class="text-center">Description</th>
+              <th class="text-center">Overrides</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for target in scope.targets.all %}
+            <tr>
+              <td><a href="{% url 'target_summary' current_project.slug target.id %}">{{ target.value }}</a></td>
+              <td class="text-center"><span class="badge bg-secondary">{{ target.target_type }}</span></td>
+              <td class="text-center">{% if target.description %}{{ target.description }}{% else %}-{% endif %}</td>
+              <td class="text-center">
+                {% if target.scan_config %}
+                  <span class="badge bg-warning text-dark" data-bs-toggle="tooltip" title="Target has parameter overrides">Override</span>
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="text-muted mb-0">No targets assigned yet. <a href="{% url 'update_scope' current_project.slug scope.id %}">Add targets</a>.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock main_content %}
+
+{% block page_level_script %}
+<script>
+$(document).ready(function() {
+  if (typeof window.initClientSideDataTable === "function" && $('#scope_targets_table').length) {
+    window.initClientSideDataTable('#scope_targets_table', { scrollY: '40vh' });
+  }
+  const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+  tooltipTriggerList.forEach(el => new bootstrap.Tooltip(el));
+});
+</script>
+{% endblock page_level_script %}

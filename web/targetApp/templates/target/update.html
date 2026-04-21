@@ -5,12 +5,12 @@
 Update Target
 {% endblock title %}
 
-
 {% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
 {% endblock custom_js_css_link %}
 
 {% block page_title %}
-Update Target   {{ form.name.value }}
+Update Target {{ form.value.value }}
 {% endblock page_title %}
 
 {% block main_content %}
@@ -19,40 +19,56 @@ Update Target   {{ form.name.value }}
     <div class="card">
       <div class="card-body">
         <h4 class="header-title">Update Target</h4>
-        <form method="POST">
+        <form method="POST" id="scan-params-form">
           {% csrf_token %}
           <div class="row mb-3">
             <div class="col-6">
               <div>
-                <label for="simpleinput" class="form-label">Domain name</label>
-                {{ form.name }}
+                <label for="simpleinput" class="form-label">Target value</label>
+                {{ form.value }}
                 {% if form.errors %}
                 <div class="invalid-feedback" style="display: block;">
-                  {{ form.errors.name|striptags }}
+                  {{ form.errors.value|striptags }}
                 </div>
                 {% endif %}
               </div>
             </div>
             <div class="col-6">
-              <label for="domainDescription" class="form-label">Description (Optional)</label>
+              <label for="targetDescription" class="form-label">Description (Optional)</label>
               {{ form.description }}
             </div>
           </div>
-          <div class="col-12">
-            <label for="domainDescription" class="form-label">HackerOne Target Team Handle
+          <div class="col-12 mb-3">
+            <label for="h1_team_handle" class="form-label">HackerOne Target Team Handle
               <br>
               This is used to send vulnerability reports to the HackerOne Program automatically. Team handle can be found from the program URL, hackerone.com/team_handle.
             </label>
             {{ form.h1_team_handle }}
           </div>
-          <button class="btn btn-primary submit-fn mt-2 float-end" type="submit">Update Target</button>
+
+          {% if target_scopes %}
+          <div class="alert alert-info d-flex align-items-start mb-3">
+            <i class="fe-info me-2 mt-1"></i>
+            <div>
+              This target belongs to scope{% if target_scopes|length > 1 %}s{% endif %}:
+              {% for scope in target_scopes %}
+              <a href="{% url 'scope_detail' current_project.slug scope.id %}" class="fw-semibold">{{ scope.name }}</a>{% if not forloop.last %}, {% endif %}
+              {% endfor %}.
+              Overrides below take precedence over scope defaults.
+            </div>
+          </div>
+          {% endif %}
+
+          <hr>
+          {% include "startScan/_items/secator_advanced_config_accordion.html" with id_prefix="target_" include_scan_params_section=True show_profiles=False show_simple_options=False scan_params_section_collapse_id="scanOverridesSection" scan_params_section_form_id="scan-params-form" scan_params_prefix=override_prefix scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=False %}
+
+          <button class="btn btn-primary submit-fn mt-3 float-end" type="submit">Update Target</button>
         </form>
       </div>
     </div>
   </div>
 </div>
 {% endblock main_content %}
-
 
 {% block page_level_script %}
 {% endblock page_level_script %}

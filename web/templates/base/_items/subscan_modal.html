@@ -1,32 +1,566 @@
+{% load secator_extras %}
+{% load static %}
+<style>
+.subscan-targets-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+	gap: 0.25rem 1rem;
+	align-content: start;
+}
+.subscan-targets-grid .subscan-target-item {
+	margin-bottom: 0;
+	min-width: 0;
+}
+</style>
 <div id="subscan-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="standard-modalLabel" aria-hidden="true">
-	<div class="modal-dialog modal-dialog-centered">
+	<div class="modal-dialog modal-dialog-centered modal-xl">
 		<div class="modal-content">
 			<div class="modal-header">
-				<h4 class="modal-title" id="standard-modalLabel">Initiate subscan</h4>
+				<div class="modal-title-wrapper w-100">
+					<h4 class="modal-title header-title d-inline" id="standard-modalLabel">Initiate Subscan for <span id="subscan-modal-target-count">0</span> target(s):</h4>
+					<div id="subscan-modal-subdomain-badges" class="mt-2 flex-wrap d-flex gap-1"></div>
+				</div>
 				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 			</div>
 			<div class="modal-body">
-				<div class="mt-2">
-					<h5>Select the scan engine <small>(default engine Selected)</small></h5>
-					<select class="form-select" id="subtaskScanEngine" name="subtaskScanEngine">
-					{% for engine in scan_engines %}
-						{% if engine.engine_name == history.scan_type.engine_name %}
-							<option value="{{engine.id}}" selected>{{engine}}</option>
-							{% else %}
-							<option value="{{engine.id}}">{{engine}}</option>
-						{% endif %}
-					{% endfor %}
-					</select>
+				<!-- Execution Mode Selection -->
+				<div class="mb-4">
+					{% include 'startScan/_items/secator_execution_mode_selector.html' with id_prefix='subscan_' %}
 				</div>
-				<h5>Select the engine's subtasks to perform</h5>
-				<div id="engineTasks" name="engineTasks">
-				<!-- dynamically populated based on engine input -->
+				{% include 'startScan/_items/secator_view_toggle.html' with id_prefix='subscan' %}
+
+				{% include 'startScan/_items/secator_selection_layout.html' with id_prefix='subscan' %}
+				<!-- Scan options (Path Filters only) and Advanced Configuration (scan params + worker) -->
+				<div class="mt-3" id="subscan-options-advanced" style="display: none;">
+					{% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name='selected target(s)' id_prefix='subscan_' path_filters_only=True %}
+					{% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='subscan_' show_simple_options=False include_scan_params_section=True scan_params_section_collapse_id="subscan-params-section" scan_params_section_form_id="" scan_params_prefix="override_" scan_params_level=scan_params_level|default:"target" scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_collapse_expanded=scan_params_section_collapse_expanded scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=True %}
 				</div>
 			</div>
 			<div class="modal-footer">
 				<button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
-				<button type="button" class="btn btn-primary" id="btn-initiate-subtask"><i class="fe-zap ms-1 me-1"></i>Initiate subscan</button>
+				<button type="button" class="btn btn-primary" id="btn-initiate-subtask" disabled>
+					<i class="fe-zap ms-1 me-1"></i>Initiate Subscan
+				</button>
 			</div>
 		</div>
 	</div>
 </div>
+
+<script>
+// Subscan modal initialization
+(function() {
+	let initialized = false;
+
+	function initSubscanModalTooltips() {
+		if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return;
+		const root = document.querySelector('#subscan-modal');
+		if (!root) return;
+		if (window.SecatorScan && typeof window.SecatorScan.initializeTooltipsWithin === 'function') {
+			window.SecatorScan.initializeTooltipsWithin('#subscan-modal');
+			return;
+		}
+		const tooltipTriggerList = [].slice.call(root.querySelectorAll('[data-bs-toggle="tooltip"]'));
+		tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+			const existing = bootstrap.Tooltip.getInstance(tooltipTriggerEl);
+			if (existing) existing.dispose();
+			new bootstrap.Tooltip(tooltipTriggerEl, {
+				delay: { show: 500, hide: 100 },
+				html: true,
+				boundary: 'viewport',
+				container: '#subscan-modal'
+			});
+		});
+	}
+	
+	function initSubscanModal() {
+		if (initialized) {
+			return;
+		}
+		
+		if (typeof $ === 'undefined') {
+			setTimeout(initSubscanModal, 100);
+			return;
+		}
+		
+		if (!$('#subscan-modal').length) {
+			return;
+		}
+		
+		initialized = true;
+		
+		// Handle execution mode selection - only within subscan modal
+		$('#subscan-modal').on('click', '.execution-mode-card', function() {
+			const $card = $(this);
+			const mode = $card.data('mode');
+			const $modal = $('#subscan-modal');
+			
+			// Remove selected class from all cards in modal
+			$modal.find('.execution-mode-card').removeClass('selected');
+			$card.addClass('selected');
+			
+			// Add execution mode class to modal for CSS styling
+			$modal.removeClass('execution-mode-workflow execution-mode-tasks execution-mode-scan');
+			$modal.addClass(`execution-mode-${mode}`);
+			
+			// Load selection options via AJAX
+			loadSubscanSelection(mode);
+		});
+		
+		// Handle selection changes to enable/disable button and refresh proposed targets
+		$('#subscan-modal').on('change', '#subscan-selection-container input[type="radio"], #subscan-selection-container input[name="workflow_id"], #subscan-selection-container input[name="secator_scan_type"]', function() {
+			fetchInputTypesAndTargets();
+			checkSubscanSelection();
+		});
+		// Tasks: when a task checkbox is toggled in the detail panel, sync list and refresh
+		$('#subscan-modal').on('change', '#subscan-selection-container .task-tile input[name="task_ids"]', function() {
+			const taskId = $(this).val();
+			const $listItem = $('#subscan-list-container').find('.subscan-list-item[data-item-id="' + taskId + '"]');
+			$listItem.toggleClass('active', $(this).is(':checked'));
+			refreshTasksDetail();
+			fetchInputTypesAndTargets();
+			checkSubscanSelection();
+		});
+		
+		// Also handle clicks on workflow/task tiles in detail panel (they use labels that trigger the input)
+		$('#subscan-modal').on('click', '#subscan-selection-container .workflow-tile, #subscan-selection-container .task-tile, #subscan-selection-container .scan-type-tile', function() {
+			const $tile = $(this);
+			const mode = $('#subscan-modal').find('.execution-mode-card.selected').data('mode');
+			
+			// Update list item active state
+			if (mode === 'workflow') {
+				const workflowId = $tile.find('input[type="radio"]').val();
+				$('#subscan-list-container').find(`[data-item-id="${workflowId}"]`).addClass('active').siblings().removeClass('active');
+			} else if (mode === 'scan') {
+				const scanType = $tile.find('input[type="radio"]').val();
+				$('#subscan-list-container').find(`[data-item-id="${scanType}"]`).addClass('active').siblings().removeClass('active');
+			} else if (mode === 'tasks') {
+				const taskId = $tile.find('input[type="checkbox"]').val();
+				const $listItem = $('#subscan-list-container').find(`[data-item-id="${taskId}"]`);
+				if ($tile.find('input[type="checkbox"]').is(':checked')) {
+					$listItem.addClass('active');
+				} else {
+					$listItem.removeClass('active');
+				}
+			}
+			
+			setTimeout(function() {
+				checkSubscanSelection();
+			}, 50);
+		});
+		
+		function updateSubscanModalHeader() {
+			const multiple = $('#btn-initiate-subtask').attr('multiple-subscan') === 'true';
+			const $badges = $('#subscan-modal-subdomain-badges').empty();
+			const ipRaw = $('#subtask_ip_address_id').val();
+			const ipId = ipRaw ? parseInt(ipRaw, 10) : 0;
+			if (!multiple && ipId > 0) {
+				$('#subscan-modal-target-count').text('1');
+				const label = $('#subscan-modal').data('subscan-ip-label');
+				const text = (label && String(label).trim()) ? String(label).trim() : ('IP #' + ipId);
+				$badges.append($('<span class="badge badge-soft-primary m-1">').text(text));
+				return;
+			}
+			const ids = [];
+			if (multiple) {
+				document.querySelectorAll('.subdomain_checkbox:checked').forEach(function(el) {
+					const val = $(el).val();
+					if (val) ids.push(val);
+				});
+			} else {
+				const singleId = $('#subtask_subdomain_id').val();
+				if (singleId && String(singleId) !== '0') ids.push(singleId);
+			}
+			$('#subscan-modal-target-count').text(ids.length);
+			if (ids.length === 0) return;
+			const apiUrl = window.SUBDOMAIN_NAMES_API_URL;
+			if (!apiUrl) return;
+			const csrfToken = typeof getCookie !== 'undefined' ? getCookie('csrftoken') : '';
+			$.ajax({
+				url: apiUrl,
+				type: 'GET',
+				data: { ids: ids.join(',') },
+				headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrfToken },
+				success: function(data) {
+					const results = data.results || [];
+					$('#subscan-modal-target-count').text(results.length);
+					results.forEach(function(item) {
+						if (item && item.name) {
+							$badges.append($('<span class="badge badge-soft-primary m-1">').text(item.name));
+						}
+					});
+				},
+				error: function() {
+					$('#subscan-modal-target-count').text(ids.length);
+				}
+			});
+		}
+
+		$(document).on('show.bs.modal', '#subscan-modal', function() {
+			updateSubscanModalHeader();
+			const targetIdEl = document.getElementById('context_target_id');
+			const targetId = (targetIdEl && targetIdEl.value ? targetIdEl.value.trim() : '') || '';
+			const $modal = $('#subscan-modal');
+			const blockRoot = $modal.find('[data-scan-params-block-root="true"]')[0];
+			if (blockRoot) {
+				if (targetId) blockRoot.setAttribute('data-scan-params-target-id', targetId);
+				if (targetId && typeof window.ScanParams !== 'undefined' && typeof window.ScanParams.schedulePreview === 'function') {
+					window.ScanParams.schedulePreview(blockRoot);
+				} else if (targetId && blockRoot.querySelector('input')) {
+					blockRoot.querySelector('input').dispatchEvent(new Event('change', { bubbles: true }));
+				}
+			}
+		});
+
+		// Reset modal when it's closed
+		$(document).on('hidden.bs.modal', '#subscan-modal', function() {
+			const $modal = $('#subscan-modal');
+			$modal.find('.execution-mode-card').removeClass('selected');
+			$modal.removeClass('execution-mode-workflow execution-mode-tasks execution-mode-scan');
+			const blockRoot = $modal.find('[data-scan-params-block-root="true"]')[0];
+			if (blockRoot) blockRoot.setAttribute('data-scan-params-target-id', '');
+			$('#subscan-selection-container').empty();
+			$('#subscan-list-container').empty();
+			$('#subscan-content-row').hide();
+			$('#subscan-options-advanced').hide();
+			$('#subscan-input-types-targets').hide().find('#subscan-input-types-badges').empty();
+			$('#subscan-targets-single').show().find('#subscan-targets-preview').empty();
+			$('#subscan-targets-filter').val('');
+			$('#subscan-tasks-targets-container').hide().empty();
+			$('#subscan-targets-warning, #subscan-targets-error, #subscan-targets-loading').hide();
+			$modal.removeData('subscan-targets-count').removeData('subscan-task-targets-counts');
+			$('#btn-initiate-subtask').prop('disabled', true);
+			$('#subscan-modal-target-count').text('0');
+			$('#subscan-modal-subdomain-badges').empty();
+			$('#subscan-modal').removeData('subscan-ip-label');
+		});
+	}
+	
+	function loadSubscanSelection(mode) {
+		const $listContainer = $('#subscan-list-container');
+		const $detailContainer = $('#subscan-selection-container');
+		const $contentRow = $('#subscan-content-row');
+		const $btn = $('#btn-initiate-subtask');
+		
+		// Disable button while loading
+		$btn.prop('disabled', true);
+		
+		// Show the two-column layout and Scan options / Advanced config
+		$contentRow.show().css('display', '').removeAttr('aria-hidden');
+		$('#subscan-options-advanced').show();
+		// Restore profile switch state from hidden inputs so "Use X Profile" matches stored value after reopen
+		if (typeof window.ScanParams !== 'undefined' && typeof window.ScanParams.syncProfileSwitchesFromHiddenValues === 'function') {
+			window.ScanParams.syncProfileSwitchesFromHiddenValues($('#subscan-modal'));
+		}
+		// Hide view toggle until items are loaded
+		if (window.SecatorScan) window.SecatorScan.setViewToggleVisible('subscan', false);
+		// Hide previous mode's Required input types block
+		$('#subscan-input-types-targets').hide().find('#subscan-input-types-badges, #subscan-targets-preview').empty();
+		$('#subscan-targets-toolbar').hide();
+		$('#subscan-targets-filter').val('');
+		$('#subscan-targets-warning, #subscan-targets-error, #subscan-targets-loading').hide();
+		$('#subscan-modal').removeData('subscan-targets-count');
+		
+		const placeholderHtml = '<div class="text-muted text-center py-5"><i class="fas fa-hand-pointer fa-2x mb-3"></i><p>Select an item from the list to view details</p></div>';
+		const ajaxUrl = window.SECATOR_SELECTION_URL + `?execution_mode=${mode}&id_prefix=subscan_`;
+		const csrfToken = typeof getCookie !== 'undefined' ? getCookie('csrftoken') : '';
+		
+		$.ajax({
+			url: ajaxUrl,
+			type: 'GET',
+			headers: {
+				'X-Requested-With': 'XMLHttpRequest',
+				'X-CSRFToken': csrfToken
+			},
+			beforeSend: function() {
+				$('.secator-view-toggle[data-content-row="#subscan-content-row"]').removeClass('secator-view-toggle-visible');
+				$listContainer.html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i><p class="mt-2 small">Loading...</p></div>');
+				$detailContainer.html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i><p class="mt-2 small">Loading...</p></div>');
+			},
+				success: function(data) {
+				if (data.html) {
+					const $html = $(data.html);
+					var $modal = $('#subscan-modal');
+					var blockRoot = $modal.find('[data-scan-params-block-root="true"]')[0];
+					if (blockRoot && typeof window.ScanParams !== 'undefined' && typeof window.ScanParams.schedulePreview === 'function') {
+						var targetIdEl = document.getElementById('context_target_id');
+						var targetId = (targetIdEl && targetIdEl.value ? targetIdEl.value.trim() : '') || '';
+						if (targetId) blockRoot.setAttribute('data-scan-params-target-id', targetId);
+						window.ScanParams.schedulePreview(blockRoot);
+					}
+					if (window.SecatorScan && typeof window.SecatorScan.buildCompactList === 'function') {
+						window.SecatorScan.buildCompactList($html, mode, {
+							listContainer: $listContainer,
+							listItemClass: 'subscan-list-item',
+							showTaskCategories: false,
+							onWorkflowClick: function($tile, workflowId) { showItemDetail($tile, 'workflow', workflowId); },
+							onScanClick: function($tile, scanType) { showItemDetail($tile, 'scan', scanType); },
+							onTaskClick: function($tile, taskId) { refreshTasksDetail(); fetchInputTypesAndTargets(); checkSubscanSelection(); }
+						});
+						if (typeof window.SecatorScan.bindListToolbar === 'function') {
+							window.SecatorScan.bindListToolbar({
+								prefix: 'subscan',
+								mode: mode,
+								listContainer: $listContainer,
+								listItemClass: 'subscan-list-item',
+								onSelectionChange: function() {
+									if (mode === 'tasks') {
+										refreshTasksDetail();
+										fetchInputTypesAndTargets();
+										checkSubscanSelection();
+									}
+								}
+							});
+						}
+					}
+					// Store full HTML on content row for list/grid toggle (unified with pages)
+					$contentRow.data('full-html', data.html).data('list-view-html', placeholderHtml);
+					$detailContainer.data('full-html', data.html);
+					$detailContainer.html(placeholderHtml);
+					// Show view toggle only when elements are displayed
+					const hasItems = $listContainer.find('.subscan-list-item').length > 0;
+					if (window.SecatorScan) window.SecatorScan.setViewToggleVisible('subscan', hasItems);
+					// Restore grid view content when switching mode while in grid view
+					if ($contentRow.hasClass('secator-view-grid')) {
+						$detailContainer.html(data.html);
+						$contentRow.find('.secator-list-col').hide();
+					}
+					initSubscanModalTooltips();
+					setTimeout(function() {
+						checkSubscanSelection();
+					}, 100);
+				} else {
+					$('.secator-view-toggle[data-content-row="#subscan-content-row"]').removeClass('secator-view-toggle-visible');
+					$listContainer.html('<div class="alert alert-danger">Error loading options</div>');
+					$detailContainer.html('');
+					$btn.prop('disabled', true);
+				}
+			},
+			error: function(xhr, status, error) {
+				console.error('Error loading subscan selection:', error);
+				if (window.SecatorScan) window.SecatorScan.setViewToggleVisible('subscan', false);
+				$listContainer.html('<div class="alert alert-danger">Error loading options. Please try again.</div>');
+				$detailContainer.html('');
+				$btn.prop('disabled', true);
+			}
+		});
+	}
+	
+		function getSubscanContext() {
+		const domainId = $('#subscan-modal').data('domain-id') || $('#subscan_domain_id').val() || '';
+		const multiple = $('#btn-initiate-subtask').attr('multiple-subscan') === 'true';
+		const ipRaw = $('#subtask_ip_address_id').val();
+		const ipId = ipRaw ? parseInt(ipRaw, 10) : 0;
+		let subdomainIds = [];
+		let ipAddressIds = [];
+		if (!multiple && ipId > 0) {
+			ipAddressIds = [String(ipId)];
+		} else if (multiple) {
+			document.querySelectorAll('.subdomain_checkbox:checked').forEach(function(el) {
+				subdomainIds.push($(el).val());
+			});
+		} else {
+			const singleId = $('#subtask_subdomain_id').val();
+			if (singleId && String(singleId) !== '0') subdomainIds = [singleId];
+		}
+		const scanHistEl = document.getElementById('summary_identifier_val');
+		const scanHistoryId = (scanHistEl && scanHistEl.value) ? String(scanHistEl.value).trim() : '';
+		return {
+			domainId: domainId ? String(domainId).trim() : '',
+			subdomainIds: subdomainIds,
+			ipAddressIds: ipAddressIds,
+			scanHistoryId: scanHistoryId
+		};
+	}
+
+	function fetchInputTypesAndTargets() {
+		const $modal = $('#subscan-modal');
+		const mode = $modal.find('.execution-mode-card.selected').data('mode');
+		const $container = $('#subscan-selection-container');
+		if (!mode || !$container.length) {
+			hideInputTypesTargets();
+			return;
+		}
+		if (window.SecatorScan && typeof window.SecatorScan.fetchInputTypesAndTargetsWithContext === 'function') {
+			const subscanContext = {
+				$root: $modal,
+				prefix: 'subscan',
+				getExecutionMode: function() { return $modal.find('.execution-mode-card.selected').data('mode'); },
+				getTargetId: function() {
+					const val = $('#context_target_id').val();
+					return (val !== undefined && val !== null && String(val).trim() !== '') ? String(val).trim() : '';
+				},
+				getDomainId: function() { return getSubscanContext().domainId; },
+				getSubdomainIds: function() { return getSubscanContext().subdomainIds; },
+				getIpAddressIds: function() { return getSubscanContext().ipAddressIds; },
+				getScanHistoryId: function() { return getSubscanContext().scanHistoryId; },
+				getWorkflowId: function() { return $container.find('input[name="workflow_id"]:checked').val(); },
+				getScanName: function() { return $container.find('input[name="secator_scan_type"]:checked').val(); },
+				getTaskIds: function() { return $container.find('input[name="task_ids"]:checked').map(function() { return $(this).val(); }).get(); },
+				getSelectionContainer: function() { return $container; },
+				checkboxClass: 'subscan-target-checkbox',
+				itemWrapperClass: 'subscan-target-item form-check',
+				onUpdateCount: function() {
+					const $preview = $('#subscan-targets-preview');
+					if ($preview.length) {
+						const checked = $preview.find('.subscan-target-checkbox:checked').length;
+						$modal.data('subscan-targets-count', checked);
+					}
+					checkSubscanSelection();
+				}
+			};
+			window.SecatorScan.fetchInputTypesAndTargetsWithContext(subscanContext);
+		}
+	}
+
+	function hideInputTypesTargets() {
+		$('#subscan-input-types-targets').hide();
+		$('#subscan-targets-single').show();
+		$('#subscan-tasks-targets-container').hide().empty();
+		$('#subscan-modal').data('subscan-targets-count', null);
+		$('#subscan-modal').data('subscan-task-targets-counts', null);
+		checkSubscanSelection();
+	}
+
+	function refreshTasksDetail() {
+		const $detailContainer = $('#subscan-selection-container');
+		const fullHtml = $detailContainer.data('full-html');
+		if (!fullHtml) return;
+		const $listContainer = $('#subscan-list-container');
+		const activeIds = $listContainer.find('.subscan-list-item.active[data-item-type="task"]').map(function() {
+			return $(this).attr('data-item-id');
+		}).get();
+		if (activeIds.length === 0) {
+			$detailContainer.html('<div class="text-muted text-center py-5"><i class="fas fa-hand-pointer fa-2x mb-3"></i><p>Select one or more tasks from the list</p></div>');
+			hideInputTypesTargets();
+			return;
+		}
+		const $parsed = $(fullHtml);
+		const $row = $('<div class="row secator-task-selection-row"></div>');
+		activeIds.forEach(function(taskId) {
+			const $tile = $parsed.find('.task-tile').filter(function() {
+				return $(this).find('input[type="checkbox"]').val() === String(taskId);
+			}).first();
+			if ($tile.length === 0) return;
+			const $clone = $tile.clone(true, true);
+			$clone.find('input[type="checkbox"]').attr('name', 'task_ids').prop('checked', true);
+			const $col = $('<div class="col-12 col-sm-6 col-xl-4 col-xxl-3 mb-3"></div>');
+			const safeId = String(taskId).replace(/"/g, '&quot;');
+			const $card = $('<div class="secator-task-selection-card border rounded p-2 h-100" data-task-id="' + safeId + '"></div>');
+			$card.append($clone);
+			$card.append('<div class="secator-task-input-types mt-2 small"><span class="d-block fw-bold mb-1">Required input types</span><span class="secator-task-input-types-badges"></span></div>');
+			$card.append('<div class="secator-task-proposed-targets mt-2 small"></div>');
+			$col.append($card);
+			$row.append($col);
+		});
+		$detailContainer.html($row);
+		$('#subscan-content-row').data('list-view-html', $detailContainer.html());
+		initSubscanModalTooltips();
+	}
+
+	function showItemDetail($tile, mode, itemId) {
+		if (mode === 'tasks') {
+			refreshTasksDetail();
+			return;
+		}
+		$('#subscan-input-types-targets').show();
+		$('#subscan-targets-single').show();
+
+		const $detailContainer = $('#subscan-selection-container');
+		const $contentRow = $('#subscan-content-row');
+
+		const $detailTile = $tile.clone(true, true);
+		if (mode === 'workflow') {
+			$detailTile.find('input[type="radio"]').attr('name', 'workflow_id');
+		} else if (mode === 'scan') {
+			$detailTile.find('input[type="radio"]').attr('name', 'secator_scan_type');
+		}
+
+		$detailContainer.html($detailTile);
+		// Keep list-view-html in sync for list/grid toggle (unified with pages)
+		$contentRow.data('list-view-html', $detailContainer.html());
+
+		if (mode === 'workflow' || mode === 'scan') {
+			$detailContainer.find('input[type="radio"]').prop('checked', true).trigger('change');
+		}
+
+		const $originalInput = $tile.find('input[type="radio"], input[type="checkbox"]');
+		const $detailInput = $detailTile.find('input[type="radio"], input[type="checkbox"]');
+		const $listItem = $('#subscan-list-container').find(`[data-item-id="${itemId}"]`);
+
+		$detailInput.on('change', function() {
+			const isChecked = $(this).is(':checked');
+			$originalInput.prop('checked', isChecked);
+			if (mode === 'workflow' || mode === 'scan') {
+				if (isChecked) {
+					$('#subscan-list-container').find('.subscan-list-item').removeClass('active');
+					$listItem.addClass('active');
+				}
+			}
+			fetchInputTypesAndTargets();
+			checkSubscanSelection();
+		});
+
+		$originalInput.on('change', function() {
+			$detailInput.prop('checked', $(this).is(':checked'));
+			fetchInputTypesAndTargets();
+			checkSubscanSelection();
+		});
+
+		initSubscanModalTooltips();
+
+		fetchInputTypesAndTargets();
+		setTimeout(function() {
+			checkSubscanSelection();
+		}, 50);
+	}
+	
+	function checkSubscanSelection() {
+		const $btn = $('#btn-initiate-subtask');
+		const $modal = $('#subscan-modal');
+		const mode = $modal.find('.execution-mode-card.selected').data('mode');
+
+		if (!mode) {
+			$btn.prop('disabled', true);
+			return;
+		}
+
+		let hasSelection = false;
+		const $container = $('#subscan-selection-container');
+		let hasValidTargets = true;
+
+		if (mode === 'workflow') {
+			hasSelection = $container.find('input[name="workflow_id"]:checked').length > 0;
+			const targetsCount = $modal.data('subscan-targets-count');
+			hasValidTargets = (targetsCount === undefined || targetsCount === null || targetsCount > 0);
+		} else if (mode === 'tasks') {
+			hasSelection = $container.find('input[name="task_ids"]:checked').length > 0;
+			const taskCounts = $modal.data('subscan-task-targets-counts') || {};
+			hasValidTargets = hasSelection && Object.keys(taskCounts).length > 0 && Object.values(taskCounts).every(function(c) { return c > 0; });
+		} else if (mode === 'scan') {
+			hasSelection = $container.find('input[name="secator_scan_type"]:checked').length > 0;
+			const targetsCount = $modal.data('subscan-targets-count');
+			hasValidTargets = (targetsCount === undefined || targetsCount === null || targetsCount > 0);
+		}
+
+		$btn.prop('disabled', !hasSelection || !hasValidTargets);
+	}
+	
+	// Initialize when DOM is ready
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', initSubscanModal);
+	} else {
+		if (typeof $ !== 'undefined' && typeof $.fn.ready === 'function') {
+			$(document).ready(initSubscanModal);
+		} else {
+			initSubscanModal();
+		}
+	}
+})();
+</script>
+<script>
+	// Provide Django-generated API routes to JS (no hardcoded URLs)
+	window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
+	window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
+	window.SUBDOMAIN_NAMES_API_URL = "{% url "api:get_subdomain_names" %}";
+	window.SCAN_PARAMS_EFFECTIVE_HTML_URL = "{% url "api:get_scan_params_effective_html" %}";
+</script>

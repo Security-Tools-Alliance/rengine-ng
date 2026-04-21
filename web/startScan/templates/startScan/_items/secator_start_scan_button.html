@@ -1,0 +1,10 @@
+{# Reusable "Start Scan" button (preferred UX). #}
+{# Params: button_class (string) #}
+<div class="start-scan-button-container">
+  <div class="d-flex justify-content-center">
+    <button type="submit" class="{{ button_class|default:'btn btn-secondary btn-lg px-5' }} start-scan-button-sticky" id="start-scan-btn" disabled>
+      <i class="fas fa-play me-2"></i>Start Scan
+    </button>
+  </div>
+</div>
+

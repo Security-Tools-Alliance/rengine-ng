@@ -1,0 +1,49 @@
+version: '3.8'
+
+# Docker Compose for deploying remote Secator Celery workers.
+# Used on remote hosts; the container runs the same entrypoint as docker/worker/entrypoint.sh (secator worker).
+#
+# Prerequisites:
+# 1. Copy this file and .env to the remote machine (deploy_path).
+# 2. Run: docker compose -f docker-compose.worker.yml up -d
+#
+# reNgine-ng runs each scan via SSH (docker exec ...) or via the worker API.
+# Results are reported back to reNgine-ng via API (SECATOR_ADDONS_* in .env).
+#
+# extra_hosts allows the container to reach the host (SSH tunnel when using tunnel API access).
+# For tunnel mode, on the reNgine server set RENGINE_TUNNEL_BIND_ADDRESS to the Docker bridge
+# gateway so only this container can reach the tunnel (e.g. 172.17.0.1 on Linux default bridge).
+# Then the container uses host.docker.internal:api_tunnel_port. Worker host sshd needs GatewayPorts yes.
+
+# Optional: set SECATOR_WORKER_CONTAINER_NAME in .env to distinguish workers on the same host
+# On ARM64 (aarch64), the Secator image is amd64-only; platform forces amd64 so Docker runs it via QEMU.
+services:
+  secator-worker:
+    image: freelabz/secator:latest
+    platform: linux/amd64
+    container_name: ${SECATOR_WORKER_CONTAINER_NAME:-secator-worker}
+    restart: unless-stopped
+    entrypoint: /entrypoint.sh
+    command: ['worker']
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/opt/rengine-ssl-suppress
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./entrypoint.sh:/entrypoint.sh:ro
+      - ./rengine_pull_agent.py:/rengine-pull-agent/rengine_pull_agent.py:ro
+      # Load sitecustomize.py to suppress urllib3 InsecureRequestWarning (copy docker/worker/python_ssl_suppress to deploy path)
+      - ./python_ssl_suppress:/opt/rengine-ssl-suppress:ro
+      # Custom templates (workflows, scans, tasks, profiles) synced from reNgine-ng
+      - ./templates:/home/secator/.secator/templates
+      # Script and job file for Python-bridge execution
+      - ./scripts:/home/secator/scripts
+    networks:
+      - secator_network
+
+networks:
+  secator_network:
+    driver: bridge
+

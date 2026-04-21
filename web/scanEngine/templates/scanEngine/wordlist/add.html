@@ -10,12 +10,12 @@ Add New Wordlist
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
-<li class="breadcrumb-item"><a href="{% url 'wordlist_list' %}">Wordlist</a></li>
+<li class="breadcrumb-item"><a href="{% url 'wordlist_list' current_project.slug %}">Wordlist</a></li>
 <li class="breadcrumb-item active">Add Worldlist</li>
 {% endblock breadcrumb_title %}
 
 {% block page_title %}
-Add New Wordlist for Bruteforce
+Add New Wordlist
 {% endblock page_title %}
 
 {% block main_content %}
@@ -23,34 +23,45 @@ Add New Wordlist for Bruteforce
   <div class="col-12">
     <div class="card">
       <div class="card-body">
-        <p>Wordlist can be used for directory bruteforce or subdomain bruteforce. Instructions on how to use the wordlist are <a href="https://github.com/Security-Tools-Alliance/rengine-ng/wiki/wordlist/#adding-new-wordlist">found here <i class="fe-external-link"></i></a></p>
+        <p>Wordlists can be used for directory bruteforce, subdomain bruteforce and Secator workflows. They are available on the worker at <code>/home/secator/.secator/wordlists/</code> (filename = short name + <code>.txt</code>). You can upload one or several <code>.txt</code> files at once; when uploading multiple files, the short name is derived from each filename.</p>
         <form class="simple-example" method="POST" enctype="multipart/form-data">
           {% csrf_token %}
           <div class="row">
             <div class="col-6">
-              <label for="name" class="form-label">Wordlist Name</label>
+              <label for="name" class="form-label">Wordlist Name (single file)</label>
               {{ form.name }}
+              {% if form.errors.name %}
+              <div class="invalid-feedback" style="display: block;">
+                {{ form.errors.name|striptags }}
+              </div>
+              {% endif %}
+              <p class="text-muted small">Used when uploading one file; ignored when uploading multiple files.</p>
             </div>
             <div class="col-6">
-              <label for="short_name" class="form-label">Short Name</label>
+              <label for="short_name" class="form-label">Short Name (single file)</label>
               {{ form.short_name }}
               {% if form.errors.short_name %}
               <div class="invalid-feedback" style="display: block;">
                 {{ form.errors.short_name|striptags }}
               </div>
               {% endif %}
-              <p class="text-primary mt-1">Please keep the short names without spaces, like my-wordlist or my_wordlist. The short names will be later used to reference wordlist in the YAML settings.</p>
+              <p class="text-muted small">Use only letters, numbers, hyphens and underscores. Used in YAML and at <code>/home/secator/.secator/wordlists/&lt;short_name&gt;.txt</code>.</p>
             </div>
             <div>
-              <h4 class="header-title">Select the wordlist file</h4>
-              <p class="text-primary">Your wordlist must be a *.txt file and wordlists must be separated by a new line.</p>
+              <h4 class="header-title">Select wordlist file(s)</h4>
+              <p class="text-primary">Upload one or more <code>.txt</code> files; one line per entry. When uploading multiple files, name and short name are generated from each filename.</p>
             </div>
             <div class="custom-file mb-4">
-              <label class="form-label" for="txtFile">Choose *.txt file</label>
+              <label class="form-label" for="txtFile">Choose *.txt file(s)</label>
               {{ form.upload_file }}
+              {% if form.errors.upload_file %}
+              <div class="invalid-feedback" style="display: block;">
+                {{ form.errors.upload_file|striptags }}
+              </div>
+              {% endif %}
             </div>
           </div>
-          <button class="btn btn-primary submit-fn mt-2 float-end" type="submit">Upload Wordlist</button>
+          <button class="btn btn-primary submit-fn mt-2 float-end" type="submit">Upload Wordlist(s)</button>
         </form>
       </div>
     </div>
@@ -65,12 +76,12 @@ var input = document.getElementById("name");
 var shortName = document.getElementById("short_name");
 
 input.addEventListener("input", function() {
-  inputValue = document.getElementById("name").value;
+  var inputValue = document.getElementById("name").value;
   shortName.value = inputValue.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();;
 });
 
 shortName.addEventListener("input", function() {
-  inputValue = document.getElementById("short_name").value;
+  var inputValue = document.getElementById("short_name").value;
   shortName.value = inputValue.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();;
 });
 
@@ -78,7 +89,7 @@ shortName.addEventListener("input", function() {
 // custom file input
 $(".custom-file-input").on("change", function() {
   var fileName = $(this).val().split("\\").pop();
-  $(this).siblings(".custom-file-label").addClass("selected").html(fileName);
+  $(this).siblings(".custom-file-label").addClass("selected").text(fileName);
 });
 </script>
 {% endblock page_level_script %}

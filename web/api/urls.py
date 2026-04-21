@@ -1,36 +1,52 @@
 from django.urls import include, path
 from rest_framework import routers
 
+from .scan_file import ServeScanFile
 from .views import (
     AddReconNote,
     AddTarget,
     AvailableOllamaModels,
-    CMSDetector,
     CreateProjectApi,
-    CVEDetails,
+    CreateSecatorScan,
+    CreateSecatorTask,
+    CreateSecatorWorkflow,
+    DatatableFilterHealth,
     DeleteMultipleRows,
+    DeleteSecatorScan,
+    DeleteSecatorTask,
+    DeleteSecatorWorkflow,
     DeleteSubdomain,
     DeleteVulnerability,
     DirectoryViewSet,
     DomainIPHistory,
     EndPointChangesViewSet,
     EndPointViewSet,
+    ExploitViewSet,
     FetchMostCommonVulnerability,
     FetchMostVulnerable,
     FetchScreenshots,
     FetchSubscanResults,
+    GetAvailableTasks,
+    GetAvailableWorkflows,
     GetCSRFToken,
-    GetExternalToolCurrentVersion,
+    GetDefaultProfileOpts,
     GetFileContents,
     GetIpDetails,
+    GetScanDetail,
+    GetScanParamsEffectiveHtml,
+    GetSecatorInputTypesAndTargets,
+    GetSecatorSelection,
+    GetSubdomainNames,
+    GetTaskDetail,
+    GetWorkflowDetail,
+    GetWorkflowTasks,
     GfList,
-    GithubToolCheckGetLatestRelease,
     InitiateSubTask,
     InterestingEndpointViewSet,
     InterestingSubdomainViewSet,
     IpAddressViewSet,
-    IPToDomain,
     ListActivityLogsViewSet,
+    ListCertificates,
     ListDorks,
     ListDorkTypes,
     ListEmails,
@@ -41,54 +57,93 @@ from .views import (
     ListIPs,
     ListMetadata,
     ListOrganizations,
+    ListOrganizationsDatatableViewSet,
     ListOsintUsers,
     ListPorts,
+    ListS3BucketsDatatableViewSet,
+    ListScanEnginesDatatableViewSet,
     ListScanHistory,
     ListScanLogsViewSet,
+    ListScheduledScansDatatableViewSet,
+    ListScopes,
+    ListScopesDatatableViewSet,
     ListSubdomains,
     ListSubScans,
+    ListSubScansDatatableViewSet,
     ListTargetsDatatableViewSet,
     ListTargetsInOrganization,
     ListTargetsWithoutOrganization,
     ListTechnology,
     ListTodoNotes,
+    ListWordlistsDatatableViewSet,
     LLMAttackSuggestion,
     LLMModelsManager,
     LLMVulnerabilityReportGenerator,
+    LoadBuiltinProfiles,
+    LoadBuiltinScans,
+    LoadBuiltinTasks,
+    LoadBuiltinWorkflows,
     OllamaDetailManager,
     OllamaManager,
-    PingHosts,
+    PostScanParamsEffectivePreview,
     QueryInterestingSubdomains,
     RengineUpdateCheck,
-    ReverseWhois,
+    ScanHistoryFilterChoices,
     ScanStatus,
     SearchHistoryView,
+    SecatorFindingCreate,
+    SecatorFindingUpdate,
+    SecatorHealth,
+    SecatorRunnerCreate,
+    SecatorRunnerUpdate,
+    SecatorWorkerCheckIn,
+    SecatorWorkerViewSet,
+    SecretViewSet,
     StartScan,
+    StopActivity,
     StopScan,
     SubdomainChangesViewSet,
     SubdomainDatatableViewSet,
     SubdomainsViewSet,
+    ToggleIpAddressImportantStatus,
     ToggleSubdomainImportantStatus,
     UncommonWebPortsView,
-    UninstallTool,
     UniversalSearch,
-    UpdateTool,
+    UnlinkScanIpAddresses,
+    UnlinkTargetIpAddresses,
+    UpdateSecatorScan,
+    UpdateSecatorTask,
+    UpdateSecatorWorkflow,
     VisualiseData,
     VulnerabilityReport,
     VulnerabilityViewSet,
-    WafDetector,
-    Whois,
+)
+from .views_advanced_search import (
+    AdvancedSearchFieldsView,
+    AdvancedSearchValidateView,
+    AdvancedSearchValuesView,
+)
+from .views_ip_discovery import CidrDiscoveryToolView, PingHostsV2ToolView
+from .views_worker_pull import (
+    secator_worker_pull_checkin,
+    secator_worker_pull_claim,
+    secator_worker_pull_complete,
 )
 
 
 app_name = "api"
 router = routers.DefaultRouter()
 router.register(r"listDatatableSubdomain", SubdomainDatatableViewSet, basename="subdomain-datatable")
+router.register(r"listScopes", ListScopesDatatableViewSet, basename="scopes-datatable")
+router.register(r"listDatatableOrganizations", ListOrganizationsDatatableViewSet, basename="organizations-datatable")
+router.register(r"listScheduledScans", ListScheduledScansDatatableViewSet, basename="scheduled-scans-datatable")
 router.register(r"listTargets", ListTargetsDatatableViewSet, basename="targets")
 router.register(r"listSubdomains", SubdomainsViewSet, basename="subdomains")
 router.register(r"listEndpoints", EndPointViewSet, basename="endpoints")
 router.register(r"listDirectories", DirectoryViewSet, basename="directories")
 router.register(r"listVulnerability", VulnerabilityViewSet, basename="vulnerabilities")
+router.register(r"listSecret", SecretViewSet, basename="secrets")
+router.register(r"listExploit", ExploitViewSet, basename="exploits")
 router.register(r"listInterestingSubdomains", InterestingSubdomainViewSet, basename="interesting-subdomains")
 router.register(r"listInterestingEndpoints", InterestingEndpointViewSet, basename="interesting-endpoints")
 router.register(r"listSubdomainChanges", SubdomainChangesViewSet, basename="subdomain-changes")
@@ -96,9 +151,13 @@ router.register(r"listEndPointChanges", EndPointChangesViewSet, basename="endpoi
 router.register(r"listIps", IpAddressViewSet, basename="ip-addresses")
 router.register(r"listActivityLogs", ListActivityLogsViewSet, basename="activity-logs")
 router.register(r"listScanLogs", ListScanLogsViewSet, basename="scan-logs")
+router.register(r"secator/workers", SecatorWorkerViewSet, basename="secator-workers")
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("advancedSearch/fields/", AdvancedSearchFieldsView.as_view(), name="advancedSearchFields"),
+    path("advancedSearch/validate/", AdvancedSearchValidateView.as_view(), name="advancedSearchValidate"),
+    path("advancedSearch/values/", AdvancedSearchValuesView.as_view(), name="advancedSearchValues"),
     path("add/target/", AddTarget.as_view(), name="addTarget"),
     path("add/recon_note/", AddReconNote.as_view(), name="addReconNote"),
     path("queryTechnologies/", ListTechnology.as_view(), name="listTechnologies"),
@@ -108,6 +167,7 @@ urlpatterns = [
     path("queryInterestingSubdomains/", QueryInterestingSubdomains.as_view(), name="queryInterestingSubdomains"),
     path("querySubdomains/", ListSubdomains.as_view(), name="querySubdomains"),
     path("queryEndpoints/", ListEndpoints.as_view(), name="queryEndpoints"),
+    path("certificates/", ListCertificates.as_view(), name="certificates_list"),
     path("queryOsintUsers/", ListOsintUsers.as_view(), name="queryOsintUsers"),
     path("queryMetadata/", ListMetadata.as_view(), name="queryMetadata"),
     path("queryEmails/", ListEmails.as_view(), name="queryEmails"),
@@ -116,6 +176,7 @@ urlpatterns = [
     path("queryDorkTypes/", ListDorkTypes.as_view(), name="queryDorkTypes"),
     path("queryAllScanResultVisualise/", VisualiseData.as_view(), name="queryAllScanResultVisualise"),
     path("fetchScreenshots/", FetchScreenshots.as_view(), name="fetchScreenshots"),
+    path("scan-files/<path:relative_path>", ServeScanFile.as_view(), name="serve_scan_file"),
     path(
         "queryTargetsWithoutOrganization/",
         ListTargetsWithoutOrganization.as_view(),
@@ -123,23 +184,41 @@ urlpatterns = [
     ),
     path("queryTargetsInOrganization/", ListTargetsInOrganization.as_view(), name="queryTargetsInOrganization"),
     path("listOrganizations/", ListOrganizations.as_view(), name="listOrganizations"),
+    path("queryScopes/", ListScopes.as_view(), name="listScopes"),
+    path(
+        "listDatatableSubscans/",
+        ListSubScansDatatableViewSet.as_view({"get": "list"}),
+        name="listDatatableSubscans",
+    ),
     path("listEngines/", ListEngines.as_view(), name="listEngines"),
     path("listSubScans/", ListSubScans.as_view(), name="listSubScans"),
     path("listScanHistory/", ListScanHistory.as_view(), name="listScanHistory"),
+    path("scanHistoryFilterChoices/", ScanHistoryFilterChoices.as_view(), name="scanHistoryFilterChoices"),
+    path(
+        "listS3Buckets/",
+        ListS3BucketsDatatableViewSet.as_view({"get": "list"}),
+        name="listS3Buckets",
+    ),
+    path(
+        "listWordlists/",
+        ListWordlistsDatatableViewSet.as_view({"get": "list"}),
+        name="listWordlists",
+    ),
+    path(
+        "listScanEngines/",
+        ListScanEnginesDatatableViewSet.as_view({"get": "list"}),
+        name="listScanEngines",
+    ),
     path("listTodoNotes/", ListTodoNotes.as_view(), name="listTodoNotes"),
     path("listInterestingKeywords/", ListInterestingKeywords.as_view(), name="listInterestingKeywords"),
+    # Preview for custom scan assets only (gf_pattern, nuclei_template). Unsupported params return 410 Gone + migration_note.
     path("getFileContents/", GetFileContents.as_view(), name="getFileContents"),
     path("vulnerability/report/", VulnerabilityReport.as_view(), name="vulnerability_report"),
-    path("tools/ip_to_domain/", IPToDomain.as_view(), name="ip_to_domain"),
-    path("tools/ping_hosts/", PingHosts.as_view(), name="ping_hosts"),
     path("tools/csrf_token/", GetCSRFToken.as_view(), name="csrf_token"),
-    path("tools/whois/", Whois.as_view(), name="whois"),
-    path("tools/reverse/whois/", ReverseWhois.as_view(), name="reverse_whois"),
     path("tools/domain_ip_history", DomainIPHistory.as_view(), name="domain_ip_history"),
-    path("tools/cms_detector/", CMSDetector.as_view(), name="cms_detector"),
-    path("tools/cve_details/", CVEDetails.as_view(), name="cve_details"),
-    path("tools/waf_detector/", WafDetector.as_view(), name="waf_detector"),
     path("tools/gf_list/", GfList.as_view(), name="gf_list"),
+    path("tools/cidr_discovery/", CidrDiscoveryToolView.as_view(), name="cidr_discovery"),
+    path("tools/ping_hosts_v2/", PingHostsV2ToolView.as_view(), name="ping_hosts_v2"),
     path(
         "tools/llm_vulnerability_report/",
         LLMVulnerabilityReportGenerator.as_view(),
@@ -148,16 +227,6 @@ urlpatterns = [
     path("tools/llm_get_possible_attacks/", LLMAttackSuggestion.as_view(), name="llm_get_possible_attacks"),
     path("tools/llm_models/", LLMModelsManager.as_view(), name="llm_models_manager"),
     path("tools/available_ollama_models/", AvailableOllamaModels.as_view(), name="available_ollama_models"),
-    path(
-        "github/tool/get_latest_releases/", GithubToolCheckGetLatestRelease.as_view(), name="github_tool_latest_release"
-    ),
-    path(
-        "external/tool/get_current_release/",
-        GetExternalToolCurrentVersion.as_view(),
-        name="external_tool_get_current_release",
-    ),
-    path("tool/update/", UpdateTool.as_view(), name="update_tool"),
-    path("tool/uninstall/", UninstallTool.as_view(), name="uninstall_tool"),
     path("tool/ollama/", OllamaManager.as_view(), name="ollama_manager"),
     path("tool/ollama/<path:model_name>/", OllamaDetailManager.as_view(), name="ollama_detail_manager"),
     path("rengine/update/", RengineUpdateCheck.as_view(), name="check_rengine_update"),
@@ -165,9 +234,30 @@ urlpatterns = [
     path("action/vulnerability/delete/", DeleteVulnerability.as_view(), name="delete_vulnerability"),
     path("action/rows/delete/", DeleteMultipleRows.as_view(), name="delete_rows"),
     path("toggle/subdomain/important/", ToggleSubdomainImportantStatus.as_view(), name="toggle_subdomain"),
+    path("toggle/ip/important/", ToggleIpAddressImportantStatus.as_view(), name="toggle_ip_important"),
+    path("action/scan/unlink_ips/", UnlinkScanIpAddresses.as_view(), name="unlink_scan_ip_addresses"),
+    path("action/target/unlink_ips/", UnlinkTargetIpAddresses.as_view(), name="unlink_target_ip_addresses"),
     path("action/initiate/subtask/", InitiateSubTask.as_view(), name="initiate_subscan"),
+    path("subdomain/names/", GetSubdomainNames.as_view(), name="get_subdomain_names"),
+    path(
+        "secator/input-types-targets",
+        GetSecatorInputTypesAndTargets.as_view(),
+        name="get_secator_input_types_targets",
+    ),
+    path("secator/selection/", GetSecatorSelection.as_view(), name="get_secator_selection"),
+    path(
+        "secator/scan-params-effective-html/",
+        GetScanParamsEffectiveHtml.as_view(),
+        name="get_scan_params_effective_html",
+    ),
+    path(
+        "secator/scan-params-effective-preview/",
+        PostScanParamsEffectivePreview.as_view(),
+        name="get_scan_params_effective_preview",
+    ),
     path("action/start/scan/", StartScan.as_view(), name="start_scan"),
     path("action/stop/scan/", StopScan.as_view(), name="stop_scan"),
+    path("action/stop/activity/", StopActivity.as_view(), name="stop_activity"),
     path("fetch/results/subscan/", FetchSubscanResults.as_view(), name="fetch_subscan_results"),
     path("fetch/most_vulnerable/", FetchMostVulnerable.as_view(), name="fetch_most_vulnerable"),
     path(
@@ -181,6 +271,51 @@ urlpatterns = [
     path("scan_status/", ScanStatus.as_view(), name="scan_status"),
     path("action/create/project", CreateProjectApi.as_view(), name="create_project"),
     path("uncommon-web-ports/", UncommonWebPortsView.as_view(), name="uncommonWebPorts"),
+    # Workflow API endpoints
+    path("workflows/create/", CreateSecatorWorkflow.as_view(), name="create_workflow"),
+    path("workflows/<int:workflow_id>/", GetWorkflowDetail.as_view(), name="get_workflow_detail"),
+    path("workflows/<int:workflow_id>/update/", UpdateSecatorWorkflow.as_view(), name="update_workflow"),
+    path("workflows/<int:workflow_id>/delete/", DeleteSecatorWorkflow.as_view(), name="delete_workflow"),
+    path("tasks/create/", CreateSecatorTask.as_view(), name="create_task"),
+    path("tasks/<int:task_id>/", GetTaskDetail.as_view(), name="get_task_detail"),
+    path("tasks/<int:task_id>/update/", UpdateSecatorTask.as_view(), name="update_task"),
+    path("tasks/<int:task_id>/delete/", DeleteSecatorTask.as_view(), name="delete_task"),
+    path("scans/create/", CreateSecatorScan.as_view(), name="create_scan"),
+    path("scans/<int:scan_id>/", GetScanDetail.as_view(), name="get_scan_detail"),
+    path("scans/<int:scan_id>/update/", UpdateSecatorScan.as_view(), name="update_scan"),
+    path("scans/<int:scan_id>/delete/", DeleteSecatorScan.as_view(), name="delete_scan"),
+    path("workflows/load-builtin/", LoadBuiltinWorkflows.as_view(), name="load_builtin_workflows"),
+    path("tasks/load-builtin/", LoadBuiltinTasks.as_view(), name="load_builtin_tasks"),
+    path("profiles/load-builtin/", LoadBuiltinProfiles.as_view(), name="load_builtin_profiles"),
+    path("profiles/default-opts/", GetDefaultProfileOpts.as_view(), name="get_default_profile_opts"),
+    path("scans/load-builtin/", LoadBuiltinScans.as_view(), name="load_builtin_scans"),
+    path("workflows/<int:workflow_id>/tasks/", GetWorkflowTasks.as_view(), name="get_workflow_tasks"),
+    path("tasks/available/", GetAvailableTasks.as_view(), name="get_available_tasks"),
+    path("workflows/available/", GetAvailableWorkflows.as_view(), name="get_available_workflows"),
+    # Secator API Hook endpoints (for runner and finding CRUD operations)
+    # POST uses plural (runners/findings), PUT uses singular (runner/finding) per Secator hook API
+    path("secator/runners", SecatorRunnerCreate.as_view(), name="secator_runner_create"),
+    path("secator/runner/<str:runner_id>", SecatorRunnerUpdate.as_view(), name="secator_runner_update"),
+    path("secator/findings", SecatorFindingCreate.as_view(), name="secator_finding_create"),
+    path("secator/finding/<str:finding_id>", SecatorFindingUpdate.as_view(), name="secator_finding_update"),
+    path("secator/health/", SecatorHealth.as_view(), name="secator_health"),
+    path("health/datatables-filters/", DatatableFilterHealth.as_view(), name="datatable_filter_health"),
+    path("secator/worker/<int:worker_id>/check/", SecatorWorkerCheckIn.as_view(), name="secator_worker_check"),
+    path(
+        "secator/workers/<int:worker_id>/pull/claim/",
+        secator_worker_pull_claim,
+        name="secator_worker_pull_claim",
+    ),
+    path(
+        "secator/workers/<int:worker_id>/pull/complete/",
+        secator_worker_pull_complete,
+        name="secator_worker_pull_complete",
+    ),
+    path(
+        "secator/workers/<int:worker_id>/pull/checkin/",
+        secator_worker_pull_checkin,
+        name="secator_worker_pull_checkin",
+    ),
 ]
 
 urlpatterns += router.urls

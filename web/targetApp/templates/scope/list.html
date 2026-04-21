@@ -1,0 +1,306 @@
+{% extends 'base/base.html' %}
+{% load static %}
+{% load humanize %}
+{% load permission_tags %}
+
+{% block title %}
+Scopes
+{% endblock title %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item active"><a href="{% url 'list_scope' current_project.slug %}">Scopes</a></li>
+{% endblock breadcrumb_title %}
+
+{% block page_title %}
+Scopes
+{% endblock page_title %}
+
+{% block main_content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="p-2">
+        <div class="row">
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center flex-wrap gap-1">
+            {% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='scopeListQuickSearch' %}
+            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scope_list.html' id_prefix='scopeList' filtering_text_id='scopeListFilteringTextHidden' %}
+            <div class="btn-group ms-1 dropstart">
+              <button type="button" class="btn btn-soft-info dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Scope grouping">
+                <i class="fe-layout"></i>
+              </button>
+              <div class="dropdown-menu">
+                <div class="dropdown-item">
+                  <div class="form-check">
+                    <input type="radio" id="scope_group_none" name="grouping_scope_row" class="form-check-input" value="" checked>
+                    <label class="form-check-label" for="scope_group_none">None</label>
+                  </div>
+                </div>
+                <div class="dropdown-item">
+                  <div class="form-check">
+                    <input type="radio" id="scope_group_organization" name="grouping_scope_row" class="form-check-input" value="organization_name">
+                    <label class="form-check-label" for="scope_group_organization">Organization</label>
+                  </div>
+                </div>
+                <div class="dropdown-item">
+                  <div class="form-check">
+                    <input type="radio" id="scope_group_type" name="grouping_scope_row" class="form-check-input" value="scope_type">
+                    <label class="form-check-label" for="scope_group_type">Type</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="scopeListFilteringText" class="w-100 d-flex flex-wrap gap-1 mt-2"></div>
+          </div>
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
+            {% if user|can:'modify_targets' %}
+            <a class="btn btn-sm btn-soft-primary" href="{% url 'add_scope' current_project.slug %}" data-toggle="tooltip" data-placement="top" title="Add Scope" aria-label="Add scope">Add New Scope</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <table id="list_scope_table" class="table dt-responsive w-100">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th class="text-center">Organization</th>
+            <th class="text-center">Type</th>
+            <th class="text-center">Start</th>
+            <th class="text-center">End</th>
+            <th class="text-center">Targets</th>
+            <th class="text-center">Workers</th>
+            <th class="text-center">Added</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tfoot>
+          <tr>
+            <th>
+              <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="0" placeholder="Search name" />
+            </th>
+            <th>
+              <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="1" placeholder="Search organization" />
+            </th>
+            <th>
+              <input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="2" placeholder="Search type" />
+            </th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
+          </tr>
+        </tfoot>
+        <tbody>
+        </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock main_content %}
+
+
+{% block page_level_script %}
+<script>
+window.SCOPE_LIST_DATATABLE_URL = "{% url 'api:scopes-datatable-list' %}";
+window.SCOPE_LIST_PROJECT_SLUG = "{{ current_project.slug|escapejs }}";
+window.SCOPE_LIST_SCOPE_DETAIL_BASE = "{% url 'scope_detail' current_project.slug 0 %}".replace('/0', '/');
+window.SCOPE_LIST_START_SCAN_BASE = "{% url 'start_scope_scan' current_project.slug 0 %}".replace('/0', '/');
+window.SCOPE_LIST_UPDATE_SCOPE_BASE = "{% url 'update_scope' current_project.slug 0 %}".replace('/0', '/');
+window.SCOPE_LIST_DELETE_SCOPE_BASE = "{% url 'delete_scope' current_project.slug 0 %}".replace('/0', '/');
+window.SCOPE_LIST_CAN_INITIATE_SCANS = {{ user|can:'initiate_scans_subscans'|yesno:"true,false" }};
+window.SCOPE_LIST_CAN_MODIFY_TARGETS = {{ user|can:'modify_targets'|yesno:"true,false" }};
+</script>
+{{ datatable_row_group_config|json_script:"datatable-row-group-config" }}
+{{ datatable_filter_select_to_param|json_script:"datatable-filter-params" }}
+<script>
+$(document).ready(function() {
+  const scopeListColumns = [
+    { data: 'name', name: 'name' },
+    { data: 'organization_name', name: 'organization_name' },
+    { data: 'scope_type', name: 'scope_type' },
+    { data: 'start_date', name: 'start_date' },
+    { data: 'end_date', name: 'end_date' },
+    { data: 'target_count', name: 'target_count' },
+    { data: 'worker_count', name: 'worker_count' },
+    { data: 'insert_date', name: 'insert_date' },
+    { data: 'id', name: 'action' }
+  ];
+  const scopeListRowGroupBaseOpts = {
+    dataSrc: 'organization_name',
+    rowLabel: 'Scopes',
+    emptyGroupLabel: 'No organization'
+  };
+  const scopeListGroups = [
+    { value: '', label: 'None' },
+    { value: 'organization_name', label: 'Organization', orderWhenActive: [['organization_name', 'asc']] },
+    { value: 'scope_type', label: 'Type', orderWhenActive: [['scope_type', 'asc']] }
+  ];
+  const scopeBackendRowGroup = typeof window.getRengineRowGroupConfigFromScript === 'function' ? window.getRengineRowGroupConfigFromScript('datatable-row-group-config') : null;
+  const scopeRowGroupOpts = scopeBackendRowGroup && typeof window.getRengineRowGroupConfig === 'function'
+    ? window.getRengineRowGroupConfig(scopeBackendRowGroup, {
+        groups: scopeListGroups,
+        columns: scopeListColumns,
+        defaultOrderWhenDisabled: [['name', 'asc']],
+        rowGroupBaseOpts: scopeListRowGroupBaseOpts,
+        snackbarMessage: window.getRengineRowGroupSnackbarMessage('Grouping cleared', 'Scopes grouped by {label}')
+      })
+    : null;
+  const scopeTable = window.initRengineServerSideDataTable('#list_scope_table', {
+    filterParamsElId: 'datatable-filter-params',
+    ajax: {
+      url: window.SCOPE_LIST_DATATABLE_URL,
+      data: function(d) { d.slug = window.SCOPE_LIST_PROJECT_SLUG; }
+    },
+    columns: scopeListColumns,
+    orderFromColumns: [scopeListColumns, [['name', 'asc']]],
+    rowGroup: scopeRowGroupOpts,
+    columnDefs: [
+      { orderable: false, targets: 'action:name' },
+      {
+        targets: 'name:name',
+        render: function(data, type, row) {
+          const idEnc = window.safeAttr(String(row.id));
+          const detailUrl = window.SCOPE_LIST_SCOPE_DETAIL_BASE + idEnc;
+          return type === 'display' ? '<a href="' + detailUrl + '">' + window.safeText(data) + '</a>' : data;
+        }
+      },
+      {
+        targets: 'organization_name:name',
+        className: 'text-center',
+        render: function(data) {
+          return window.safeBadge ? window.safeBadge(data || '', 'badge badge-soft-dark', 'fe-briefcase') : ('<span class="badge badge-soft-dark"><i class="fe-briefcase me-1"></i>' + window.safeText(data || '') + '</span>');
+        }
+      },
+      {
+        targets: 'scope_type:name',
+        className: 'text-center',
+        render: function(data) {
+          return window.safeBadge ? window.safeBadge(data || '', 'badge bg-info', 'fe-tag') : ('<span class="badge bg-info"><i class="fe-tag me-1"></i>' + window.safeText(data || '') + '</span>');
+        }
+      },
+      {
+        targets: 'start_date:name',
+        className: 'text-center',
+        render: function(data) { return data ? window.safeText(data) : '&mdash;'; }
+      },
+      {
+        targets: 'end_date:name',
+        className: 'text-center',
+        render: function(data) { return data ? window.safeText(data) : '&mdash;'; }
+      },
+      {
+        targets: 'target_count:name',
+        className: 'text-center',
+        render: function(data) {
+          return '<span class="badge bg-primary"><i class="fe-crosshair me-1"></i>' + (data != null ? data : 0) + '</span>';
+        }
+      },
+      {
+        targets: 'worker_count:name',
+        className: 'text-center',
+        render: function(data) {
+          return '<span class="badge bg-secondary"><i class="fe-cpu me-1"></i>' + (data != null ? data : 0) + '</span>';
+        }
+      },
+      {
+        targets: 'insert_date:name',
+        className: 'text-center',
+        render: function(data, type, row) {
+          const title = row.insert_date ? window.safeText(String(row.insert_date)) : '';
+          const display = row.insert_date_humanized ? window.safeText(row.insert_date_humanized) : (data ? window.safeText(data) : '');
+          return '<span class="badge badge-soft-secondary" data-toggle="tooltip" data-placement="top" title="' + title + '"><i class="fe-clock me-1"></i>' + display + '</span>';
+        }
+      },
+      {
+        targets: 'action:name',
+        className: 'text-center',
+        orderable: false,
+        render: function(data, type, row) {
+          const attackUrl = window.RengineTargetEntityKind && typeof window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls === 'function'
+            ? window.RengineTargetEntityKind.attackSurfaceApiUrlFromDatatableUrls()
+            : null;
+          const llmBtn = window.RengineDatatableActionRenderers && typeof window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton === 'function'
+            ? window.RengineDatatableActionRenderers.renderLlmAttackSurfaceRowButton(attackUrl || '', row.id, 'scope', row)
+            : '';
+          const idEnc = window.safeAttr(String(row.id));
+          let html = '<div class="d-flex flex-wrap gap-1 justify-content-center">';
+          html += llmBtn;
+          if (!window.SCOPE_LIST_CAN_INITIATE_SCANS && !window.SCOPE_LIST_CAN_MODIFY_TARGETS) {
+            html += '</div>';
+            return html;
+          }
+          if (window.SCOPE_LIST_CAN_INITIATE_SCANS) {
+            html += '<a href="' + window.SCOPE_LIST_START_SCAN_BASE + idEnc + '" class="btn btn-sm btn-soft-success" data-toggle="tooltip" title="Quick Scan Entire Scope"><i class="fe-zap"></i></a>';
+          }
+          if (window.SCOPE_LIST_CAN_MODIFY_TARGETS) {
+            const updateUrl = window.SCOPE_LIST_UPDATE_SCOPE_BASE + idEnc;
+            const deleteUrl = window.SCOPE_LIST_DELETE_SCOPE_BASE + idEnc;
+            html += '<a href="' + updateUrl + '" class="btn btn-soft-primary btn-sm" data-toggle="tooltip" title="Edit"><i class="fe-edit-2"></i></a>';
+            html += '<button type="button" class="btn btn-soft-danger btn-sm js-delete-scope-row" data-delete-url="' + deleteUrl + '" data-toggle="tooltip" title="Delete" aria-label="Delete scope"><i class="fe-trash-2"></i></button>';
+          }
+          html += '</div>';
+          return html;
+        }
+      }
+    ],
+    fnCreatedRow: function(nRow, aData) {
+      $(nRow).attr('data-delete-url', window.SCOPE_LIST_DELETE_SCOPE_BASE + window.safeAttr(String(aData.id)));
+    },
+    drawCallbackTooltips: true
+  });
+
+  if (window.attachDatatableQuickSearch) {
+    window.attachDatatableQuickSearch(scopeTable, { inputSelector: '#scopeListQuickSearch', tableId: 'scope_list' });
+  }
+  if (window.attachDatatableColumnSearch) {
+    window.attachDatatableColumnSearch(scopeTable, { tableSelector: '#list_scope_table', delayMs: 400, tableId: 'scope_list' });
+  }
+
+  $.getJSON("{% url 'api:listOrganizations' %}?format=json&project=" + encodeURIComponent(window.SCOPE_LIST_PROJECT_SLUG || ""), function(data) {
+    var orgs = data.organizations || [];
+    var sel = document.getElementById('filterByOrganization');
+    if (sel) orgs.forEach(function(org) {
+      var opt = document.createElement('option');
+      opt.value = org.name;
+      opt.textContent = org.name;
+      sel.appendChild(opt);
+    });
+  }).fail(function() {});
+  var scopeTypeChoices = {{ scope_type_choices|default:"[]"|safe }};
+  var scopeTypeSelect = document.getElementById('filterByScopeType');
+  if (scopeTypeSelect && scopeTypeChoices.length) {
+    scopeTypeChoices.forEach(function(pair) {
+      var label = Array.isArray(pair) ? pair[1] : pair;
+      var opt = document.createElement('option');
+      opt.value = label;
+      opt.textContent = label;
+      scopeTypeSelect.appendChild(opt);
+    });
+  }
+  if (typeof window.attachDatatableFilters === 'function') {
+    window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('scope_list', scopeTable, { onApply: function() { scopeTable.draw(); } }));
+  }
+
+  $(document).on('click', '.js-delete-scope-row', function(e) {
+    e.preventDefault();
+    if (typeof window.confirmDeleteRow === 'function') {
+      window.confirmDeleteRow(this, {
+        confirmTitle: 'Are you sure you want to delete this scope?',
+        confirmText: 'This action cannot be undone!',
+        successMessage: 'Deleted! Scope has been deleted.',
+        errorMessage: 'Could not delete scope.'
+      });
+    }
+  });
+});
+</script>
+{% endblock page_level_script %}

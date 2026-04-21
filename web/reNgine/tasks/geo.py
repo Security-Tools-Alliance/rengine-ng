@@ -1,15 +1,13 @@
-from celery.utils.log import get_task_logger
 import validators
 
-from reNgine.celery import app
-from reNgine.utilities.data import geoiplookup
+from reNgine.core.data import geoiplookup
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import CountryISO, IpAddress
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
-@app.task(name="geo_localize", bind=False, queue="io_queue")
 def geo_localize(host, ip_id=None):
     """Uses geoiplookup to find location associated with host.
 
@@ -42,7 +40,6 @@ def geo_localize(host, ip_id=None):
     return None
 
 
-@app.task(name="geo_localize_batch", bind=False, queue="io_queue")
 def geo_localize_batch(ip_addresses):
     """Batch geolocalization for multiple IP addresses.
 
@@ -71,7 +68,7 @@ def geo_localize_batch(ip_addresses):
                 continue
 
             # Skip private/internal IP addresses
-            from reNgine.utilities.data import get_ip_info
+            from reNgine.core.data import get_ip_info
 
             ip_info = get_ip_info(ip_address)
             if ip_info and ip_info.is_private:

@@ -7,7 +7,7 @@ It tests functionalities related to scan engines, wordlists, settings, and tools
 
 from django.urls import reverse
 
-from scanEngine.models import EngineType, InstalledExternalTool, Wordlist
+from scanEngine.models import EngineType, Wordlist
 from utils.test_base import BaseTestCase
 
 
@@ -37,12 +37,12 @@ class TestScanEngineViews(BaseTestCase):
         """
         response = self.client.post(
             reverse("add_engine"),
-            {"engine_name": "New Engine", "yaml_configuration": "new: config", "scan_type": "bug_bounty"},
+            {"engine_name": "New Engine", "yaml_configuration": "new: config", "scan_type": "internet"},
         )
         self.assertEqual(response.status_code, 302)
         engine = EngineType.objects.filter(engine_name="New Engine").first()
         self.assertTrue(engine is not None)
-        self.assertEqual(engine.scan_type, "bug_bounty")
+        self.assertEqual(engine.scan_type, "internet")
 
     def test_delete_engine_view(self):
         """
@@ -162,14 +162,6 @@ class TestScanEngineViews(BaseTestCase):
         self.data_generator.report_setting.refresh_from_db()
         self.assertEqual(self.data_generator.report_setting.primary_color, "#FFFFFF")
 
-    def test_tool_arsenal_section_view(self):
-        """
-        Tests the tool arsenal section view to ensure it returns the correct status code and template.
-        """
-        response = self.client.get(reverse("tool_arsenal"))
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "scanEngine/settings/tool_arsenal.html")
-
     def test_api_vault_view(self):
         """
         Tests the API vault view to ensure it updates API keys successfully.
@@ -179,39 +171,6 @@ class TestScanEngineViews(BaseTestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "scanEngine/settings/api.html")
-
-    def test_add_tool_view(self):
-        """
-        Tests the add tool view to ensure a new tool is created successfully.
-        """
-        response = self.client.post(
-            reverse("add_tool"),
-            {
-                "name": "New Tool",
-                "github_url": "https://github.com/new/tool",
-                "install_command": "pip install new-tool",
-                "description": "New Tool Description",
-            },
-        )
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(InstalledExternalTool.objects.filter(name="New Tool").exists())
-
-    def test_modify_tool_in_arsenal_view(self):
-        """
-        Tests the modify tool in arsenal view to ensure a tool is updated successfully.
-        """
-        response = self.client.post(
-            reverse("update_tool_in_arsenal", kwargs={"id": self.data_generator.external_tool.id}),
-            {
-                "name": "Modified Tool",
-                "github_url": "https://github.com/modified/tool",
-                "install_command": "pip install modified-tool",
-                "description": "Modified Tool Description",
-            },
-        )
-        self.assertEqual(response.status_code, 302)
-        self.data_generator.external_tool.refresh_from_db()
-        self.assertEqual(self.data_generator.external_tool.name, "Modified Tool")
 
     def test_add_engine_invalid_scan_type(self):
         """
@@ -289,7 +248,7 @@ port_scan: {
             {
                 "engine_name": "YAML Scan Type Engine",
                 "yaml_configuration": yaml_config_with_scan_type,
-                "scan_type": "bug_bounty",  # This should be overridden by YAML
+                "scan_type": "internet",  # This should be overridden by YAML
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -345,7 +304,7 @@ port_scan: {
             engine_name="Test Invalid Scan Type", yaml_configuration="test: config", scan_type="invalid_type"
         )
         # The model should handle this gracefully
-        self.assertIn(engine.scan_type, ["bug_bounty", "internal_network"])
+        self.assertIn(engine.scan_type, ["internet", "internal_network"])
 
     def test_engine_model_yaml_scan_type_override(self):
         """
@@ -362,7 +321,7 @@ custom_header: {
         engine = EngineType.objects.create(
             engine_name="Test YAML Override",
             yaml_configuration=yaml_config,
-            scan_type="bug_bounty",  # This should be overridden by YAML
+            scan_type="internet",  # This should be overridden by YAML
         )
         # Should use scan_type from YAML
         self.assertEqual(engine.scan_type, "internal_network")
@@ -395,16 +354,16 @@ port_scan: {}
 """
         engine = EngineType.objects.create(engine_name="Test Missing YAML", yaml_configuration=yaml_config_missing)
         # Should return default fallback
-        self.assertEqual(engine.get_scan_type_from_yaml(), "bug_bounty")
+        self.assertEqual(engine.get_scan_type_from_yaml(), "internet")
 
         # Test with malformed YAML
         engine = EngineType.objects.create(
             engine_name="Test Malformed YAML", yaml_configuration="invalid: yaml: content: ["
         )
         # Should return default fallback
-        self.assertEqual(engine.get_scan_type_from_yaml(), "bug_bounty")
+        self.assertEqual(engine.get_scan_type_from_yaml(), "internet")
 
         # Test with empty YAML
         engine = EngineType.objects.create(engine_name="Test Empty YAML", yaml_configuration="")
         # Should return default fallback
-        self.assertEqual(engine.get_scan_type_from_yaml(), "bug_bounty")
+        self.assertEqual(engine.get_scan_type_from_yaml(), "internet")

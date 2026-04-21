@@ -1,0 +1,10 @@
+type: profile
+name: vps
+category: speed
+description: "VPS / cloud droplet (2–4 vCPU, 2–8GB)"
+opts:
+  threads: 4
+  rate_limit: 50
+  delay: 0.1
+  timeout: 10
+  retries: 3

@@ -1,0 +1,10 @@
+type: profile
+name: desktop
+category: speed
+description: "Standard desktop (e.g. i5 / 8GB RAM)"
+opts:
+  threads: 8
+  rate_limit: 80
+  delay: 0
+  timeout: 10
+  retries: 3

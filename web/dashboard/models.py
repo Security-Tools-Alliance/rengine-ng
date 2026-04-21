@@ -1,6 +1,17 @@
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
 from rest_framework_api_key.models import AbstractAPIKey
+
+
+DATATABLES_DISPLAY_CLASSIC = "classic"
+DATATABLES_DISPLAY_SCROLLER = "scroller"
+
+# DataTables default rows per page: single source of truth for menu options and default.
+DATATABLES_PAGE_LENGTH_DEFAULT = 20
+DATATABLES_PAGE_LENGTH_CHOICES = [10, 20, 30, 50, 100, 200, 500, 1000]
+# Menu values for lengthMenu (choices + -1 for "All")
+DATATABLES_PAGE_LENGTH_MENU_VALUES = [*DATATABLES_PAGE_LENGTH_CHOICES, -1]
 
 
 class SearchHistory(models.Model):
@@ -60,6 +71,9 @@ class UserAPIKey(AbstractAPIKey):
     created_at = models.DateTimeField(auto_now_add=True)
     last_used = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    is_system = models.BooleanField(
+        default=False, help_text="System keys cannot be deleted through the UI and are managed by reNgine internally"
+    )
 
     def get_url_id(self):
         """Return a URL-safe integer ID for this API key."""
@@ -71,3 +85,21 @@ class UserAPIKey(AbstractAPIKey):
 
     def __str__(self):
         return f"{self.user.username} - {self.name}"
+
+
+class UserPreference(models.Model):
+    """Per-user interface and display preferences (extensible via JSON)."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="user_preference",
+    )
+    preferences = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "User preference"
+        verbose_name_plural = "User preferences"
+
+    def __str__(self):
+        return f"Preferences for {self.user.username}"

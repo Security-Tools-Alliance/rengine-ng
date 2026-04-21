@@ -1,0 +1,239 @@
+"""
+Tests for SecatorAPIBase base class.
+"""
+
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError
+from rest_framework.response import Response
+
+from api.secator_api_base import SecatorAPIBase
+from utils.test_base import BaseTestCase
+
+
+class TestSecatorAPIBase(BaseTestCase):
+    """Test cases for SecatorAPIBase."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+        self.base = SecatorAPIBase()
+
+    def test_validate_request_data_valid(self):
+        """Test validation of valid request data."""
+        data = {"key": "value"}
+        is_valid, error_response = self.base.validate_request_data(data)
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_response)
+
+    def test_validate_request_data_invalid(self):
+        """Test validation of invalid request data."""
+        data = "not a dict"
+        is_valid, error_response = self.base.validate_request_data(data)
+        self.assertFalse(is_valid)
+        self.assertIsInstance(error_response, Response)
+        self.assertEqual(error_response.status_code, 400)
+
+    def test_extract_runner_context(self):
+        """Test extraction of runner context."""
+        runner_data = {
+            "config": {"type": "workflow", "name": "test_workflow"},
+            "context": {
+                "scan_history_id": 123,
+                "target_id": 1,
+                "subscan_id": 456,
+                "celery_id": "celery-123",
+            },
+            "status": "RUNNING",
+            "progress": 50,
+            "done": False,
+        }
+        context = self.base.extract_runner_context(runner_data)
+        self.assertEqual(context["runner_type"], "workflow")
+        self.assertEqual(context["runner_name"], "test_workflow")
+        self.assertEqual(context["scan_history_id"], 123)
+        self.assertEqual(context["target_id"], 1)
+        self.assertEqual(context["subscan_id"], 456)
+        self.assertEqual(context["celery_id"], "celery-123")
+        self.assertEqual(context["status"], "RUNNING")
+        self.assertEqual(context["progress"], 50)
+        self.assertEqual(context["done"], False)
+
+    def test_extract_runner_context_partial_data(self):
+        """Test extraction of runner context with partial data."""
+        runner_data = {}
+        context = self.base.extract_runner_context(runner_data)
+        # All keys should be present even if None
+        self.assertIn("runner_type", context)
+        self.assertIn("runner_name", context)
+        self.assertIn("scan_history_id", context)
+        self.assertIn("target_id", context)
+        self.assertIn("subscan_id", context)
+        self.assertIn("celery_id", context)
+        self.assertIn("status", context)
+        self.assertIn("progress", context)
+        self.assertIn("done", context)
+        # Values should be None when missing
+        self.assertIsNone(context["runner_type"])
+        self.assertIsNone(context["runner_name"])
+        self.assertIsNone(context["scan_history_id"])
+        self.assertIsNone(context["target_id"])
+        self.assertIsNone(context["subscan_id"])
+
+    def test_validate_request_data_with_prefix(self):
+        """Test validation of request data with custom prefix."""
+        data = "not a dict"
+        is_valid, error_response = self.base.validate_request_data(data, prefix=self.base.logger.PREFIX_FINDING)
+        self.assertFalse(is_valid)
+        self.assertIsInstance(error_response, Response)
+        self.assertEqual(error_response.status_code, 400)
+
+    def test_validate_scan_context_with_prefix(self):
+        """Test validation of scan context with custom prefix."""
+        target_id = self.data_generator.target.id
+        is_valid, error_response, scan_history, target = self.base.validate_scan_context(
+            self.data_generator.scan_history.id,
+            target_id,
+            "subdomain",
+            prefix=self.base.logger.PREFIX_RUNNER,
+        )
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_response)
+        self.assertIsNotNone(scan_history)
+        self.assertIsNotNone(target)
+        self.assertEqual(target.id, target_id)
+
+    def test_extract_finding_context(self):
+        """Test extraction of finding context."""
+        finding_data = {
+            "_type": "subdomain",
+            "_context": {"scan_history_id": 123, "target_id": 1, "task": "subfinder"},
+        }
+        context = self.base.extract_finding_context(finding_data)
+        self.assertEqual(context["finding_type"], "subdomain")
+        self.assertEqual(context["scan_history_id"], 123)
+        self.assertEqual(context["target_id"], 1)
+        self.assertEqual(context["task"], "subfinder")
+        self.assertIsNone(context.get("runner_id"))
+
+    def test_extract_finding_context_includes_runner_id_from_task_id(self):
+        """Test that runner_id is derived from task_id in _context."""
+        finding_data = {
+            "_type": "url",
+            "_context": {"scan_history_id": 1, "target_id": 1, "task_id": 42},
+        }
+        context = self.base.extract_finding_context(finding_data)
+        self.assertEqual(context["runner_id"], 42)
+
+    def test_extract_finding_context_includes_runner_id_from_workflow_id(self):
+        """Test that runner_id is derived from workflow_id in _context."""
+        finding_data = {
+            "_type": "url",
+            "_context": {"scan_history_id": 1, "target_id": 1, "workflow_id": 99},
+        }
+        context = self.base.extract_finding_context(finding_data)
+        self.assertEqual(context["runner_id"], 99)
+
+    def test_extract_finding_context_runner_id_prefers_task_over_workflow_over_scan(self):
+        """Test that task_id takes precedence over workflow_id and scan_id."""
+        finding_data = {
+            "_type": "url",
+            "_context": {"scan_history_id": 1, "target_id": 1, "task_id": 1, "workflow_id": 2, "scan_id": 3},
+        }
+        context = self.base.extract_finding_context(finding_data)
+        self.assertEqual(context["runner_id"], 1)
+
+    def test_validate_scan_context_success(self):
+        """Test successful validation of scan context."""
+        target_id = self.data_generator.target.id
+        is_valid, error_response, scan_history, target = self.base.validate_scan_context(
+            self.data_generator.scan_history.id, target_id, "subdomain"
+        )
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_response)
+        self.assertIsNotNone(scan_history)
+        self.assertIsNotNone(target)
+        self.assertEqual(target.id, target_id)
+
+    def test_validate_scan_context_missing_scan_history_id(self):
+        """Test validation with missing scan_history_id."""
+        target_id = self.data_generator.target.id
+        is_valid, error_response, scan_history, target = self.base.validate_scan_context(None, target_id, "subdomain")
+        self.assertFalse(is_valid)
+        self.assertIsInstance(error_response, Response)
+        self.assertEqual(error_response.status_code, 400)
+
+    def test_validate_scan_context_missing_target_id(self):
+        """Test validation when target_id is missing in context."""
+        is_valid, error_response, scan_history, target = self.base.validate_scan_context(
+            self.data_generator.scan_history.id, None, "tag"
+        )
+        self.assertFalse(is_valid)
+        self.assertIsInstance(error_response, Response)
+        self.assertEqual(error_response.status_code, 400)
+
+    def test_validate_scan_context_scan_history_not_found(self):
+        """Test validation when scan history doesn't exist."""
+        target_id = self.data_generator.target.id
+        is_valid, error_response, scan_history, target = self.base.validate_scan_context(99999, target_id, "subdomain")
+        self.assertFalse(is_valid)
+        self.assertIsInstance(error_response, Response)
+        self.assertEqual(error_response.status_code, 404)
+
+    def test_validate_scan_context_target_not_found(self):
+        """Test validation when target doesn't exist."""
+        is_valid, error_response, scan_history, target = self.base.validate_scan_context(
+            self.data_generator.scan_history.id, 99999, "subdomain"
+        )
+        self.assertFalse(is_valid)
+        self.assertIsInstance(error_response, Response)
+        self.assertEqual(error_response.status_code, 404)
+
+    def test_get_repository_for_finding_type(self):
+        """Test getting repository for finding type."""
+        from reNgine.services.repositories.subdomain_repository import SubdomainRepository
+
+        repo_class = self.base.get_repository_for_finding_type("subdomain")
+        self.assertEqual(repo_class, SubdomainRepository)
+
+    def test_get_repository_for_finding_type_unknown(self):
+        """Test getting repository for unknown finding type."""
+        repo_class = self.base.get_repository_for_finding_type("unknown_type")
+        self.assertIsNone(repo_class)
+
+    def test_is_metadata_type(self):
+        """Test checking if type is metadata type."""
+        self.assertTrue(self.base.is_metadata_type("warning"))
+        self.assertTrue(self.base.is_metadata_type("stat"))
+        self.assertFalse(self.base.is_metadata_type("subdomain"))
+
+    def test_handle_repository_error_object_does_not_exist(self):
+        """Test handling ObjectDoesNotExist error."""
+        target_id = self.data_generator.target.id
+        error = ObjectDoesNotExist("Object not found")
+        response = self.base.handle_repository_error(error, "subdomain", 123, target_id)
+        self.assertIsInstance(response, Response)
+        self.assertEqual(response.status_code, 404)
+
+    def test_handle_repository_error_integrity_error(self):
+        """Test handling IntegrityError."""
+        target_id = self.data_generator.target.id
+        error = IntegrityError("Integrity error")
+        response = self.base.handle_repository_error(error, "subdomain", 123, target_id)
+        self.assertIsInstance(response, Response)
+        self.assertEqual(response.status_code, 409)
+
+    def test_handle_repository_error_validation_error(self):
+        """Test handling validation error."""
+        target_id = self.data_generator.target.id
+        error = ValueError("Validation error: invalid data")
+        response = self.base.handle_repository_error(error, "subdomain", 123, target_id)
+        self.assertIsInstance(response, Response)
+        self.assertEqual(response.status_code, 400)
+
+    def test_handle_repository_error_generic_error(self):
+        """Test handling generic error."""
+        target_id = self.data_generator.target.id
+        error = Exception("Generic error")
+        response = self.base.handle_repository_error(error, "subdomain", 123, target_id)
+        self.assertIsInstance(response, Response)
+        self.assertEqual(response.status_code, 500)

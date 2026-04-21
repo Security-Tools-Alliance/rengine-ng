@@ -2,14 +2,15 @@ import json
 import re
 import xml.etree.ElementTree as ET
 
-from celery.utils.log import get_task_logger
 import xmltodict
 
 from reNgine.definitions import NMAP, NUCLEI_SEVERITY_MAP
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import sanitize_url
 
 
-logger = get_task_logger(__name__)
+PREFIX_PARSER = "[PARSER]"
+logger = get_module_logger(__name__)
 
 
 # -----------------#
@@ -39,8 +40,18 @@ def parse_nmap_results(xml_file, output_file=None, parse_type="vulnerabilities")
         try:
             nmap_results = xmltodict.parse(content)
         except Exception as e:
-            logger.warning(e)
-            logger.error(f"Cannot parse {xml_file} to valid JSON. Skipping.")
+            logger.log_line(
+                PREFIX_PARSER,
+                "PARSE_NMAP",
+                "Parse warning: %s" % (e,),
+                level="warning",
+            )
+            logger.log_line(
+                PREFIX_PARSER,
+                "PARSE_NMAP",
+                "Cannot parse %s to valid JSON. Skipping." % (xml_file,),
+                level="error",
+            )
             return []
 
     if output_file:
@@ -148,7 +159,12 @@ def parse_nmap_results(xml_file, output_file=None, parse_type="vulnerabilities")
                             vulns = parse_nmap_vulners_output(script_output)
                             url_vulns.extend(vulns)
                         else:
-                            logger.warning(f'Script output parsing for script "{script_id}" is not supported yet.')
+                            logger.log_line(
+                                PREFIX_PARSER,
+                                "PARSE_NMAP",
+                                'Script output parsing for script "%s" is not supported yet.' % (script_id,),
+                                level="warning",
+                            )
 
                     for vuln in url_vulns:
                         vuln["source"] = NMAP
@@ -183,13 +199,22 @@ def parse_nmap_vulscan_output(script_output):
             continue
         if not line.startswith("["):  # provider line
             if "No findings" in line:
-                logger.info(f"No findings: {line}")
+                logger.log_line(
+                    PREFIX_PARSER,
+                    "VULSCAN",
+                    "No findings: %s" % (line,),
+                    level="info",
+                )
             elif " - " in line:
                 provider_name, provider_url = tuple(line.split(" - "))
                 data[provider_name] = {"url": provider_url.rstrip(":"), "entries": []}
             else:
-                # Log a warning
-                logger.warning(f"Unexpected line format: {line}")
+                logger.log_line(
+                    PREFIX_PARSER,
+                    "VULSCAN",
+                    "Unexpected line format: %s" % (line,),
+                    level="warning",
+                )
             continue
         reg = r"\[(.*)\] (.*)"
         matches = re.match(reg, line)
@@ -197,30 +222,74 @@ def parse_nmap_vulscan_output(script_output):
         entry = {"id": id, "title": title}
         data[provider_name]["entries"].append(entry)
 
-    logger.warning("Vulscan parsed output:")
-    logger.warning(pprint.pformat(data))
+    logger.log_line(
+        PREFIX_PARSER,
+        "VULSCAN",
+        "Vulscan parsed output: %s" % (pprint.pformat(data),),
+        level="warning",
+    )
 
     for provider_name in data:
         if provider_name == "Exploit-DB":
-            logger.error(f"Provider {provider_name} is not supported YET.")
+            logger.log_line(
+                PREFIX_PARSER,
+                "VULSCAN",
+                "Provider %s is not supported YET." % (provider_name,),
+                level="error",
+            )
         elif provider_name == "IBM X-Force":
-            logger.error(f"Provider {provider_name} is not supported YET.")
+            logger.log_line(
+                PREFIX_PARSER,
+                "VULSCAN",
+                "Provider %s is not supported YET." % (provider_name,),
+                level="error",
+            )
         elif provider_name == "MITRE CVE":
-            logger.error(f"Provider {provider_name} is not supported YET.")
+            logger.log_line(
+                PREFIX_PARSER,
+                "VULSCAN",
+                "Provider %s is not supported YET." % (provider_name,),
+                level="error",
+            )
             for entry in data[provider_name]["entries"]:
                 cve_id = entry["id"]
                 vuln = cve_to_vuln(cve_id)
                 vulns.append(vuln)
         elif provider_name == "OSVDB":
-            logger.error(f"Provider {provider_name} is not supported YET.")
+            logger.log_line(
+                PREFIX_PARSER,
+                "VULSCAN",
+                "Provider %s is not supported YET." % (provider_name,),
+                level="error",
+            )
         elif provider_name == "OpenVAS (Nessus)":
-            logger.error(f"Provider {provider_name} is not supported YET.")
+            logger.log_line(
+                PREFIX_PARSER,
+                "VULSCAN",
+                "Provider %s is not supported YET." % (provider_name,),
+                level="error",
+            )
         elif provider_name == "SecurityFocus":
-            logger.error(f"Provider {provider_name} is not supported YET.")
+            logger.log_line(
+                PREFIX_PARSER,
+                "VULSCAN",
+                "Provider %s is not supported YET." % (provider_name,),
+                level="error",
+            )
         elif provider_name == "VulDB":
-            logger.error(f"Provider {provider_name} is not supported YET.")
+            logger.log_line(
+                PREFIX_PARSER,
+                "VULSCAN",
+                "Provider %s is not supported YET." % (provider_name,),
+                level="error",
+            )
         else:
-            logger.error(f"Provider {provider_name} is not supported.")
+            logger.log_line(
+                PREFIX_PARSER,
+                "VULSCAN",
+                "Provider %s is not supported." % (provider_name,),
+                level="error",
+            )
     return vulns
 
 
@@ -260,7 +329,12 @@ def cve_to_vuln(cve_id, vuln_type=""):
 
     cve_info = CVESearch("https://cve.circl.lu").id(cve_id)
     if not cve_info:
-        logger.error(f"Could not fetch CVE info for cve {cve_id}. Skipping.")
+        logger.log_line(
+            PREFIX_PARSER,
+            "CVE",
+            "Could not fetch CVE info for cve %s. Skipping." % (cve_id,),
+            level="error",
+        )
         return None
     vuln_cve_id = cve_info["id"]
     vuln_name = vuln_cve_id
@@ -280,7 +354,6 @@ def cve_to_vuln(cve_id, vuln_type=""):
         vuln_type = ovals[0]["family"]
 
     # Set vulnerability severity based on CVSS score
-    vuln_severity = "info"
     if vuln_cvss < 4:
         vuln_severity = "low"
     elif vuln_cvss < 7:
@@ -298,7 +371,7 @@ def cve_to_vuln(cve_id, vuln_type=""):
         msg += f"\n\tEXPLOITDB: {exploit_id}"
     for capec_id in capec_objects:
         msg += f"\n\tCAPEC: {capec_id}"
-    logger.warning(msg)
+    logger.log_line(PREFIX_PARSER, "CVE", msg, level="warning")
     return {
         "name": vuln_name,
         "type": vuln_type,
@@ -339,7 +412,12 @@ def process_nmap_service_results(xml_file):
 
             # Skip if still empty or if it's a hostname
             if not ip or any(c.isalpha() for c in ip):
-                logger.warning(f"Skipping invalid IP address: {ip} for host {host}")
+                logger.log_line(
+                    PREFIX_PARSER,
+                    "PROCESS_NMAP_SERVICE",
+                    "Skipping invalid IP address: %s for host %s" % (ip, host),
+                    level="warning",
+                )
                 continue
 
             ip_address, _ = IpAddress.objects.get_or_create(address=ip)
@@ -347,7 +425,12 @@ def process_nmap_service_results(xml_file):
                 port_number=int(service["port"]), service_info=service, ip_address=ip_address
             )
         except Exception as e:
-            logger.error(f"Failed to process port {service['port']}: {str(e)}")
+            logger.log_line(
+                PREFIX_PARSER,
+                "PROCESS_NMAP_SERVICE",
+                "Failed to process port %s: %s" % (service["port"], e),
+                level="error",
+            )
 
 
 def process_httpx_response(line):

@@ -1,0 +1,324 @@
+type: workflow
+name: full_recon
+alias: fullrec
+description: Complete reconnaissance workflow
+long_description: |
+  Comprehensive reconnaissance workflow combining all available techniques.
+  Performs complete subdomain discovery, DNS resolution, port scanning, service
+  detection, multi-engine URL crawling, comprehensive fuzzing, parameter discovery,
+  vulnerability scanning, exploit research, WAF detection, SSL/TLS analysis, and
+  secret hunting. The most thorough workflow for complete target assessment.
+tags: [recon, comprehensive]
+input_types:
+  - host
+
+options:
+  nuclei:
+    is_flag: True
+    default: False
+    help: Run nuclei scans (slow)
+    short: n
+
+  hunt_secrets:
+    is_flag: True
+    default: False
+    help: Hunt secrets in HTTP responses (trufflehog)
+    short: hs
+
+  test_ssl:
+    is_flag: True
+    default: False
+    help: Test SSL/TLS security
+    short: tssl
+
+  scanners:
+    type: list
+    default: [naabu, nmap]
+    help: Port scanners to use (naabu, nmap)
+    internal: True
+
+  crawlers:
+    type: list
+    default: [katana, gospider, cariddi]
+    help: Crawlers to use (katana, gospider, cariddi)
+    internal: True
+
+  fuzzers:
+    type: list
+    default: [ffuf, feroxbuster]
+    help: Fuzzers to use (ffuf, feroxbuster)
+    internal: True
+
+tasks:
+  _group/discover:
+    subfinder:
+      description: Discover subdomains (passive)
+
+    dnsx:
+      description: Resolve DNS records
+
+    xurlfind3r:
+      description: Discover URLs from passive sources
+
+    urlfinder:
+      description: Find URLs in text
+
+    gau:
+      description: Fetch known URLs from passive sources
+
+  jswhois:
+    description: Get WHOIS information
+    targets_:
+      - type: target
+        field: name
+
+  getasn:
+    description: Get ASN information
+    targets_:
+      - type: target
+        field: name
+
+  dnsx/resolve:
+    description: Resolve DNS records for discovered subdomains
+    targets_:
+      - type: subdomain
+        field: host
+
+  httpx/probe:
+    description: Run HTTP probes with technology detection
+    tech_detect: True
+    tls_grab: True
+    follow_redirect: True
+    filter_duplicates: True
+    targets_:
+      - type: target
+        field: name
+      - type: subdomain
+        field: host
+
+  _group/port_scan:
+    naabu:
+      description: Find open ports (light)
+      top_ports: 1000
+      targets_:
+        - type: subdomain
+          field: host
+        - type: target
+          field: name
+      if: "'naabu' in opts.scanners"
+
+    nmap/light:
+      description: Find open ports (light)
+      targets_:
+        - type: subdomain
+          field: host
+        - type: target
+          field: name
+      if: "'nmap' in opts.scanners"
+
+  nmap:
+    description: Detect services and versions
+    version_detection: true
+    targets_:
+      - type: port
+        field: host
+    ports_:
+      - type: port
+        field: port
+
+  sshaudit:
+    description: Audit SSH port
+    targets_:
+      - type: port
+        field: host
+        condition: 'port.port == 22 or "ssh" in port.service_name.lower()'
+
+  _group/crawl:
+    katana:
+      description: Crawl URLs
+      depth: 3
+      targets_:
+        - type: url
+          field: url
+          condition: item.status_code != 0
+      if: "'katana' in opts.crawlers"
+
+    gospider:
+      description: Fast web spider
+      targets_:
+        - type: url
+          field: url
+          condition: item.status_code != 0
+      if: "'gospider' in opts.crawlers"
+
+    cariddi:
+      description: Hunt URLs patterns, secrets, API keys
+      info: True
+      secrets: True
+      errors: True
+      juicy_extensions: 1
+      juicy_endpoints: True
+      targets_:
+        - type: url
+          field: url
+          condition: item.status_code != 0
+      if: "'cariddi' in opts.crawlers"
+
+  urlparser:
+    description: Extract query string parameters from URLs
+    include: [url_base]
+    targets_:
+      - type: url
+        field: url
+
+  _group/fuzz:
+    ffuf:
+      description: Fuzz directories and files
+      auto_calibration: True
+      wordlist: directory_list_small
+      targets_:
+        - type: url
+          field: '{url}/FUZZ'
+          condition: item.status_code != 0
+      if: "'ffuf' in opts.fuzzers"
+
+#    dirsearch:
+#      description: Advanced web path brute-forcer
+#      targets_:
+#        - type: url
+#          field: url
+#          condition: item.status_code != 0
+#      if: "'dirsearch' in opts.fuzzers"
+
+    feroxbuster:
+      description: Fast recursive content discovery
+      targets_:
+        - type: url
+          field: url
+          condition: item.status_code != 0
+      if: "'feroxbuster' in opts.fuzzers"
+
+  _group/params:
+    arjun:
+      description: Extract parameters from URLs
+      wordlist: http_params
+      targets_:
+        - type: tag
+          field: value
+          condition: item.name == 'url_base'
+
+#    x8:
+#      description: Bruteforce URL params
+#      wordlist: http_params
+#      targets_:
+#        - type: tag
+#          field: '{value}/'
+#          condition: item.name == 'url_base'
+
+  _group/pattern:
+    gf/xss:
+      description: Hunt XSS params
+      pattern: xss
+      targets_:
+        - type: url
+          field: url
+
+    gf/lfi:
+      description: Hunt LFI params
+      pattern: lfi
+      targets_:
+        - type: url
+          field: url
+
+    gf/ssrf:
+      description: Hunt SSRF params
+      pattern: ssrf
+      targets_:
+        - type: url
+          field: url
+
+    gf/rce:
+      description: Hunt RCE params
+      pattern: rce
+      targets_:
+        - type: url
+          field: url
+
+    gf/idor:
+      description: Hunt IDOR params
+      pattern: idor
+      targets_:
+        - type: url
+          field: url
+
+  _group/vuln_scan:
+    nuclei:
+      description: Search for HTTP vulns
+      exclude_tags: [network, ssl, file, dns, osint, token-spray, headers]
+      severity: critical,high,medium,low
+      targets_:
+        - type: url
+          field: url
+          condition: item.status_code != 0
+      if: opts.nuclei
+
+    dalfox:
+      description: Attack XSS vulnerabilities
+      targets_:
+        - type: tag
+          field: match
+          condition: 'item._source.startswith("gf") or item._source.startswith("arjun") or item._source.startswith("x8")'
+        - type: url
+          field: url
+          condition: '"?" in item.url'
+
+  bup:
+    description: Bypass 4xx URLs
+    targets_:
+      - type: url
+        field: url
+        condition: item.status_code in [400, 401, 403, 404]
+
+  search_vulns:
+    description: Search for related exploits
+    targets_:
+      - type: port
+        field: '{host}:{port}~{service_name}'
+        condition: len(item.service_name.split('/')) > 1
+
+  searchsploit:
+    description: Search for related exploits
+    targets_:
+      - type: port
+        field: '{host}:{port}~{service_name}'
+        condition: len(item.service_name.split('/')) > 1
+
+  wafw00f:
+    description: Check WAF
+    targets_:
+      - type: url
+        field: url
+        condition: item.status_code != 0
+
+  testssl:
+    description: Test SSL/TLS security
+    server_defaults: True
+    targets_:
+      - type: url
+        field: url
+        condition: 'item.url.startswith("https://")'
+    if: opts.test_ssl
+
+  trufflehog:
+    description: Find secrets in HTTP responses
+    targets_:
+      - type: url
+        field: stored_response_path
+        condition: 'item.stored_response_path != ""'
+    if: opts.hunt_secrets
+
+  bbot:
+    description: Multipurpose scanner
+    targets_:
+      - type: target
+        field: name

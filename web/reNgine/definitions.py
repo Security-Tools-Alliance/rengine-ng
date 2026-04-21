@@ -18,6 +18,14 @@ logger = logging.getLogger("django")
 
 EMAIL_REGEX = re.compile(r"[a-z0-9\.\-+_]+@[a-z0-9\.\-+_]+\.[a-z]+")
 
+# Max bytes to read for asset preview (e.g. GF patterns, Nuclei templates) in API.
+MAX_ASSET_PREVIEW_BYTES = 256 * 1024  # 256 KiB
+# Default timeout in seconds for outbound HTTP requests (e.g. notifications).
+REQUEST_TIMEOUT_SECONDS = 10
+
+# Generic user-facing error message when exception details must not be exposed (security).
+GENERIC_USER_ERROR_MESSAGE = "An error occurred. Please try again."
+
 ###############################################################################
 # YAML CONFIG DEFINITIONS
 ###############################################################################
@@ -237,32 +245,94 @@ MATCHED_SUBDOMAIN = "Subdomain"
 MATCHED_PAGE_TITLE = "Page Title"
 
 ###############################################################################
-# Celery Task Status CODES
+# Task and Scan Status Codes
 ###############################################################################
+# When to use which:
+#   - ScanHistory.scan_status: use SCAN_STATUS_* constants and
+#     SCAN_STATUS_DISPLAY_MAP (or SCAN_STATUSES, SCAN_STATUSES_CURRENT, etc.)
+#     for filtering, ordering, and get_status_display().
+#   - ScanActivity.status, SubScan.status, Command: use *_TASK constants and
+#     TASK_STATUS_MAP for the same. Same integers (-1..5) are shared; labels
+#     and semantics differ (e.g. 0 = "QUEUED" for scan, "FAILED" for task).
+#   - Do not mix: e.g. do not filter ScanHistory by FAILED_TASK; use
+#     SCAN_STATUS_QUEUED or SCAN_STATUS_FAILED depending on intent.
+#
+# Scan status: single source of truth for ScanHistory.scan_status.
+SCAN_STATUS_PENDING = -1
+SCAN_STATUS_QUEUED = 0
+SCAN_STATUS_RUNNING = 1
+SCAN_STATUS_COMPLETED = 2
+SCAN_STATUS_FAILED = 3
+SCAN_STATUS_RUNNING_BACKGROUND = 4
+SCAN_STATUS_SKIPPED = 5
+
+# Tuple of (value, label) for ScanHistory.scan_status choices. Derived from
+# SCAN_STATUS_* to keep one source of truth.
+SCAN_STATUSES = (
+    (SCAN_STATUS_PENDING, "Pending"),
+    (SCAN_STATUS_QUEUED, "Queued"),
+    (SCAN_STATUS_RUNNING, "Running"),
+    (SCAN_STATUS_COMPLETED, "Completed"),
+    (SCAN_STATUS_FAILED, "Failed"),
+    (SCAN_STATUS_RUNNING_BACKGROUND, "Running Background"),
+    (SCAN_STATUS_SKIPPED, "Skipped"),
+)
+
+# Scan domain: value -> display string for ScanHistory.get_status_display().
+# Use this map only for ScanHistory; for SubScan/ScanActivity use TASK_STATUS_MAP.
+SCAN_STATUS_DISPLAY_MAP = {
+    SCAN_STATUS_PENDING: "PENDING",
+    SCAN_STATUS_QUEUED: "QUEUED",
+    SCAN_STATUS_RUNNING: "RUNNING",
+    SCAN_STATUS_COMPLETED: "COMPLETED",
+    SCAN_STATUS_FAILED: "FAILED",
+    SCAN_STATUS_RUNNING_BACKGROUND: "RUNNING_BACKGROUND",
+    SCAN_STATUS_SKIPPED: "SKIPPED",
+}
+
+# Task status: same integers as scan status but for ScanActivity, SubScan, Command.
+# Use these constants for task-level status; do not use them for ScanHistory.scan_status.
 INITIATED_TASK = -1
 FAILED_TASK = 0
 RUNNING_TASK = 1
 SUCCESS_TASK = 2
 ABORTED_TASK = 3
 RUNNING_BACKGROUND = 4
+SKIPPED_TASK = 5
 
-CELERY_TASK_STATUS_MAP = {
-    INITIATED_TASK: "INITITATED",
+# Task domain: value -> display string for SubScan.get_status_display() and
+# ScanActivity.get_status_display(). Use TASK_STATUS_MAP only for task models.
+TASK_STATUS_MAP = {
+    INITIATED_TASK: "INITIATED",
     FAILED_TASK: "FAILED",
     RUNNING_TASK: "RUNNING",
     SUCCESS_TASK: "SUCCESS",
     ABORTED_TASK: "ABORTED",
     RUNNING_BACKGROUND: "RUNNING_BACKGROUND",
+    SKIPPED_TASK: "SKIPPED",
 }
 
-CELERY_TASK_STATUSES = (
-    (INITIATED_TASK, "Pending"),
-    (FAILED_TASK, "Queued"),
-    (RUNNING_TASK, "Running"),
-    (SUCCESS_TASK, "Completed"),
-    (ABORTED_TASK, "Failed"),
-    (RUNNING_BACKGROUND, "Running Background"),
-)
+# Backward compatibility: SCAN_STATUS_MAP pointed at task labels; keep for code
+# that still imports it but prefer SCAN_STATUS_DISPLAY_MAP (scan) or TASK_STATUS_MAP (task).
+SCAN_STATUS_MAP = TASK_STATUS_MAP
+
+# Valid status codes for validation and type hints. Use assert_scan_status /
+# assert_task_status (from reNgine.utilities.status) in services or models.
+SCAN_STATUS_VALUES = frozenset(SCAN_STATUS_DISPLAY_MAP.keys())
+TASK_STATUS_VALUES = frozenset(TASK_STATUS_MAP.keys())
+
+# Type aliases for annotations (ScanHistory.scan_status vs ScanActivity/SubScan/Command status).
+ScanStatus = int
+TaskStatus = int
+
+# Dashboard query helpers: which ScanHistory.scan_status values count as
+# "recently completed" vs "current". Derived from SCAN_STATUS_* to avoid drift.
+# QUEUED is included so scans that never started or stayed in queue appear in the
+# "recently completed" dashboard bucket; to show only runs that actually finished
+# (success/failure), use (SCAN_STATUS_COMPLETED, SCAN_STATUS_FAILED) instead.
+SCAN_STATUSES_RECENTLY_COMPLETED = (SCAN_STATUS_QUEUED, SCAN_STATUS_COMPLETED, SCAN_STATUS_FAILED)
+SCAN_STATUSES_CURRENT = (SCAN_STATUS_RUNNING, SCAN_STATUS_RUNNING_BACKGROUND)
+
 DYNAMIC_ID = -1
 
 ###############################################################################
@@ -544,6 +614,8 @@ OLLAMA_INSTANCE = os.getenv("OLLAMA_INSTANCE", DEFAULT_OLLAMA_INSTANCE)
 # SCAN ENGINES DEFINITIONS
 ###############################################################################
 
+# ⚠️ LEGACY: These definitions are kept for backward compatibility with old scans
+# New scans use Secator workflows and tasks instead
 ENGINE_DISPLAY_NAMES = [
     ("subdomain_discovery", "Subdomain Discovery"),
     ("port_scan", "Port Scan"),
@@ -555,5 +627,17 @@ ENGINE_DISPLAY_NAMES = [
     ("waf_detection", "WAF Detection"),
 ]
 
-# Engine names for internal use
+# Engine names for internal use (LEGACY - kept for backward compatibility)
 ENGINE_NAMES = [engine[0] for engine in ENGINE_DISPLAY_NAMES]
+
+###############################################################################
+# Secator Output Types DEFINITIONS
+###############################################################################
+
+# Confidence levels for endpoints and ports
+CONFIDENCE_LEVELS = ["low", "medium", "high"]
+CONFIDENCE_CHOICES = [(level, level.capitalize()) for level in CONFIDENCE_LEVELS]
+
+# IP Protocol types
+IP_PROTOCOLS = ["IPv4", "IPv6"]
+IP_PROTOCOL_CHOICES = [(protocol, protocol) for protocol in IP_PROTOCOLS]

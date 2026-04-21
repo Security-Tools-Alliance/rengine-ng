@@ -1,15 +1,15 @@
 import ast
 import json
-import logging
 import re
 from urllib.parse import urlparse
 
 from django import template
 
 from dashboard.utils import get_user_groups
+from reNgine.utilities.logger import get_module_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 register = template.Library()
 
 
@@ -26,6 +26,14 @@ def map_filter(value, arg):
 @register.filter(name="count")
 def count(value):
     return len(value.split(","))
+
+
+@register.filter(name="get_item")
+def get_item(dictionary, key):
+    """Get item from dictionary by key"""
+    if dictionary is None:
+        return None
+    return dictionary.get(key)
 
 
 @register.filter(name="getpath")
@@ -111,16 +119,15 @@ def parse_references(value):
             logger.error(f"Failed to parse array format for value: {value}")
             logger.debug("Both AST literal_eval and JSON parsing failed", exc_info=True)
 
-        # Try to parse as JSON
+        # Try to parse as JSON (value may be plain text/markdown from AI reports)
         try:
             parsed = json.loads(value)
             if isinstance(parsed, list):
                 return parsed
             elif isinstance(parsed, str):
                 return [parsed]
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON format for value: {value}")
-            logger.debug(f"JSON decode error details: {e}", exc_info=True)
+        except json.JSONDecodeError:
+            pass
 
         # Split by common separators and filter URLs
         # Look for URLs in the text
@@ -152,3 +159,35 @@ def parse_references(value):
     except Exception:
         # If all parsing fails, return the original value as a single item
         return [value]
+
+
+@register.filter(name="pretty_json")
+def pretty_json(value):
+    """
+    Format JSON data in a readable way.
+
+    Args:
+        value: JSON data (dict, list, or JSON string)
+
+    Returns:
+        str: Formatted JSON string
+    """
+    if value is None:
+        return ""
+
+    try:
+        # If it's already a dict or list, use it directly
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, indent=2, ensure_ascii=False)
+        # If it's a string, try to parse it first
+        elif isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                return json.dumps(parsed, indent=2, ensure_ascii=False)
+            except (json.JSONDecodeError, TypeError):
+                return value
+        else:
+            return str(value)
+    except Exception as e:
+        logger.error(f"Error formatting JSON: {e}")
+        return str(value)

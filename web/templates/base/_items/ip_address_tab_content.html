@@ -1,0 +1,114 @@
+{% include "base/_items/_datatable_advanced_search_block.html" with wrapper_id="ip-search-input" advanced_search_context="ips" input_id="ips-search" button_id="ip-search-button" autocom_box_id="ips-autocom-box" placeholder="Filter IP Addresses" aria_label="Filter IP Addresses" %}
+<div class="row">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="row">
+					<div class="col-8 float-start d-flex align-items-center flex-wrap gap-1">
+						<span class="small text-muted me-1">Bulk actions:</span>
+						<div class="btn-group" role="group">
+							<a class="btn btn-sm btn-soft-primary disabled" id="initiate_selected_ips_subscan_btn" data-button="ip_btns" data-toggle="tooltip" title="Initiate multiple subscans for selected IPs" aria-label="Initiate multiple subscans for selected IPs" onclick="initiateMultipleIpSubscan(); return false;"><i class="fe-zap"></i></a>
+							<a class="btn btn-sm btn-soft-info disabled" id="download_selected_ips_btn" data-button="ip_btns" data-toggle="tooltip" title="Download selected IPs" aria-label="Download selected IPs"><i class="fe-download"></i></a>
+							<a class="btn btn-sm btn-soft-danger disabled" data-button="ip_btns" data-toggle="tooltip" title="Delete multiple IPs (not available yet)" aria-label="Delete multiple IPs"><i class="fe-trash-2"></i></a>
+						</div>
+						<div class="ms-1">
+							<a href="#" class="badge badge-soft-primary" id="ip_selected_count" onclick="uncheckIps(); return false;" data-toggle="tooltip" data-placement="top" title="Clear IP selection" aria-label="Clear IP selection"></a>
+						</div>
+					</div>
+					<div class="col-4">
+						<div class="btn-group btn-group-sm mb-2 float-end dropstart">
+							<button class="btn btn-sm btn-soft-primary dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Filter Columns" aria-label="Filter columns">
+								<i class="fe-filter"></i>
+							</button>
+							<div class="dropdown-menu" style="">
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="checkbox" class="form-check-input" id="ip_subdomains_filter_checkbox" name="ip_subdomains_filter_checkbox" checked>
+										<label class="form-check-label" for="ip_subdomains_filter_checkbox">Subdomains</label>
+									</div>
+								</div>
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="checkbox" class="form-check-input" id="ip_ports_filter_checkbox" name="ip_ports_filter_checkbox" checked>
+										<label class="form-check-label" for="ip_ports_filter_checkbox">Ports</label>
+									</div>
+								</div>
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="checkbox" class="form-check-input" id="ip_technologies_filter_checkbox" name="ip_technologies_filter_checkbox" checked>
+										<label class="form-check-label" for="ip_technologies_filter_checkbox">Technologies</label>
+									</div>
+								</div>
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="checkbox" class="form-check-input" id="ip_alive_filter_checkbox" name="ip_alive_filter_checkbox" checked>
+										<label class="form-check-label" for="ip_alive_filter_checkbox">Alive</label>
+									</div>
+								</div>
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="checkbox" class="form-check-input" id="ip_cdn_filter_checkbox" name="ip_cdn_filter_checkbox" checked>
+										<label class="form-check-label" for="ip_cdn_filter_checkbox">CDN</label>
+									</div>
+								</div>
+							</div>
+							<a class="btn btn-sm btn-soft-danger ms-1" data-toggle="tooltip" data-placement="top" title="Toggle important IP addresses" id="load_important_ip_table_btn" aria-label="Toggle important IP addresses" aria-pressed="false"><i class="mdi mdi-alert-rhombus-outline"></i></a>
+							<a class="btn btn-sm btn-soft-primary ms-2 me-2" data-toggle="tooltip" data-placement="top" title="Reload IP Addresses" id="reload_ip_table_btn" aria-label="Reload"><i class="fe-refresh-cw"></i></a>
+							<button class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="Download IP Addresses" aria-label="Download IP addresses">
+								<i class="fe-download"></i>
+							</button>
+							<div class="dropdown-menu" style="">
+								{% include 'base/_items/_ip_download_links.html' %}
+							</div>
+						</div>
+						<div class="btn-group btn-group-sm mb-2 float-end dropstart">
+							<button class="btn btn-sm btn-soft-info dropdown-toggle ms-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-toggle="tooltip" data-placement="left" title="IP Grouping" aria-label="Grouping">
+								<i class="fe-layout"></i>
+							</button>
+							<div class="dropdown-menu" style="">
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="radio" id="ip_group_none" name="grouping_ip_row" class="form-check-input" value="" checked>
+										<label class="form-check-label" for="ip_group_none">None</label>
+									</div>
+								</div>
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="radio" id="ip_group_alive" name="grouping_ip_row" class="form-check-input" value="alive">
+										<label class="form-check-label" for="ip_group_alive">Alive</label>
+									</div>
+								</div>
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="radio" id="ip_group_cdn" name="grouping_ip_row" class="form-check-input" value="is_cdn">
+										<label class="form-check-label" for="ip_group_cdn">CDN</label>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="row mt-1">
+					<div class="col-12">
+						<table id="ip_scan_results" class="table dt-responsive w-100">
+							<thead>
+								<tr>
+									<th class="checkbox-column">Status</th>
+									<th>IP Address</th>
+									<th>Subdomains</th>
+									<th>Ports</th>
+									<th>Technologies</th>
+									<th>Alive</th>
+									<th>CDN</th>
+									<th class="d-none">Important</th>
+									<th>Action</th>
+								</tr>
+							</thead>
+							<tbody></tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>

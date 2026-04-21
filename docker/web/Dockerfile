@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM python:3.13-alpine
+FROM --platform=$BUILDPLATFORM python:3.12-slim
 
 # Labels and Credits
 LABEL \
@@ -13,24 +13,64 @@ ENV USERNAME="rengine"
 ARG HOST_UID
 ARG HOST_GID
 
-RUN apk add --no-cache bash postgresql-libs curl fontconfig ttf-freefont font-noto terminus-font net-tools htop vim && \
-    apk add --no-cache py3-pip gcc musl-dev python3-dev pango zlib-dev jpeg-dev openjpeg-dev g++ libffi-dev && \
-    apk add --no-cache --virtual .build-deps gcc python3-dev musl-dev postgresql-dev && \
-    fc-cache -f && \ 
-    fc-list | sort && \
-    addgroup --gid $HOST_GID -S $USERNAME && \
-    adduser -g $HOST_GID -u $HOST_UID -S --shell /bin/bash --ingroup $USERNAME $USERNAME
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    curl \
+    openssh-client \
+    fontconfig \
+    fonts-freefont-ttf \
+    fonts-noto \
+    fonts-terminus \
+    net-tools \
+    htop \
+    vim \
+    build-essential \
+    gcc \
+    python3-dev \
+    libpango1.0-dev \
+    zlib1g-dev \
+    libjpeg-dev \
+    libopenjp2-7-dev \
+    g++ \
+    libffi-dev \
+    libpq-dev \
+    postgresql-client \
+    pipx \
+    python3-watchdog \
+    && fc-cache -f \
+    && fc-list | sort \
+    && groupadd --gid $HOST_GID $USERNAME \
+    && useradd --uid $HOST_UID --gid $HOST_GID --shell /bin/bash --create-home $USERNAME \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 USER $USERNAME
-ENV PATH=/home/$USERNAME/.local/bin:${PATH}
-
-COPY --chown=$USERNAME:$USERNAME ./pyproject.toml /home/$USERNAME/pyproject.toml
 WORKDIR /home/$USERNAME
-RUN echo 'PATH="$HOME/.local/bin:${PATH}"' >> $HOME/.bashrc && \
-    pip install pipx && pipx install poetry && pipx install watchdog && poetry install --without dev
+
+ENV TOOLPATH="/home/${USERNAME}/tools"
+ENV BINPATH="/home/${USERNAME}/.local/bin"
+ENV PIPX_BIN_DIR="${TOOLPATH}/pipx"
+ENV PATH="${PATH}:${BINPATH}:${PIPX_BIN_DIR}"
+
+RUN mkdir -p $TOOLPATH && \
+    mkdir -p $BINPATH && \
+    mkdir -p /home/$USERNAME/.ssh && \
+    mkdir -p /home/$USERNAME/docker
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install poetry via pipx
+RUN pipx install poetry
+
+# Copy poetry config files
+COPY --chown=$USERNAME:$USERNAME ./pyproject.toml /home/$USERNAME/pyproject.toml
+
+# Install reNgine dependencies
+RUN poetry install --without dev
 
 EXPOSE 8000
-USER $USERNAME
 RUN mkdir -p /home/$USERNAME/rengine
 VOLUME /home/$USERNAME/rengine
 WORKDIR /home/$USERNAME/rengine

@@ -3,8 +3,11 @@ from django.contrib.auth.models import User
 
 from dashboard.models import Project
 from reNgine.validators import validate_domain
+from scanEngine.models import SecatorWorker
+from startScan.models import Domain
 
-from .models import Domain, Organization
+from .models import Organization, Scope, Target
+from .services.scope_params import normalize_allowed_hosts_from_list
 
 
 class AddTargetForm(forms.Form):
@@ -47,23 +50,23 @@ class AddOrganizationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         project = kwargs.pop("project")
         super(AddOrganizationForm, self).__init__(*args, **kwargs)
-        self.fields["domains"] = forms.ModelMultipleChoiceField(
-            queryset=Domain.objects.filter(project__slug=project, domains__isnull=True),
+        self.fields["targets"] = forms.ModelMultipleChoiceField(
+            queryset=Target.objects.for_project(project),
             widget=forms.SelectMultiple(
                 attrs={
                     "class": "form-control select2-multiple",
                     "data-toggle": "select2",
                     "data-width": "100%",
                     "data-placeholder": "Choose Targets",
-                    "id": "domains",
+                    "id": "targets",
                 }
             ),
-            required=True,
+            required=False,
         )
 
     class Meta:
         model = Organization
-        fields = ["name", "description", "domains"]
+        fields = ["name", "description", "targets"]
 
     name = forms.CharField(
         required=True,
@@ -85,11 +88,6 @@ class AddOrganizationForm(forms.ModelForm):
             }
         ),
     )
-
-    def clean_domains(self):
-        if domains := self.cleaned_data.get("domains"):
-            return [int(domain.id) for domain in domains]
-        return []
 
 
 class UpdateTargetForm(forms.ModelForm):
@@ -134,10 +132,59 @@ class UpdateTargetForm(forms.ModelForm):
         self.initial["h1_team_handle"] = h1_team_handle
 
 
+class UpdateTargetModelForm(forms.ModelForm):
+    """ModelForm for Target (value read-only, description and h1_team_handle editable)."""
+
+    class Meta:
+        model = Target
+        fields = ["value", "description", "h1_team_handle"]
+
+    value = forms.CharField(
+        required=True,
+        disabled=True,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "targetValue",
+            }
+        ),
+    )
+    description = forms.CharField(
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "targetDescription",
+            }
+        ),
+    )
+    h1_team_handle = forms.CharField(
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "id": "h1_team_handle",
+            }
+        ),
+    )
+
+
 class UpdateOrganizationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super(UpdateOrganizationForm, self).__init__(*args, **kwargs)
-        self.fields["domains"].choices = [(domain.id, domain.name) for domain in Domain.objects.all()]
+        project = getattr(self.instance, "project", None)
+        target_queryset = Target.objects.filter(project=project) if project else Target.objects.none()
+        self.fields["targets"] = forms.ModelMultipleChoiceField(
+            queryset=target_queryset,
+            widget=forms.SelectMultiple(
+                attrs={
+                    "class": "form-control form-control-lg tagging",
+                    "multiple": "multiple",
+                    "id": "targets",
+                }
+            ),
+            required=False,
+        )
 
     class Meta:
         model = Organization
@@ -163,20 +210,182 @@ class UpdateOrganizationForm(forms.ModelForm):
         ),
     )
 
-    domains = forms.ChoiceField(
-        required=True,
-        widget=forms.Select(
+    def set_value(self, organization_value, description_value, target_list=None):
+        self.initial["name"] = organization_value
+        self.initial["description"] = description_value
+        if target_list is not None and "targets" in self.fields:
+            self.initial["targets"] = [int(t) for t in target_list if str(t).isdigit()]
+
+
+def _scope_list_field_initial_display(instance, attr_name: str) -> str:
+    """Return a newline-joined string for a Scope list field (e.g. allowed_finding_domains) for form initial."""
+    value = getattr(instance, attr_name, None) if instance else None
+    if value and isinstance(value, list):
+        return "\n".join(x for x in value if isinstance(x, str) and x.strip())
+    return ""
+
+
+class ScopeForm(forms.ModelForm):
+    """Form for creating and updating a Scope."""
+
+    allowed_finding_domains = forms.CharField(
+        required=False,
+        widget=forms.Textarea(
             attrs={
-                "class": "form-control form-control-lg tagging",
-                "multiple": "multiple",
-                "id": "domains",
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "example.com\nother-allowed.com",
             }
+        ),
+        help_text='One domain per line. Only used when "Restrict findings to target" is checked.',
+    )
+    allowed_finding_hosts = forms.CharField(
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": "sub.example.com\n192.168.1.1",
+            }
+        ),
+        help_text=(
+            'When "Restrict findings to target" is checked and this list is non-empty, '
+            "only these hostnames and IPs are accepted for findings. One per line."
         ),
     )
 
-    def set_value(self, organization_value, description_value):
-        self.initial["name"] = organization_value
-        self.initial["description"] = description_value
+    def __init__(self, *args, **kwargs):
+        project_slug = kwargs.pop("project_slug", None)
+        super().__init__(*args, **kwargs)
+
+        if project_slug:
+            self.fields["organization"].queryset = Organization.objects.for_project(project_slug)
+            self.fields["targets"].queryset = Target.objects.for_project(project_slug)
+        elif self.instance and self.instance.pk:
+            project = self.instance.organization.project
+            self.fields["organization"].queryset = Organization.objects.for_project(project)
+            self.fields["targets"].queryset = Target.objects.for_project(project)
+
+        self.fields["workers"].queryset = SecatorWorker.objects.active()
+        self.fields[
+            "workers"
+        ].help_text = (
+            'Remote workers allowed for scans in this scope. Use "Allow Local worker" to include the reNgine server.'
+        )
+        if self.instance and self.instance.pk:
+            base_qs = SecatorWorker.objects.active().filter(scopes=self.instance)
+            default_id = getattr(self.instance, "default_worker_id", None)
+            if default_id and not base_qs.filter(pk=default_id).exists():
+                self.fields["default_worker"].queryset = (
+                    (base_qs | SecatorWorker.objects.filter(pk=default_id)).distinct().order_by("name")
+                )
+            else:
+                self.fields["default_worker"].queryset = base_qs.order_by("name")
+        else:
+            self.fields["default_worker"].queryset = SecatorWorker.objects.active()
+        self.fields["default_worker"].required = False
+        self.fields["default_worker"].empty_label = "Local (this server)"
+        self.fields[
+            "default_worker"
+        ].help_text = "When the scope has 2 or more allowed workers, choose which one is pre-selected by default."
+
+        self.initial["allowed_finding_domains"] = _scope_list_field_initial_display(
+            self.instance, "allowed_finding_domains"
+        )
+        self.initial["allowed_finding_hosts"] = _scope_list_field_initial_display(
+            self.instance, "allowed_finding_hosts"
+        )
+
+    class Meta:
+        model = Scope
+        fields = [
+            "organization",
+            "name",
+            "scope_type",
+            "start_date",
+            "end_date",
+            "description",
+            "targets",
+            "workers",
+            "allow_local_worker",
+            "default_worker",
+            "restrict_findings_to_target",
+            "allowed_finding_domains",
+            "allowed_finding_hosts",
+        ]
+        widgets = {
+            "organization": forms.Select(
+                attrs={"class": "form-control select2", "data-toggle": "select2", "data-width": "100%"}
+            ),
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Scope name"}),
+            "scope_type": forms.Select(
+                attrs={"class": "form-control select2", "data-toggle": "select2", "data-width": "100%"}
+            ),
+            "start_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "end_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "targets": forms.SelectMultiple(
+                attrs={
+                    "class": "form-control select2-multiple",
+                    "data-toggle": "select2",
+                    "data-width": "100%",
+                    "data-placeholder": "Choose Targets",
+                }
+            ),
+            "workers": forms.SelectMultiple(
+                attrs={
+                    "class": "form-control select2-multiple",
+                    "data-toggle": "select2",
+                    "data-width": "100%",
+                    "data-placeholder": "Choose remote workers",
+                }
+            ),
+            "allow_local_worker": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "default_worker": forms.Select(
+                attrs={
+                    "class": "form-control select2",
+                    "data-toggle": "select2",
+                    "data-width": "100%",
+                    "data-placeholder": "Local (default)",
+                }
+            ),
+            "restrict_findings_to_target": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def clean_allowed_finding_domains(self):
+        value = self.cleaned_data.get("allowed_finding_domains")
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(x).strip().lower() for x in value if isinstance(x, str) and x.strip()]
+        return [line.strip().lower() for line in str(value).splitlines() if line.strip()]
+
+    def clean_allowed_finding_hosts(self):
+        value = self.cleaned_data.get("allowed_finding_hosts")
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return normalize_allowed_hosts_from_list(value)
+        lines = [line.strip() for line in str(value).splitlines() if line.strip()]
+        return normalize_allowed_hosts_from_list(lines)
+
+    def clean(self):
+        cleaned = super().clean()
+        start = cleaned.get("start_date")
+        end = cleaned.get("end_date")
+        if start and end and start > end:
+            raise forms.ValidationError("Start date must be before end date.")
+        allow_local = cleaned.get("allow_local_worker", True)
+        workers = list(cleaned.get("workers") or [])
+        default_worker = cleaned.get("default_worker")
+        allowed_count = (1 if allow_local else 0) + len(workers)
+        if allowed_count >= 2 and default_worker is not None:
+            if default_worker not in workers:
+                self.add_error(
+                    "default_worker",
+                    "Default worker must be one of the allowed workers for this scope.",
+                )
+        return cleaned
 
 
 class ProjectForm(forms.ModelForm):

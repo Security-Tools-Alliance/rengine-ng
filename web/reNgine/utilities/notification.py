@@ -2,20 +2,20 @@ import json
 import pickle
 from time import sleep
 
-from celery.utils.log import get_task_logger
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from django.utils import timezone
 import humanize
 import redis
 import requests
 
-from reNgine.definitions import DISCORD_SEVERITY_COLORS
-from reNgine.settings import CELERY_BROKER_URL, DOMAIN_NAME
+from reNgine.definitions import DISCORD_SEVERITY_COLORS, REQUEST_TIMEOUT_SECONDS
+from reNgine.settings import DOMAIN_NAME, SECATOR_CELERY_BROKER_URL
+from reNgine.utilities.logger import get_module_logger
 from scanEngine.models import Notification
 
 
-logger = get_task_logger(__name__)
-DISCORD_WEBHOOKS_CACHE = redis.Redis.from_url(CELERY_BROKER_URL)
+logger = get_module_logger(__name__)
+DISCORD_WEBHOOKS_CACHE = redis.Redis.from_url(SECATOR_CELERY_BROKER_URL)
 
 
 # --------------------#
@@ -33,10 +33,22 @@ def send_telegram_message(message):
     do_send = notif and notif.send_to_telegram and notif.telegram_bot_token and notif.telegram_bot_chat_id
     if not do_send:
         return
-    telegram_bot_token = notif.telegram_bot_token
-    telegram_bot_chat_id = notif.telegram_bot_chat_id
-    send_url = f"https://api.telegram.org/bot{telegram_bot_token}/sendMessage?chat_id={telegram_bot_chat_id}&parse_mode=Markdown&text={message}"
-    requests.get(send_url)
+    base_url = f"https://api.telegram.org/bot{notif.telegram_bot_token}/sendMessage"
+    try:
+        response = requests.get(
+            base_url,
+            params={"chat_id": notif.telegram_bot_chat_id, "parse_mode": "Markdown", "text": message},
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        if not (200 <= response.status_code < 300):
+            logger.warning(
+                "Failed to send Telegram notification, non-2xx status: %s, content_type=%s, content_length=%s",
+                response.status_code,
+                response.headers.get("Content-Type"),
+                response.headers.get("Content-Length"),
+            )
+    except requests.RequestException as e:
+        logger.warning("Failed to send Telegram message: %s", e)
 
 
 def send_slack_message(message):
@@ -45,14 +57,28 @@ def send_slack_message(message):
     Args:
         message (str): Message.
     """
-    headers = {"content-type": "application/json"}
-    message = {"text": message}
     notif = Notification.objects.first()
     do_send = notif and notif.send_to_slack and notif.slack_hook_url
     if not do_send:
         return
-    hook_url = notif.slack_hook_url
-    requests.post(url=hook_url, data=json.dumps(message), headers=headers)
+    headers = {"content-type": "application/json"}
+    payload = {"text": message}
+    try:
+        response = requests.post(
+            url=notif.slack_hook_url,
+            data=json.dumps(payload),
+            headers=headers,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        if not (200 <= response.status_code < 300):
+            logger.warning(
+                "Failed to send Slack notification, non-2xx status: %s, content_type=%s, content_length=%s",
+                response.status_code,
+                response.headers.get("Content-Type"),
+                response.headers.get("Content-Length"),
+            )
+    except requests.RequestException as e:
+        logger.warning("Failed to send Slack message: %s", e)
 
 
 def send_lark_message(message):
@@ -61,17 +87,31 @@ def send_lark_message(message):
     Args:
         message (str): Message.
     """
-    headers = {"content-type": "application/json"}
-    message = {
-        "msg_type": "interactive",
-        "card": {"elements": [{"tag": "div", "text": {"content": message, "tag": "lark_md"}}]},
-    }
     notif = Notification.objects.first()
     do_send = notif and notif.send_to_lark and notif.lark_hook_url
     if not do_send:
         return
-    hook_url = notif.lark_hook_url
-    requests.post(url=hook_url, data=json.dumps(message), headers=headers)
+    headers = {"content-type": "application/json"}
+    payload = {
+        "msg_type": "interactive",
+        "card": {"elements": [{"tag": "div", "text": {"content": message, "tag": "lark_md"}}]},
+    }
+    try:
+        response = requests.post(
+            url=notif.lark_hook_url,
+            data=json.dumps(payload),
+            headers=headers,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        if not (200 <= response.status_code < 300):
+            logger.warning(
+                "Failed to send Lark notification, non-2xx status: %s, content_type=%s, content_length=%s",
+                response.status_code,
+                response.headers.get("Content-Type"),
+                response.headers.get("Content-Length"),
+            )
+    except requests.RequestException as e:
+        logger.warning("Failed to send Lark message: %s", e)
 
 
 def send_discord_message(message, title="", severity=None, url=None, files=None, fields=None, fields_append=None):
@@ -229,14 +269,18 @@ def get_scan_url(scan_id=None, subscan_id=None):
 def get_scan_fields(engine, scan, subscan=None, status="RUNNING", tasks=None):
     if tasks is None:
         tasks = []
-    scan_obj = subscan or scan
     if subscan:
         tasks_h = f"`{subscan.type}`"
-        host = subscan.subdomain.name
+        if subscan.subdomain_id:
+            host = subscan.subdomain.name
+        elif subscan.ip_address_id:
+            host = subscan.ip_address.address or ""
+        else:
+            host = ""
         scan_obj = subscan
     else:
         tasks_h = "• " + "\n• ".join(f"`{task.name}`" for task in tasks) if tasks else ""
-        host = scan.domain.name
+        host = scan.target.value if scan.target_id else ""
         scan_obj = scan
 
     # Find scan elapsed time

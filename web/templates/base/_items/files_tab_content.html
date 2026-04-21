@@ -1,0 +1,30 @@
+{% comment %}
+  Directories (files) tab content for scan detail. Include from detail_scan when dir_file_fuzz task is present.
+  Expects: (from parent) scan_history_id, current_project.slug, use_datatables_scroller
+{% endcomment %}
+<div class="row">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="row mb-2">
+					<div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+						<button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" data-bs-toggle="dropdown" aria-expanded="false">Display <span class="caret"></span></button>
+					</div>
+				</div>
+				<table id="directories-table" class="table dt-responsive w-100">
+					<thead>
+						<tr>
+							<th class="checkbox-column">Status</th>
+							<th>Subdomain</th>
+							<th>Status</th>
+							<th>Page Title</th>
+							<th>Directories</th>
+							<th>HTTP URL</th>
+							<th>Is Interesting</th>
+						</tr>
+					</thead>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>

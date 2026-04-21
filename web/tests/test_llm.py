@@ -94,6 +94,13 @@ class TestLLMAttackSuggestion(TestLLMBase):
         validated = self.generator._validate_input(input_data)
         self.assertEqual(validated, input_data)
 
+    def test_resolve_attack_unknown_prompt_key_falls_back_to_asset(self):
+        """Unknown prompt_key must resolve to the same system prompt as asset."""
+        self.assertEqual(
+            self.generator._resolve_attack_system_prompt("nonexistent_prompt_key"),
+            self.generator._resolve_attack_system_prompt("asset"),
+        )
+
     @patch("reNgine.llm.llm.LLMAttackSuggestionGenerator._get_openai_response")
     def test_get_attack_suggestion_failure(self, mock_get_response):
         """Test attack suggestion generation failure."""

@@ -223,7 +223,7 @@ API Keys Management
 function confirmDelete(keyName, deleteUrl) {
   document.getElementById('deleteKeyName').textContent = keyName;
   document.getElementById('deleteForm').action = deleteUrl;
-  new bootstrap.Modal(document.getElementById('deleteConfirmModal')).show();
+  if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.DELETE_CONFIRM);
 }
 
 function copyApiKey(button) {
@@ -258,7 +258,7 @@ function copyApiKey(button) {
 <script>
 // Show the new API key modal automatically
 document.addEventListener('DOMContentLoaded', function() {
-  new bootstrap.Modal(document.getElementById('newApiKeyModal')).show();
+  if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.NEW_API_KEY);
 });
 </script>
 {% endif %}

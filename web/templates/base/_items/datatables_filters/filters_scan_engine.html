@@ -1,0 +1,9 @@
+<div class="">
+  <label for="filterByEngineName" class="form-label">Filter by Engine Name (multi-select)</label>
+  <select class="form-control" id="filterByEngineName" multiple size="3">
+    {% for name in engine_name_list %}
+      <option value="{{ name }}">{{ name }}</option>
+    {% endfor %}
+  </select>
+</div>
+

@@ -93,7 +93,6 @@ HackerOne Settings
 
 {% block page_level_script %}
 <script src="{% static 'plugins/markdown/simplemde.min.js' %}"></script>
-<script src="{% static 'custom/custom.js' %}"></script>
 <script type="text/javascript">
 
 var simplemde = new SimpleMDE({
@@ -116,7 +115,7 @@ function test_hackerone() {
     }
   }
   else{
-    const hackerone_api = '{% url 'testHackerone' %}';
+    const hackerone_api = '{% url "testHackerone" %}';
     var username = $("#username").val();
     var api_key = $("#api_key").val();
     swal.queue([{

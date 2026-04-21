@@ -3,8 +3,10 @@ This file contains the test cases for the API views.
 """
 
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 
+from dashboard.models import Project
 from targetApp.models import Organization
 from utils.test_base import BaseTestCase
 
@@ -25,7 +27,7 @@ class TestListOrganizations(BaseTestCase):
         self.assertEqual(len(response.json()["organizations"]), 0)
 
     def test_list_organizations(self):
-        """Test listing all organizations."""
+        """Test listing all organizations (no project filter)."""
         url = reverse("api:listOrganizations")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -35,6 +37,34 @@ class TestListOrganizations(BaseTestCase):
             response.data["organizations"][0]["name"],
             self.data_generator.organization.name,
         )
+
+    def test_list_organizations_filtered_by_project(self):
+        """Test listing organizations for a project returns only that project's organizations."""
+        project = self.data_generator.project
+        url = reverse("api:listOrganizations")
+        response = self.client.get(url, {"project": project.slug})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("organizations", response.data)
+        orgs = response.data["organizations"]
+        self.assertGreaterEqual(len(orgs), 1)
+        names = [o["name"] for o in orgs]
+        self.assertIn(self.data_generator.organization.name, names)
+        other_project = Project.objects.create(
+            slug="other-proj-filter",
+            name="Other Project",
+            insert_date=timezone.now(),
+        )
+        other_org = Organization.objects.create(
+            name="Other Org Filter Test",
+            project=other_project,
+            insert_date=timezone.now(),
+        )
+        response_all = self.client.get(url)
+        self.assertGreaterEqual(len(response_all.data["organizations"]), 2)
+        response_scoped = self.client.get(url, {"project": project.slug})
+        scoped_names = [o["name"] for o in response_scoped.data["organizations"]]
+        self.assertIn(self.data_generator.organization.name, scoped_names)
+        self.assertNotIn(other_org.name, scoped_names)
 
 
 class TestListTargetsInOrganization(BaseTestCase):

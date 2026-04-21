@@ -1,0 +1,132 @@
+<!-- DO NOT AUTO INDENT THIS FILE DUE TO PRELOADED YAML CONF -->
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}
+Add Profile
+{% endblock title %}
+
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" type="text/css" href="{% static 'plugins/switches/switches.min.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
+{{ form.media }}
+
+{% endblock custom_js_css_link %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'profiles' current_project.slug %}">Profiles</a></li>
+<li class="breadcrumb-item active">Add Profile</li>
+{% endblock breadcrumb_title %}
+
+{% block page_title %}
+Add Profile
+{% endblock page_title %}
+
+{% block main_content %}
+<div class="row">
+  <div class="col-xl-12">
+  <div class="card">
+  <div class="card-body">
+  <h4 class="header-title">Profiles</h4>
+  <p>
+  <code>Profiles</code> define configuration options for scans. They allow you to customize scan behavior, speed, evasion techniques, and feature activation.
+  <br>
+  YAML configuration allows you to define option overrides that will be applied during scan execution.
+  </p>
+  <div class="alert alert-info">
+    <h6><i class="fas fa-info-circle"></i> Profile Configuration Help</h6>
+    <p>
+      Profiles can be categorized as: <strong>speed</strong> (scan speed and intensity), <strong>evasion</strong> (stealth and evasion techniques), <strong>general</strong> (global scan approach), or <strong>network</strong> (network-specific options).
+      <br>
+      The <code>enforce</code> option determines whether the profile should enforce its options even if they conflict with other settings.
+      <br>
+      <a href="https://docs.freelabz.com/in-depth/concepts/profiles" target="_blank" class="alert-link" rel="noopener noreferrer">
+        <i class="fas fa-external-link-alt"></i> Learn more about profiles in the documentation
+      </a>
+    </p>
+  </div>
+  <form method="POST">
+  {% csrf_token %}
+  {% include "scanEngine/_items/form_profile.html" %}
+  <div class="mt-3">
+    <button class="btn btn-primary submit-fn" type="submit">
+      <i class="fas fa-save"></i> Add Profile
+    </button>
+    <a href="{% url 'profiles' current_project.slug %}" class="btn btn-secondary">
+      <i class="fas fa-arrow-left"></i> Back to Profiles
+    </a>
+  </div>
+  </form>
+  </div>
+  </div>
+  </div>
+</div>
+{% endblock main_content %}
+
+{% block page_level_script %}
+<script type="text/javascript">
+$(document).ready(function() {
+  // Assign unique IDs to ACE editor container elements
+  $('.ace_editor').each(function(index) {
+    const uniqueId = 'ace-editor-container-' + Date.now() + '-' + index;
+    $(this).attr('id', uniqueId);
+  });
+});
+
+// Load default opts template
+function loadDefaultOpts() {
+    fetch('{% url "api:get_default_profile_opts" %}', {
+        method: 'GET',
+        credentials: "same-origin",
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success' && data.opts) {
+            // Find the ACE editor for opts field
+            const editorElements = document.querySelectorAll('.ace_editor');
+            if (editorElements.length > 0) {
+                // Get the editor instance (assuming it's initialized by django-ace)
+                const editorId = editorElements[0].id || 'profile_opts_editor';
+                // Try to get the editor instance
+                if (typeof ace !== 'undefined') {
+                    try {
+                        const editor = ace.edit(editorId);
+                        editor.setValue(data.opts);
+                        editor.clearSelection();
+                    } catch (e) {
+                        // Fallback: set the textarea value directly
+                        const textarea = document.getElementById('profile_opts_editor');
+                        if (textarea) {
+                            textarea.value = data.opts;
+                        }
+                    }
+                } else {
+                    // Fallback: set the textarea value directly
+                    const textarea = document.getElementById('profile_opts_editor');
+                    if (textarea) {
+                        textarea.value = data.opts;
+                    }
+                }
+            }
+        } else {
+            Swal.fire({
+                title: 'Error!',
+                text: data.message || 'Failed to load default options template',
+                icon: 'error'
+            });
+        }
+    })
+    .catch(error => {
+        Swal.fire({
+            title: 'Error!',
+            text: 'Failed to load default options template',
+            icon: 'error'
+        });
+    });
+}
+</script>
+{% endblock page_level_script %}

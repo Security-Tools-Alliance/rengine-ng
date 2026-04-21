@@ -1,0 +1,30 @@
+{% load permission_tags %}
+<td class="text-center">
+  <div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
+    <a href="{% url 'detail_scan' current_project.slug scan_history.id %}" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="View Results"><i class="fe-eye"></i></a>
+    {% if user|can:'initiate_scans_subscans' %}
+      {% if scan_history.scan_status == 0 or scan_history.scan_status == 2 or scan_history.scan_status == 3 %}
+        {% with rescan_target_id=scan_history.target_id %}
+        {% if rescan_target_id %}
+    <a href="{% url 'start_scan' current_project.slug rescan_target_id %}" class="btn btn-sm btn-soft-success" data-toggle="tooltip" data-placement="top" title="Rescan"><i class="fe-refresh-ccw"></i></a>
+        {% endif %}
+        {% endwith %}
+      {% endif %}
+      {% if scan_history.scan_status == 1 or scan_history.scan_status == 4 or scan_history.scan_status == -1 %}
+    <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Stop Scan" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id={{ scan_history.id }}, subscan_id=null, reload_scan_bar=false, reload_location=true); return false;"><i class="fe-alert-triangle"></i></a>
+      {% endif %}
+    {% endif %}
+    {% if user|can:'modify_scan_results' %}
+      {% if scan_history.scan_status == 2 or scan_history.scan_status == 3 or scan_history.scan_status == 0 %}
+    <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Delete Scan Results" onclick="delete_scan('{% url 'delete_scan' current_project.slug scan_history.id %}'); return false;"><i class="fe-trash-2"></i></a>
+      {% endif %}
+    {% endif %}
+    {% if scan_history.scan_status != -1 %}
+    {% if scan_history.is_legacy_scan %}
+    <a href="#" class="btn btn-sm btn-soft-info" data-toggle="tooltip" data-placement="top" title="Scan Report" onclick="initiate_report('{% url "create_report" current_project.slug scan_history.id %}', {{ scan_history.id }}, '{% if 'subdomain_discovery' in scan_history.tasks %}True{% endif %}', '{% if 'vulnerability_scan' in scan_history.tasks %}True{% endif %}', '{% if 'port_scan' in scan_history.tasks %}True{% endif %}', '{{ scan_history.target.value|escapejs }}'); return false;"><i class="fe-download"></i></a>
+    {% else %}
+    <a href="#" class="btn btn-sm btn-soft-info" data-toggle="tooltip" data-placement="top" title="Scan Report" onclick="initiate_report('{% url "create_report" current_project.slug scan_history.id %}', {{ scan_history.id }}, 'True', 'True', 'True', '{{ scan_history.target.value|escapejs }}'); return false;"><i class="fe-download"></i></a>
+    {% endif %}
+    {% endif %}
+  </div>
+</td>

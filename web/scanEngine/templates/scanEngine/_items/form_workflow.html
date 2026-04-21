@@ -1,0 +1,101 @@
+<div class="form-group">
+    <label for="{{ form.name.id_for_label }}">Name (no spaces) *</label>
+    {{ form.name }}
+    {% if form.name.help_text %}
+        <small class="form-text text-muted">{{ form.name.help_text }}</small>
+    {% endif %}
+    {% if form.name.errors %}
+        <div class="text-danger">
+            {% for error in form.name.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="form-group">
+    <label for="{{ form.display_name.id_for_label }}">Display Name</label>
+    {{ form.display_name }}
+    {% if form.display_name.help_text %}
+        <small class="form-text text-muted">{{ form.display_name.help_text }}</small>
+    {% endif %}
+    {% if form.display_name.errors %}
+        <div class="text-danger">
+            {% for error in form.display_name.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="form-group">
+    <label for="{{ form.description.id_for_label }}">Description</label>
+    {{ form.description }}
+    {% if form.description.errors %}
+        <div class="text-danger">
+            {% for error in form.description.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="form-group">
+    <label for="{{ form.tags.id_for_label }}">Tags</label>
+    {{ form.tags }}
+    {% if form.tags.help_text %}
+        <small class="form-text text-muted">{{ form.tags.help_text }}</small>
+    {% endif %}
+    {% if form.tags.errors %}
+        <div class="text-danger">
+            {% for error in form.tags.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="form-group">
+            <label for="{{ form.scan_type.id_for_label }}">Scan Type *</label>
+            {{ form.scan_type }}
+            {% if form.scan_type.help_text %}
+                <small class="form-text text-muted">{{ form.scan_type.help_text }}</small>
+            {% endif %}
+            {% if form.scan_type.errors %}
+                <div class="text-danger">
+                    {% for error in form.scan_type.errors %}
+                        <small>{{ error }}</small>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="form-group">
+    <label for="{{ form.yaml_configuration.id_for_label }}">YAML Configuration *</label>
+    {{ form.yaml_configuration }}
+    {% if form.yaml_configuration.errors %}
+        <div class="text-danger">
+            {% for error in form.yaml_configuration.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="form-check">
+    {{ form.is_active }}
+    <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+        Active
+    </label>
+    {% if form.is_active.errors %}
+        <div class="text-danger">
+            {% for error in form.is_active.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>

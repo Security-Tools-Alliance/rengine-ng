@@ -1,12 +1,13 @@
-import logging
-
 from django.conf import settings
 from django.shortcuts import render
 from django.template import RequestContext
 from django.utils.module_loading import import_string
 
+from reNgine.utilities.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+
+PREFIX_COMMON_VIEWS = "[COMMON_VIEWS]"
+logger = get_module_logger(__name__)
 
 
 def bad_request(request, exception=None):
@@ -14,9 +15,19 @@ def bad_request(request, exception=None):
     Custom 400 error handler
     """
     if exception is not None:
-        logger.warning(f"Bad request from {request.META.get('REMOTE_ADDR', 'Unknown')}: {exception}")
+        logger.log_line(
+            PREFIX_COMMON_VIEWS,
+            "BAD_REQUEST",
+            "Bad request from %s: %s" % (request.META.get("REMOTE_ADDR", "Unknown"), exception),
+            level="warning",
+        )
     else:
-        logger.warning(f"Bad request from {request.META.get('REMOTE_ADDR', 'Unknown')}")
+        logger.log_line(
+            PREFIX_COMMON_VIEWS,
+            "BAD_REQUEST",
+            "Bad request from %s" % (request.META.get("REMOTE_ADDR", "Unknown"),),
+            level="warning",
+        )
 
     context = RequestContext(request)
 
@@ -31,9 +42,19 @@ def bad_request(request, exception=None):
 
 def permission_denied(request, exception=None):
     if exception is not None:
-        logger.warning(f"Permission denied for user {request.user}: {exception}")
+        logger.log_line(
+            PREFIX_COMMON_VIEWS,
+            "PERMISSION_DENIED",
+            "Permission denied for user %s: %s" % (request.user, exception),
+            level="warning",
+        )
     else:
-        logger.warning(f"Permission denied for user {request.user}")
+        logger.log_line(
+            PREFIX_COMMON_VIEWS,
+            "PERMISSION_DENIED",
+            "Permission denied for user %s" % (request.user,),
+            level="warning",
+        )
 
     context = RequestContext(request)
 
@@ -48,9 +69,19 @@ def permission_denied(request, exception=None):
 
 def page_not_found(request, exception=None):
     if exception is not None:
-        logger.warning(f"Page not found: {request.path} - {exception}")
+        logger.log_line(
+            PREFIX_COMMON_VIEWS,
+            "PAGE_NOT_FOUND",
+            "Page not found: %s - %s" % (request.path, exception),
+            level="warning",
+        )
     else:
-        logger.warning(f"Page not found: {request.path}")
+        logger.log_line(
+            PREFIX_COMMON_VIEWS,
+            "PAGE_NOT_FOUND",
+            "Page not found: %s" % (request.path,),
+            level="warning",
+        )
 
     context = RequestContext(request)
 

@@ -43,6 +43,19 @@ MANIFEST
 .vscode/settings.json
 .vscode/tasks-and-contexts.json
 .idea/
+.cursor/*
+!.cursor/rules
+!.cursor/rules/**
+!.cursor/skills
+!.cursor/skills/**
+.claude/*
+!.claude/rules
+!.claude/rules/**
+!.claude/skills
+!.claude/skills/**
+.zed/
+.VSCodeCounter/
+.sourcery.yaml
 
 *.manifest
 *.spec
@@ -67,5 +80,14 @@ logs
 
 get-docker.sh
 
+# Database backups (host volume dumps)
+backup/
+
 # Environment variables
 .env
+
+# Celery
+*.pid
+
+analyse*
+*.json

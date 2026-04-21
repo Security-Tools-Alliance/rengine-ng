@@ -1,5 +1,5 @@
 function get_external_tool_latest_version(tool_id, tool_name){
-  var current_version = document.getElementById(tool_name+'_current').textContent;
+  let current_version = document.getElementById(tool_name+'_current').textContent;
   console.log(current_version)
   if (current_version === 'Invalid version lookup command.' || current_version === 'Version Lookup command not provided.'){
     Swal.fire({
@@ -134,7 +134,7 @@ function get_external_tool_latest_version(tool_id, tool_name){
         // match current version with installed version
         // sometimes version names can be v1.1.1 or 1.1.1, so for consistency
         // let's remove v from both
-        var latest_version = response['name'];
+        let latest_version = response['name'];
         latest_version = latest_version.charAt(0) == 'v' ? latest_version.substring(1) : latest_version;
 
         if (current_version === 'Invalid version lookup command.' || current_version === 'Version Lookup command not provided.'){

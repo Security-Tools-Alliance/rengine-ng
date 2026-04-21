@@ -1,0 +1,19 @@
+{% comment %}
+  Centralized filter dropdown shell. Use with inner_template for the filter rows.
+  Pass id_prefix (e.g. "scanHistory") so IDs are unique when multiple dropdowns exist on one page.
+  Variables: inner_template (required), id_prefix (required for unique IDs), filter_menu_id, filtering_text_id, reset_filters_id (optional overrides when id_prefix not used)
+{% endcomment %}
+<div class="btn-group ms-1 dropstart position-relative">
+  <button type="button" class="btn btn-soft-primary dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Filters" id="{% if filter_menu_id %}{{ filter_menu_id }}{% elif id_prefix %}{{ id_prefix }}FilterMenu{% else %}filterMenu{% endif %}">
+    <i class="fe-filter"></i>
+  </button>
+  <div id="{% if filtering_text_id %}{{ filtering_text_id }}{% elif id_prefix %}{{ id_prefix }}FilteringText{% else %}filteringText{% endif %}" class="position-absolute mt-2 d-flex flex-wrap gap-1" style="top:100%; left:0; z-index:2;"></div>
+  <div class="dropdown-menu" style="min-width: 320px;">
+    <div class="dropdown-item-text px-3 py-2">
+      <h6 class="dropdown-header px-0 pt-0">Filters</h6>
+      {% include inner_template with id_prefix=id_prefix|default:"" %}
+    </div>
+    <div class="dropdown-divider"></div>
+    <a href="#" class="dropdown-item text-primary text-end" id="{% if reset_filters_id %}{{ reset_filters_id }}{% elif id_prefix %}{{ id_prefix }}ResetFilters{% else %}resetFilters{% endif %}">Reset Filters</a>
+  </div>
+</div>

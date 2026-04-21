@@ -1,0 +1,70 @@
+{% for workflow in workflows %}
+<tr>
+    <td>
+        <strong>{{ workflow.get_display_name }}</strong>
+        {% if workflow.name %}
+        <br><small class="text-info"><i class="fas fa-tag"></i> {{ workflow.name }}</small>
+        {% endif %}
+        {% if workflow.description %}
+        <br><small class="text-muted">{{ workflow.description|truncatechars:100 }}</small>
+        {% endif %}
+    </td>
+    <td>
+        <span class="badge badge-soft-{% if workflow.workflow_type == 'builtin' %}primary{% else %}secondary{% endif %}">
+            {{ workflow.get_workflow_type_display }}
+        </span>
+    </td>
+    <td>
+        {% if workflow.tags %}
+        {% for tag in workflow.tags %}
+        <span class="badge badge-soft-secondary me-1">{{ tag }}</span>
+        {% endfor %}
+        {% else %}
+        <span class="text-muted">-</span>
+        {% endif %}
+    </td>
+    <td>
+        <span class="badge badge-soft-info">{{ workflow.get_scan_type_display }}</span>
+    </td>
+    <td>
+        {% if workflow.long_description %}
+        <small class="text-muted">{{ workflow.long_description|truncatechars:80 }}</small>
+        {% else %}
+        <span class="text-muted">-</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if workflow.is_active %}
+        <span class="badge badge-soft-success">Active</span>
+        {% else %}
+        <span class="badge badge-soft-danger">Inactive</span>
+        {% endif %}
+    </td>
+    <td>{{ workflow.created_at|date:"M d, Y" }}</td>
+    <td>
+        <div class="btn-group btn-group-sm">
+            <a href="{% url 'workflow_detail' current_project.slug workflow.id %}" class="btn btn-info btn-sm" title="View">
+                <i class="fas fa-eye"></i>
+            </a>
+            <a href="{% url 'duplicate_workflow' workflow.id %}" class="btn btn-secondary btn-sm" title="Copy">
+                <i class="fas fa-copy"></i>
+            </a>
+            {% if workflow.workflow_type == 'custom' %}
+            <a href="{% url 'update_workflow' current_project.slug workflow.id %}" class="btn btn-warning btn-sm" title="Edit">
+                <i class="fas fa-edit"></i>
+            </a>
+            <button type="button" class="btn btn-danger btn-sm" onclick="deleteWorkflow({{ workflow.id }}, '{{ workflow.get_display_name|escapejs }}')" title="Delete">
+                <i class="fas fa-trash"></i>
+            </button>
+            {% endif %}
+        </div>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="8" class="text-center text-muted">
+        <i class="fas fa-inbox fa-2x mb-2"></i><br>
+        No workflows found. Create one or load built-in workflows.
+    </td>
+</tr>
+{% endfor %}
