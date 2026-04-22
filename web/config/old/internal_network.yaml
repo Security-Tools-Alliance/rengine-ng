@@ -1,0 +1,168 @@
+type: workflow
+name: internal_network
+alias: intnet
+description: Internal network reconnaissance
+long_description: |
+  Comprehensive internal network reconnaissance workflow for local network
+  security assessments. Discovers network ranges, performs host discovery using
+  ARP and ICMP, scans ports, detects services, audits SSH configurations,
+  probes HTTP services, and searches for known vulnerabilities and exploits.
+  Designed for penetration testing and internal security assessments.
+tags: [recon, network, internal]
+input_types:
+  - ip
+  - cidr_range
+  - slug
+
+default_inputs: ''
+
+options:
+  nuclei:
+    is_flag: True
+    default: False
+    help: Run nuclei scans (slow)
+    short: n
+
+  scanners:
+    type: list
+    default: [naabu, nmap]
+    help: Port scanners to use (naabu, nmap)
+    internal: True
+
+  exploiters:
+    type: list
+    default: [search_vulns]
+    help: Exploit providers to use (searchsploit, search_vulns)
+    internal: True
+
+tasks:
+  netdetect:
+    description: Detect local network CIDR ranges
+    if: len(targets) == 0
+
+  _group/discover:
+    arp:
+      description: Discover neighbors with ARP requests
+      if: len(targets) == 0
+
+    arpscan:
+      description: Discover hosts with ARP requests
+      targets_:
+        - type: tag
+          field: value
+          condition: item.name == 'user_input'
+      if: len(targets) == 0
+
+    fping:
+      description: Discover hosts with ICMP requests
+      targets_:
+        - type: tag
+          field: value
+          condition: item.name == 'user_input'
+      if: len(targets) == 0
+
+  mapcidr:
+    description: Process CIDR ranges
+    targets_:
+      - type: target
+        field: name
+        condition: '"/" in target.name'
+
+  _group/port_scan:
+    naabu:
+      description: Find open ports (light)
+      top_ports: 1000
+      targets_:
+        - type: target
+          field: name
+        - type: tag
+          field: value
+          condition: item.name == 'user_input'
+      if: "'naabu' in opts.scanners"
+
+    nmap/light:
+      description: Find open ports (light)
+      targets_:
+        - type: target
+          field: name
+        - type: tag
+          field: value
+          condition: item.name == 'user_input'
+      if: "'nmap' in opts.scanners"
+
+  nmap:
+    description: Detect services and versions
+    version_detection: true
+    tcp_syn_stealth: false
+    fragment: false
+    skip_host_discovery: false
+    targets_:
+      - type: target
+        field: name
+        condition: opts.ports
+      - type: port
+        field: host
+        condition: opts.scanners
+    ports_:
+      - type: port
+        field: port
+        condition: port.host in targets and opts.scanners
+
+  sshaudit:
+    description: Audit SSH port
+    targets_:
+      - type: port
+        field: host
+        condition: 'port.port == 22 or "ssh" in port.service_name.lower()'
+
+  httpx:
+    description: Probe HTTP services on open ports
+    tech_detect: True
+    targets_:
+      - type: port
+        field: '{host}:{port}'
+        condition: port.port in [80, 443, 8080, 8443, 8000, 3000]
+
+  _group/exploit_search:
+    search_vulns:
+      description: Search for related exploits
+      targets_:
+        - type: port
+          field: '{host}:{port}~{service_name}'
+          condition: len(item.service_name.split('/')) > 1
+        - type: vulnerability
+          field: '{matched_at}~{id}'
+          condition: item.id
+      if: "'search_vulns' in opts.exploiters"
+
+    searchsploit:
+      description: Search for related exploits
+      targets_:
+        - type: port
+          field: '{host}:{port}~{service_name}'
+          condition: len(item.service_name.split('/')) > 1
+      if: "'searchsploit' in opts.exploiters"
+
+  _group/vuln_scan:
+    nuclei/network:
+      description: Scan network and SSL vulnerabilities
+      tags: [network, ssl]
+      targets_:
+        - type: port
+          field: '{host}:{port}'
+      if: opts.nuclei
+
+    nuclei/url:
+      description: Search for vulnerabilities on alive HTTP services
+      exclude_tags: [network, ssl, file, dns, osint, token-spray, headers]
+      targets_:
+        - type: url
+          field: url
+          condition: item.status_code != 0
+      if: opts.nuclei
+
+  bbot:
+    description: Multipurpose scanner for internal network
+    targets_:
+      - type: target
+        field: name

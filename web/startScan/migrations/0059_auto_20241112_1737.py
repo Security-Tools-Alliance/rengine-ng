@@ -4,31 +4,30 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0058_auto_20241110_2230'),
+        ("startScan", "0058_auto_20241110_2230"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='llmvulnerabilityreport',
-            name='references',
+            model_name="llmvulnerabilityreport",
+            name="references",
         ),
         migrations.AddField(
-            model_name='llmvulnerabilityreport',
-            name='references',
+            model_name="llmvulnerabilityreport",
+            name="references",
             field=models.TextField(blank=True, null=True),
         ),
         migrations.RemoveField(
-            model_name='vulnerability',
-            name='references',
+            model_name="vulnerability",
+            name="references",
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='references',
+            model_name="vulnerability",
+            name="references",
             field=models.TextField(blank=True, null=True),
         ),
         migrations.DeleteModel(
-            name='VulnerabilityReference',
+            name="VulnerabilityReference",
         ),
     ]

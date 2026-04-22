@@ -1,0 +1,24 @@
+{# Optional worker selection: run scan on remote worker #}
+{# Params: id_prefix (string, optional), secator_workers (list of SecatorWorker, optional), scan_params_allow_local_worker (bool, default True), scan_params_default_worker_id (int or None for Local), worker_select_name (default "worker_id"; use "default_worker" on Scope form so POST binds to ScopeForm) #}
+{% with wname=worker_select_name|default:"worker_id" %}
+<div class="worker-select mt-3">
+  {% if scan_params_allow_local_worker|default:True or secator_workers %}
+  <label for="{% if wname == 'default_worker' %}id_default_worker{% else %}{{ id_prefix|default:'' }}worker_id{% endif %}">Run on worker</label>
+  <select class="form-control" name="{{ wname }}" id="{% if wname == 'default_worker' %}id_default_worker{% else %}{{ id_prefix|default:'' }}worker_id{% endif %}">
+    {% if scan_params_allow_local_worker|default:True %}
+    <option value="" {% if scan_params_default_worker_id == None or scan_params_default_worker_id == '' %}selected{% endif %}>Local (this server)</option>
+    {% endif %}
+    {% for w in secator_workers %}
+    <option value="{{ w.id }}" {% if scan_params_default_worker_id == w.id %}selected{% endif %}>{{ w.name|escape }}</option>
+    {% endfor %}
+  </select>
+  {% if scan_params_allow_local_worker|default:True %}
+  <small class="text-muted">Leave as &quot;Local&quot; to run on this server; choose a worker to run on a remote Secator host.</small>
+  {% else %}
+  <small class="text-muted">Choose a worker to run the scan on a remote Secator host.</small>
+  {% endif %}
+  {% else %}
+  <p class="text-muted small mb-0">No workers are available for this context. Enable &quot;Allow Local worker&quot; or add remote workers in the scope configuration.</p>
+  {% endif %}
+</div>
+{% endwith %}

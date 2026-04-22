@@ -7,8 +7,16 @@ All subdomains
 {% endblock title %}
 
 {% block custom_js_css_link %}
+<link href="{% static 'plugins/select2/select2.min.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/lightbox/css/lightbox.css' %}" rel="stylesheet" />
+<link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
+<style>
+#subdomain_scan_results td.col-action,
+#subdomain_scan_results th.col-action {
+	min-width: 180px;
+}
+</style>
 {% endblock custom_js_css_link %}
 
 {% block main_content %}
@@ -17,134 +25,123 @@ All subdomains
 </div>
 {% include "base/_items/recon_note_modal.html" %}
 {% include "base/_items/subscan_modal.html" %}
-{# for passing subdomain id to initiate subtask scan #}
+{# for passing subdomain id to initiate subtask scan; context_target_id used by subscan modal for effective params preview #}
 <input type="hidden" name="subtask_subdomain_id" id="subtask_subdomain_id" value="0">
+<input type="hidden" id="context_target_id" value="">
 {% endblock main_content %}
 
 
 {% block page_level_script %}
+<script>
+window.DETAIL_SCAN_API_CERTIFICATES_LIST = "{% url 'api:certificates_list' %}";
+</script>
 <script src="{% static 'custom/todo.js' %}"></script>
 <script src="{% static 'note/js/todo.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
 <script src="{% static 'assets/js/clipboard.min.js' %}"></script>
-<script src="{% static 'startScan/js/subdomains-suggestions.js' %}"></script>
+<script src="{% static 'plugins/select2/select2.min.js' %}"></script>
+{% include 'shared/_advanced_search_scripts.html' %}
 <script src="{% static 'custom/subdomain.js' %}"></script>
-<script src="{% static 'custom/subdomain_datatable.js' %}"></script>
 <script type="text/javascript">
+window.SUBDOMAIN_DATATABLE_BASE_URL = "{% url 'api:subdomain-datatable-list' %}?project={{ current_project.slug|escapejs }}&format=datatables";
+{% if request.GET.ip_address %}window.SUBDOMAIN_DATATABLE_EXTRA_PARAMS = "&ip_address={{ request.GET.ip_address|escapejs }}";{% elif request.GET.name %}window.SUBDOMAIN_DATATABLE_EXTRA_PARAMS = "&name={{ request.GET.name|escapejs }}";{% else %}window.SUBDOMAIN_DATATABLE_EXTRA_PARAMS = "";{% endif %}
+const subdomain_datatable_columns = (window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS || []).map(function(col) {
+	if (col && (col.name === 'vuln_count' || col.name === 'endpoint_count')) return Object.assign({}, col, { visible: false });
+	return col;
+});
+const subdomain_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
+
 $(document).ready(function() {
 	const ps = new PerfectScrollbar(document.querySelector('.mt-container'));
 	var clipboard = new Clipboard('.copyable');
 	var is_subd_grouping = false;
 	var subd_grouping_col = 8;
-	{% if request.GET.ip_address %}
-	var url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&format=datatables&ip_address={{request.GET.ip_address}}';
-	{% elif request.GET.name %}
-	var url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&format=datatables&name={{request.GET.name}}';
-	{% else %}
-	var url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&format=datatables';
-	{% endif %}
-	var subdomain_datatables = $('#subdomain_scan_results').DataTable({
+	var url = (window.SUBDOMAIN_DATATABLE_BASE_URL || '') + (window.SUBDOMAIN_DATATABLE_EXTRA_PARAMS || '');
+	var subdomain_datatables = window.initServerSideDataTable('#subdomain_scan_results', window.getRengineDatatableConfig('#subdomain_scan_results', {
 		"headerCallback": function(e, a, t, n, s) {
 			e.getElementsByTagName("th")[0].innerHTML='<div class="form-check ms-1 form-check-primary"><input type="checkbox" class="float-start form-check-input chk-parent" id="head_checkbox" onclick=mainCheckBoxSelected(this)>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>\n'
 		},
 		"destroy": true,
-		"processing": true,
-		"oLanguage": subdomain_oLanguage,
+		"language": { "processing": "Fetching Subdomains... Please wait..." },
 		"fnCreatedRow": function (nRow, aData, iDataIndex) {
 			$(nRow).attr('id', 'subdomain_row_' + aData['id']);
 		},
 		"stripeClasses": [],
 		"lengthMenu": subdomain_datatable_length_menu,
-		"pageLength": subdomain_datatable_page_length,
-		"serverSide": true,
-		"ajax": {
-				'url': url
-		},
+		"ajax": { url: url },
 		"rowGroup": {
 			"startRender": function(rows, group) {
-				return group + ' (' + rows.count() + ' Subdomains)';
+				return window.safeText(group) + ' (' + rows.count() + ' Subdomains)';
 			}
 		},
-		"order": [[ 8, "desc" ]],
+		"order": window.getRengineDatatableOrderFromNames(subdomain_datatable_columns, (window.RENGINE_DATATABLE_SUBDOMAIN_DEFAULT_ORDER || [['content_length', 'desc']])),
 		"columns": subdomain_datatable_columns,
 		"columnDefs": [
-			{ "orderable": false, "targets": [
-				get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
-				get_datatable_col_index('ports', subdomain_datatable_columns), 
-				get_datatable_col_index('ports', subdomain_datatable_columns),
-				get_datatable_col_index('open_ports', subdomain_datatable_columns),
-				get_datatable_col_index('content_length', subdomain_datatable_columns)
-			]},
+			{ orderable: false, targets: ['ip_addresses:name', 'ports:name', 'content_length:name'] },
 			{
-				"targets": [
-					get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
-					get_datatable_col_index('ports', subdomain_datatable_columns),
-					get_datatable_col_index('content_discovery_count', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_cvss_score', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_cwe_id', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_cve_id', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_reference', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_tags', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_description', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_extracted_results', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_template', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_severity', subdomain_datatable_columns),
-					get_datatable_col_index('cms', subdomain_datatable_columns),
-					get_datatable_col_index('webserver', subdomain_datatable_columns),
-					get_datatable_col_index('cname', subdomain_datatable_columns),
-					get_datatable_col_index('content_type', subdomain_datatable_columns)
-				],
-				"visible": false,
-				"searchable": false,
+				targets: ['ip_addresses:name', 'ports:name', 'technologies:name', 'http_url:name', 'cname:name', 'is_interesting:name', 'info_count:name', 'low_count:name', 'medium_count:name', 'high_count:name', 'critical_count:name', 'todos_count:name', 'webserver:name', 'content_type:name', 'directories_count:name', 'subscan_count:name', 'waf:name', 'attack_surface:name', 'verified:name', 'sources:name'],
+				visible: false,
+				searchable: false,
 			},
 			{
-				"targets": [
-					get_datatable_col_index('technologies', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_cwe_id', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_severity', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_tags', subdomain_datatable_columns),
-					get_datatable_col_index('nuclei_cve_id', subdomain_datatable_columns)
-				],
-				"visible": false,
-				"searchable": true,
+				targets: ['technologies:name', 'cname:name', 'is_important:name', 'webserver:name', 'content_type:name'],
+				visible: false,
+				searchable: true,
 			},
-			{"className": "text-start text-lg-center", "targets": [
-				get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
-				get_datatable_col_index('ports', subdomain_datatable_columns),
-				get_datatable_col_index('http_status', subdomain_datatable_columns),
-				get_datatable_col_index('content_length', subdomain_datatable_columns),
-				get_datatable_col_index('technologies', subdomain_datatable_columns)
-			]},
-			// checkbox
+			{ className: 'text-start text-lg-center', targets: ['ip_addresses:name', 'ports:name', 'http_status:name', 'content_length:name', 'technologies:name'] },
 			{
-				"targets":0, "width":"15px", "className":"", "orderable":!1, render:function(e, a, t, n) {
-					return'<div class="form-check ms-1 form-check-primary"><input type="checkbox" name="subdomain_checkbox['+ e + ']" class="float-start form-check-input subdomain_checkbox" value="' + e + '" onchange=toggleMultipleSubdomainButton()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>';
-				}},
+				targets: 'id:name',
+				width: '15px',
+				orderable: false,
+				render: function(e, a, t, n) {
+					return '<div class="form-check ms-1 form-check-primary"><input type="checkbox" name="subdomain_checkbox[' + e + ']" class="float-start form-check-input subdomain_checkbox" value="' + e + '" onchange=toggleMultipleSubdomainButton()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>';
+				}
+			},
 				// subdomain Name
 				{
 					"render": function ( data, type, row ) {
 						var badges = '';
 						var tech_badge = '';
 						var interesting_badge = '';
-						var content_type = '';
-						var web_server = '';
 						var waf_badge = '';
-						if (row['technologies']){
-							tech_badge = '<div>' + parse_technology('{% url 'api:querySubdomains' %}', row['technologies'], "primary", scan_id=null, domain_id=null) + '</div>';
+						if (window.RengineDatatableRenderers && typeof window.RengineDatatableRenderers.renderEndpointDefaultsByPortBadges === 'function') {
+							tech_badge = window.RengineDatatableRenderers.renderEndpointDefaultsByPortBadges(row['endpoint_defaults_by_port'], {
+								queryUrl: '{% url "api:querySubdomains" %}',
+								showPortLabel: true,
+								technologies: {
+									technologies: row['technologies'] || null,
+									content_type: row['content_type'] || '',
+									webserver: row['webserver'] || '',
+								},
+							});
+						}
+						if (!tech_badge && row['technologies']){
+							var scanIdForTech = null;
+							if (row['scan_history'] != null) {
+								scanIdForTech = (typeof row['scan_history'] === 'object' && row['scan_history'].id != null) ? row['scan_history'].id : row['scan_history'];
+							}
+							var domainIdForTech = null;
+							if (row['domain'] != null) {
+								domainIdForTech = (typeof row['domain'] === 'object' && row['domain'].id != null) ? row['domain'].id : row['domain'];
+							}
+							tech_badge = '<div>' + parse_technology('{% url "api:querySubdomains" %}', row['technologies'], "primary", scanIdForTech, domainIdForTech) + '</div>';
 						}
 						if(row['is_interesting'])
 						{
 							interesting_badge = `<div><span class='me-1 badge badge-soft-danger' data-toggle="tooltip" data-placement="top" title="Interesting Subdomain">Interesting</span></div>`;
-						}
-
-						if (row['content_type']) {
-							content_type = `<div><span class='mt-1 badge badge-soft-blue bs-tooltip' title="Content Type">${row['content_type']}</span></div>`;
-						}
-
-						if (row['webserver']) {
-							web_server = `<div><span class='mt-1 badge badge-soft-info bs-tooltip' title="Web Server">${row['webserver']}</span></div>`;
 						}
 
 						if (interesting_badge) {
@@ -172,16 +169,7 @@ $(document).ready(function() {
 							waf_badge += `</div>`;
 						}
 
-						vuln_count_badge = '';
-						total_vuln_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link' title="All Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count']} <i class="fas fa-bug"></i></span>`;
-						info_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-info bs-tooltip badge-link' title="Informational Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=0, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count']} Info</span>`;
-						low_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-low bs-tooltip badge-link' title=" Low Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=1, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['low_count']} Low</span>`;
-						medium_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-warning bs-tooltip badge-link' title="Medium Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=2, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['medium_count']} Med</span>`;
-						high_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-danger bs-tooltip badge-link' title="High Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=3, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['high_count']} High</span>`;
-						critical_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link' title="Critical Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=4, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['critical_count']} Critical</span>`;
-						vuln_count_badge = `<div class="">` + (row['info_count'] > 0? info_badge : '') + (row['low_count'] > 0? low_badge : '') + (row['medium_count'] > 0? medium_badge : '') + (row['high_count'] > 0? high_badge : '') + (row['critical_count'] > 0? critical_badge : '') + `</div>`;
-
-						vuln_count_badge = (row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count'] > 0? total_vuln_badge : '') + vuln_count_badge;
+						vuln_count_badge = (window.RengineDatatableColumnDefs && typeof window.RengineDatatableColumnDefs.getSubdomainVulnCountBadgesHtml === 'function') ? window.RengineDatatableColumnDefs.getSubdomainVulnCountBadgesHtml(row, { vulnerabilityListUrl: "{% url 'api:vulnerabilities-list' %}" }) : '';
 
 						copy_icon = `
 						<a href="javascript:;" data-clipboard-action="copy" class="action-icon copyable" data-toggle="tooltip" data-placement="top" title="Copy Subdomain!" data-clipboard-target="#subdomain-${row['id']}" id="#subdomain-${row['id']}" onclick="setTooltip(this.id, 'Copied!')"> <i class="text-primary mdi mdi-content-copy"></i></a>
@@ -197,10 +185,12 @@ $(document).ready(function() {
 							subscan_count_badge = `<span class="badge me-1 badge-soft-blue badge-link bs-tooltip" title="SubScans" onclick="get_and_render_subscan_history('{% url 'api:listSubScans' %}', ${row['id']}, '${row['name']}')">${row['subscan_count']} <i class="fas fa-history"></i></span>`;
 						}
 
-						tech_badge += content_type;
-						tech_badge += web_server;
+						var certificate_count_badge = '';
+						if (row['certificate_count']) {
+							certificate_count_badge = `<span class="me-1 badge badge-soft-secondary badge-link bs-tooltip" title="Certificate(s)" onclick="render_certificate_in_xl_modal(${row['id']}, '${String(row['name']).replace(/'/g, "\\'")}', null)">${row['certificate_count']} <i class="fas fa-certificate"></i></span>`;
+						}
 
-						end_vuln_badge = '<div class="">' + subscan_count_badge + endpoint_count_badge + directory_count_badge + vuln_count_badge + '</div>';
+						end_vuln_badge = '<div class="">' + subscan_count_badge + endpoint_count_badge + directory_count_badge + certificate_count_badge + vuln_count_badge + '</div>';
 
 						if (row['http_url']) {
 							if (row['cname']) {
@@ -211,130 +201,133 @@ $(document).ready(function() {
 						}
 						return badges + `<div class="clipboard copy-txt"><a href="https://` + data + `" class="text-primary" target="_blank"><span id='subdomain-${row['id']}'>` + data + `${copy_icon} </span></a>` + `</div>` + waf_badge + end_vuln_badge + tech_badge + todo_badge;
 					},
-					"targets": get_datatable_col_index('name', subdomain_datatable_columns)
+					targets: 'name:name',
 				},
-				// vulnerability count
 				{
-					"render": function ( data, type, row ) {
+					render: function ( data, type, row ) {
 						if (row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count'] > 0) {
 							return `<span class='badge badge-critical bs-tooltip badge-link' title="All Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count']} <i class="fas fa-bug"></i></span>`;
 						}
 						return "";
 					},
-					"targets": get_datatable_col_index('vuln_count', subdomain_datatable_columns),
+					targets: 'vuln_count:name',
 				},
-				// http_status
 				{
-					"render": function ( data, type, row ) {
-						// display badge based on http status
-						// green for http status 2XX, orange for 3XX and warning for everything else
+					render: function ( data, type, row ) {
 						if (data >= 200 && data < 300) {
 							return "<span class='badge bg-success'>"+data+"</span>";
 						}
-						else if (data >= 300 && data < 400) {
+						if (data >= 300 && data < 400) {
 							return "<span class='badge bg-warning'>"+data+"</span>";
 						}
-						else if (data == 0){
-							// datatable throws error when no data is returned
+						if (data == 0) {
 							return "";
 						}
 						return `<span class='badge bg-danger'>`+data+`</span>`;
 					},
-					"targets": get_datatable_col_index('http_status', subdomain_datatable_columns),
+					targets: 'http_status:name',
 				},
-				// page title
 				{
-					"render": function ( data, type, row ) {
+					render: function ( data, type, row ) {
 						if (data){
-							return htmlEncode(data);
+							return window.safeText(data);
 						}
 						return "";
 					},
-					"targets": get_datatable_col_index('page_title', subdomain_datatable_columns),
+					targets: 'page_title:name',
 				},
-				// ip address
 				{
-					"render": function ( data, type, row ) {
-						ip_badge = ''
+					render: function ( data, type, row ) {
+						ip_badge = '';
 						if (data) {
 							Object.entries(data).forEach(([key, value]) => {
 								if (value['is_cdn']) {
-									ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
+									ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`;
 								} else {
-									ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
+									ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`;
 								}
 							});
 							return ip_badge;
 						}
 						return "";
 					},
-					"targets": get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
+					targets: 'ip_addresses:name',
 				},
-				// open ports
 				{
-					"render": function ( data, type, row ) {
+					render: function ( data, type, row ) {
 						return renderBadge(data, {
-							api_ips_url: '{% url 'api:listIPs' %}',
-							api_subdomains_url: '{% url 'api:querySubdomains' %}',
+							api_ips_url: '{% url "api:listIPs" %}',
+							api_subdomains_url: '{% url "api:querySubdomains" %}',
 							scan_id: null,
-							domain_id: null
+							domain_id: null,
+							summaryWithPopover: true,
+							rowId: row['id']
 						});
 					},
-					"targets": get_datatable_col_index('open_ports', subdomain_datatable_columns),
+					targets: 'ports:name',
 				},
 				{
-					"render": function ( data, type, row ) {
+					render: function ( data, type, row ) {
 						if (data){
-							//return lightbox with caption as http link
 							return data;
 						}
 						return 0;
 					},
-					"targets": get_datatable_col_index('content_length', subdomain_datatable_columns),
+					targets: 'content_length:name',
 				},
-
-				// response_time
 				{
-					"render": function ( data, type, row ) {
+					render: function ( data, type, row ) {
 						if (data){
 							return get_response_time_text(data);
 						}
 						return "";
 					},
-					"targets": get_datatable_col_index('response_time', subdomain_datatable_columns),
+					targets: 'response_time:name',
 				},
-				// Action
+				{
+					width: '180px',
+					className: 'col-action',
+					render: function ( data, type, row ) {
+						return window.RengineDatatableActionRenderers.renderSubdomainActions(row, {
+							urls: window.RENGINE_DATATABLE_ACTION_URLS.subdomain,
+							projectSlug: '{{ current_project.slug|escapejs }}',
+							useInlineNote: false
+						});
+					},
+					targets: 'action:name',
+				},
+				// verified
 				{
 					"render": function ( data, type, row ) {
-						const cms_detector_http_url = row['http_url'] ? row['http_url'] : 'https://' + row['name'];
-						return `
-						<div class="btn-group mt-2">
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal('{% url 'api:llm_get_possible_attacks' %}', ${row['id']})"><i class="fe-eye"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" class="btn btn-primary btn-scan-subdomain me-1 bs-tooltip" id="${row['id']}"><i class="fe-zap"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" class="btn btn-primary me-1 bs-tooltip" id="${row['id']}" onclick="add_note_for_subdomain(${row['id']}, '${row['name']}', '{{current_project.slug}}')"><i class="fe-file-plus"></i></button>
-							<button class="btn btn-primary me-1 dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-horizontal"></i></button>
-							<div class="dropdown-menu dropdown-menu-end">
-							<a class="dropdown-item" href="#" onclick="mark_important_subdomain('{% url 'api:toggle_subdomain' %}', this, ${row['id']})" id="${row['id']}"><i class="mdi mdi-alert-rhombus-outline me-2 text-muted font-18 vertical-middle"></i>Mark Important Subdomain</a>
-							<a class="dropdown-item detect_subdomain_cms_link" href="#" data-http-status="${row['http_status']}" data-cms-url="${cms_detector_http_url}" data-url="{% url 'api:cms_detector' %}"><i class="fe-grid me-2 text-muted font-18 vertical-middle"></i>Detect CMS</a>
-							<a class="text-danger dropdown-item btn-delete-subdomain" href="#" id="${row['id']}"><i class="text-danger mdi mdi-delete-forever-outline me-2 font-18 vertical-middle"></i>Delete Subdomain</a>
-							</div>
-						</div>
-						`;
+						if (data === true || data === "true" || data === 1) {
+							return "<span class='badge bg-success'>Verified</span>";
+						}
+						return "<span class='badge bg-secondary'>Not Verified</span>";
 					},
-					"targets": get_datatable_col_index('action', subdomain_datatable_columns),
+					targets: 'verified:name',
+				},
+				// sources
+				{
+					"render": function ( data, type, row ) {
+						if (data && Array.isArray(data) && data.length > 0) {
+							return data.map(source => `<span class='badge badge-soft-info m-1'>${window.safeText(source)}</span>`).join('');
+						}
+						return "";
+					},
+					targets: 'sources:name',
 				},
 			],
-			"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-			"<'table-responsive'tr>" +
-			"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
 			"initComplete": function(settings, json) {
 				api = this.api();
-				subdomain_datatable_col_visibility(subdomain_datatables);
+				if (window.subdomainDatatableColVisibility) window.subdomainDatatableColVisibility(subdomain_datatables, subdomain_datatable_columns);
 				$(".dtrg-group th:contains('No group')").remove();
 			},
-			"drawCallback": function () {
-				$('.badge').tooltip({ template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' })
-				$('.bs-tooltip').tooltip();
+			"drawCallback": function (settings) {
+				if (window.getRengineDatatableDrawCallbackTooltips) {
+					var fn = window.getRengineDatatableDrawCallbackTooltips('#subdomain_scan_results', { tooltipTemplate: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' });
+					if (typeof fn === 'function') fn.call(this, settings);
+				}
+				if (typeof initPortsPopovers === 'function') initPortsPopovers('#subdomain_scan_results');
 				$('.dtrg-group').remove();
 				drawCallback_api = this.api();
 				setTimeout(function() {
@@ -342,28 +335,19 @@ $(document).ready(function() {
 				}, 1);
 			},
 			"rowCallback": function( row, data, dataIndex ) {
-				if (data['is_important']){
-					$(row).addClass('table-danger');
+				if (typeof window.rengineApplyImportantRowHighlight === 'function') {
+					window.rengineApplyImportantRowHighlight(row, data);
 				}
 			},
-		});
+		}));
+	window.subdomain_datatables = subdomain_datatables;
 
-		var radioGroup = document.getElementsByName('grouping_subd_row');
-		radioGroup.forEach(function(radioButton) {
-			radioButton.addEventListener('change', function() {
-				if (this.checked) {
-					var groupRows = document.querySelectorAll('tr.group');
-					var col_index = get_datatable_col_index(this.value, subdomain_datatable_columns);
-					api.page.len(-1).draw();
-					api.order([col_index, 'asc']).draw();
-					subdomain_datatables.rowGroup().dataSrc(this.value);
-					Snackbar.show({
-						text: 'Subdomains grouped by ' + this.value,
-						pos: 'top-right',
-						duration: 2500
-					});
-				}
-			});
+		window.attachRengineDatatableRowGroupSelector(subdomain_datatables, {
+			selector: 'input[name="grouping_subd_row"]',
+			groups: window.RENGINE_DATATABLE_SUBDOMAIN_ROW_GROUP_GROUPS || [],
+			defaultOrderWhenDisabled: window.RENGINE_DATATABLE_SUBDOMAIN_DEFAULT_ORDER || [['content_length', 'desc']],
+			columns: subdomain_datatable_columns,
+			snackbarMessage: window.getRengineRowGroupSnackbarMessage('Grouping cleared', 'Subdomains grouped by {label}')
 		});
 
 		$('#reload_subdomain_table_btn').click(function () {
@@ -432,12 +416,11 @@ $(document).ready(function() {
 
 		$("#subdomain_scan_results").on('click', '.btn-scan-subdomain', function () {
 			$('input[type=checkbox]').prop('checked',false);
-			$('#subscan-modal').modal('show');
 			var subdomain_id = $(this).attr('id');
-			$('a[data-toggle="tooltip"]').tooltip("hide")
 			$('#subtask_subdomain_id').val(subdomain_id);
-			// to distinguish multiple subscan or single, put a extra attribute on button
 			$('#btn-initiate-subtask').attr('multiple-subscan', false);
+			$('a[data-toggle="tooltip"]').tooltip("hide");
+			if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.SUBSCAN);
 		});
 
 		var subdomain_cols = [

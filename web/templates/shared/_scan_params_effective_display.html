@@ -1,0 +1,138 @@
+{% comment %}
+  Single source of truth for "Effective scan parameters" display.
+  Context: scan_params_effective (dict), optional scan_params_effective_title (string),
+  optional scan_params_level ("organization"|"scope"|"target") to derive title if title not set.
+  Optional scan_params_show_empty_placeholder (default True): when effective is empty, show the
+  level-specific placeholder message only if true; when false, container stays empty for JS.
+  Always renders #scan-params-effective-container so AJAX preview has a target.
+{% endcomment %}
+<div id="scan-params-effective-container" class="scan-params-effective-wrapper">
+{% if scan_params_effective %}
+<div class="alert alert-light border mb-3 mt-3">
+  <p class="fw-semibold mb-2 small"><i class="fe-info me-1"></i>
+    {% if scan_params_effective_title %}
+      {{ scan_params_effective_title }}
+    {% elif scan_params_level == "organization" %}
+      Current effective values for this organization:
+    {% elif scan_params_level == "scope" %}
+      Current effective values (organization defaults + scope overrides):
+    {% elif scan_params_level == "target" %}
+      Current effective values (without your override):
+    {% else %}
+      Current effective values:
+    {% endif %}
+  </p>
+  <div class="row row-cols-2 row-cols-md-4 g-2">
+    {% if scan_params_effective_ordered %}
+    {% for param, info in scan_params_effective_ordered %}
+    <div class="col">
+      <div class="d-flex align-items-center gap-1 flex-wrap">
+        <span class="text-muted small" style="min-width:80px">{{ param }}</span>
+        <span class="small fw-semibold">
+          {% if info.value is not None %}
+            {% if param == "follow_redirect" %}{{ info.value|yesno:"Yes,No" }}
+            {% else %}{{ info.value }}{% endif %}
+            {% if info.source == "profile" and info.profile_name %}<span class="text-muted"> ({{ info.profile_name|escape }})</span>{% endif %}
+          {% else %}&mdash;{% endif %}
+        </span>
+        {% if info.source == "scan" %}
+        <span class="badge bg-success">scan</span>
+        {% elif info.source == "target" %}
+        <span class="badge bg-warning text-dark">target</span>
+        {% elif info.source == "scope" %}
+        <span class="badge bg-primary">scope</span>
+        {% elif info.source == "organization" %}
+        <span class="badge bg-info text-dark">organization</span>
+        {% elif info.source == "profile" %}
+          {% if info.profile_source_level == "organization" and scan_params_level != "organization" %}
+        <span class="badge bg-info text-dark" title="From organization profile">org</span>
+          {% elif info.profile_source_level == "scope" and scan_params_level != "scope" and scan_params_level != "organization" %}
+        <span class="badge bg-primary" title="From scope profile">scop</span>
+          {% elif info.profile_source_level == "target" and scan_params_level != "target" %}
+        <span class="badge bg-warning text-dark" title="From target profile">target</span>
+          {% else %}
+        <span class="badge bg-dark">profile</span>
+          {% endif %}
+        {% else %}
+        <span class="badge bg-secondary">default</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    {% for param, info in scan_params_effective.items %}
+    {% if param != "profiles" and param != "profile_display_list" and param != "worker" %}
+    <div class="col">
+      <div class="d-flex align-items-center gap-1 flex-wrap">
+        <span class="text-muted small" style="min-width:80px">{{ param }}</span>
+        <span class="small fw-semibold">
+          {% if info.value is not None %}
+            {% if param == "follow_redirect" %}{{ info.value|yesno:"Yes,No" }}
+            {% else %}{{ info.value }}{% endif %}
+            {% if info.source == "profile" and info.profile_name %}<span class="text-muted"> ({{ info.profile_name|escape }})</span>{% endif %}
+          {% else %}&mdash;{% endif %}
+        </span>
+        {% if info.source == "scan" %}
+        <span class="badge bg-success">scan</span>
+        {% elif info.source == "target" %}
+        <span class="badge bg-warning text-dark">target</span>
+        {% elif info.source == "scope" %}
+        <span class="badge bg-primary">scope</span>
+        {% elif info.source == "organization" %}
+        <span class="badge bg-info text-dark">organization</span>
+        {% elif info.source == "profile" %}
+          {% if info.profile_source_level == "organization" and scan_params_level != "organization" %}
+        <span class="badge bg-info text-dark" title="From organization profile">org ({{ info.profile_name|default:""|escape }})</span>
+          {% elif info.profile_source_level == "scope" and scan_params_level != "scope" and scan_params_level != "organization" %}
+        <span class="badge bg-primary" title="From scope profile">scope ({{ info.profile_name|default:""|escape }})</span>
+          {% elif info.profile_source_level == "target" and scan_params_level != "target" %}
+        <span class="badge bg-warning text-dark" title="From target profile">target ({{ info.profile_name|default:""|escape }})</span>
+          {% else %}
+        <span class="badge bg-dark">profile</span>
+          {% endif %}
+        {% else %}
+        <span class="badge bg-secondary">default</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% with profiles_info=scan_params_effective.profiles profile_display_list=scan_params_effective.profile_display_list %}
+  {% if profiles_info.value %}
+  <div class="mt-2">
+    <span class="text-muted small me-1">Profiles:</span>
+    {% if profile_display_list %}
+    {% for item in profile_display_list %}
+    {% with cat=item.category source_level=item.source_level|default:"default" %}
+    <span class="badge {% if cat == 'speed' %}bg-primary{% elif cat == 'evasion' %}bg-secondary{% elif cat == 'general' %}bg-info text-dark{% elif cat == 'network' %}bg-success text-dark{% else %}bg-secondary{% endif %} me-1" title="{% if source_level == 'organization' %}From organization{% elif source_level == 'scope' %}From scope{% elif source_level == 'target' %}From target{% elif source_level == 'scan' %}From scan override{% else %}{{ item.tooltip|escape }}{% endif %}" data-bs-toggle="tooltip" data-bs-html="false">{{ item.category }}: {{ item.name }}</span>
+    {% endwith %}
+    {% endfor %}
+    {% else %}
+    {% for cat, name in profiles_info.value.items %}
+    <span class="badge {% if cat == 'speed' %}bg-primary{% elif cat == 'evasion' %}bg-secondary{% elif cat == 'general' %}bg-info text-dark{% elif cat == 'network' %}bg-success text-dark{% else %}bg-secondary{% endif %} me-1">{{ cat }}: {{ name }}</span>
+    {% endfor %}
+    {% endif %}
+    <span class="badge bg-light text-dark border ms-1">{{ profiles_info.source }}</span>
+  </div>
+  {% endif %}
+  {% endwith %}
+</div>
+{% elif scan_params_show_empty_placeholder|default:True %}
+<div class="alert alert-light border mb-3 mt-3 text-muted small">
+  <p class="mb-0">
+    <i class="fe-info me-1"></i>
+    {% if scan_params_level == "organization" %}
+      No effective scan parameters are currently configured at the organization level.
+    {% elif scan_params_level == "scope" %}
+      No effective scan parameters are currently configured for this scope.
+    {% elif scan_params_level == "target" %}
+      Effective parameters depend on the scan target. Change fields to update.
+    {% else %}
+      No effective scan parameters are currently configured. Change fields to update.
+    {% endif %}
+  </p>
+</div>
+{% endif %}
+</div>

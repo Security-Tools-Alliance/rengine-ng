@@ -4,18 +4,17 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0006_remove_associateddomain_association_by'),
+        ("targetApp", "0006_remove_associateddomain_association_by"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='associateddomain',
-            name='creation_date',
+            model_name="associateddomain",
+            name="creation_date",
         ),
         migrations.RemoveField(
-            model_name='associateddomain',
-            name='registrar',
+            model_name="associateddomain",
+            name="registrar",
         ),
     ]

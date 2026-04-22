@@ -1,0 +1,22 @@
+{# Out of Scope Subdomains card #}
+{# Params: id_prefix (string, optional) #}
+<div class="col-lg-6 mb-4">
+  <div class="card border-0 bg-soft-warning h-100">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="fas fa-ban text-warning me-2"></i>
+        Out of Scope Subdomains
+      </h5>
+      <p class="card-text small">
+        Define subdomains that should be excluded from the scan.
+      </p>
+      
+      <div class="alert bg-soft-warning border-0 mt-1 mb-2 small" role="alert">
+        <span>Separate the out of scope subdomains/keywords using new line. (No regex currently supported.)</span>
+      </div>
+      
+      <label for="{{ id_prefix|default:'' }}outOfScopeSubdomainTextarea" class="form-label small">Out of Scope Subdomains List</label>
+      <textarea class="form-control" id="{{ id_prefix|default:'' }}outOfScopeSubdomainTextarea" name="outOfScopeSubdomainTextarea" rows="4" spellcheck="false"></textarea>
+    </div>
+  </div>
+</div>

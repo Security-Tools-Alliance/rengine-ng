@@ -1,0 +1,170 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}{{ task.name }} - Task Details{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-tasks"></i> {{ task.name }}
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'duplicate_task' task.id %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-copy"></i> Copy
+                        </a>
+                        <a href="{% url 'tasks' current_project.slug %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Tasks
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Task Information</h5>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-borderless">
+                                        <tr>
+                                            <td><strong>Name:</strong></td>
+                                            <td>{{ task.name }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Type:</strong></td>
+                                            <td><code>{{ task.task_type }}</code></td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Tags:</strong></td>
+                                            <td>
+                                                {% if task.tags %}
+                                                {% for tag in task.tags %}
+                                                <span class="badge badge-secondary me-1">{{ tag }}</span>
+                                                {% endfor %}
+                                                {% else %}
+                                                <span class="text-muted">Not specified</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Status:</strong></td>
+                                            <td>
+                                                {% if task.is_active %}
+                                                <span class="badge badge-success">Active</span>
+                                                {% else %}
+                                                <span class="badge badge-danger">Inactive</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Built-in:</strong></td>
+                                            <td>
+                                                {% if task.is_builtin %}
+                                                <span class="badge badge-info">Yes</span>
+                                                {% else %}
+                                                <span class="badge badge-warning">No</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Created:</strong></td>
+                                            <td>{{ task.created_at|date:"F d, Y H:i" }}</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Updated:</strong></td>
+                                            <td>{{ task.updated_at|date:"F d, Y H:i" }}</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            {% if task.description %}
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Description</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p>{{ task.description }}</p>
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            {% if task.yaml_configuration %}
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">YAML Configuration</h5>
+                                </div>
+                                <div class="card-body">
+                                    <pre><code>{{ task.yaml_configuration }}</code></pre>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Related Scans</h5>
+                                </div>
+                                <div class="card-body">
+                                    {% if related_scans %}
+                                    <div class="list-group">
+                                        {% for scan in related_scans %}
+                                        <a href="{% url 'scan_detail' current_project.slug scan.id %}" class="list-group-item list-group-item-action">
+                                            <div class="d-flex w-100 justify-content-between">
+                                                <h6 class="mb-1">{{ scan.name }}</h6>
+                                                <small>{{ scan.execution_mode|title }}</small>
+                                            </div>
+                                            <p class="mb-1">{{ scan.description|truncatechars:50 }}</p>
+                                            <small>
+                                                {% if scan.is_active %}
+                                                <span class="badge badge-success">Active</span>
+                                                {% else %}
+                                                <span class="badge badge-danger">Inactive</span>
+                                                {% endif %}
+                                            </small>
+                                        </a>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted">This task is not used in any scan configurations.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Task Statistics</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row text-center">
+                                        <div class="col-6">
+                                            <h4 class="text-primary">{{ related_scans.count }}</h4>
+                                            <small class="text-muted">Used in Scans</small>
+                                        </div>
+                                        <div class="col-6">
+                                            <h4 class="text-success">
+                                                {% if task.is_active %}1{% else %}0{% endif %}
+                                            </h4>
+                                            <small class="text-muted">Status</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

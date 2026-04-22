@@ -8,6 +8,7 @@ Add Organization
 
 {% block custom_js_css_link %}
 <link rel="stylesheet" type="text/css" href="{% static 'plugins/select2/select2.min.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
@@ -25,8 +26,8 @@ Add Organization
   <div class="col-12">
     <div class="card">
       <div class="card-body">
-        <p>Organizations can be used to bundle the targets, an organization can have multiple targets. You will be able to scan the organizations just like the targets, but scanning the organization will allow you to scan all the targets within the organization together.</p>
-        <form method="POST">
+        <p>Organizations group scopes and optional legacy targets. In the scope-based model, add targets to scopes (not here). You can create an organization without targets and add scopes with targets later. Optionally attach targets directly to the organization for legacy compatibility.</p>
+        <form method="POST" id="scan-params-form">
           {% csrf_token %}
           <div class="row">
             <div class="col-6">
@@ -43,18 +44,19 @@ Add Organization
               {{ form.description }}
             </div>
             <div class="col-12 mt-3">
-              <label for="targets" class="form-label">Select Targets</label>
-              {{form.domains}}
-              {% if form.errors.domains %}
+              <label for="targets" class="form-label">Select Targets (Optional, legacy)</label>
+              <p class="text-muted small">Targets are usually added at scope level. Use this only for legacy compatibility.</p>
+              {{ form.targets }}
+              {% if form.errors.targets %}
               <div class="invalid-feedback text-danger" style="display: block;">
-                <p class="text-danger">
-                  {{ form.errors.domains|striptags }}
-                </p>
+                <p class="text-danger">{{ form.errors.targets|striptags }}</p>
               </div>
               {% endif %}
             </div>
           </div>
-          <button class="btn btn-primary submit-fn mt-2 float-end" disabled="true" type="submit">Add Organization</button>
+          <hr>
+          {% include "startScan/_items/secator_advanced_config_accordion.html" with id_prefix="org_" include_scan_params_section=True show_profiles=False show_simple_options=False scan_params_section_collapse_id=section_collapse_id scan_params_section_form_id="scan-params-form" scan_params_prefix="" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=False %}
+          <button class="btn btn-primary submit-fn mt-2 float-end" type="submit">Add Organization</button>
         </form>
       </div>
     </div>
@@ -67,18 +69,7 @@ Add Organization
 <script src="{% static 'plugins/select2/select2.min.js' %}"></script>
 <script type="text/javascript">
   $(document).ready(function(){
-    // $(".tagging").select2({
-    //   tags: true,
-    // });
-    $('select').select2({closeOnSelect: false}).on("change", function(e) {
-      var counter = $(".select2-selection__choice").length;
-      if (counter) {
-        $(':input[type="submit"]').prop('disabled', false);
-      }
-      else{
-        $(':input[type="submit"]').prop('disabled', true);
-      }
-    });
+    $('select').select2({closeOnSelect: false});
   });
 </script>
 {% endblock page_level_script %}

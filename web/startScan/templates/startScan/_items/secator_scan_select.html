@@ -1,0 +1,80 @@
+{% load secator_extras %}
+<div class="scan-type-selection">
+  <h5 class="mb-3">
+    <i class="fas fa-radar text-primary me-2"></i>
+    Select Scan
+  </h5>
+
+  {% if scans %}
+    <div class="scan-type-tiles-container">
+      <div class="row">
+        {% for scan_ctx in scans %}
+          {% with scan=scan_ctx.scan workflows=scan_ctx.workflows %}
+          <div class="col-xxl-3 col-xl-4 col-lg-6 col-md-6 col-sm-12 mb-3">
+            <div class="scan-type-tile" data-scan-type="{{ scan.name }}" data-secator-icon="{{ scan.name|scan_icon }}">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="secator_scan_type" id="scan_type_{{ scan.name }}" value="{{ scan.name }}" required>
+                <label class="form-check-label w-100" for="scan_type_{{ scan.name }}">
+                  <div class="scan-type-tile-content">
+                    <div class="scan-type-tile-header">
+                      <div class="tile-icon">
+                        <i class="fas fa-{{ scan.name|scan_icon }}"></i>
+                      </div>
+                    </div>
+
+                    <div class="scan-type-tile-body">
+                      <div class="workflow-tile-title-row">
+                        <h6 class="scan-type-tile-title" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ scan.get_display_name|title }}</strong><br>{% if scan.long_description %}{{ scan.long_description }}{% else %}{{ scan.description }}{% endif %}">{{ scan.get_display_name }}</h6>
+                        <div class="workflow-tasks-inline">
+                          <span class="workflow-tasks-count">{{ workflows|length }} workflow{{ workflows|length|pluralize }}</span>
+                        </div>
+                      </div>
+                      <p class="scan-type-tile-description">{{ scan.description|truncatechars:80 }}</p>
+
+                      {% if workflows %}
+                        <div class="scan-tile-workflows mt-2">
+                          <div class="d-flex align-items-center gap-1 mb-1">
+                            <button type="button" class="btn btn-link btn-sm p-0 text-muted scan-expand-all" aria-label="Expand all workflows">Expand all</button>
+                            <span class="text-muted small">|</span>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-muted scan-collapse-all" aria-label="Collapse all workflows">Collapse all</button>
+                          </div>
+                          {% for wf_ctx in workflows %}
+                            <div class="scan-workflow-block mt-1">
+                              <button type="button" class="btn btn-link btn-sm p-0 text-start w-100 workflow-task-group-header scan-workflow-toggle border-0 bg-transparent d-flex align-items-center" data-bs-toggle="collapse" data-bs-target="#collapse_scan_{{ scan.name }}_{{ wf_ctx.workflow.id }}" aria-expanded="false" aria-controls="collapse_scan_{{ scan.name }}_{{ wf_ctx.workflow.id }}">
+                                <i class="fas fa-chevron-right fa-fw scan-workflow-chevron me-1 small"></i>
+                                <i class="fas fa-project-diagram text-primary me-1"></i>
+                                <span class="workflow-task-group-name">{{ wf_ctx.workflow.get_display_name|title }}</span>
+                                <span class="workflow-task-group-count text-muted ms-1">({{ wf_ctx.tasks_count }} tasks)</span>
+                              </button>
+                              <div class="collapse scan-workflow-collapse mt-1" id="collapse_scan_{{ scan.name }}_{{ wf_ctx.workflow.id }}">
+                                {% include "startScan/_items/_secator_tasks_compact.html" with structured_tasks=wf_ctx.structured_tasks show_all=True %}
+                              </div>
+                            </div>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                    </div>
+
+                    <div class="scan-type-tile-footer">
+                      <div class="scan-type-tile-meta">
+                        <span class="badge badge-soft-primary">
+                          {{ scan.get_display_name }} Scan
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+          {% endwith %}
+        {% endfor %}
+      </div>
+    </div>
+  {% else %}
+    <div class="alert alert-warning">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      No scan types available. Please check the system configuration.
+    </div>
+  {% endif %}
+</div>

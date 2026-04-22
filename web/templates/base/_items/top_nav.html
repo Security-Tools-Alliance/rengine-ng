@@ -6,19 +6,31 @@
       <div class="collapse navbar-collapse" id="topnav-menu-content">
         <ul class="navbar-nav">
           <li class="nav-item dropdown {{target_data_active}}">
-            <a class="nav-link arrow-none" href="{% url 'dashboardIndex' current_project.slug %}">
+            <a class="nav-link arrow-none" href="{% if current_project %}{% url 'dashboardIndex' current_project.slug %}{% else %}{% url 'list_projects' %}{% endif %}">
               <i class="fe-home me-1"></i> Dashboard
             </a>
           </li>
           <li class="nav-item dropdown {{target_data_active}}">
-            <a class="nav-link arrow-none" href="{% url 'list_projects' %}">
+            <a class="nav-link arrow-none" href="{% url 'list_projects' %}{{ project_nav_q }}">
               <i class="fe-folder me-1"></i> Projects
             </a>
           </li>
-          <li class="nav-item dropdown {{target_data_active}}">
-            <a class="nav-link arrow-none" href="{% url 'list_target' current_project.slug %}">
-              <i class="fe-crosshair me-1"></i> Targets
+          {% if current_project %}
+          <li class="nav-item dropdown {{organization_active}}">
+            <a class="nav-link arrow-none" href="{% url 'list_organization' current_project.slug %}">
+              <i class="fe-briefcase me-1"></i> Organization
             </a>
+          </li>
+          <li class="nav-item dropdown {{target_data_active}} {{scope_active}}">
+            <a class="nav-link dropdown-toggle arrow-none" href="#" id="topnav-targets" role="button"
+              data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              <i class="fe-crosshair me-1"></i> Targets
+              <div class="arrow-down"></div>
+            </a>
+            <div class="dropdown-menu" aria-labelledby="topnav-targets">
+              <a href="{% url 'list_target' current_project.slug %}" class="dropdown-item">Targets</a>
+              <a href="{% url 'list_scope' current_project.slug %}" class="dropdown-item">Scopes</a>
+            </div>
           </li>
           <li class="nav-item dropdown {{scan_history_active}} {{scheduled_scan_active}}">
             <a class="nav-link dropdown-toggle arrow-none" href="#" id="topnav-history" role="button"
@@ -45,11 +57,7 @@
               <i class="fe-check-square me-1"></i> To-do
             </a>
           </li>
-          <li class="nav-item dropdown {{organization_active}}">
-            <a class="nav-link arrow-none" href="{% url 'list_organization' current_project.slug %}">
-              <i class="fe-briefcase me-1"></i> Organization
-            </a>
-          </li>
+          {% endif %}
           <li class="nav-item dropdown {{scan_engine_nav_active}}">
             <a class="nav-link dropdown-toggle arrow-none" href="#" id="topnav-scanengine" role="button"
               data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -58,13 +66,24 @@
             </a>
             <div class="dropdown-menu" aria-labelledby="topnav-scanengine">
               {% if user|can:'modify_scan_configurations' %}
-              <a href="{% url 'scan_engine_index' %}" class="dropdown-item">Scan Engines</a>
+              <a href="{% if current_project %}{% url 'scans' current_project.slug %}{% else %}{% url 'scans' %}{% endif %}" class="dropdown-item">Scans</a>
+              <a href="{% if current_project %}{% url 'workflows' current_project.slug %}{% else %}{% url 'workflows' %}{% endif %}" class="dropdown-item">Workflows</a>
+              <a href="{% if current_project %}{% url 'tasks' current_project.slug %}{% else %}{% url 'tasks' %}{% endif %}" class="dropdown-item">Tasks</a>
+              <a href="{% if current_project %}{% url 'profiles' current_project.slug %}{% else %}{% url 'profiles' %}{% endif %}" class="dropdown-item">Profiles</a>
+              <a href="{% if current_project %}{% url 'worker_list' current_project.slug %}{% else %}{% url 'worker_list' %}{% endif %}" class="dropdown-item">Workers</a>
+              <div class="dropdown-divider"></div>
               {% endif %}
               {% if user|can:'modify_wordlists' %}
-              <a href="{% url 'wordlist_list' %}" class="dropdown-item">Wordlists</a>
+              <a href="{% if current_project %}{% url 'wordlist_list' current_project.slug %}{% else %}{% url 'wordlist_list' %}{% endif %}" class="dropdown-item">Wordlists</a>
               {% endif %}
               {% if user|can:'modify_interesting_lookup' %}
-              <a href="{% url 'interesting_lookup' %}" class="dropdown-item">Interesting Lookup</a>
+              <a href="{% if current_project %}{% url 'interesting_lookup' current_project.slug %}{% else %}{% url 'interesting_lookup' %}{% endif %}" class="dropdown-item">Interesting Lookup</a>
+              {% endif %}
+              {% if user|can:'modify_scan_configurations' %}
+              <a href="{% if current_project %}{% url 'scan_engine_index' current_project.slug %}{% else %}{% url 'scan_engine_index' %}{% endif %}" class="dropdown-item">
+                <i class="fas fa-exclamation-triangle text-warning me-1"></i>Scan Engines
+                <small class="text-muted d-block">(Legacy - Use Secator instead)</small>
+              </a>
               {% endif %}
             </div>
           </li>
@@ -76,29 +95,32 @@
             </a>
             <div class="dropdown-menu" aria-labelledby="topnav-settings">
               {% if user|can:'modify_scan_configurations' %}
-              <a href="{% url 'proxy_settings' %}" class="dropdown-item">Proxies</a>
-              <a href="{% url 'tool_settings' %}" class="dropdown-item">Tool Settings</a>
+              <a href="{% if current_project %}{% url 'proxy_settings' current_project.slug %}{% else %}{% url 'proxy_settings' %}{% endif %}" class="dropdown-item">Proxies</a>
+              <a href="{% if current_project %}{% url 'tool_settings' current_project.slug %}{% else %}{% url 'tool_settings' %}{% endif %}" class="dropdown-item">Tool Settings</a>
               {% endif %}
               {% if user|can:'modify_system_configurations' %}
-              <a href="{% url 'api_vault' %}" class="dropdown-item">API Vault</a>
-              <a href="{% url 'llm_toolkit' %}" class="dropdown-item">LLM Toolkit</a>
-              <a href="{% url 'tool_arsenal' %}" class="dropdown-item">Tools Arsenal</a>
+              <a href="{% if current_project %}{% url 'api_vault' current_project.slug %}{% else %}{% url 'api_vault' %}{% endif %}" class="dropdown-item">API Vault</a>
+              <a href="{% if current_project %}{% url 'llm_toolkit' current_project.slug %}{% else %}{% url 'llm_toolkit' %}{% endif %}" class="dropdown-item">LLM Toolkit</a>
               {% endif %}
               {% if user|can:'modify_scan_report' %}
-              <a href="{% url 'report_settings' %}" class="dropdown-item">Report Settings</a>
+              <a href="{% if current_project %}{% url 'report_settings' current_project.slug %}{% else %}{% url 'report_settings' %}{% endif %}" class="dropdown-item">Report Settings</a>
               {% endif %}
               {% if user|can:'modify_system_configurations' %}
-              <a href="{% url 'rengine_settings' %}" class="dropdown-item">reNgine-ng Settings</a>
+              <a href="{% if current_project %}{% url 'rengine_settings' current_project.slug %}{% else %}{% url 'rengine_settings' %}{% endif %}" class="dropdown-item">reNgine-ng Settings</a>
               {% endif %}
               {% if user|can:'modify_scan_configurations' %}
-              <a href="{% url 'hackerone_settings' %}" class="dropdown-item">Hackerone Settings</a>
-              <a href="{% url 'notification_settings' %}" class="dropdown-item">Notification Settings</a>
+              <a href="{% if current_project %}{% url 'hackerone_settings' current_project.slug %}{% else %}{% url 'hackerone_settings' %}{% endif %}" class="dropdown-item">Hackerone Settings</a>
+              <a href="{% if current_project %}{% url 'notification_settings' current_project.slug %}{% else %}{% url 'notification_settings' %}{% endif %}" class="dropdown-item">Notification Settings</a>
               {% endif %}
             </div>
           </li>
         </ul>
       </div>
-      <span class="badge bg-blue" data-bs-toggle="tooltip" data-bs-placement="top" title="Current Project">{{current_project.name}}</span>
+      {% if current_project %}
+      <span class="badge bg-blue d-none d-xl-block" data-bs-toggle="tooltip" data-bs-placement="top" title="Current Project">{{current_project.name}}</span>
+      {% else %}
+      <span class="badge bg-secondary" data-bs-toggle="tooltip" data-bs-placement="top" title="No project selected">No Project</span>
+      {% endif %}
     </nav>
   </div>
 </div>

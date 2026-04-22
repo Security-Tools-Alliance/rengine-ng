@@ -1,0 +1,32 @@
+{% if detail_scan %}
+	<a
+		class="dropdown-item"
+		href="#"
+		onclick="download_ips({{ scan_history_id }}, null, '{{ scan_display_name|escapejs }}'); return false;"
+	>
+		Download All IP Addresses
+	</a>
+	<a
+		class="dropdown-item"
+		href="#"
+		onclick="download_important_ips({{ scan_history_id }}, null, '{{ scan_display_name|escapejs }}'); return false;"
+	>
+		Download Important IP Addresses
+	</a>
+{% endif %}
+{% if target_summary %}
+	<a
+		class="dropdown-item"
+		href="#"
+		onclick="download_ips(null, {{ target.id }}, '{{ target.value|escapejs }}'); return false;"
+	>
+		Download All IP Addresses
+	</a>
+	<a
+		class="dropdown-item"
+		href="#"
+		onclick="download_important_ips(null, {{ target.id }}, '{{ target.value|escapejs }}'); return false;"
+	>
+		Download Important IP Addresses
+	</a>
+{% endif %}

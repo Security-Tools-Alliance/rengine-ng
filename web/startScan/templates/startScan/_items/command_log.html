@@ -1,0 +1,134 @@
+{% load humanize %}
+{% load mathfilters %}
+{% comment %}
+Template for displaying a single command log entry with hierarchy support.
+
+Context variables:
+- command: Command object with all fields including hierarchy fields
+- indent_level: Optional integer for indentation level (default: 0)
+{% endcomment %}
+
+<div class="command-log-entry mb-1" data-command-id="{{ command.id }}" data-runner-type="{{ command.runner_type|default:'' }}" data-has-parent="{{ command.has_parent|yesno:'true,false' }}" data-command-name="{{ command.name|default:command.workflow_name|default:'' }}">
+  <div class="command-log-header" data-bs-toggle="collapse" data-bs-target="#collapse-command-{{ command.id }}" style="cursor: pointer;">
+    <div class="d-flex align-items-center gap-2">
+      {% if command.runner_type == "scan" %}
+        <i class="fas fa-search me-2 text-primary"></i>
+      {% elif command.runner_type == "workflow" %}
+        <i class="fas fa-project-diagram me-2 text-info"></i>
+      {% elif command.runner_type == "task" %}
+        <i class="fas fa-tasks me-2 text-success"></i>
+      {% else %}
+        <i class="fas fa-terminal me-2 text-secondary"></i>
+      {% endif %}
+      
+      <span class="command-log-name fw-bold">
+        {% if command.has_parent %}
+          <span class="text-muted">└─</span>
+        {% endif %}
+        {{ command.name|default:command.command|truncatewords:10 }}
+      </span>
+      
+      {% if command.scan_history and command.scan_history.is_legacy_scan %}
+        {% if command.status %}
+          <span class="badge badge-soft-{% if command.status == 'SUCCESS' %}success{% elif command.status == 'FAILURE' or command.status == 'FAILED' %}danger{% elif command.status == 'RUNNING' %}primary{% elif command.status == 'REVOKED' %}danger{% else %}secondary{% endif %}">
+            {% if command.status == 'REVOKED' %}Aborted{% else %}{{ command.status }}{% endif %}
+          </span>
+        {% endif %}
+      {% else %}
+        {% if command.status_string %}
+          <span class="badge badge-soft-{% if command.status_string == 'SUCCESS' %}success{% elif command.status_string == 'FAILURE' or command.status_string == 'FAILED' %}danger{% elif command.status_string == 'RUNNING' %}primary{% elif command.status_string == 'REVOKED' %}danger{% else %}secondary{% endif %}">
+            {% if command.status_string == 'REVOKED' %}Aborted{% else %}{{ command.status_string }}{% endif %}
+          </span>
+        {% elif command.status %}
+          <span class="badge badge-soft-{% if command.status == 'SUCCESS' %}success{% elif command.status == 'FAILURE' or command.status == 'FAILED' %}danger{% elif command.status == 'RUNNING' %}primary{% elif command.status == 'REVOKED' %}danger{% else %}secondary{% endif %}">
+            {% if command.status == 'REVOKED' %}Aborted{% else %}{{ command.status }}{% endif %}
+          </span>
+        {% endif %}
+      {% endif %}
+      
+      {% if command.elapsed %}
+        <span class="text-muted small command-log-header-duration">
+          ({{ command.elapsed|floatformat:2 }}s)
+        </span>
+      {% endif %}
+    </div>
+  </div>
+  
+  {% if command.output or command.command or command.cwd or command.errors or command.warnings or command.return_code is not None or command.time or command.end_time %}
+    <div class="collapse" id="collapse-command-{{ command.id }}">
+      <div class="card card-body mt-2">
+        {% if command.command %}
+          <div class="mb-2">
+            <strong>Command:</strong>
+            <code class="d-block mt-1 p-2 bg-light rounded">{{ command.command }}</code>
+          </div>
+        {% endif %}
+        
+        {% if command.time %}
+          <div class="mb-2">
+            <strong>Time:</strong> {{ command.time|naturaltime }}
+          </div>
+        {% endif %}
+        
+        {% if command.end_time %}
+          <div class="mb-2">
+            <strong>End Time:</strong> {{ command.end_time|naturaltime }}
+          </div>
+        {% endif %}
+        
+        {% if command.elapsed is not None %}
+          <div class="mb-2">
+            <strong>Duration:</strong> {{ command.elapsed|floatformat:1 }}s
+          </div>
+        {% endif %}
+        
+        {% if command.return_code is not None %}
+          <div class="mb-2">
+            <strong>Return Code:</strong> 
+            <span class="badge badge-soft-{% if command.return_code == 0 %}success{% else %}danger{% endif %}">
+              {{ command.return_code }}
+            </span>
+          </div>
+        {% endif %}
+        
+        {% if command.cwd %}
+          <div class="mb-2">
+            <strong>Working Directory:</strong> <code>{{ command.cwd }}</code>
+          </div>
+        {% endif %}
+        
+        {% if command.output %}
+          <div class="mb-2">
+            <strong>Output:</strong>
+            {% with formatted=command.get_formatted_output %}
+            <pre class="command-output mt-2 p-3 bg-dark text-light rounded" style="font-family: 'Courier New', monospace; font-size: 0.875rem; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;">
+{% if formatted.formatted %}{{ formatted.formatted|safe }}{% else %}{{ command.output|escape }}{% endif %}</pre>
+            {% endwith %}
+          </div>
+        {% endif %}
+        
+        {% if command.errors %}
+          <div class="mb-2">
+            <strong class="text-danger">Errors:</strong>
+            <ul class="list-unstyled ms-3">
+              {% for error in command.errors %}
+                <li class="text-danger">{{ error|escape }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+        
+        {% if command.warnings %}
+          <div class="mb-2">
+            <strong class="text-warning">Warnings:</strong>
+            <ul class="list-unstyled ms-3">
+              {% for warning in command.warnings %}
+                <li class="text-warning">{{ warning|escape }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>

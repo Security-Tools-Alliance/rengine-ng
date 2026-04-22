@@ -1,0 +1,629 @@
+"""
+Port Repository - Data access for port operations.
+
+Handles Port database operations with IP dependency from Secator.
+Ports attach to IpAddress; scan visibility follows that IP's links (subdomain M2M or
+IP-backed endpoints in the same scan), matching IpRepository / scan_lookups utilities.
+"""
+
+from typing import Any, Dict, List, Optional, Tuple
+
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import DatabaseError, IntegrityError
+
+from reNgine.core.validators import is_valid_ip, is_valid_port
+from reNgine.secator.source_extraction import extract_secator_tool_source
+from reNgine.services.repositories.endpoint_repository import EndpointRepository
+from reNgine.services.repositories.ip_repository import IpRepository
+from reNgine.services.repositories.subdomain_repository import SubdomainRepository
+from reNgine.utilities.domain import get_domain_by_id, resolve_domain_for_scan
+from reNgine.utilities.extra_data_merge import (
+    bounded_diagnostic_preview,
+    merge_extra_data_payload_into_model,
+)
+from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.url import is_acceptable_subdomain_name
+from startScan.models import IpAddress, Port, ScanHistory
+from targetApp.models import Target
+
+
+PREFIX_PORT_REPO = "[PORT_REPO]"
+logger = get_module_logger(__name__)
+
+
+_SECATOR_PORT_OPEN_LIKE_STATES = frozenset(
+    {
+        "open",
+        "open|filtered",
+        "open|unfiltered",
+        "unfiltered",
+    }
+)
+
+
+def secator_port_data_implies_alive_host(data: Dict[str, Any]) -> bool:
+    """
+    Return True if a Secator Port dict indicates a reachable service (host should be alive).
+
+    Only known open-style states imply reachability; ambiguous or negative states
+    (closed, filtered, timeout, unknown, etc.) do not.
+    """
+    state = (data.get("state") or "").strip().lower()
+    return state in _SECATOR_PORT_OPEN_LIKE_STATES
+
+
+class PortRepository:
+    """Repository for port-related database operations."""
+
+    def save_from_secator(
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        target_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Port]:
+        """
+        Save port from Secator result.
+
+        Args:
+            item: Secator port item
+            scan_history_id: ID of the scan history
+            target_id: ID of the target (reNgine-ng scan context)
+            rengine_context: Optional context (unused for ports)
+
+        Returns:
+            Port: Saved port object or None
+        """
+        try:
+            return self._process_secator_port_item(item, scan_history_id, target_id)
+        except ObjectDoesNotExist as e:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Object not found when saving port: %s" % (e,),
+                level="error",
+            )
+            return None
+        except IntegrityError as e:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Integrity error saving port: %s" % (e,),
+                level="error",
+            )
+            return None
+        except DatabaseError as e:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Database error saving port from Secator: %s" % (e,),
+                level="error",
+            )
+            return None
+
+    def _process_secator_port_item(self, item: Dict[str, Any], scan_history_id: int, target_id: int) -> Optional[Port]:
+        target_value = Target.objects.filter(id=target_id).values_list("value", flat=True).first() or ""
+        domain = resolve_domain_for_scan(
+            scan_history_id,
+            target_value,
+            create=True,
+            log_failure={
+                "logger": logger,
+                "prefix": PREFIX_PORT_REPO,
+                "extra": "target_id=%s" % (target_id,),
+            },
+        )
+        if not domain:
+            return None
+
+        raw_port = item.get("port")
+        raw_ip = item.get("ip")
+        raw_host = item.get("host")
+
+        if raw_port is None:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Port item missing port number field",
+                level="warning",
+            )
+            return None
+
+        try:
+            port_number = int(raw_port)
+        except (TypeError, ValueError):
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Invalid port number type/value: %s" % (bounded_diagnostic_preview(raw_port, use_repr=True),),
+                level="warning",
+            )
+            return None
+
+        if not is_valid_port(port_number):
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Invalid port number: %s" % (port_number,),
+                level="warning",
+            )
+            return None
+
+        ip_address: Optional[str] = None
+        if raw_ip:
+            if is_valid_ip(raw_ip):
+                ip_address = raw_ip
+            else:
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "SAVE",
+                    "Invalid IP address in 'ip' field for port: %s" % (raw_ip,),
+                    level="warning",
+                )
+        if ip_address is None and raw_host:
+            if is_valid_ip(raw_host):
+                ip_address = raw_host
+            else:
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "SAVE",
+                    "Port item host is not an IP address; treating 'host' as hostname: %s" % (raw_host,),
+                    level="info",
+                )
+        if ip_address is None:
+            if raw_ip is None and raw_host is None:
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "SAVE",
+                    "Port item missing both 'ip' and 'host' fields",
+                    level="warning",
+                )
+            else:
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "SAVE",
+                    "Port item does not contain a valid IP address in either 'ip' or 'host' fields",
+                    level="warning",
+                )
+            return None
+
+        EndpointRepository().create_endpoint_for_ip(ip_address, scan_history_id, domain.id)
+
+        implies_alive = secator_port_data_implies_alive_host(item)
+        alive_kw: Optional[bool] = True if implies_alive else None
+        ip_obj, _ = IpRepository().get_or_create_for_scan(
+            scan_history_id,
+            target_id,
+            ip_address,
+            alive=alive_kw,
+        )
+        if not ip_obj:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Failed to get or create IP address: %s" % (ip_address,),
+                level="error",
+            )
+            return None
+
+        extra_init = self._secator_port_extra_data_dict(item)
+        port_defaults: Dict[str, Any] = {
+            "service_name": item.get("service_name", ""),
+            "description": item.get("description", ""),
+            "is_uncommon": self._is_uncommon_port(port_number),
+            "state": item.get("state", ""),
+            "cpes": item.get("cpes", []),
+            "protocol": item.get("protocol", ""),
+            "host": item.get("host", ""),
+            "confidence": self._validate_confidence(item.get("confidence", "")),
+        }
+        if extra_init is not None:
+            port_defaults["extra_data"] = extra_init
+        if src := extract_secator_tool_source(item, include_provider=False, max_length=200):
+            port_defaults["source"] = src
+
+        port_obj, created = Port.objects.get_or_create(
+            number=port_number,
+            ip_address=ip_obj,
+            defaults=port_defaults,
+        )
+
+        if created:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Created port: %s on %s" % (port_number, ip_address),
+                level="info",
+            )
+        else:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Port already exists: %s on %s" % (port_number, ip_address),
+                level="debug",
+            )
+
+        self._apply_secator_port_followup(port_obj, item, created, ip_address, raw_host, extra_init)
+
+        if raw_host and raw_host.strip().lower() != ip_address and is_acceptable_subdomain_name(raw_host):
+            SubdomainRepository().get_or_create_from_host(scan_history_id, target_id, raw_host)
+
+        return port_obj
+
+    def get_or_create(self, port_number: int, ip_address: str, **kwargs) -> Tuple[Optional[Port], bool]:
+        """
+        Get or create a port.
+
+        Args:
+            port_number: Port number
+            ip_address: IP address string
+            **kwargs: Additional fields
+
+        Returns:
+            tuple: (Port, created boolean) or (None, False)
+        """
+        try:
+            if not is_valid_port(port_number):
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "GET_OR_CREATE",
+                    "Invalid port number: %s" % (port_number,),
+                    level="warning",
+                )
+                return None, False
+
+            if not is_valid_ip(ip_address):
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "GET_OR_CREATE",
+                    "Invalid IP address: %s" % (ip_address,),
+                    level="warning",
+                )
+                return None, False
+
+            # Get or create IP address
+            ip_obj, _ = IpAddress.objects.get_or_create(
+                address=ip_address,
+                defaults={
+                    "is_cdn": False,
+                    "is_private": self._is_private_ip(ip_address),
+                    "version": self._get_ip_version(ip_address),
+                },
+            )
+
+            defaults = {
+                "service_name": "",
+                "description": "",
+                "is_uncommon": self._is_uncommon_port(port_number),
+            } | kwargs
+            port_obj, created = Port.objects.get_or_create(number=port_number, ip_address=ip_obj, defaults=defaults)
+
+            return port_obj, created
+
+        except (IntegrityError, DatabaseError) as e:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "GET_OR_CREATE",
+                "Error in get_or_create port: %s" % (e,),
+                level="error",
+            )
+            return None, False
+
+    def bulk_create(self, ports: list, scan_history_id: int, domain_id: int) -> list:
+        """
+        Bulk create ports.
+
+        Args:
+            ports: List of port dictionaries with 'port' and 'ip' keys
+            scan_history_id: ID of the scan history
+            domain_id: ID of the domain
+
+        Returns:
+            list: List of created Port objects
+        """
+        try:
+            return self._create_ports_in_bulk(scan_history_id, domain_id, ports)
+        except ObjectDoesNotExist as e:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "BULK_CREATE",
+                "Object not found: %s" % (e,),
+                level="error",
+            )
+            return []
+        except DatabaseError as e:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "BULK_CREATE",
+                "Error in bulk create ports: %s" % (e,),
+                level="error",
+            )
+            return []
+
+    def _create_ports_in_bulk(self, scan_history_id: int, domain_id: int, ports: List[Dict[str, Any]]) -> List[Port]:
+        # Validate scan_history and domain exist
+        scan_history = ScanHistory.objects.get(id=scan_history_id)
+        if get_domain_by_id(domain_id) is None:
+            return []
+        target_id = scan_history.target_id
+        if not target_id:
+            return []
+
+        port_objects = []
+        seen_ips = set()
+        for port_data in ports:
+            port_number = port_data.get("port")
+            ip_address = port_data.get("ip")
+
+            if is_valid_port(port_number) and is_valid_ip(ip_address):
+                if ip_address not in seen_ips:
+                    seen_ips.add(ip_address)
+                    EndpointRepository().create_endpoint_for_ip(ip_address, scan_history_id, domain_id)
+                alive_kw: Optional[bool] = True if secator_port_data_implies_alive_host(port_data) else None
+                ip_obj, _ = IpRepository().get_or_create_for_scan(
+                    scan_history_id,
+                    target_id,
+                    ip_address,
+                    alive=alive_kw,
+                )
+                if not ip_obj:
+                    continue
+
+                port_objects.append(
+                    Port(
+                        number=port_number,
+                        ip_address=ip_obj,
+                        service_name=port_data.get("service_name", ""),
+                        description=port_data.get("description", ""),
+                        is_uncommon=self._is_uncommon_port(port_number),
+                    )
+                )
+
+        if port_objects:
+            created = Port.objects.bulk_create(port_objects, ignore_conflicts=True)
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "BULK_CREATE",
+                "Bulk created %s ports" % (len(created),),
+                level="info",
+            )
+            return created
+
+        return []
+
+    def update_service_info(self, port_id: int, service_name: str = None, description: str = None) -> bool:
+        """
+        Update service information for a port.
+
+        Args:
+            port_id: ID of the port
+            service_name: Service name
+            description: Service description
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            port_obj = Port.objects.get(id=port_id)
+
+            if service_name is not None:
+                port_obj.service_name = service_name
+            if description is not None:
+                port_obj.description = description
+
+            port_obj.save()
+            return True
+
+        except ObjectDoesNotExist:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "UPDATE_SERVICE",
+                "Port with ID %s not found" % (port_id,),
+                level="error",
+            )
+            return False
+        except DatabaseError as e:
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "UPDATE_SERVICE",
+                "Error updating port service info: %s" % (e,),
+                level="error",
+            )
+            return False
+
+    @staticmethod
+    def _secator_port_extra_data_dict(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        raw = item.get("extra_data")
+        if isinstance(raw, dict) and raw:
+            return dict(raw)
+        return None
+
+    def _apply_secator_port_followup(
+        self,
+        port_obj: Port,
+        item: Dict[str, Any],
+        created: bool,
+        ip_literal: str,
+        raw_host: Optional[str],
+        normalized_extra: Optional[Dict[str, Any]],
+    ) -> None:
+        """Merge Secator extra_data; enrich empty scalar fields when the port row already existed."""
+        update_fields: List[str] = []
+        if normalized_extra is not None and merge_extra_data_payload_into_model(
+            port_obj, normalized_extra, persist=False
+        ):
+            update_fields.append("extra_data")
+        if not created:
+            update_fields.extend(self._fill_empty_port_fields_from_secator(port_obj, item, ip_literal, raw_host))
+        if src := extract_secator_tool_source(item, include_provider=False, max_length=200):
+            if port_obj.source != src:
+                port_obj.source = src
+                update_fields.append("source")
+        if update_fields:
+            port_obj.save(update_fields=sorted(set(update_fields)))
+
+    @staticmethod
+    def _fill_empty_port_string_field_if_blank(
+        port_obj: Port,
+        item: Dict[str, Any],
+        field: str,
+        fields: List[str],
+    ) -> None:
+        val = (item.get(field) or "").strip()
+        if val and not (getattr(port_obj, field) or "").strip():
+            setattr(port_obj, field, val)
+            fields.append(field)
+
+    @staticmethod
+    def _merge_secator_cpes_into_port(
+        port_obj: Port,
+        item: Dict[str, Any],
+        fields: List[str],
+    ) -> None:
+        cpes = item.get("cpes")
+        if not isinstance(cpes, list) or not cpes:
+            return
+        existing_cpes = [c for c in (port_obj.cpes or []) if isinstance(c, str)]
+        seen_str = set(existing_cpes)
+        appended = False
+        for cpe in cpes:
+            if not isinstance(cpe, str):
+                continue
+            if cpe not in seen_str:
+                seen_str.add(cpe)
+                existing_cpes.append(cpe)
+                appended = True
+        if appended:
+            port_obj.cpes = existing_cpes
+            fields.append("cpes")
+
+    @staticmethod
+    def _secator_raw_host_is_hostname_candidate(raw_host: str, ip_literal: str) -> bool:
+        rh = raw_host.strip()
+        return bool(rh) and rh.lower() != ip_literal.lower() and not is_valid_ip(rh)
+
+    @staticmethod
+    def _fill_port_host_from_secator_raw(
+        port_obj: Port,
+        raw_host: Optional[str],
+        ip_literal: str,
+        fields: List[str],
+    ) -> None:
+        if not raw_host:
+            return
+        if not PortRepository._secator_raw_host_is_hostname_candidate(raw_host, ip_literal):
+            return
+        rh = raw_host.strip()
+        cur = (port_obj.host or "").strip()
+        if not cur or cur == ip_literal or is_valid_ip(cur):
+            port_obj.host = rh
+            fields.append("host")
+
+    def _fill_empty_port_fields_from_secator(
+        self,
+        port_obj: Port,
+        item: Dict[str, Any],
+        ip_literal: str,
+        raw_host: Optional[str],
+    ) -> List[str]:
+        """Populate empty columns from a newer Secator port item (e.g. naabu then nmap)."""
+        fields: List[str] = []
+        self._fill_empty_port_string_field_if_blank(port_obj, item, "service_name", fields)
+        self._fill_empty_port_string_field_if_blank(port_obj, item, "description", fields)
+        self._fill_empty_port_string_field_if_blank(port_obj, item, "state", fields)
+        self._fill_empty_port_string_field_if_blank(port_obj, item, "protocol", fields)
+        conf = self._validate_confidence(item.get("confidence", ""))
+        if conf and not (port_obj.confidence or "").strip():
+            port_obj.confidence = conf
+            fields.append("confidence")
+        self._merge_secator_cpes_into_port(port_obj, item, fields)
+        self._fill_port_host_from_secator_raw(port_obj, raw_host, ip_literal, fields)
+        return fields
+
+    def _validate_confidence(self, confidence: str) -> str:
+        """
+        Validate and normalize confidence level.
+
+        Args:
+            confidence: Confidence string to validate
+
+        Returns:
+            str: Validated confidence or empty string if invalid
+        """
+        from reNgine.core.validators import validate_confidence
+
+        validated = validate_confidence(confidence)
+        return validated or ""
+
+    def _is_uncommon_port(self, port_number: int) -> bool:
+        """
+        Check if port is uncommon.
+
+        Args:
+            port_number: Port number
+
+        Returns:
+            bool: True if uncommon port
+        """
+        # Common ports that are not considered uncommon
+        common_ports = {
+            21,
+            22,
+            23,
+            25,
+            53,
+            80,
+            110,
+            135,
+            139,
+            143,
+            443,
+            445,  # Standard services
+            993,
+            995,
+            1433,
+            1521,
+            3306,
+            3389,
+            5432,
+            6379,
+            27017,  # Database services
+        }
+
+        return port_number not in common_ports
+
+    def _is_private_ip(self, ip_address: str) -> bool:
+        """
+        Check if IP address is private.
+
+        Args:
+            ip_address: IP address to check
+
+        Returns:
+            bool: True if private IP
+        """
+        try:
+            import ipaddress
+
+            ip_obj = ipaddress.ip_address(ip_address)
+            return ip_obj.is_private
+        except (ValueError, ipaddress.AddressValueError):
+            return False
+
+    def _get_ip_version(self, ip_address: str) -> int:
+        """
+        Get IP version (4 or 6).
+
+        Args:
+            ip_address: IP address
+
+        Returns:
+            int: IP version (4 or 6)
+        """
+        try:
+            import ipaddress
+
+            ip_obj = ipaddress.ip_address(ip_address)
+            return ip_obj.version
+        except (ValueError, ipaddress.AddressValueError):
+            return 4  # Default to IPv4

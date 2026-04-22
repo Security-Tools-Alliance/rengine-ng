@@ -4,35 +4,34 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0023_auto_20220430_1933'),
+        ("startScan", "0023_auto_20220430_1933"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='dork',
-            name='url',
+            model_name="dork",
+            name="url",
             field=models.CharField(blank=True, max_length=10000, null=True),
         ),
         migrations.AlterField(
-            model_name='endpoint',
-            name='http_url',
+            model_name="endpoint",
+            name="http_url",
             field=models.CharField(max_length=10000),
         ),
         migrations.AlterField(
-            model_name='metafinderdocument',
-            name='url',
+            model_name="metafinderdocument",
+            name="url",
             field=models.CharField(blank=True, max_length=10000, null=True),
         ),
         migrations.AlterField(
-            model_name='subdomain',
-            name='cname',
+            model_name="subdomain",
+            name="cname",
             field=models.CharField(blank=True, max_length=5000, null=True),
         ),
         migrations.AlterField(
-            model_name='vulnerability',
-            name='curl_command',
+            model_name="vulnerability",
+            name="curl_command",
             field=models.CharField(blank=True, max_length=15000, null=True),
         ),
     ]

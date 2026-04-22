@@ -1,0 +1,35 @@
+{% comment %}
+Reusable card showing a table of domains (name, registrant, registrar).
+Expects: domains (list of Domain with domain_info).
+Optional: title (default "Domains"), description (paragraph under title), card_style (e.g. "height: 95%").
+{% endcomment %}
+<div class="card"{% if card_style %} style="{{ card_style }}"{% endif %}>
+	<div class="card-body">
+		<h4 class="header-title mb-2"><i class="fe-activity"></i>&nbsp;{{ title|default:"Domains" }}</h4>
+		{% if description %}<p class="text-muted font-13 mb-2">{{ description }}</p>{% endif %}
+		{% if domains %}
+		<div class="table-responsive">
+			<table class="table table-sm table-borderless table-hover mb-0">
+				<thead class="table-light">
+					<tr>
+						<th>Domain</th>
+						<th>Registrant</th>
+						<th>Registrar</th>
+					</tr>
+				</thead>
+				<tbody>
+					{% for dom in domains %}
+					<tr>
+						<td><span class="fw-medium">{{ dom.name }}</span></td>
+						<td>{% if dom.domain_info and dom.domain_info.registrant %}{{ dom.domain_info.registrant.name|default:"—" }}{% else %}—{% endif %}</td>
+						<td>{% if dom.domain_info and dom.domain_info.registrar %}{{ dom.domain_info.registrar.name|default:"—" }}{% else %}—{% endif %}</td>
+					</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+		{% else %}
+		<div class="alert alert-info mb-0">No domains discovered for this target yet. Run a scan to discover domains.</div>
+		{% endif %}
+	</div>
+</div>

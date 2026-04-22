@@ -1,0 +1,34 @@
+<div class="execution-mode-selector mb-4">
+  <div class="row">
+    <div class="col-md-4 mb-3">
+      <div class="execution-mode-card" data-mode="workflow">
+        <i class="fas fa-project-diagram"></i>
+        <h5>Workflow</h5>
+        <p>Pre-configured task sequences</p>
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="execution-mode-card" data-mode="tasks">
+        <i class="fas fa-tasks"></i>
+        <h5>Individual Tasks</h5>
+        <p>Custom task selection</p>
+      </div>
+    </div>
+    <div class="col-md-4 mb-3">
+      <div class="execution-mode-card" data-mode="scan">
+        <i class="fas fa-satellite-dish"></i>
+        <h5>{{ scan_title|default:"Scan" }}</h5>
+        <p>Quick scan modes</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Suggestions Box -->
+{% include 'startScan/_items/secator_suggestions_box.html' with id_prefix='execution_mode_' %}
+
+{% if embed_selection_container|default:True %}
+<!-- Step 2: Specific selection (dynamically loaded) - omit when using secator_selection_layout -->
+<div id="selection-container"></div>
+{% endif %}
+

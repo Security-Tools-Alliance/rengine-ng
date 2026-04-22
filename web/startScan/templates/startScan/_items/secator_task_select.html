@@ -1,0 +1,148 @@
+{% load secator_extras %}
+<div class="task-selection">
+  <h5 class="mb-3">
+    <i class="fas fa-tasks text-primary me-2"></i>
+    Select Tasks
+  </h5>
+
+  {% if tasks %}
+    <!-- Global controls -->
+    <div class="mb-4">
+      <div class="row">
+        <div class="col-md-6">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="select_all_tasks">
+            <label class="form-check-label" for="select_all_tasks">
+              <strong>Select All Tasks</strong>
+            </label>
+          </div>
+        </div>
+        <div class="col-md-6 text-end">
+          <div class="selected-tasks-summary">
+            <span class="badge badge-primary" id="selected-tasks-count">0</span> task(s) selected
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category filter -->
+    <div class="category-filter mb-4">
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="text-muted me-2">Filter by category:</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary category-filter-btn active" data-category="all">
+          <i class="fas fa-th-large me-1"></i>All
+          <span class="badge badge-soft-secondary ms-1">{{ tasks|length }}</span>
+        </button>
+        {% regroup tasks by tags|tags_parent_category as parent_category_groups %}
+        {% for parent_category_group in parent_category_groups %}
+          <button type="button" class="btn btn-sm category-filter-btn" data-category="{{ parent_category_group.grouper }}">
+            <i class="fas fa-{{ parent_category_group.grouper|category_icon }} me-1"></i>
+            {{ parent_category_group.grouper|category_display_label|title }}
+            {% if parent_category_group.grouper == 'url' %}
+              <span class="badge badge-soft-primary ms-1">{{ parent_category_group.list|length }}</span>
+            {% elif parent_category_group.grouper == 'exploit' %}
+              <span class="badge badge-soft-info ms-1">{{ parent_category_group.list|length }}</span>
+            {% elif parent_category_group.grouper == 'ip' %}
+              <span class="badge badge-soft-success ms-1">{{ parent_category_group.list|length }}</span>
+            {% elif parent_category_group.grouper == 'dns' %}
+              <span class="badge badge-soft-warning ms-1">{{ parent_category_group.list|length }}</span>
+            {% elif parent_category_group.grouper == 'port' %}
+              <span class="badge badge-soft-danger ms-1">{{ parent_category_group.list|length }}</span>
+            {% elif parent_category_group.grouper == 'vuln' %}
+              <span class="badge badge-soft-dark ms-1">{{ parent_category_group.list|length }}</span>
+            {% elif parent_category_group.grouper == 'pattern' %}
+              <span class="badge badge-soft-secondary ms-1">{{ parent_category_group.list|length }}</span>
+            {% elif parent_category_group.grouper == 'secret' %}
+              <span class="badge badge-soft-secondary ms-1">{{ parent_category_group.list|length }}</span>
+            {% elif parent_category_group.grouper == 'user' %}
+              <span class="badge badge-soft-secondary ms-1">{{ parent_category_group.list|length }}</span>
+            {% elif parent_category_group.grouper == 'waf' %}
+              <span class="badge badge-soft-secondary ms-1">{{ parent_category_group.list|length }}</span>
+            {% else %}
+              <span class="badge badge-soft-light ms-1">{{ parent_category_group.list|length }}</span>
+            {% endif %}
+          </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Selected tasks display -->
+    <div class="selected-tasks-display mb-4" id="selected-tasks-display" style="display: none;">
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="text-muted me-2">Selected tasks:</span>
+        <div id="selected-tasks-badges" class="d-flex flex-wrap gap-1">
+          <!-- Selected task badges will be inserted here by JavaScript -->
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="clear-all-tasks">
+          <i class="fas fa-times me-1"></i>Clear All
+        </button>
+      </div>
+    </div>
+
+    <!-- Task tiles grouped by parent category -->
+    <div class="task-tiles-container">
+      {% for parent_category_group in parent_category_groups %}
+        <!-- Category separator -->
+        <div class="category-separator" data-category="{{ parent_category_group.grouper }}">
+          <div class="category-separator-line"></div>
+          <div class="category-separator-label">
+            <i class="fas fa-{{ parent_category_group.grouper|category_icon }} me-2"></i>
+            {{ parent_category_group.grouper|category_display_label|title }}
+          </div>
+          <div class="category-separator-line"></div>
+        </div>
+        
+        <!-- Tasks for this parent category -->
+        <div class="row mb-4" data-category="{{ parent_category_group.grouper }}">
+          {% for task in parent_category_group.list %}
+            <div class="col-xxl-3 col-xl-4 col-lg-6 col-md-6 col-sm-12 mb-3">
+              <div class="task-tile" data-task-id="{{ task.id }}" data-task-type="{{ task.task_type }}" data-secator-icon="{{ task.tags|tags_icon }}">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="task_ids" id="task_{{ task.id }}" value="{{ task.id }}" data-task-type="{{ task.task_type }}">
+                  <label class="form-check-label w-100" for="task_{{ task.id }}">
+                    <div class="task-tile-content">
+                      <div class="task-tile-header">
+                        <div class="tile-icon">
+                          <i class="fas fa-{{ task.tags|tags_icon }}"></i>
+                        </div>
+                        {% if task.is_builtin %}
+                          <i class="fas fa-star text-warning task-tile-badge" title="Built-in task"></i>
+                        {% endif %}
+                      </div>
+                      
+                      <div class="task-tile-body">
+                        <h6 class="task-tile-title" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task.tags|tags_parent_category|title }}</strong><br>{{ task.description }}">{{ task.name }}</h6>
+                        <p class="task-tile-description">{{ task.description|truncatechars:60 }}</p>
+                      </div>
+                      
+                      <div class="task-tile-footer">
+                        <div class="task-tile-meta">
+                          <span class="badge badge-soft-info small">{{ task.task_type }}</span>
+                          <span class="badge badge-soft-secondary small">{{ task.tags|tags_parent_category|slice:":10" }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <!-- Summary at bottom -->
+    <div class="selected-tasks-summary mt-4">
+      <div class="alert alert-success">
+        <i class="fas fa-check-circle me-2"></i>
+        <strong>Ready to scan!</strong> <span id="selected-tasks-count-bottom">0</span> task(s) selected.
+      </div>
+    </div>
+  {% else %}
+    <div class="alert alert-warning">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      No tasks available. Please ensure tasks are loaded in the system.
+    </div>
+  {% endif %}
+</div>
+

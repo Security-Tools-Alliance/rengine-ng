@@ -4,13 +4,12 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('dashboard', '0008_merge_0007_netlasapikey_openaiapikey_0007_openaikeys'),
+        ("dashboard", "0008_merge_0007_netlasapikey_openaiapikey_0007_openaikeys"),
     ]
 
     operations = [
         migrations.DeleteModel(
-            name='OpenAIKeys',
+            name="OpenAIKeys",
         ),
     ]

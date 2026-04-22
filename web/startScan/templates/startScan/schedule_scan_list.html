@@ -23,7 +23,11 @@ Scheduled Scans
 <div class="row">
   <div class="col-12">
     <div class="card">
-      <table id="scheduled_scan_table" class="table dt-responsive w-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-end mb-2">
+          {% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='scheduledScanQuickSearch' %}
+        </div>
+        <table id="scheduled_scan_table" class="table dt-responsive w-100">
         <thead>
           <tr>
             <th>Description</th>
@@ -32,75 +36,94 @@ Scheduled Scans
             <th class="text-center">Run Count</th>
             <th class="text-center">One Off Task</th>
             <th class="text-center">Enabled</th>
+            {% if user|can:'modify_scan_results' %}
             <th class="text-center">Action</th>
+            {% endif %}
           </tr>
         </thead>
         <tbody>
-          {% for task in scheduled_tasks %}
-          <tr>
-            {% with task_name=task.name|split:":" %}
-            <td>{{ task_name.0 }}</td>
-            {% endwith %}
-            <td>
-              {% if task.interval %}
-              Will run  {{ task.interval }}
-              {% elif task.clocked %}
-              Will run exactly at {{ task.clocked.clocked_time}} UTC
-              {% endif %}
-            </td>
-            <td>{{ task.last_run_at|none_or_never }} UTC</td>
-            <td class="text-center">{{ task.total_run_count }}</td>
-            <td class="text-center">
-              {% if task.one_off %}
-              {% include 'base/_items/green_tick.html' %}
-              {% else %}
-              {% include 'base/_items/red_cross.html' %}
-              {% endif %}
-            </td>
-            <td class="text-center">
-              <label class="switch s-icons s-outline s-outline-info">
-                <input type="hidden" name="task_id" value="task.id" />
-                <input type="checkbox" name="task_enabled" {% if task.enabled %}checked{% endif %} onchange="change_scheduled_task_status('{% url 'change_scheduled_task_status' current_project.slug task.id %}', this)" data-plugin="switchery">
-                <span class="slider round"></span>
-              </label>
-            </td>
-            {% if user|can:'modify_scan_results' %}
-            <td class="text-center">
-              <a onclick="deleteScheduledScan('{% url 'delete_scheduled_task' current_project.slug task.id %}')" class="text-danger btnDelTask" href="#" data-toggle="tooltip" data-placement="top" title="" data-original-title="Delete Scheduled Task">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather table-delete feather-x-circle">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="15" y1="9" x2="9" y2="15"></line>
-                  <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-              </a>
-            </td>
-            {% endif %}
-          </tr>
-          {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </div>
 {% endblock main_content %}
 {% block page_level_script %}
 <script>
-// var e;
+window.SCHEDULED_SCAN_DATATABLE_URL = "{% url 'api:scheduled-scans-datatable-list' %}";
+window.SCHEDULED_SCAN_CHANGE_STATUS_BASE = "{% url 'change_scheduled_task_status' current_project.slug 0 %}".replace('/0', '/');
+window.SCHEDULED_SCAN_DELETE_BASE = "{% url 'delete_scheduled_task' current_project.slug 0 %}".replace('/0', '/');
+window.SCHEDULED_SCAN_CAN_MODIFY = {{ user|can:'modify_scan_results'|yesno:"true,false" }};
+</script>
+<script>
 $(document).ready(function() {
-  var scheduled_scan_table = $('#scheduled_scan_table').DataTable({
-    "oLanguage": {
-      "oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-      "sInfo": "Showing page _PAGE_ of _PAGES_",
-      "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-      "sSearchPlaceholder": "Search...",
-      "sLengthMenu": "Results :  _MENU_",
-    },
-    "lengthMenu": [5, 10, 20, 30, 50, 100],
-    "pageLength": 10,
-    "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center mt-sm-0 mt-3'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" +
-    "<'table-responsive'tr>" +
-    "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
+  const scheduledScanColumns = [
+    { data: 'description', name: 'description' },
+    { data: 'frequency', name: 'frequency' },
+    { data: 'last_run', name: 'last_run' },
+    { data: 'run_count', name: 'run_count' },
+    { data: 'one_off', name: 'one_off' },
+    { data: 'enabled', name: 'enabled' }
+  ];
+  if (window.SCHEDULED_SCAN_CAN_MODIFY) {
+    scheduledScanColumns.push({ data: 'id', name: 'action' });
+  }
+  const scheduledScanDefaultOrder = window.getRengineDatatableOrderFromNames(scheduledScanColumns, [['description', 'asc']]);
+  const scheduledScanTableConfig = window.getRengineDatatableConfig('#scheduled_scan_table', {
+    ajax: { url: window.SCHEDULED_SCAN_DATATABLE_URL },
+    columns: scheduledScanColumns,
+    order: scheduledScanDefaultOrder,
+    columnDefs: [
+      { orderable: false, targets: 'action:name' },
+      {
+        targets: 'last_run:name',
+        render: function(data) { return data ? window.safeText(data) : '—'; }
+      },
+      {
+        targets: 'run_count:name',
+        className: 'text-center',
+        render: function(data) { return data != null ? data : 0; }
+      },
+      {
+        targets: 'one_off:name',
+        className: 'text-center',
+        render: function(data) {
+          return data ? '<span class="text-success"><i class="fe-check"></i></span>' : '<span class="text-danger"><i class="fe-x"></i></span>';
+        }
+      },
+      {
+        targets: 'enabled:name',
+        className: 'text-center',
+        render: function(data, type, row) {
+          const checked = data ? ' checked' : '';
+          const idEnc = window.safeAttr(String(row.id));
+          const changeUrl = window.SCHEDULED_SCAN_CHANGE_STATUS_BASE + idEnc;
+          return '<label class="switch s-icons s-outline s-outline-info"><input type="hidden" name="task_id" value="' + idEnc + '"><input type="checkbox" name="task_enabled"' + checked + ' onchange="change_scheduled_task_status(\'' + changeUrl + '\', this)" data-plugin="switchery"><span class="slider round"></span></label>';
+        }
+      },
+      {
+        targets: 'action:name',
+        className: 'text-center',
+        orderable: false,
+        render: function(data, type, row) {
+          if (!window.SCHEDULED_SCAN_CAN_MODIFY) return '';
+          const idEnc = window.safeAttr(String(row.id));
+          const deleteUrl = window.SCHEDULED_SCAN_DELETE_BASE + idEnc;
+          return '<div class="d-flex flex-wrap gap-1 justify-content-center mb-2"><a href="#" class="btn btn-sm btn-soft-danger btnDelTask" data-toggle="tooltip" title="Delete Scheduled Task" onclick="deleteScheduledScan(\'' + deleteUrl + '\'); return false;"><i class="fe-trash-2"></i></a></div>';
+        }
+      }
+    ],
+    drawCallback: function() {
+      if (typeof window.initSwitchery === 'function') {
+        window.initSwitchery();
+      }
+    }
   });
+  var scheduled_scan_table = window.initServerSideDataTable('#scheduled_scan_table', scheduledScanTableConfig);
+  if (window.attachDatatableQuickSearch) {
+    window.attachDatatableQuickSearch(scheduled_scan_table, { inputSelector: '#scheduledScanQuickSearch', tableId: 'scheduled_scans' });
+  }
   multiCheck(scheduled_scan_table);
 });
 </script>

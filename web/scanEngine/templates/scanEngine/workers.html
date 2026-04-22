@@ -1,0 +1,517 @@
+{% extends "base/base.html" %}
+{% load static %}
+{% load worker_extras %}
+
+{% block title %}Workers{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-server"></i> Secator Workers
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'worker_add' current_project.slug %}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i> Add Worker
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        <strong>Pull-agent workers</strong> (HTTPS classic + pull): deploy with <strong>Download bundle</strong>; SSH actions are disabled.
+                        The <strong>API</strong> column means the worker can reach reNgine-ng (HTTPS, worker → reNgine-ng). It is updated when <strong>Refresh status</strong> runs over SSH (curl from the container to reNgine-ng). Without SSH, refresh cannot run that check—the badge may stay stale; rely on scans/findings or optional worker check-in to <code>/api/secator/worker/&lt;id&gt;/check/</code>.
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="workersTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Host</th>
+                                    <th>Port</th>
+                                    <th>SSH</th>
+                                    <th>Container</th>
+                                    <th>API</th>
+                                    <th>Last status</th>
+                                    <th>Active</th>
+                                    <th scope="col"><span class="sr-only">Actions</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for worker in workers %}
+                                <tr data-worker-id="{{ worker.id }}"
+                                    data-api-access="{{ worker.api_access_type }}"
+                                    data-https-pull="{% if worker.https_pull_agent %}1{% else %}0{% endif %}">
+                                    <td><strong>{{ worker.name }}</strong></td>
+                                    <td>{% if worker|worker_is_pull_only %}<span class="text-muted" title="SSH not used">—</span>{% else %}{{ worker.ssh_host }}{% endif %}</td>
+                                    <td>{% if worker|worker_is_pull_only %}<span class="text-muted">—</span>{% else %}{{ worker.ssh_port }}{% endif %}</td>
+                                    <td class="worker-ssh">
+                                        {% if worker|worker_is_pull_only %}
+                                        <span class="badge bg-secondary" title="Pull agent mode">N/A</span>
+                                        {% elif worker.ssh_ok %}
+                                        <span class="badge bg-success">OK</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="worker-container">
+                                        {% if worker.container_running %}
+                                        <span class="badge bg-success">Running</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="worker-api">
+                                        {% if worker.api_reachable %}
+                                        <span class="badge bg-success">Yes</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if worker.last_status_at %}
+                                        {{ worker.last_status_at|timesince }} ago
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if worker.is_active %}
+                                        <span class="badge badge-soft-success">Active</span>
+                                        {% else %}
+                                        <span class="badge badge-soft-danger">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{% url 'worker_update' current_project.slug worker.id %}" class="btn btn-warning btn-sm" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <a href="{% url 'duplicate_worker' worker.id %}" class="btn btn-secondary btn-sm" title="Copy">
+                                                <i class="fas fa-copy"></i>
+                                            </a>
+                                            {% if worker|worker_is_pull_only %}
+                                            <span class="d-inline-block" title="Use manual bundle deploy for pull-agent workers">
+                                                <button type="button" class="btn btn-info btn-sm" disabled aria-disabled="true">
+                                                    <i class="fas fa-rocket"></i>
+                                                </button>
+                                            </span>
+                                            {% else %}
+                                            <button type="button" class="btn btn-info btn-sm btn-worker-deploy" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Deploy via SSH">
+                                                <i class="fas fa-rocket"></i>
+                                            </button>
+                                            {% endif %}
+                                            {% if worker|worker_is_pull_only %}
+                                            <button type="button" class="btn btn-secondary btn-sm" disabled aria-disabled="true" title="Refresh via SSH is disabled for pull-agent workers (SSH is not used).">
+                                                <i class="fas fa-sync-alt"></i>
+                                            </button>
+                                            {% else %}
+                                            <button type="button" class="btn btn-secondary btn-sm btn-worker-refresh" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Refresh via SSH: container status and HTTPS from worker container to reNgine">
+                                                <i class="fas fa-sync-alt"></i>
+                                            </button>
+                                            {% endif %}
+                                            {% if worker|worker_is_pull_only %}
+                                            <span class="d-inline-block" title="Restart requires SSH or host shell">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled aria-disabled="true">
+                                                    <i class="fas fa-redo"></i>
+                                                </button>
+                                            </span>
+                                            <span class="d-inline-block" title="Sync via bundle or re-download ZIP">
+                                                <button type="button" class="btn btn-outline-primary btn-sm" disabled aria-disabled="true">
+                                                    <i class="fas fa-cloud-upload-alt"></i>
+                                                </button>
+                                            </span>
+                                            {% else %}
+                                            <button type="button" class="btn btn-outline-secondary btn-sm btn-worker-restart" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Restart container (SSH)">
+                                                <i class="fas fa-redo"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-outline-primary btn-sm btn-worker-sync-configs" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Sync configs (SSH)">
+                                                <i class="fas fa-cloud-upload-alt"></i>
+                                            </button>
+                                            {% endif %}
+                                            <a href="{% url 'worker_download_bundle' current_project.slug worker.id %}" class="btn btn-{% if worker|worker_is_pull_only %}primary{% else %}outline-secondary{% endif %} btn-sm" title="{% if worker|worker_is_pull_only %}Download bundle (required for pull-agent deploy){% else %}Download bundle (manual deploy){% endif %}" download>
+                                                <i class="fas fa-download"></i><span class="sr-only">Download bundle</span>
+                                            </a>
+                                            {% if worker.is_active %}
+                                            <button type="button" class="btn btn-warning btn-sm btn-worker-disable" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Disable">
+                                                <i class="fas fa-pause-circle"></i>
+                                            </button>
+                                            {% else %}
+                                            <button type="button" class="btn btn-success btn-sm btn-worker-enable" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Enable">
+                                                <i class="fas fa-play-circle"></i>
+                                            </button>
+                                            {% endif %}
+                                            <button type="button" class="btn btn-danger btn-sm btn-worker-delete" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Delete (teardown + remove)">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted">
+                                        <i class="fas fa-server fa-2x mb-2"></i><br>
+                                        No workers. Add a worker to deploy Secator on a remote host.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_level_script %}
+<script>
+(function() {
+    const workersListUrl = "{% url 'api:secator-workers-list' %}";
+    const urls = {
+        deploy: function(id) { return workersListUrl.replace(/\/?$/, '/') + id + '/deploy/'; },
+        refresh: function(id) { return workersListUrl.replace(/\/?$/, '/') + id + '/refresh/'; },
+        restart: function(id) { return workersListUrl.replace(/\/?$/, '/') + id + '/restart/'; },
+        syncConfigs: function(id) { return workersListUrl.replace(/\/?$/, '/') + id + '/sync-configs/'; },
+        disable: function(id) { return workersListUrl.replace(/\/?$/, '/') + id + '/disable/'; },
+        enable: function(id) { return workersListUrl.replace(/\/?$/, '/') + id + '/enable/'; },
+        delete: function(id) { return workersListUrl.replace(/\/?$/, '/') + id + '/delete/'; },
+    };
+
+    function getCookie(name) {
+        let v = null;
+        if (document.cookie && document.cookie !== '') {
+            document.cookie.split(';').forEach(function(c) {
+                const parts = c.trim().split('=');
+                if (parts[0] === name) v = decodeURIComponent(parts[1] || '');
+            });
+        }
+        return v;
+    }
+
+    function getCsrfToken() {
+        const input = document.querySelector('[name=csrfmiddlewaretoken]');
+        return (input && input.value) ? input.value : getCookie('csrftoken');
+    }
+
+    const csrfToken = getCsrfToken();
+
+    function apiPost(url, body) {
+        return fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRFToken': csrfToken || getCsrfToken(),
+                'Content-Type': 'application/json',
+            },
+            body: body ? JSON.stringify(body) : undefined,
+        }).then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); });
+    }
+
+    function showMsg(title, text, icon) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({ title: title, text: text, icon: icon || 'info' });
+        } else {
+            alert(title + ': ' + text);
+        }
+    }
+
+    function confirmThen(title, text, icon, fn) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: title,
+                text: text,
+                icon: icon || 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Yes',
+            }).then(function(result) {
+                if (result.isConfirmed && typeof fn === 'function') fn();
+            });
+        } else if (confirm(title + ' - ' + text)) {
+            if (typeof fn === 'function') fn();
+        }
+    }
+
+    function buildDeployWsUrl(workerId) {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return protocol + '//' + window.location.host + '/ws/worker-deploy/' + workerId + '/';
+    }
+
+    function buildRefreshWsUrl(workerId) {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return protocol + '//' + window.location.host + '/ws/worker-refresh/' + workerId + '/';
+    }
+
+    function appendDeployLogLine(logEl, step, message, isError) {
+        if (!logEl) return;
+        const line = document.createElement('div');
+        line.className = isError ? 'text-danger' : '';
+        const text = (step && message) ? (step + ': ' + message) : (message || step || '');
+        line.textContent = text || '\u00a0';
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    const XL_CLOSE_FOOTER = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal" aria-label="Close">Close</button>';
+
+    function showWorkerXlModal(titleText, logId) {
+        const bodyHtml = '<pre id="' + logId + '" class="bg-dark text-light p-3 mb-0" style="max-height:60vh;overflow:auto;font-family:monospace;white-space:pre-wrap;"></pre>';
+        if (typeof ModalManager !== 'undefined') {
+            ModalManager.showXl({ title: titleText, bodyHtml: bodyHtml, footerHtml: '' });
+        }
+        return document.getElementById(logId);
+    }
+
+    function setWorkerXlFooter(html) {
+        if (typeof ModalManager !== 'undefined' && ModalManager.setXlContent) {
+            ModalManager.setXlContent({ footerHtml: html });
+        }
+    }
+
+    document.querySelectorAll('.btn-worker-deploy').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-worker-id');
+            const name = this.getAttribute('data-worker-name');
+            const titleText = 'Deploying ' + name;
+            const logEl = showWorkerXlModal(titleText, 'worker-deploy-log');
+            const wsUrl = buildDeployWsUrl(id);
+            let ws = null;
+            let done = false;
+            function showCloseButton() {
+                if (done) return;
+                done = true;
+                if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+                setWorkerXlFooter(XL_CLOSE_FOOTER);
+            }
+            try {
+                ws = new WebSocket(wsUrl);
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.done) {
+                            if (data.error) {
+                                appendDeployLogLine(logEl, 'error', data.error, true);
+                            }
+                            showCloseButton();
+                            return;
+                        }
+                        appendDeployLogLine(logEl, data.step, data.message || '', data.step === 'error');
+                    } catch (e) {
+                        appendDeployLogLine(logEl, null, 'Invalid message', true);
+                    }
+                };
+                ws.onerror = function() {
+                    appendDeployLogLine(logEl, null, 'WebSocket error.', true);
+                    showCloseButton();
+                };
+                ws.onclose = function() {
+                    if (!done) showCloseButton();
+                };
+            } catch (e) {
+                appendDeployLogLine(logEl, null, 'Could not connect to deploy stream.', true);
+                showCloseButton();
+            }
+            apiPost(urls.deploy(id)).then(function(res) {
+                if (res.ok && res.data.status === 'accepted') {
+                    appendDeployLogLine(logEl, null, 'Deploy started. Waiting for log...', false);
+                } else {
+                    appendDeployLogLine(logEl, 'error', res.data.message || 'Deploy request failed.', true);
+                    showCloseButton();
+                }
+            }).catch(function() {
+                appendDeployLogLine(logEl, 'error', 'Deploy request failed.', true);
+                showCloseButton();
+            });
+        });
+    });
+
+    document.querySelectorAll('.btn-worker-refresh').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-worker-id');
+            const name = this.getAttribute('data-worker-name');
+            const titleText = 'Refreshing ' + name;
+            const logEl = showWorkerXlModal(titleText, 'worker-refresh-log');
+            const wsUrl = buildRefreshWsUrl(id);
+            let ws = null;
+            let done = false;
+            function showCloseButton() {
+                if (done) return;
+                done = true;
+                if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+                setWorkerXlFooter(XL_CLOSE_FOOTER);
+            }
+            function updateWorkerRowBadges(workerId, sshOk, containerRunning, apiReachable) {
+                const row = document.querySelector('tr[data-worker-id="' + workerId + '"]');
+                if (!row) return;
+                const sshCell = row.querySelector('.worker-ssh');
+                const containerCell = row.querySelector('.worker-container');
+                const apiCell = row.querySelector('.worker-api');
+                const badge = function(ok, yesText, noText) {
+                    return ok ? '<span class="badge bg-success">' + yesText + '</span>' : '<span class="badge bg-danger">' + noText + '</span>';
+                };
+                if (sshCell && typeof sshOk === 'boolean') sshCell.innerHTML = badge(sshOk, 'OK', 'No');
+                if (containerCell && typeof containerRunning === 'boolean') containerCell.innerHTML = badge(containerRunning, 'Running', 'No');
+                if (apiCell && typeof apiReachable === 'boolean') apiCell.innerHTML = badge(apiReachable, 'Yes', 'No');
+            }
+            try {
+                ws = new WebSocket(wsUrl);
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.done) {
+                            if (data.error) {
+                                appendDeployLogLine(logEl, 'error', data.error, true);
+                            } else {
+                                appendDeployLogLine(logEl, data.step, data.message || '', data.step === 'error');
+                                if (data.worker_id !== undefined) {
+                                    updateWorkerRowBadges(data.worker_id, data.ssh_ok, data.container_running, data.api_reachable);
+                                }
+                            }
+                            showCloseButton();
+                            return;
+                        }
+                        appendDeployLogLine(logEl, data.step, data.message || '', data.step === 'error');
+                    } catch (e) {
+                        appendDeployLogLine(logEl, null, 'Invalid message', true);
+                    }
+                };
+                ws.onerror = function() {
+                    appendDeployLogLine(logEl, null, 'WebSocket error.', true);
+                    showCloseButton();
+                };
+                ws.onclose = function() {
+                    if (!done) showCloseButton();
+                };
+            } catch (e) {
+                appendDeployLogLine(logEl, null, 'Could not connect to refresh stream.', true);
+                showCloseButton();
+            }
+            apiPost(urls.refresh(id)).then(function(res) {
+                if (res.ok && res.data.status === 'accepted') {
+                    appendDeployLogLine(logEl, null, 'Refresh started. Waiting for log...', false);
+                } else {
+                    appendDeployLogLine(logEl, 'error', res.data.message || 'Refresh request failed.', true);
+                    showCloseButton();
+                }
+            }).catch(function() {
+                appendDeployLogLine(logEl, 'error', 'Refresh request failed.', true);
+                showCloseButton();
+            });
+        });
+    });
+
+    document.querySelectorAll('.btn-worker-restart').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-worker-id');
+            const name = this.getAttribute('data-worker-name');
+            const titleText = 'Restart container: ' + name;
+            const bodyHtml = '<pre id="worker-restart-log" class="bg-dark text-light p-3 mb-0" style="max-height:60vh;overflow:auto;font-family:monospace;white-space:pre-wrap;">Restarting...</pre>';
+            if (typeof ModalManager !== 'undefined') {
+                ModalManager.showXl({ title: titleText, bodyHtml: bodyHtml, footerHtml: '' });
+            }
+            const logEl = document.getElementById('worker-restart-log');
+            function showCloseButton() {
+                setWorkerXlFooter(XL_CLOSE_FOOTER);
+            }
+            apiPost(urls.restart(id)).then(function(res) {
+                const data = res.data || {};
+                if (logEl) {
+                    let text = (data.log != null && data.log !== '') ? data.log : '(no output)';
+                    if (data.error) {
+                        text = (data.error + '\n\n' + text).trim();
+                    }
+                    logEl.textContent = text;
+                    if (!res.ok || data.error) logEl.classList.add('text-danger');
+                    logEl.scrollTop = logEl.scrollHeight;
+                }
+                showCloseButton();
+            }).catch(function() {
+                if (logEl) {
+                    logEl.textContent = 'Restart request failed.';
+                    logEl.classList.add('text-danger');
+                }
+                showCloseButton();
+            });
+        });
+    });
+
+    document.querySelectorAll('.btn-worker-sync-configs').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-worker-id');
+            const name = this.getAttribute('data-worker-name');
+            showMsg('Syncing...', 'Syncing configs to worker "' + name + '". Please wait.', 'info');
+            apiPost(urls.syncConfigs(id)).then(function(res) {
+                if (res.ok && res.data.status === 'ok') {
+                    showMsg('Success', res.data.message || 'Configs synced.', 'success');
+                } else {
+                    showMsg('Error', res.data.message || 'Sync failed.', 'error');
+                }
+            });
+        });
+    });
+
+    document.querySelectorAll('.btn-worker-disable').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-worker-id');
+            const name = this.getAttribute('data-worker-name');
+            confirmThen('Disable worker?', 'Disable "' + name + '"?', 'question', function() {
+                apiPost(urls.disable(id)).then(function(res) {
+                    if (res.ok && res.data.status === 'ok') {
+                        showMsg('Done', 'Worker disabled.', 'success');
+                        setTimeout(function() { location.reload(); }, 800);
+                    } else {
+                        showMsg('Error', res.data.message || 'Failed.', 'error');
+                    }
+                });
+            });
+        });
+    });
+
+    document.querySelectorAll('.btn-worker-enable').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-worker-id');
+            apiPost(urls.enable(id)).then(function(res) {
+                if (res.ok && res.data.status === 'ok') {
+                    showMsg('Done', 'Worker enabled.', 'success');
+                    setTimeout(function() { location.reload(); }, 800);
+                } else {
+                    showMsg('Error', res.data.message || 'Failed.', 'error');
+                }
+            });
+        });
+    });
+
+    document.querySelectorAll('.btn-worker-delete').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-worker-id');
+            const name = this.getAttribute('data-worker-name');
+            confirmThen(
+                'Delete worker?',
+                'Remove "' + name + '"? This will teardown the remote host (stop container, remove files) and delete the worker from the list.',
+                'warning',
+                function() {
+                    apiPost(urls.delete(id)).then(function(res) {
+                        if (res.ok && res.data.status === 'ok') {
+                            showMsg('Removed', 'Worker removed.', 'success');
+                            const row = document.querySelector('tr[data-worker-id="' + id + '"]');
+                            if (row) row.remove();
+                        } else {
+                            showMsg('Error', res.data.message || 'Delete failed.', 'error');
+                        }
+                    });
+                }
+            );
+        });
+    });
+})();
+</script>
+{% endblock %}

@@ -4,14 +4,13 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0005_rename_assocation_by_associateddomain_association_by'),
+        ("targetApp", "0005_rename_assocation_by_associateddomain_association_by"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='associateddomain',
-            name='association_by',
+            model_name="associateddomain",
+            name="association_by",
         ),
     ]

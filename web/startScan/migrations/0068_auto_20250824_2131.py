@@ -4,18 +4,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0067_extend_field_limit'),
+        ("startScan", "0067_extend_field_limit"),
     ]
 
     operations = [
         migrations.AddIndex(
-            model_name='directoryfile',
-            index=models.Index(fields=['name', 'url', 'http_status'], name='startScan_d_name_43e4ce_idx'),
+            model_name="directoryfile",
+            index=models.Index(fields=["name", "url", "http_status"], name="startScan_d_name_43e4ce_idx"),
         ),
         migrations.AddIndex(
-            model_name='directoryfile',
-            index=models.Index(fields=['http_status'], name='startScan_d_http_st_43c970_idx'),
+            model_name="directoryfile",
+            index=models.Index(fields=["http_status"], name="startScan_d_http_st_43c970_idx"),
         ),
     ]

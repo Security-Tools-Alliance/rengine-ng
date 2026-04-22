@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0046_gptvulnerabilityreport_references'),
+        ("startScan", "0046_gptvulnerabilityreport_references"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='subdomain',
-            name='attack_surface',
+            model_name="subdomain",
+            name="attack_surface",
             field=models.TextField(blank=True, null=True),
         ),
     ]

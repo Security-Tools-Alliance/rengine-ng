@@ -7,13 +7,43 @@ services:
       - ../.env
     restart: unless-stopped
     container_name: rengine-db-1
+    entrypoint: /entrypoint.sh
     volumes:
+      - ./postgres/entrypoint.sh:/entrypoint.sh:ro
       - postgres_data:/var/lib/postgresql/data/
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
+      test: ["CMD-SHELL", "pg_isready -U rengine -d rengine"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 20
+    networks:
+      - rengine_network
+
+  pgbouncer:
+    build: ./pgbouncer
+    image: edoburu/pgbouncer:latest
+    container_name: rengine-pgbouncer-1
+    env_file:
+      - ../.env
+    environment:
+      - AUTH_TYPE=scram-sha-256
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+      - PGUSER=${POSTGRES_USER}
+      - LISTEN_ADDR=0.0.0.0
+      - LISTEN_PORT=${PGBOUNCER_LISTEN_PORT:-6432}
+      - POOL_MODE=${PGBOUNCER_POOL_MODE:-transaction}
+      - MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN:-200}
+      - DEFAULT_POOL_SIZE=${PGBOUNCER_DEFAULT_POOL_SIZE:-30}
+      - SERVER_RESET_QUERY=${PGBOUNCER_SERVER_RESET_QUERY:-DISCARD ALL}
+    command: ["/bin/sh", "-c", "sed -i \"s/^user = postgres/user = $$POSTGRES_USER/\" /etc/pgbouncer/pgbouncer.ini; exec pgbouncer /etc/pgbouncer/pgbouncer.ini"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - rengine_network
 
@@ -24,6 +54,9 @@ services:
     restart: unless-stopped
     container_name: rengine-redis-1
     hostname: redis
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
       test: ["CMD", "redis-cli","ping"]
       interval: 10s
@@ -32,62 +65,26 @@ services:
     networks:
       - rengine_network
 
-  celery:
-    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
+  worker:
+    image: freelabz/secator:0.26.1
+    container_name: secator-worker
+    restart: unless-stopped
+    entrypoint: /entrypoint.sh
+    command: ['worker']
     env_file:
       - ../.env
-    user: rengine
-    restart: unless-stopped
-    container_name: rengine-celery-1
-    entrypoint: /entrypoint.sh
     environment:
-      - CELERY_BROKER=redis://redis:6379/0
-      - CELERY_BACKEND=redis://redis:6379/0
+      - PYTHONPATH=/opt/rengine-ssl-suppress
+      - SECATOR_CELERY_RESULT_EXPIRES=3600
     volumes:
-      - ../web:/home/rengine/rengine:rw,z
-      - ./celery/entrypoint.sh:/entrypoint.sh:ro
-      - scan_results:/home/rengine/scan_results
-      - github_repos:/home/rengine/github_repos
-      - tool_config:/home/rengine/.config
-      - nuclei_templates:/home/rengine/nuclei-templates
-      - gf_patterns:/home/rengine/.gf
-      - wordlist:/home/rengine/wordlists
-    healthcheck:
-      test: ["CMD", "poetry", "-C", "/home/rengine/rengine", "run", "celery","-A","reNgine","status"]
-      interval: 10s
-      timeout: 10s
-      retries: 60
+      - scan_results:/home/secator/.secator/reports
+      - nuclei_templates:/home/secator/nuclei-templates
+      - wordlist:/home/secator/.secator/wordlists
+      - gf_patterns:/home/secator/.gf
+      - ./worker/entrypoint.sh:/entrypoint.sh:ro
+      - ./worker/python_ssl_suppress:/opt/rengine-ssl-suppress:ro
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - rengine_network
-
-  celery-beat:
-    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
-    env_file:
-      - ../.env
-    user: rengine
-    restart: unless-stopped
-    container_name: rengine-celery-beat-1
-    entrypoint: /entrypoint.sh
-    environment:
-      - CELERY_BROKER=redis://redis:6379/0
-      - CELERY_BACKEND=redis://redis:6379/0
-    depends_on:
-      celery:
-        condition: service_healthy
-    volumes:
-      - ../web:/home/rengine/rengine:rw,z
-      - ./beat/entrypoint.sh:/entrypoint.sh:ro
-      - scan_results:/home/rengine/scan_results
-      - github_repos:/home/rengine/github_repos
-      - tool_config:/home/rengine/.config
-      - nuclei_templates:/home/rengine/nuclei-templates
-      - gf_patterns:/home/rengine/.gf
-      - wordlist:/home/rengine/wordlists
+      - redis
     networks:
       - rengine_network
 
@@ -101,26 +98,28 @@ services:
     entrypoint: /entrypoint.sh
     environment:
       - RENGINE_HOME=/home/rengine/rengine
-      - CELERY_BROKER=redis://redis:6379/0
-      - CELERY_BACKEND=redis://redis:6379/0
+      - UI_ERROR_LOGGING=0
     volumes:
       - ../web:/home/rengine/rengine:rw,z
       - ./web/entrypoint.sh:/entrypoint.sh:ro
-      - tool_config:/home/rengine/.config
+      - ./docker-compose.worker.yml:/home/rengine/docker/docker-compose.worker.yml:ro
+      - ./worker:/home/rengine/docker/worker:ro
+      - rengine_ssh_keys:/home/rengine/.ssh
       - nuclei_templates:/home/rengine/nuclei-templates
-      - gf_patterns:/home/rengine/.gf
       - wordlist:/home/rengine/wordlists
+      - gf_patterns:/home/rengine/.gf
+      - scan_results:/home/rengine/scan_results
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s
       timeout: 10s
-      retries: 10
+      retries: 20
     depends_on:
       db:
         condition: service_healthy
-      celery:
-        condition: service_healthy
-      celery-beat:
+      pgbouncer:
+        condition: service_started
+      worker:
         condition: service_started
     networks:
       rengine_network:
@@ -173,22 +172,20 @@ networks:
     name: rengine_network
 
 volumes:
-  tool_config:
-    name: rengine_tool_config
   postgres_data:
     name: rengine_postgres_data
   gf_patterns:
     name: rengine_gf_patterns
   nuclei_templates:
     name: rengine_nuclei_templates
-  github_repos:
-    name: rengine_github_repos
   wordlist:
     name: rengine_wordlist
   scan_results:
     name: rengine_scan_results
   ollama_data:
     name: rengine_ollama_data
+  rengine_ssh_keys:
+    name: rengine_ssh_keys
 
 
 secrets:

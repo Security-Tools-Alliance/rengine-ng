@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Switching project…</title>
+</head>
+<body>
+<script>
+(function () {
+  try {
+    window.sessionStorage.setItem("rengine-current-project-slug", {{ project_slug_json|safe }});
+  } catch (e) {}
+  window.location.replace({{ dashboard_url_json|safe }});
+})();
+</script>
+<noscript>
+  <p><a href="{{ dashboard_url_escaped|escape }}">Continue to dashboard</a></p>
+</noscript>
+</body>
+</html>

@@ -1,0 +1,187 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}{{ scan.name }} - Scan Detail{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-tomorrow_night_eighties.min.js"></script>
+
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-cogs"></i> {{ scan.name }}
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'duplicate_scan' scan.id %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-copy"></i> Copy
+                        </a>
+                        <a href="{% url 'scans' current_project.slug %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Scans
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5>Description</h5>
+                            <p>{{ scan.description|default:"No description available." }}</p>
+                            
+                            <h5>YAML Configuration</h5>
+                            <div class="bg-light p-3 rounded">
+                                <div id="yaml-editor-readonly" data-yaml-config="{{ scan.yaml_configuration|escape }}"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Configuration Information</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>Name:</strong> 
+                                        <span class="badge badge-soft-info">{{ scan.name }}</span>
+                                    </p>
+                                    <p><strong>Description:</strong> 
+                                        {% if scan.description %}
+                                            {{ scan.description }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </p>
+                                    <p><strong>Type:</strong> 
+                                        <span class="badge badge-soft-info">{{ scan.get_scan_type_display }}</span>
+                                    </p>
+                                    <p><strong>Config Type:</strong> 
+                                        <span class="badge badge-soft-{% if scan.scan_config_type == 'builtin' %}success{% else %}secondary{% endif %}">
+                                            {{ scan.get_scan_config_type_display }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Default:</strong> 
+                                        <span class="badge badge-soft-{% if scan.is_default %}success{% else %}light{% endif %}">
+                                            {{ scan.is_default|yesno:"Yes,No" }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Status:</strong> 
+                                        <span class="badge badge-soft-{% if scan.is_active %}success{% else %}danger{% endif %}">
+                                            {{ scan.is_active|yesno:"Active,Inactive" }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Created:</strong> {{ scan.created_at|date:"M d, Y H:i" }}</p>
+                                    <p><strong>Updated:</strong> {{ scan.updated_at|date:"M d, Y H:i" }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% if recent_scans %}
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <h5>Recent scan history</h5>
+                            {% if recent_scans_unfiltered %}
+                            <p class="text-muted small">
+                                <i class="fas fa-info-circle"></i> Showing last 10 scans across all configurations — not yet filtered by this scan. Filtering by this configuration will be available when ScanHistory is linked to SecatorScan.
+                            </p>
+                            {% endif %}
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Scan</th>
+                                            <th class="text-center">Summary</th>
+                                            <th>Started</th>
+                                            <th>Worker</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for history in recent_scans %}
+                                        <tr>
+                                            <td>
+                                                {% if history.target and history.target.project and history.target.project.slug %}
+                                                <a href="{% url 'detail_scan' history.target.project.slug history.id %}">{{ history.target.value }} #{{ history.id }}</a>
+                                                {% else %}
+                                                <span>{{ history.target.value|default:"" }} #{{ history.id }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="text-left">
+                                                <span class="badge badge-pills bg-secondary mt-1 me-1" data-toggle="tooltip" title="Domains"><i class="fe-globe me-1"></i>{{ history.domain_count|default:0 }}</span>
+                                                <span class="badge badge-pills bg-info mt-1 me-1" data-toggle="tooltip" title="Subdomains"><i class="fe-layers me-1"></i>{{ history.subdomain_count|default:0 }}</span>
+                                                <span class="badge badge-pills badge-soft-dark mt-1 me-1" data-toggle="tooltip" title="IP addresses"><i class="fe-server me-1"></i>{{ history.ip_address_count|default:0 }}</span>
+                                                <span class="badge badge-pills bg-warning mt-1 me-1" data-toggle="tooltip" title="Endpoints"><i class="fe-link me-1"></i>{{ history.endpoint_count|default:0 }}</span>
+                                                <span class="badge badge-pills bg-danger mt-1 me-1" data-toggle="tooltip" title="Vulnerabilities"><i class="fe-alert-triangle me-1"></i>{{ history.vulnerability_count|default:0 }}</span>
+                                                <span class="badge badge-pills badge-soft-warning mt-1 me-1" data-toggle="tooltip" title="Secrets"><i class="fe-lock me-1"></i>{{ history.secret_count|default:0 }}</span>
+                                                <span class="badge badge-pills badge-soft-danger mt-1 me-1" data-toggle="tooltip" title="Exploits"><i class="fe-crosshair me-1"></i>{{ history.exploit_count|default:0 }}</span>
+                                            </td>
+                                            <td>{{ history.start_scan_date|date:"M d, Y H:i" }}</td>
+                                            <td><span class="badge badge-soft-secondary">{{ history.secator_worker_name|default:"Local" }}</span></td>
+                                            <td><span class="badge badge-soft-secondary">{{ history.get_status_display }}</span></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_level_script %}
+<script type="text/javascript">
+$(document).ready(function() {
+    // Initialize ACE editor for YAML display (read-only)
+    const editorElement = document.getElementById("yaml-editor-readonly");
+    const editor = ace.edit("yaml-editor-readonly");
+    editor.setTheme("ace/theme/tomorrow_night_eighties");
+    editor.session.setMode("ace/mode/yaml");
+    editor.setReadOnly(true);
+    editor.session.setValue(editorElement.dataset.yamlConfig || "");
+    editor.setOptions({
+        fontSize: "14px",
+        showInvisibles: true,
+        highlightActiveLine: false,
+        highlightGutterLine: false
+    });
+    
+    // Calculate optimal height based on content and available space
+    function calculateEditorHeight() {
+        const editorElement = document.getElementById("yaml-editor-readonly");
+        const contentLines = editor.session.getLength();
+        const lineHeight = editor.renderer.lineHeight;
+        const minHeight = 200; // Minimum height in pixels
+        const viewportHeight = window.innerHeight;
+        const editorOffsetTop = editorElement.getBoundingClientRect().top;
+        const maxHeight = viewportHeight - editorOffsetTop - 50; // 50px padding from bottom
+        
+        // Calculate height based on content (with some padding)
+        const contentHeight = Math.max(contentLines * lineHeight + 40, minHeight);
+        
+        // Use the smaller of content height or max height
+        const finalHeight = Math.min(contentHeight, maxHeight);
+        
+        editorElement.style.height = finalHeight + "px";
+        editor.resize();
+    }
+    
+    // Calculate height after editor is initialized
+    setTimeout(calculateEditorHeight, 100);
+    
+    // Recalculate on window resize
+    $(window).on('resize', calculateEditorHeight);
+    });
+</script>
+{% endblock %}

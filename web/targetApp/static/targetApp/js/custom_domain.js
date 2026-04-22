@@ -36,7 +36,7 @@ function checkedCount () {
   // this function will count the number of boxes checked
   item = document.getElementsByClassName("targets_checkbox");
   count = 0;
-  for (var i = 0; i < item.length; i++) {
+  for (let i = 0; i < item.length; i++) {
     if (item[i].checked) {
       count++;
     }
@@ -102,7 +102,7 @@ function toggleMultipleTargetButton() {
 }
 
 function mainCheckBoxSelected() {
-  var input = document.querySelector('#head_checkbox');
+  let input = document.querySelector('#head_checkbox');
   if (input.checked) {
     $("#scan_multiple_button").removeClass("disabled");
     $("#delete_multiple_button").removeClass("disabled");

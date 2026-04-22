@@ -1,0 +1,23 @@
+{# Unified Secator selection layout: list (left) + detail (right) + input types #}
+{# Params: id_prefix (string, e.g. 'subscan', 'start_scan', 'start_org_scan') #}
+{# In list view: left column = compact list, right = selection container + input types. In grid view: selection container full width. #}
+<div class="row secator-selection-row secator-view-list" id="{{ id_prefix }}-content-row" data-secator-id-prefix="{{ id_prefix }}" style="display: none;" aria-hidden="true">
+  <div class="col-md-4 col-lg-3 secator-list-col">
+    <div id="{{ id_prefix }}-list-toolbar" class="secator-list-toolbar d-flex flex-wrap align-items-center gap-2 mb-2 small" style="display: none;">
+      <input type="text" id="{{ id_prefix }}-list-search" class="form-control form-control-sm" placeholder="Search..." style="max-width: 180px;" autocomplete="off" aria-label="Search list">
+      <div id="{{ id_prefix }}-list-category-filters" class="d-flex flex-wrap align-items-center gap-1 secator-list-category-filters"></div>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="{{ id_prefix }}-list-select-all" aria-label="Select all visible">Select all</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="{{ id_prefix }}-list-deselect-all" aria-label="Deselect all visible">Deselect all</button>
+      <span id="{{ id_prefix }}-list-count-text" class="text-muted"></span>
+    </div>
+    <div id="{{ id_prefix }}-list-container" class="secator-list-container">
+      <!-- Dynamically loaded list items -->
+    </div>
+  </div>
+  <div class="col-md-8 col-lg-9 secator-detail-col">
+    <div id="{{ id_prefix }}-detail-container" class="secator-detail-container">
+      <div id="{{ id_prefix }}-selection-container" class="secator-selection-container"></div>
+      {% include 'startScan/_items/secator_input_types_targets.html' with id_prefix=id_prefix %}
+    </div>
+  </div>
+</div>

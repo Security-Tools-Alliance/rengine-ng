@@ -41,7 +41,7 @@ LLM Toolkit
   <h5>{{installed_models|length}} available Models</h5>
   {% if openai_key_error %}
   <div class="alert alert-danger border-0 mb-3 mt-3" role="alert">
-    <b>Warning:</b> GPT model is currently selected and requires API key to be set. Please set the API key in the <a href="{% url 'api_vault' %}"> API Vault.</a>
+    <b>Warning:</b> GPT model is currently selected and requires API key to be set. Please set the API key in the <a href="{% if current_project %}{% url 'api_vault' current_project.slug %}{% else %}{% url 'api_vault' %}{% endif %}"> API Vault.</a>
   </div>
   {% endif %}
   <div class="row">
@@ -230,7 +230,7 @@ LLM Toolkit
 
         $('#addModelModal .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
         
-        // Ajout du warning sur les tailles de modèles
+        // Add warning about model sizes
         const warningHtml = `
             <div class="alert alert-warning mb-3">
                 <i class="mdi mdi-alert me-2"></i>
@@ -253,7 +253,7 @@ LLM Toolkit
             const modelName = model.name;
             const tags = model.tags || [];
             const sizeOptions = model.size_options || {};
-            const defaultTag = tags[0]; // Premier tag = version par défaut
+            const defaultTag = tags[0]; // First tag = default version
             
             modelOptions += `
                 <div class="col-md-4 mt-2">
@@ -298,7 +298,7 @@ LLM Toolkit
             </div>
         `);
 
-        $('#addModelModal').modal('show');
+        if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_MODEL);
 
     } catch (error) {
         console.error('Error loading models:', error);

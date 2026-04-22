@@ -1,0 +1,350 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}Scans{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-cogs"></i> Scans
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'add_scan' current_project.slug %}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i> Create Scan
+                        </a>
+                        <button type="button" class="btn btn-success btn-sm" onclick="loadBuiltinScans()">
+                            <i class="fas fa-download"></i> Load Built-in
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <!-- Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <select class="form-control" id="filterSelect" onchange="filterScans()">
+                                <option value="all">All Configurations</option>
+                                <option value="builtin">Built-in</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" id="searchInput" placeholder="Search configurations..." onkeyup="searchScans()">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-secondary btn-block" onclick="clearFilters()">
+                                <i class="fas fa-times"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Scans Table -->
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="scansTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Description</th>
+                                    <th>Type</th>
+                                    <th>Config Type</th>
+                                    <th>Long Description</th>
+                                    <th>Status</th>
+                                    <th>Default</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for scan in page_obj %}
+                                <tr>
+                                    <td>
+                                        <span class="badge badge-soft-info">{{ scan.name }}</span>
+                                    </td>
+                                    <td>
+                                        {% if scan.description %}
+                                            {{ scan.description }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-soft-info">{{ scan.get_scan_type_display }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-soft-{% if scan.scan_config_type == 'builtin' %}success{% else %}secondary{% endif %}">
+                                            {{ scan.get_scan_config_type_display }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if scan.long_description %}
+                                            {{ scan.long_description }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if scan.is_active %}
+                                        <span class="badge badge-soft-success">Active</span>
+                                        {% else %}
+                                        <span class="badge badge-danger">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if scan.is_default %}
+                                            <span class="badge badge-soft-warning">Yes</span>
+                                        {% else %}
+                                            <span class="badge badge-soft-dark">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ scan.created_at|date:"M d, Y" }}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{% url 'scan_detail' current_project.slug scan.id %}" class="btn btn-info btn-sm">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="{% url 'duplicate_scan' scan.id %}" class="btn btn-secondary btn-sm" title="Copy">
+                                                <i class="fas fa-copy"></i>
+                                            </a>
+                                            {% if scan.scan_config_type == 'custom' %}
+                                            <a href="{% url 'update_scan' current_project.slug scan.id %}" class="btn btn-warning btn-sm">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-danger btn-sm" data-scan-id="{{ scan.id }}" data-scan-name="{{ scan.name }}" onclick="deleteScan(this.dataset.scanId, this.dataset.scanName)">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted">
+                                        <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                                        No scan configurations found. Create your first configuration.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    {% if page_obj.has_other_pages %}
+                    <nav aria-label="Scans pagination">
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=1{% if filter_type %}&filter={{ filter_type }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}">First</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if filter_type %}&filter={{ filter_type }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}">Previous</a>
+                                </li>
+                            {% endif %}
+                            
+                            <li class="page-item active">
+                                <span class="page-link">
+                                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                                </span>
+                            </li>
+                            
+                            {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if filter_type %}&filter={{ filter_type }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}">Next</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if filter_type %}&filter={{ filter_type }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}">Last</a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+{% endblock %}
+
+{% block page_level_script %}
+<script src="{% static 'scanEngine/js/secator.js' %}"></script>
+<script>
+window.RENGINE_PAGE_URLS = window.RENGINE_PAGE_URLS || {};
+(function () {
+  var templateUrl = "{% url 'delete_scan' current_project.slug 0 %}";
+  window.RENGINE_PAGE_URLS.delete_scan_base = templateUrl.replace(/\/0\/delete\/$/, "/");
+})();
+// Scan-specific JavaScript functions
+function filterScans() {
+    const filter = document.getElementById('filterSelect').value;
+    const search = document.getElementById('searchInput').value;
+    const url = new URL(window.location);
+    url.searchParams.set('filter', filter);
+    if (search) url.searchParams.set('search', search);
+    window.location.href = url.toString();
+}
+
+function searchScans() {
+    const search = document.getElementById('searchInput').value;
+    const filter = document.getElementById('filterSelect').value;
+    const url = new URL(window.location);
+    url.searchParams.set('search', search);
+    url.searchParams.set('filter', filter);
+    window.location.href = url.toString();
+}
+
+function clearFilters() {
+    window.location.href = window.location.pathname;
+}
+
+// Load built-in scans
+function loadBuiltinScans() {
+    Swal.fire({
+        title: 'Load Built-in Scans?',
+        text: 'This will load built-in Secator scans. Continue?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, load them!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Loading...',
+                text: 'Please wait while we load the scans',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch('{% url "api:load_builtin_scans" %}', {
+                method: 'POST',
+                credentials: "same-origin",
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Built-in scans loading started. Please refresh the page in a few moments.',
+                        icon: 'success'
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to load built-in scans');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'Error loading built-in scans',
+                    icon: 'error'
+                });
+            });
+        }
+    });
+}
+
+// Utility function to get cookie value
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Function to delete a scan configuration
+function deleteScan(scanId, scanName) {
+    const base = window.RENGINE_PAGE_URLS && window.RENGINE_PAGE_URLS.delete_scan_base;
+    if (!base) {
+        Swal.fire({
+            title: "Error",
+            text: "Delete URL is not configured.",
+            icon: "error"
+        });
+        return;
+    }
+    const url = base + String(scanId) + "/delete/";
+    
+    Swal.fire({
+        title: 'Are you sure?',
+        text: `Are you sure you want to delete the scan configuration "${scanName}"?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Deleting...',
+                text: 'Please wait while we delete the scan configuration',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch(url, {
+                method: 'POST',
+                credentials: "same-origin",
+                headers: {
+                    "X-CSRFToken": getCookie("csrftoken"),
+                    "Content-Type": "application/json"
+                }
+            })
+            .then(response => response.json().then(data => ({
+                ok: response.ok,
+                status: response.status,
+                data: data
+            })))
+            .then(({ok, status, data}) => {
+                if (ok && data.status === true) {
+                    Swal.fire({
+                        title: 'Deleted!',
+                        text: 'The scan configuration has been deleted.',
+                        icon: 'success'
+                    }).then(() => {
+                        location.reload();
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to delete scan configuration');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'An error occurred while deleting the scan configuration',
+                    icon: 'error'
+                });
+            });
+        }
+    });
+}
+</script>
+{% endblock %}

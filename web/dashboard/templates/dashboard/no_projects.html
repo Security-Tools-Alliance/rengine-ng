@@ -1,0 +1,60 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-layout="horizontal" data-topbar-color="dark">
+  <head>
+    <meta charset="utf-8" />
+    <title>No Projects - reNgine-ng</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="{% static 'bootstrap/bootstrap.min.css' %}" rel="stylesheet" type="text/css" id="bootstrap-stylesheet" />
+    <link href="{% static 'assets/css/app.min.css' %}" rel="stylesheet" type="text/css" id="main-stylesheet" />
+    <link href="{% static 'assets/css/icons.min.css' %}" rel="stylesheet" type="text/css" />
+  </head>
+  <body class="authentication-bg authentication-bg-pattern">
+    <div class="account-pages mt-5 mb-5">
+      <div class="container">
+        <div class="row justify-content-center">
+          <div class="col-xl-6">
+            <div class="card bg-pattern">
+              <div class="card-body p-4">
+                <div class="text-center">
+                  <a href="/" class="logo text-center mb-4 d-block">
+                    <img src="/staticfiles/img/logo-lg.png" alt="reNgine-ng" height="90">
+                  </a>
+                </div>
+                <div class="text-center py-4">
+                  <div class="mb-4">
+                    <i class="fe-folder text-muted" style="font-size: 64px;"></i>
+                  </div>
+                  <h4 class="text-muted">No Projects Available</h4>
+                  {% if is_oauth_user %}
+                  <p class="text-muted mb-4">
+                    Welcome, <strong>{{ user.username }}</strong>!<br><br>
+                    You signed in via OAuth but haven't been assigned to any projects yet.<br>
+                    Please contact your administrator to get access to a project.
+                  </p>
+                  {% else %}
+                  <p class="text-muted mb-4">
+                    Welcome, <strong>{{ user.username }}</strong>!<br><br>
+                    You don't have access to any projects yet.<br>
+                    Please contact your administrator to get access to a project.
+                  </p>
+                  {% endif %}
+                  <div class="mt-4">
+                    <a href="{% url 'profile' %}" class="btn btn-soft-primary me-2">
+                      <i class="fe-user me-1"></i> My Profile
+                    </a>
+                    <a href="{% url 'logout' %}" class="btn btn-soft-secondary">
+                      <i class="fe-log-out me-1"></i> Logout
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="{% static 'assets/js/vendor.min.js' %}"></script>
+    <script src="{% static 'assets/js/app.min.js' %}"></script>
+  </body>
+</html>

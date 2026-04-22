@@ -4,28 +4,27 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0027_auto_20230412_0348'),
+        ("targetApp", "0027_auto_20230412_0348"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='DNSRecords',
+            name="DNSRecords",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=500)),
-                ('type', models.CharField(max_length=50)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=500)),
+                ("type", models.CharField(max_length=50)),
             ],
         ),
         migrations.RenameField(
-            model_name='domainwhoisstatus',
-            old_name='status',
-            new_name='name',
+            model_name="domainwhoisstatus",
+            old_name="status",
+            new_name="name",
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='dns_records',
-            field=models.ManyToManyField(blank=True, to='targetApp.DNSRecords'),
+            model_name="domaininfo",
+            name="dns_records",
+            field=models.ManyToManyField(blank=True, to="targetApp.DNSRecords"),
         ),
     ]

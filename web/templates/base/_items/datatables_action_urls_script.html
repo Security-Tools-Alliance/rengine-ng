@@ -1,0 +1,11 @@
+{% if datatable_action_urls %}
+{{ datatable_action_urls|json_script:"rengine-datatable-action-urls" }}
+<script>
+(function(){
+  var el = document.getElementById('rengine-datatable-action-urls');
+  if (el && el.textContent) {
+    window.RENGINE_DATATABLE_ACTION_URLS = Object.assign(window.RENGINE_DATATABLE_ACTION_URLS || {}, JSON.parse(el.textContent));
+  }
+})();
+</script>
+{% endif %}

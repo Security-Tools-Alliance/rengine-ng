@@ -1,0 +1,444 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}Profiles{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-sliders-h"></i> Profiles
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'add_profile' current_project.slug %}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i> Create Profile
+                        </a>
+                        <button type="button" class="btn btn-success btn-sm" onclick="loadBuiltinProfiles()">
+                            <i class="fas fa-download"></i> Load Built-in
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <!-- Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <select class="form-control" id="filterSelect" onchange="filterProfiles()">
+                                <option value="all">All Profiles</option>
+                                <option value="builtin">Built-in</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" id="searchInput" placeholder="Search profiles..." onkeyup="searchProfiles()">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-secondary btn-block" onclick="clearFilters()">
+                                <i class="fas fa-times"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Profiles Table -->
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="profilesTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Category</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Enforce</th>
+                                    <th>Default</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for profile in page_obj %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ profile.name }}</strong>
+                                        {% if profile.profile_type == 'builtin' %}
+                                        <br><small class="text-success"><i class="fas fa-check-circle"></i> Built-in</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-soft-info">{{ profile.get_category_display }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-soft-{% if profile.profile_type == 'builtin' %}primary{% else %}secondary{% endif %}">
+                                            {{ profile.get_profile_type_display }}
+                                        </span>
+                                    </td>
+                                    <td>{{ profile.description|truncatechars:100 }}</td>
+                                    <td>
+                                        {% if profile.enforce %}
+                                        <span class="badge badge-soft-warning">Yes</span>
+                                        {% else %}
+                                        <span class="text-muted">No</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if profile.is_default %}
+                                        <span class="badge badge-soft-primary"><i class="fas fa-star"></i> Default</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if profile.is_active %}
+                                        <span class="badge badge-soft-success">Active</span>
+                                        {% else %}
+                                        <span class="badge badge-soft-danger">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ profile.created_at|date:"M d, Y" }}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{% url 'profile_detail' current_project.slug profile.id %}" class="btn btn-info btn-sm">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="{% url 'duplicate_profile' profile.id %}" class="btn btn-secondary btn-sm" title="Copy">
+                                                <i class="fas fa-copy"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-{% if profile.is_default %}primary{% else %}secondary{% endif %} btn-sm" onclick="setDefaultProfile({{ profile.id }}, '{{ profile.name }}', {{ profile.is_default|yesno:'true,false' }})" title="{% if profile.is_default %}Currently default{% else %}Set as default{% endif %}">
+                                                <i class="fas fa-star"></i>
+                                            </button>
+                                            {% if profile.profile_type == 'custom' %}
+                                            <a href="{% url 'update_profile' current_project.slug profile.id %}" class="btn btn-warning btn-sm">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="deleteProfile({{ profile.id }}, '{{ profile.name }}')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted">
+                                        <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                                        No profiles found. Create one or load built-in profiles.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    {% if page_obj.has_other_pages %}
+                    <nav aria-label="Profiles pagination">
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                            </li>
+                            {% endif %}
+                            
+                            {% for num in page_obj.paginator.page_range %}
+                            {% if page_obj.number == num %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ num }}</span>
+                            </li>
+                            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                            </li>
+                            {% endif %}
+                            {% endfor %}
+                            
+                            {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block page_level_script %}
+<script src="{% static 'scanEngine/js/secator.js' %}"></script>
+<script>
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    // Set current filter
+    const urlParams = new URLSearchParams(window.location.search);
+    const filter = urlParams.get('filter') || 'all';
+    document.getElementById('filterSelect').value = filter;
+    
+    // Set current search
+    const search = urlParams.get('search') || '';
+    document.getElementById('searchInput').value = search;
+});
+
+// Filter profiles
+function filterProfiles() {
+    const filter = document.getElementById('filterSelect').value;
+    const search = document.getElementById('searchInput').value;
+    const url = new URL(window.location);
+    
+    if (filter !== 'all') {
+        url.searchParams.set('filter', filter);
+    } else {
+        url.searchParams.delete('filter');
+    }
+    
+    if (search) {
+        url.searchParams.set('search', search);
+    } else {
+        url.searchParams.delete('search');
+    }
+    
+    window.location.href = url.toString();
+}
+
+// Search profiles
+function searchProfiles() {
+    const search = document.getElementById('searchInput').value;
+    const filter = document.getElementById('filterSelect').value;
+    const url = new URL(window.location);
+    
+    if (search) {
+        url.searchParams.set('search', search);
+    } else {
+        url.searchParams.delete('search');
+    }
+    
+    if (filter !== 'all') {
+        url.searchParams.set('filter', filter);
+    } else {
+        url.searchParams.delete('filter');
+    }
+    
+    // Debounce search
+    clearTimeout(window.searchTimeout);
+    window.searchTimeout = setTimeout(() => {
+        window.location.href = url.toString();
+    }, 500);
+}
+
+// Clear filters
+function clearFilters() {
+    window.location.href = '{% url "profiles" %}';
+}
+
+// Load built-in profiles
+function loadBuiltinProfiles() {
+    Swal.fire({
+        title: 'Load Built-in Profiles?',
+        text: 'This will load built-in Secator profiles. Continue?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, load them!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Loading...',
+                text: 'Please wait while we load the profiles',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch('{% url "api:load_builtin_profiles" %}', {
+                method: 'POST',
+                credentials: "same-origin",
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Built-in profiles loading started. Please refresh the page in a few moments.',
+                        icon: 'success'
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to load built-in profiles');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'Error loading built-in profiles',
+                    icon: 'error'
+                });
+            });
+        }
+    });
+}
+
+// Set default profile
+function setDefaultProfile(profileId, profileName, isCurrentlyDefault) {
+    if (isCurrentlyDefault) {
+        Swal.fire({
+            title: 'Already Default',
+            text: `"${profileName}" is already the default profile for its category.`,
+            icon: 'info'
+        });
+        return;
+    }
+
+    const url = `{% url "set_default_profile" 0 %}`.replace('0', profileId);
+    
+    Swal.fire({
+        title: 'Set as Default?',
+        html: `Set <strong>"${profileName}"</strong> as the default profile for its category?<br><br>This will unset any other default profile in the same category.`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Yes, set as default!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Setting default...',
+                text: 'Please wait',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch(url, {
+                method: 'POST',
+                credentials: "same-origin",
+                headers: {
+                    "X-CSRFToken": getCookie("csrftoken"),
+                    "Content-Type": "application/json"
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status) {
+                    Swal.fire({
+                        title: 'Success!',
+                        text: data.message || `"${profileName}" has been set as default.`,
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'Error!',
+                        text: data.message || 'Failed to set default profile',
+                        icon: 'error'
+                    });
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'Error setting default profile',
+                    icon: 'error'
+                });
+            });
+        }
+    });
+}
+
+// Delete profile
+function deleteProfile(profileId, profileName) {
+    const url = `{% url "delete_profile" 0 %}`.replace('0', profileId);
+    
+    Swal.fire({
+        title: 'Are you sure?',
+        html: `Are you sure you want to delete the profile<br><strong>"${profileName}"</strong>?<br><br>This action cannot be undone.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Deleting...',
+                text: 'Please wait while we delete the profile',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch(url, {
+                method: 'POST',
+                credentials: "same-origin",
+                headers: {
+                    "X-CSRFToken": getCookie("csrftoken"),
+                    "Content-Type": "application/json"
+                }
+            })
+            .then(response => response.json().then(data => ({
+                ok: response.ok,
+                status: response.status,
+                data: data
+            })))
+            .then(({ok, status, data}) => {
+                if (ok && data.status) {
+                    Swal.fire({
+                        title: 'Deleted!',
+                        text: 'The profile has been deleted.',
+                        icon: 'success'
+                    }).then(() => {
+                        location.reload();
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to delete profile');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'Failed to delete profile',
+                    icon: 'error'
+                });
+            });
+        }
+    });
+}
+
+// Utility functions
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}

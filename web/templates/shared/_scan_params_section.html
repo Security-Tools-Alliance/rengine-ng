@@ -1,0 +1,52 @@
+{% comment %}
+  Shared Scan Parameters Section: title, collapse, wrapper with data-*, and block include.
+
+  REQUIRED context (must be provided by the caller, typically via build_scan_params_form_context):
+    scan_params_level           "organization"|"scope"|"target" — controls labels and JS field prefix.
+    scan_params_effective       dict from build_effective_params_display() — drives the effective-values block.
+    scan_params_values          dict of current values for this level.
+    scan_params_section_title, scan_params_section_help_text, scan_params_section_use_collapse,
+    scan_params_section_collapse_expanded, scan_params_section_configure_button_label,
+    entity_profile_categories, default_profiles, custom_profiles_by_category,
+    header_initial               — all returned by build_scan_params_form_context.
+
+  REQUIRED from caller (must be passed explicitly in the {% include ... with ... %}):
+    section_collapse_id         unique HTML id for the collapse div.
+
+  OPTIONAL:
+    section_form_id             id of the enclosing <form> so JS can resolve it without DOM traversal.
+    scan_params_prefix          field name prefix ("override_" for target, "" for others).
+    id_prefix                   prefix for HTML element ids (e.g. "org_", "scope_", "target_").
+    show_use_random_proxy       if True, show "Use random proxy" checkbox next to Proxy (start scan / subscan).
+
+  Parent context may provide target, scope, organization, current_project for data-* attributes.
+
+  Always include this partial via build_scan_params_form_context to ensure all required keys are
+  present. Omitting required context variables will result in an empty or broken block.
+{% endcomment %}
+{% load static %}
+
+{% if scan_params_section_use_collapse %}
+<div class="d-flex align-items-center mb-2">
+  <h5 class="mb-0 me-2">{{ scan_params_section_title }}</h5>
+  <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#{{ section_collapse_id }}" aria-expanded="{{ scan_params_section_collapse_expanded|yesno:'true,false' }}">
+    <i class="fe-sliders me-1"></i>{{ scan_params_section_configure_button_label }}
+  </button>
+</div>
+{% endif %}
+<p class="text-muted small mb-2">{{ scan_params_section_help_text }}</p>
+<div
+  data-scan-params-block-root="true"
+  {% if section_form_id %}data-scan-params-form-id="{{ section_form_id }}"{% endif %}
+  data-scan-params-level="{{ scan_params_level }}"
+  data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}"
+  data-scan-params-entity-profile-categories="{{ entity_profile_categories|join:',' }}"
+  {% if target %}data-scan-params-target-id="{{ target.id }}"{% else %}data-scan-params-target-id=""{% endif %}
+  {% if scope %}data-scan-params-scope-id="{{ scope.id }}"{% else %}data-scan-params-scope-id=""{% endif %}
+  {% if organization %}data-scan-params-organization-id="{{ organization.id }}"{% else %}data-scan-params-organization-id=""{% endif %}
+  {% if current_project %}data-scan-params-project-slug="{{ current_project.slug }}"{% else %}data-scan-params-project-slug=""{% endif %}
+>
+  <div class="collapse {% if scan_params_section_collapse_expanded %}show{% endif %}" id="{{ section_collapse_id }}">
+    {% include "shared/_scan_params_block.html" with scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_effective_ordered=scan_params_effective_ordered scan_params_values=scan_params_values scan_params_prefix=scan_params_prefix id_prefix=id_prefix default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial show_use_random_proxy=show_use_random_proxy|default:False %}
+  </div>
+</div>

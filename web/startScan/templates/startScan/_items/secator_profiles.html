@@ -1,0 +1,144 @@
+<!-- Secator Profiles Selection - Reusable component -->
+{# Params: id_prefix (string, optional) #}
+<div class="profile-selector">
+  <!-- Speed Profile -->
+  <div class="profile-category-container mb-1">
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useSpeedProfile" name="use_speed_profile">
+      <label class="form-check-label" for="{{ id_prefix|default:'' }}useSpeedProfile">Use Speed Profile</label>
+    </div>
+    <div class="profile-category-section" data-profile-category="speed" style="display: none;">
+      <h6 class="mt-2">Speed Profile</h6>
+      <p class="small text-muted mb-2">Controls scan speed and intensity</p>
+      <div class="btn-group flex-wrap" id="{{ id_prefix|default:'' }}speed-builtin-buttons">
+    <button type="button" class="btn btn-outline-primary{% if default_profiles.speed == 'aggressive' %} active btn-primary{% endif %}" data-profile-type="speed" data-profile-value="aggressive" data-bs-toggle="tooltip" title="Optimized for internal networks or time-sensitive scans with no rate limiting">
+      &#x26A1; Aggressive{% if default_profiles.speed == 'aggressive' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    <button type="button" class="btn btn-outline-primary{% if default_profiles.speed == 'insane' %} active btn-primary{% endif %}" data-profile-type="speed" data-profile-value="insane" data-bs-toggle="tooltip" title="Maximum speed for local LAN scanning or stress testing">
+      &#x1F525; Insane{% if default_profiles.speed == 'insane' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    <button type="button" class="btn btn-outline-primary{% if default_profiles.speed == 'polite' %} active btn-primary{% endif %}" data-profile-type="speed" data-profile-value="polite" data-bs-toggle="tooltip" title="Balanced settings to avoid overloading the network">
+      &#x1F91D; Polite{% if default_profiles.speed == 'polite' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    <button type="button" class="btn btn-outline-primary{% if default_profiles.speed == 'paranoid' %} active btn-primary{% endif %}" data-profile-type="speed" data-profile-value="paranoid" data-bs-toggle="tooltip" title="Maximum stealth with very conservative settings">
+      &#x1F6E1; Paranoid{% if default_profiles.speed == 'paranoid' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+  </div>
+  {% if speed_rengine_builtin_profiles %}
+  <p class="small text-muted mt-2 mb-1">Hardware-tier (reNgine)</p>
+  <div class="btn-group flex-wrap" id="{{ id_prefix|default:'' }}speed-rengine-builtin-buttons">
+    {% for profile in speed_rengine_builtin_profiles %}
+    <button type="button" class="btn btn-outline-primary{% if default_profiles.speed == profile.name %} active btn-primary{% endif %}" data-profile-type="speed" data-profile-value="{{ profile.name }}" data-bs-toggle="tooltip" title="{{ profile.description }}">
+      {{ profile.icon }} {{ profile.display_name }}{% if default_profiles.speed == profile.name %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <div class="mt-2 mb-2">
+    <select class="form-control" id="{{ id_prefix|default:'' }}speed_custom_profile" name="speed_custom_profile" style="display: none;">
+      <option value="">-- Select Custom Profile --</option>
+      {% for profile in custom_profiles_by_category.speed %}
+      <option value="{{ profile.name }}" data-description="{{ profile.description }}" {% if default_profiles.speed == profile.name %}selected{% endif %}>{{ profile.name }}</option>
+      {% endfor %}
+    </select>
+      <div id="{{ id_prefix|default:'' }}speed_custom_description" class="small text-muted mt-1" style="display: none;"></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- Evasion Profile -->
+  <div class="profile-category-container mb-1">
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useEvasionProfile" name="use_evasion_profile">
+      <label class="form-check-label" for="{{ id_prefix|default:'' }}useEvasionProfile">Use Evasion Profile</label>
+    </div>
+    <div class="profile-category-section" data-profile-category="evasion" style="display: none;">
+      <h6 class="mt-2">Evasion Profile</h6>
+      <p class="small text-muted mb-2">Configures evasion techniques to avoid detection</p>
+      <div class="btn-group" id="{{ id_prefix|default:'' }}evasion-builtin-buttons">
+    <button type="button" class="btn btn-outline-secondary{% if default_profiles.evasion == 'sneaky' %} active btn-secondary{% endif %}" data-profile-type="evasion" data-profile-value="sneaky" data-bs-toggle="tooltip" title="IDS/IPS evasion for sensitive networks using packet fragmentation">
+      🥷 Sneaky{% if default_profiles.evasion == 'sneaky' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    <button type="button" class="btn btn-outline-secondary{% if default_profiles.evasion == 'stealth' %} active btn-secondary{% endif %}" data-profile-type="evasion" data-profile-value="stealth" data-bs-toggle="tooltip" title="Stealth scan using TCP SYN scanning">
+      🦎 Stealth{% if default_profiles.evasion == 'stealth' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    <button type="button" class="btn btn-outline-secondary{% if default_profiles.evasion == 'tor' %} active btn-secondary{% endif %}" data-profile-type="evasion" data-profile-value="tor" data-bs-toggle="tooltip" title="Anonymous scanning using the Tor network">
+      🧅 Tor{% if default_profiles.evasion == 'tor' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+  </div>
+  <div class="mt-2 mb-2">
+    <select class="form-control" id="{{ id_prefix|default:'' }}evasion_custom_profile" name="evasion_custom_profile" style="display: none;">
+      <option value="">-- Select Custom Profile --</option>
+      {% for profile in custom_profiles_by_category.evasion %}
+      <option value="{{ profile.name }}" data-description="{{ profile.description }}" {% if default_profiles.evasion == profile.name %}selected{% endif %}>{{ profile.name }}</option>
+      {% endfor %}
+    </select>
+      <div id="{{ id_prefix|default:'' }}evasion_custom_description" class="small text-muted mt-1" style="display: none;"></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- General Profile -->
+  <div class="profile-category-container mb-1">
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useGeneralProfile" name="use_general_profile">
+      <label class="form-check-label" for="{{ id_prefix|default:'' }}useGeneralProfile">Use General Profile</label>
+    </div>
+    <div class="profile-category-section" data-profile-category="general" style="display: none;">
+      <h6 class="mt-2">General Profile</h6>
+      <p class="small text-muted mb-2">Controls global scan approach and feature activation</p>
+      <div class="btn-group" id="{{ id_prefix|default:'' }}general-builtin-buttons">
+    <button type="button" class="btn btn-outline-info{% if default_profiles.general == 'active' %} active btn-info{% endif %}" data-profile-type="general" data-profile-value="active" data-bs-toggle="tooltip" title="Active scanning only (no passive sources used)">
+      🎯 Active{% if default_profiles.general == 'active' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    <button type="button" class="btn btn-outline-info{% if default_profiles.general == 'passive' %} active btn-info{% endif %}" data-profile-type="general" data-profile-value="passive" data-bs-toggle="tooltip" title="Passive scanning only (no requests to targets)">
+      👁️ Passive{% if default_profiles.general == 'passive' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    <button type="button" class="btn btn-outline-info{% if default_profiles.general == 'full' %} active btn-info{% endif %}" data-profile-type="general" data-profile-value="full" data-bs-toggle="tooltip" title="Activate all optional features">
+      ⚡ Full{% if default_profiles.general == 'full' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+  </div>
+  <div class="mt-2 mb-2">
+    <select class="form-control" id="{{ id_prefix|default:'' }}general_custom_profile" name="general_custom_profile" style="display: none;">
+      <option value="">-- Select Custom Profile --</option>
+      {% for profile in custom_profiles_by_category.general %}
+      <option value="{{ profile.name }}" data-description="{{ profile.description }}" {% if default_profiles.general == profile.name %}selected{% endif %}>{{ profile.name }}</option>
+      {% endfor %}
+    </select>
+      <div id="{{ id_prefix|default:'' }}general_custom_description" class="small text-muted mt-1" style="display: none;"></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- Network Profile -->
+  <div class="profile-category-container mb-1">
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="{{ id_prefix|default:'' }}useNetworkProfile" name="use_network_profile">
+      <label class="form-check-label" for="{{ id_prefix|default:'' }}useNetworkProfile">Use Network Profile</label>
+    </div>
+    <div class="profile-category-section" data-profile-category="network" style="display: none;">
+      <h6 class="mt-2">Network Profile</h6>
+      <p class="small text-muted mb-2">Configures network-specific options for the scan</p>
+      <div class="btn-group" id="{{ id_prefix|default:'' }}network-builtin-buttons">
+    <button type="button" class="btn btn-outline-success{% if default_profiles.network == 'all_ports' %} active btn-success{% endif %}" data-profile-type="network" data-profile-value="all_ports" data-bs-toggle="tooltip" title="Scan all ports instead of common ports">
+      🔌 All Ports{% if default_profiles.network == 'all_ports' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    <button type="button" class="btn btn-outline-success{% if default_profiles.network == 'http_headless' %} active btn-success{% endif %}" data-profile-type="network" data-profile-value="http_headless" data-bs-toggle="tooltip" title="Headless HTTP requests - Enables headless browser mode for HTTP tasks">
+      🤖 HTTP Headless{% if default_profiles.network == 'http_headless' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+    <button type="button" class="btn btn-outline-success{% if default_profiles.network == 'http_record' %} active btn-success{% endif %}" data-profile-type="network" data-profile-value="http_record" data-bs-toggle="tooltip" title="Record HTTP requests / responses and take screenshots">
+      🎬 HTTP Record{% if default_profiles.network == 'http_record' %} <small class="ms-1">(Default)</small>{% endif %}
+    </button>
+  </div>
+  <div class="mt-2 mb-2">
+    <select class="form-control" id="{{ id_prefix|default:'' }}network_custom_profile" name="network_custom_profile" style="display: none;">
+      <option value="">-- Select Custom Profile --</option>
+      {% for profile in custom_profiles_by_category.network %}
+      <option value="{{ profile.name }}" data-description="{{ profile.description }}" {% if default_profiles.network == profile.name %}selected{% endif %}>{{ profile.name }}</option>
+      {% endfor %}
+    </select>
+      <div id="{{ id_prefix|default:'' }}network_custom_description" class="small text-muted mt-1" style="display: none;"></div>
+    </div>
+  </div>
+  </div>
+</div>

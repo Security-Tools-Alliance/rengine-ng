@@ -7,74 +7,49 @@ Start Scan
 
 
 {% block custom_js_css_link %}
-<link href="{% static 'plugins/jquery-step/jquery.steps.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/accordions/custom-accordions.css' %}" rel="stylesheet" type="text/css" />
+<link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
 <li class="breadcrumb-item"><a href="{% url 'list_target' current_project.slug %}">Target</a></li>
 <li class="breadcrumb-item active">Initiate Scan</li>
-<li class="breadcrumb-item active" aria-current="page">{{domain.name}}</li>
+<li class="breadcrumb-item active" aria-current="page">{{ target.value }}</li>
 {% endblock breadcrumb_title %}
 
 {% block page_title %}
-Initiating scan for {{domain.name}}
+Initiating scan for {{ target.value }}
 {% endblock page_title %}
 
 {% block main_content %}
+{{ rengine_target_types|json_script:"rengine-target-types" }}
+<script>
+(function() {
+  const el = document.getElementById('rengine-target-types');
+  window.RENGINE_TARGET_TYPES = el ? JSON.parse(el.textContent) : {};
+})();
+</script>
 <div class="row">
   <div class="col-12">
     <div class="card">
-      <div class="card-body">
-        <form method="POST" id="start-scan-form">
+      <div class="card-body start-scan-card-body">
+        <form method="POST" id="start-scan-form" data-secator-id-prefix="start_scan">
           {% csrf_token %}
-          <div id="select_engine">
-            <h4>Choose Scan Engine</h4>
-            <div class="">
-              <h4>Select Scan Engine</h4>
-              {% if custom_engine_count == 0 %}
-              <div class="alert bg-soft-primary border-0 mb-4" role="alert">
-                <span><b>Tips! </b> You do not have any custom scan engines. Would you like to create your own scan engine?</span>
-                <a href="{% url 'add_engine' %}" class="text-primary">Create Custom Scan Engine</a>
-              </div>
-              {% endif %}
-              {% include "startScan/_items/scanEngine_select.html" %}
-            </div>
-            <h4>Import/Ignore Subdomains</h4>
-            <div class="">
-              <div class="mb-3">
-                <h4 class="text-info">Import Subdomains(Optional)</h4>
-                <span class="">You can import subdomains for <b>{{domain.name}}</b> using your private recon tools.</span>
-                <br>
-                <div class="alert bg-soft-primary border-0 mt-1 mb-1" role="alert">
-                  <span class="">Separate the subdomains using <b>new line</b>. If the subdomain does not belong to <b>{{domain.name}}</b> it will be skipped.</span>
-                </div>
-                <label for="importSubdomainFormControlTextarea" class="form-label mt-1">Subdomains List</label>
-                <textarea class="form-control" id="importSubdomainFormControlTextarea" name="importSubdomainTextArea" rows="6" spellcheck="false"></textarea>
-              </div>
-              <div class="mb-3">
-                <h4 class="text-warning">Out of Scope Subdomains(Optional)</h4>
-                <span class="">You can import subdomains for <b>{{domain.name}}</b> using your private recon tools.</span>
-                <br>
-                <div class="alert bg-soft-warning border-0 mt-1 mb-1" role="alert">
-                  <span class="">Separate the out of scope subdomains/keywords using new line.(No regex currently supported.)</span>
-                </div>
-                <label for="outOfScopeSubdomainTextarea" class="form-label mt-1">Out of Scope Subdomains List</label>
-                <textarea class="form-control" id="outOfScopeSubdomainTextarea" name="outOfScopeSubdomainTextarea" rows="6" spellcheck="false"></textarea>
-              </div>
-            </div>
+          <input type="hidden" id="target_id" name="target_id" value="{{ target.id }}">
+          <input type="hidden" id="target_id_context" value="{{ target.id }}">
+          {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='start_scan_' %}
 
-            <h4>Filters</h4>
-            <div class="">
-              <div class="mb-3">
-                <h4 class="text-info">Filters (Optional)</h4>
-                <span class="">You can filter on a specific path for <b>{{domain.name}}</b>.</span>
-                <br>
-                <label for="filterPath" class="form-label mt-1">Path filter</label>
-                <textarea class="form-control" id="filterPath" name="filterPath" rows="6" spellcheck="false"></textarea>
-              </div>
-            </div>
+          <div id="select_engine">
+            <h4>Choose Execution Mode</h4>
+            {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_title='Scan' embed_selection_container=False %}
+            {% include 'startScan/_items/secator_view_toggle.html' with id_prefix='start_scan' %}
+            {% include 'startScan/_items/secator_selection_layout.html' with id_prefix='start_scan' %}
+            <!-- Scan Options Accordion -->
+            {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=target.value id_prefix='start_scan_' id_suffix='_start_scan' show_counts=True %}
+            <!-- Advanced Configuration: Scan parameters (replaces legacy proxy/delay) + worker -->
+            {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_scan_' show_profiles=False show_simple_options=False include_scan_params_section=True scan_params_section_collapse_id="start-scan-params-section" scan_params_section_form_id="start-scan-form" scan_params_prefix="" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_effective_ordered=scan_params_effective_ordered scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_collapse_expanded=scan_params_section_collapse_expanded scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=True target=target scope=scope current_project=current_project %}
           </div>
+          {% include 'startScan/_items/secator_start_scan_button.html' %}
         </form>
       </div>
     </div>
@@ -84,58 +59,23 @@ Initiating scan for {{domain.name}}
 
 
 {% block page_level_script %}
-<script src="{% static 'plugins/jquery-step/jquery.steps.min.js' %}"></script>
-<script type="text/javascript">
-var buttonEnabled = true;
-var globalTimeout = 0;
-
-function initTimer() {
-  if (globalTimeout) clearTimeout(globalTimeout);
-  globalTimeout = setTimeout(updateButton, 400);
-}
-
-function disableNext(){
-  var nextButton = $(".actions ul li:nth-child(2) a");
-  nextButton.attr("href", "#");
-  buttonEnabled = $(".actions ul li:nth-child(2)").addClass("disabled").attr("aria-disabled", "true");
-}
-
-function enableNext(){
-  var nextButton = $(".actions ul li:nth-child(2) a");
-  nextButton.attr("href", "#next");
-  buttonEnabled = $(".actions ul li:nth-child(2)").removeClass("disabled").attr("aria-disabled", "false");
-}
-
-function updateButton(){
-  $('a[role="menuitem"]').addClass('btn btn-primary waves-effect waves-light');
-  var text = $("input[type=radio][name=scan_mode]").val();
-  if(text === ''){
-    disableNext();
-    return false;
-  }else{
-    enableNext();
-    return true;
-  }
-}
-
-$(function(){
-  $("#select_engine").steps({
-    headerTag: "h4",
-    bodyTag: "div",
-    transitionEffect: "slide",
-    cssClass: 'pill wizard',
-    enableKeyNavigation: false,
-    onStepChanging: updateButton,
-    labels: {finish: "Start Scan"},
-    onInit :function (event, current) {
-      $(".actions ul li:nth-child(3) a").attr('onclick', `$(this).closest('form').submit()`);
-    }
-  });
-  $("input[type=radio][name=scan_mode]").change(initTimer).keyup(initTimer);
-  disableNext();
-  $('a[role="menuitem"]').addClass('text-white');
-});
-
-
+<script>
+  window.SECATOR_START_SCAN_URL = "{% url "api:start_scan" %}";
+  window.PROJECT_SLUG = "{{ current_project.slug|default:target.project.slug }}";
+  window.SCAN_HISTORY_URL = "{% url "scan_history" current_project.slug %}";
+  window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
+  window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
+  window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL = "{% url 'api:get_scan_params_effective_preview' %}";
 </script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
 {% endblock page_level_script %}

@@ -1,0 +1,48 @@
+{% for task in tasks %}
+<tr>
+    <td>
+        <strong>{{ task.name }}</strong>
+        {% if task.is_builtin %}
+        <br><small class="text-success"><i class="fas fa-check-circle"></i> Built-in</small>
+        {% endif %}
+    </td>
+    <td>
+        <span class="badge badge-soft-info">{{ task.task_type }}</span>
+    </td>
+    <td>
+        {% if task.tags %}
+        {% for tag in task.tags %}
+        <span class="badge badge-soft-secondary me-1">{{ tag }}</span>
+        {% endfor %}
+        {% else %}
+        <span class="text-muted">-</span>
+        {% endif %}
+    </td>
+    <td>{{ task.description|truncatechars:100 }}</td>
+    <td>
+        {% if task.is_active %}
+        <span class="badge badge-soft-success">Active</span>
+        {% else %}
+        <span class="badge badge-danger">Inactive</span>
+        {% endif %}
+    </td>
+    <td>{{ task.created_at|date:"M d, Y" }}</td>
+    <td>
+        <div class="btn-group btn-group-sm">
+            <a href="{% url 'task_detail' task.id %}" class="btn btn-info btn-sm" title="View">
+                <i class="fas fa-eye"></i>
+            </a>
+            <a href="{% url 'duplicate_task' task.id %}" class="btn btn-secondary btn-sm" title="Copy">
+                <i class="fas fa-copy"></i>
+            </a>
+        </div>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="7" class="text-center text-muted">
+        <i class="fas fa-inbox fa-2x mb-2"></i><br>
+        No tasks found. Load built-in tasks to get started.
+    </td>
+</tr>
+{% endfor %}

@@ -1,0 +1,134 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}{{ profile.name }} - Profile Detail{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-tomorrow_night_eighties.min.js"></script>
+
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-sliders-h"></i> {{ profile.name }}
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'duplicate_profile' profile.id %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-copy"></i> Copy
+                        </a>
+                        <a href="{% url 'profiles' current_project.slug %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Profiles
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5>Description</h5>
+                            <p>{{ profile.description|default:"No description available." }}</p>
+                            
+                            <h5>Options (YAML)</h5>
+                            <div class="bg-light p-3 rounded">
+                                <div id="profile-opts-editor-readonly">{{ profile.opts }}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Profile Information</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>Category:</strong> 
+                                        <span class="badge badge-soft-info">{{ profile.get_category_display }}</span>
+                                    </p>
+                                    <p><strong>Type:</strong> 
+                                        <span class="badge badge-soft-{% if profile.profile_type == 'builtin' %}success{% else %}info{% endif %}">
+                                            {{ profile.profile_type|title }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Enforce:</strong> 
+                                        {% if profile.enforce %}
+                                        <span class="badge badge-soft-warning">Yes</span>
+                                        {% else %}
+                                        <span class="text-muted">No</span>
+                                        {% endif %}
+                                    </p>
+                                    <p><strong>Default:</strong> 
+                                        {% if profile.is_default %}
+                                        <span class="badge badge-soft-primary"><i class="fas fa-star"></i> Default for {{ profile.get_category_display }}</span>
+                                        {% else %}
+                                        <span class="text-muted">No</span>
+                                        {% endif %}
+                                    </p>
+                                    <p><strong>Status:</strong> 
+                                        <span class="badge badge-soft-{% if profile.is_active %}success{% else %}danger{% endif %}">
+                                            {{ profile.is_active|yesno:"Active,Inactive" }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Created:</strong> {{ profile.created_at|date:"M d, Y H:i" }}</p>
+                                    <p><strong>Updated:</strong> {{ profile.updated_at|date:"M d, Y H:i" }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_level_script %}
+<script type="text/javascript">
+$(document).ready(function() {
+    // Initialize ACE editor for YAML display (read-only)
+    const editor = ace.edit("profile-opts-editor-readonly");
+    editor.setTheme("ace/theme/tomorrow_night_eighties");
+    editor.session.setMode("ace/mode/yaml");
+    editor.setReadOnly(true);
+    editor.setOptions({
+        fontSize: "14px",
+        showInvisibles: true,
+        highlightActiveLine: false,
+        highlightGutterLine: false
+    });
+    
+    // Calculate optimal height based on content and available space
+    function calculateEditorHeight() {
+        const editorElement = document.getElementById("profile-opts-editor-readonly");
+        const contentLines = editor.session.getLength();
+        const lineHeight = editor.renderer.lineHeight;
+        const minHeight = 200; // Minimum height in pixels
+        const viewportHeight = window.innerHeight;
+        const editorOffsetTop = editorElement.getBoundingClientRect().top;
+        const maxHeight = viewportHeight - editorOffsetTop - 50; // 50px padding from bottom
+        
+        // Calculate height based on content (with some padding)
+        const contentHeight = Math.max(contentLines * lineHeight + 40, minHeight);
+        
+        // Use the smaller of content height or max height
+        const finalHeight = Math.min(contentHeight, maxHeight);
+        
+        editorElement.style.height = finalHeight + "px";
+        editor.resize();
+    }
+    
+    // Calculate height after editor is initialized
+    setTimeout(calculateEditorHeight, 100);
+    
+    // Recalculate on window resize
+    $(window).on('resize', calculateEditorHeight);
+});
+</script>
+{% endblock %}

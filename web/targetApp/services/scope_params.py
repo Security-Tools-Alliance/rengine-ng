@@ -1,0 +1,1060 @@
+"""
+Scan parameter resolution service.
+
+Resolves effective scan parameters by merging values from multiple sources
+following a strict priority chain:
+    1. User override at scan launch
+    2. Target.scan_config[param] / Target.scan_config["profiles"]
+    3. Scope.scan_config[param] / Scope.scan_config["profiles"] (if scope provided)
+    4. Organization.scan_config[param] / Organization.scan_config["profiles"] (if org provided)
+    5. Default (settings.DEFAULT_*)
+"""
+
+from __future__ import annotations
+
+from typing import Any, Callable
+
+from django.conf import settings
+from django.http import QueryDict
+
+from reNgine.core.validators import is_valid_ip
+from reNgine.utilities.domain import (
+    normalize_allowed_hosts_from_list,
+    normalize_domain_name,
+)
+from reNgine.utilities.logger import get_module_logger
+from reNgine.utilities.url import get_domain_from_subdomain
+from scanEngine.models import SecatorProfile, SecatorWorker
+from targetApp.models import Target
+
+from .scan_param_definitions import (
+    BOOL_PARAM_KEYS,
+    DICT_PARAM_KEYS_EMPTY_IS_NO_OVERRIDE,
+    FLOAT_PARAM_KEYS,
+    INT_PARAM_KEYS,
+    PARAM_KEYS,
+    STR_PARAM_KEYS,
+    TARGET_OVERRIDE_PREFIX,
+    cast_param_value,
+    parse_header_value,
+)
+
+
+PREFIX_SCOPE_PARAMS = "[SCOPE_PARAMS]"
+logger = get_module_logger(__name__)
+
+_SETTINGS_DEFAULTS: dict[str, str] = {
+    "threads": "DEFAULT_THREADS",
+    "rate_limit": "DEFAULT_RATE_LIMIT",
+    "timeout": "DEFAULT_HTTP_TIMEOUT",
+    "retries": "DEFAULT_RETRIES",
+    "delay": "DEFAULT_DELAY",
+    "follow_redirect": "DEFAULT_FOLLOW_REDIRECT",
+    "depth": "DEFAULT_DEPTH",
+}
+
+_PROFILE_CATEGORIES = ("speed", "evasion", "general", "network")
+PROFILE_CATEGORIES = _PROFILE_CATEGORIES
+
+
+def get_scope_for_target(target: Any) -> Any:
+    """
+    Return the scope to use for a target when scope_id is not specified.
+
+    Selection contract: when a target belongs to more than one scope, this
+    function always returns the scope with the lowest database ID (``order_by("id")``).
+    This is intentionally deterministic so that all call sites — forms, API
+    preview, and views — agree on the same scope without any additional
+    tie-breaking logic.  A warning is logged whenever multiple scopes are
+    found so that operators can diagnose unexpected associations.
+
+    Returns ``None`` if ``target`` is ``None`` or has no associated scopes.
+    """
+    if target is None:
+        return None
+    qs = target.scopes.select_related("organization", "organization__project").order_by("id")
+    scopes = list(qs[:2])
+    if len(scopes) > 1:
+        logger.log_line(
+            PREFIX_SCOPE_PARAMS,
+            "SCOPE",
+            "Target %s has multiple scopes; using first by id" % (target.id,),
+            level="warning",
+        )
+    return scopes[0] if scopes else None
+
+
+def _build_allowed_hosts_set(scope: Any) -> set[str]:
+    """Build the set of allowed hosts (hostnames + IPs) from scope.allowed_finding_hosts.
+
+    Returns normalized (strip, lower) strings. Empty set if scope has no or non-list value.
+    """
+    if not scope:
+        return set()
+    raw = getattr(scope, "allowed_finding_hosts", None)
+    return set(normalize_allowed_hosts_from_list(raw))
+
+
+def _build_allowed_domains_set(scope: Any, target: Any) -> set[str]:
+    """Build the set of allowed registered domains for finding scope filter.
+
+    Used when restrict_findings_to_target is True: target's registered domain
+    plus scope.allowed_finding_domains (normalized), plus root domains from
+    scope.allowed_finding_hosts (non-IP entries).
+    """
+    allowed: set[str] = set()
+    if target and getattr(target, "value", None):
+        if target_val := (target.value or "").strip().lower():
+            if reg := get_domain_from_subdomain(target_val):
+                allowed.add(reg)
+    if scope and getattr(scope, "allowed_finding_domains", None):
+        for entry in scope.allowed_finding_domains:
+            if isinstance(entry, str) and entry.strip():
+                if norm := normalize_domain_name(entry.strip()):
+                    reg = get_domain_from_subdomain(norm) or norm
+                    allowed.add(reg)
+    if scope:
+        for entry in normalize_allowed_hosts_from_list(getattr(scope, "allowed_finding_hosts", None)):
+            if not is_valid_ip(entry):
+                if reg := get_domain_from_subdomain(entry) or entry:
+                    allowed.add(reg)
+    return allowed
+
+
+def get_finding_scope_filter_domain(scope: Any, target: Any) -> Callable[[str], bool] | None:
+    """
+    Return a predicate for Domain creation: True if the domain name is allowed.
+
+    When restrict_findings_to_target is False or scope is None, returns None (no filter).
+    Otherwise returns a callable (domain_name: str) -> bool. IPs are rejected (False):
+    a Domain must not be created with an IP as name.
+    """
+    if scope is None or not getattr(scope, "restrict_findings_to_target", False):
+        return None
+    allowed = _build_allowed_domains_set(scope, target)
+    if not allowed:
+        return None
+
+    def _filter_domain(domain_name: str) -> bool:
+        if not domain_name or not isinstance(domain_name, str):
+            return False
+        domain = domain_name.strip()
+        if is_valid_ip(domain):
+            return False
+        norm = normalize_domain_name(domain)
+        if not norm:
+            return False
+        reg = get_domain_from_subdomain(norm) or norm
+        return reg in allowed
+
+    return _filter_domain
+
+
+def get_finding_scope_filter_host(scope: Any, target: Any) -> Callable[[str], bool] | None:
+    """
+    Return a predicate for Subdomain/host: True if the host is allowed.
+
+    When restrict_findings_to_target is False or scope is None, returns None (no filter).
+    Otherwise returns a callable (host: str) -> bool. When scope.allowed_finding_hosts
+    is non-empty, hosts in that list are accepted; hosts whose registered domain is in
+    allowed_domains (target + allowed_finding_domains) are also accepted so the target
+    stays in scope. When allowed_finding_hosts is empty, any subdomain of allowed
+    domains is accepted and IPs are always allowed.
+    """
+    if scope is None or not getattr(scope, "restrict_findings_to_target", False):
+        return None
+    allowed_domains = _build_allowed_domains_set(scope, target)
+    allowed_hosts = _build_allowed_hosts_set(scope)
+    if not allowed_domains and not allowed_hosts:
+        return None
+
+    def _filter_host(host: str) -> bool:
+        if not host or not isinstance(host, str):
+            return False
+        norm = host.strip().lower()
+        if not norm:
+            return False
+        if allowed_hosts:
+            if norm in allowed_hosts:
+                return True
+            if not is_valid_ip(norm):
+                reg = get_domain_from_subdomain(norm) or norm
+                if reg in allowed_domains:
+                    return True
+            return False
+        if is_valid_ip(norm):
+            return True
+        reg = get_domain_from_subdomain(norm) or norm
+        return reg in allowed_domains
+
+    return _filter_host
+
+
+def get_finding_scope_filters_for_target(target_id: int) -> dict[str, Any]:
+    """
+    Return domain_filter and host_filter for the given target_id.
+
+    Loads Target and scope; returns {"domain_filter": callable or None, "host_filter": callable or None}.
+    """
+    try:
+        target = Target.objects.get(id=target_id)
+    except Target.DoesNotExist:
+        return {"domain_filter": None, "host_filter": None}
+    scope = get_scope_for_target(target)
+    return {
+        "domain_filter": get_finding_scope_filter_domain(scope, target),
+        "host_filter": get_finding_scope_filter_host(scope, target),
+    }
+
+
+def get_finding_scope_filter_domain_for_target(target_id: int) -> Callable[[str], bool] | None:
+    """Return the domain filter for the given target_id, or None."""
+    return get_finding_scope_filters_for_target(target_id).get("domain_filter")
+
+
+def get_finding_scope_filter_host_for_target(target_id: int) -> Callable[[str], bool] | None:
+    """Return the host filter for the given target_id, or None."""
+    return get_finding_scope_filters_for_target(target_id).get("host_filter")
+
+
+def _get_profile_opts(profile_name: str) -> dict[str, Any]:
+    """Return parsed opts dict for a Secator profile by name, or empty dict.
+
+    If the stored YAML is the full file (with top-level key 'opts'), the inner
+    opts dict is returned so that rate_limit, delay, timeout, retries etc. are
+    applied correctly.
+    """
+    if not profile_name or not isinstance(profile_name, str):
+        return {}
+    profile = SecatorProfile.objects.filter(name=profile_name.strip(), is_active=True).first()
+    if profile is None:
+        return _get_profile_opts_from_secator_loader(profile_name.strip())
+    parsed = profile._parse_opts()
+    if isinstance(parsed, dict) and "opts" in parsed and isinstance(parsed["opts"], dict):
+        return parsed["opts"]
+    return parsed if isinstance(parsed, dict) else {}
+
+
+_secator_profiles_cache: list[Any] | None = None
+
+
+def _get_secator_profiles() -> list[Any]:
+    """Load built-in Secator profiles once and cache; avoid repeated imports."""
+    global _secator_profiles_cache
+    if _secator_profiles_cache is not None:
+        return _secator_profiles_cache
+    try:
+        from secator.loader import get_configs_by_type
+
+        profiles = get_configs_by_type("profile")
+        loaded = list(profiles) if profiles else []
+    except (ImportError, AttributeError, TypeError) as e:
+        logger.log_line(
+            PREFIX_SCOPE_PARAMS,
+            "SECATOR_LOADER",
+            "Could not load Secator profiles for fallback opts: %s" % (e,),
+            level="debug",
+        )
+        loaded = []
+    _secator_profiles_cache = loaded
+    return _secator_profiles_cache
+
+
+def _get_profile_opts_from_secator_loader(profile_name: str) -> dict[str, Any]:
+    """Fallback: load built-in profile opts from Secator package if available."""
+    for p in _get_secator_profiles():
+        try:
+            if getattr(p, "name", None) != profile_name:
+                continue
+            if not hasattr(p, "opts"):
+                continue
+            opts = getattr(p, "opts", None)
+            if isinstance(opts, dict):
+                return opts
+            if hasattr(opts, "toDict") and callable(getattr(opts, "toDict")):
+                return opts.toDict()
+            return {}
+        except (AttributeError, TypeError):
+            continue
+    return {}
+
+
+def _format_profile_opts_tooltip(opts: dict[str, Any]) -> str:
+    """Format profile opts as multi-line tooltip text (param: value)."""
+    if not opts:
+        return ""
+    lines = []
+    for k in sorted(opts.keys()):
+        v = opts[k]
+        v = "" if v is None else str(v)
+        lines.append("%s: %s" % (k, v))
+    return ", ".join(lines)
+
+
+def _get_default(param: str) -> Any:
+    setting_name = _SETTINGS_DEFAULTS.get(param)
+    return None if setting_name is None else getattr(settings, setting_name, None)
+
+
+def _normalize_scan_config(raw: Any) -> dict[str, Any]:
+    """Ensure scan_config is a dict; legacy or malformed JSONField values become {}."""
+    return raw if isinstance(raw, dict) else {}
+
+
+def _is_profiles_dict_empty(profiles: Any) -> bool:
+    """True if profiles is a dict with no non-empty category values (treated as no override)."""
+    if not isinstance(profiles, dict):
+        return True
+    if len(profiles) == 0:
+        return True
+    return not any((v or "").strip() for v in profiles.values() if isinstance(v, str)) and not any(
+        v for v in profiles.values() if not isinstance(v, str) and v
+    )
+
+
+def strip_empty_override_keys(config: dict[str, Any]) -> dict[str, Any]:
+    """
+    Remove keys whose value is an empty dict (no override) so they are not persisted.
+
+    Used before assigning scan_config to Target, Scope, or Organization.
+    Returns a new dict; empty dict for header, profiles, extra_config is removed.
+    """
+    result = dict(config)
+    for key in DICT_PARAM_KEYS_EMPTY_IS_NO_OVERRIDE:
+        if key not in result:
+            continue
+        value = result[key]
+        if key == "profiles":
+            if _is_profiles_dict_empty(value):
+                result.pop(key, None)
+        elif isinstance(value, dict) and len(value) == 0:
+            result.pop(key, None)
+    return result
+
+
+def _profiles_to_list(profiles_data: Any) -> list[str]:
+    """
+    Convert profiles from either dict or list format to a flat list of names.
+
+    scan_config["profiles"] is stored as a dict (category -> name). Legacy data may
+    still be a list of profile names; resolution code accepts both. A data migration
+    can use normalize_scope_default_profiles_to_dict() to normalize list-form values
+    so that resolution can assume dict-only and this helper can be simplified.
+    """
+    if isinstance(profiles_data, dict):
+        return [v for k, v in profiles_data.items() if k in _PROFILE_CATEGORIES and v]
+    if isinstance(profiles_data, list):
+        return [p for p in profiles_data if isinstance(p, str) and p]
+    return []
+
+
+def _get_profiles_dict(config: dict[str, Any] | None) -> dict[str, str]:
+    """Return profiles as a category -> name dict from a config. Empty dict if missing or invalid."""
+    if not config:
+        return {}
+    raw = config.get("profiles")
+    if isinstance(raw, dict):
+        return {k: v for k, v in raw.items() if k in _PROFILE_CATEGORIES and isinstance(v, str) and (v or "").strip()}
+    if isinstance(raw, list):
+        names = [p for p in raw if isinstance(p, str) and p]
+        return dict(zip(_PROFILE_CATEGORIES[: len(names)], names))
+    return {}
+
+
+def _merge_profiles_by_category(
+    override_profiles: dict[str, str],
+    target_config: dict[str, Any],
+    scope_config: dict[str, Any],
+    org_config: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Merge profiles by category: for each category, use the first non-empty value
+    from override -> target -> scope -> org. Only a profile of the same category
+    replaces the parent's; other categories are inherited.
+
+    Returns:
+        (merged category -> profile_name, category -> source level for display).
+    """
+    merged: dict[str, str] = {}
+    source_per_cat: dict[str, str] = {}
+    configs: list[tuple[dict[str, str], str]] = [
+        (override_profiles, "scan"),
+        (_get_profiles_dict(target_config), "target"),
+        (_get_profiles_dict(scope_config), "scope"),
+        (_get_profiles_dict(org_config), "organization"),
+    ]
+    for cat in _PROFILE_CATEGORIES:
+        for prof_dict, level in configs:
+            if name := (prof_dict.get(cat) or "").strip():
+                merged[cat] = name
+                source_per_cat[cat] = level
+                break
+    return merged, source_per_cat
+
+
+def _profile_chain_per_category(
+    override_profiles: dict[str, str],
+    target_config: dict[str, Any],
+    scope_config: dict[str, Any],
+    org_config: dict[str, Any],
+) -> dict[str, list[tuple[str, str]]]:
+    """
+    Build per-category chain of (profile_name, source_level) from override -> target -> scope -> org.
+    Used to resolve param values from the first profile in the chain that defines them,
+    so a profile that does not define a param inherits from the parent's profile.
+    """
+    configs: list[tuple[dict[str, str], str]] = [
+        (override_profiles, "scan"),
+        (_get_profiles_dict(target_config), "target"),
+        (_get_profiles_dict(scope_config), "scope"),
+        (_get_profiles_dict(org_config), "organization"),
+    ]
+    chain: dict[str, list[tuple[str, str]]] = {cat: [] for cat in _PROFILE_CATEGORIES}
+    for cat in _PROFILE_CATEGORIES:
+        for prof_dict, level in configs:
+            if name := (prof_dict.get(cat) or "").strip():
+                chain[cat].append((name, level))
+    return chain
+
+
+def normalize_scope_default_profiles_to_dict(raw: Any) -> dict[str, str] | None:
+    """
+    Normalize profiles to dict form for storage.
+
+    If raw is already a dict (with keys in _PROFILE_CATEGORIES), returns it as-is.
+    If raw is a legacy list of profile names, maps them to categories by order
+    (first category gets first name, etc.) and returns the dict. Otherwise returns None.
+    Intended for use in a data migration to normalize list-form default_profiles
+    so that resolution code can assume dict-only and _profiles_to_list can be simplified.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        return {k: v for k, v in raw.items() if k in _PROFILE_CATEGORIES and isinstance(v, str) and v}
+    if isinstance(raw, list):
+        names = [p for p in raw if isinstance(p, str) and p]
+        return dict(zip(_PROFILE_CATEGORIES[: len(names)], names))
+    return None
+
+
+def resolve_scan_params(
+    target: Any,
+    scope: Any | None = None,
+    organization: Any | None = None,
+    user_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Resolve effective scan parameters following the priority chain.
+
+    Args:
+        target: Target model instance.
+        scope: Scope model instance (optional). Must be explicitly provided by the caller.
+        organization: Organization model instance (optional).
+        user_override: Dict of user-provided overrides at scan launch time.
+
+    Returns:
+        Dict with resolved values for all PARAM_KEYS plus ``profiles``,
+        ``worker_ids``, and ``extra_config``.
+    """
+    override = user_override or {}
+
+    raw = getattr(target, "scan_config", None) if target else None
+    if raw is not None and not isinstance(raw, dict):
+        target_id = getattr(target, "id", None) or getattr(target, "pk", None) or target
+        logger.log_line(
+            PREFIX_SCOPE_PARAMS,
+            "SCAN_CONFIG",
+            "Non-dict scan_config for target %s: %r; treating as empty." % (target_id, raw),
+            level="warning",
+        )
+    target_config = _normalize_scan_config(raw)
+
+    scope_config = _normalize_scan_config(getattr(scope, "scan_config", None) if scope else None)
+    org_config = _normalize_scan_config(getattr(organization, "scan_config", None) if organization else None)
+
+    result: dict[str, Any] = {}
+
+    for param in PARAM_KEYS:
+        value = _resolve_single_param(param, override, target_config, scope_config, org_config)
+        result[param] = value
+
+    result["profiles"] = _resolve_profiles(override, target_config, scope_config, org_config)
+    result["worker_ids"] = _resolve_worker_ids(scope)
+    result["extra_config"] = _resolve_extra_config(override, target_config, scope_config, org_config)
+
+    return result
+
+
+def _build_effective_display_from_config_dicts(
+    user_override: dict[str, Any],
+    target_config: dict[str, Any],
+    scope_config: dict[str, Any],
+    org_config: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """
+    Build display dict from four config dicts (override > target > scope > org > default).
+
+    Source is "scan" when value comes from user_override, else "target"|"scope"|"organization"|"default".
+    """
+    result: dict[str, dict[str, Any]] = {}
+
+    for param in PARAM_KEYS:
+        if user_override.get(param) is not None:
+            result[param] = {"value": user_override[param], "source": "scan"}
+        elif target_config.get(param) is not None:
+            result[param] = {"value": target_config[param], "source": "target"}
+        elif scope_config.get(param) is not None:
+            result[param] = {"value": scope_config[param], "source": "scope"}
+        elif org_config.get(param) is not None:
+            result[param] = {"value": org_config[param], "source": "organization"}
+        else:
+            result[param] = {"value": _get_default(param), "source": "default"}
+
+    override_profiles = _get_profiles_dict(user_override)
+    merged_profiles_value, source_per_cat = _merge_profiles_by_category(
+        override_profiles, target_config, scope_config, org_config
+    )
+    if merged_profiles_value:
+        levels = set(source_per_cat.values())
+        source = levels.pop() if len(levels) == 1 else "mixed"
+        result["profiles"] = {"value": merged_profiles_value, "source": source}
+    else:
+        result["profiles"] = {"value": None, "source": "default"}
+
+    profiles_value = result.get("profiles", {}).get("value")
+    if isinstance(profiles_value, dict) and profiles_value:
+        merged_profile_opts: dict[str, Any] = {}
+        merged_profile_name: dict[str, str] = {}
+        merged_profile_source_level: dict[str, str] = {}
+        profile_opts_cache: dict[str, dict[str, Any]] = {}
+
+        def _get_cached_profile_opts(profile_name: str) -> dict[str, Any]:
+            if profile_name not in profile_opts_cache:
+                profile_opts_cache[profile_name] = _get_profile_opts(profile_name)
+            return profile_opts_cache[profile_name]
+
+        chain_per_cat = _profile_chain_per_category(override_profiles, target_config, scope_config, org_config)
+        for param in PARAM_KEYS:
+            for cat in _PROFILE_CATEGORIES:
+                for name, level in chain_per_cat.get(cat, []):
+                    opts = _get_cached_profile_opts(name)
+                    if param in opts and opts.get(param) is not None:
+                        merged_profile_opts[param] = opts[param]
+                        merged_profile_name[param] = name
+                        merged_profile_source_level[param] = level
+                        break
+                if param in merged_profile_opts:
+                    break
+        for param in PARAM_KEYS:
+            if result[param]["source"] != "scan" and param in merged_profile_opts:
+                result[param] = {
+                    "value": merged_profile_opts[param],
+                    "source": "profile",
+                    "profile_name": merged_profile_name.get(param),
+                    "profile_source_level": merged_profile_source_level.get(param, "default"),
+                }
+        profile_display_list: list[dict[str, Any]] = []
+        for cat in _PROFILE_CATEGORIES:
+            name = profiles_value.get(cat)
+            if not name or not isinstance(name, str):
+                continue
+            opts = _get_cached_profile_opts(name)
+            profile_display_list.append(
+                {
+                    "category": cat,
+                    "name": name,
+                    "source_level": source_per_cat.get(cat, "default"),
+                    "tooltip": _format_profile_opts_tooltip(opts),
+                }
+            )
+        result["profile_display_list"] = profile_display_list
+    else:
+        result["profile_display_list"] = []
+
+    return result
+
+
+def build_effective_params_display(
+    scope: Any | None = None,
+    target: Any | None = None,
+    organization: Any | None = None,
+) -> dict[str, dict[str, Any]]:
+    """
+    Build a display-oriented dict showing the effective value and its source for each param.
+
+    Used in templates to show the user which values will be applied and where they come from.
+
+    Returns a dict keyed by param name, with {"value": ..., "source": "target|scope|organization|default"}.
+    """
+    raw = getattr(target, "scan_config", None) if target else None
+    if raw is not None and not isinstance(raw, dict):
+        target_id = getattr(target, "id", None) or getattr(target, "pk", None) or target
+        logger.log_line(
+            PREFIX_SCOPE_PARAMS,
+            "SCAN_CONFIG",
+            "Non-dict scan_config for target %s: %r; treating as empty." % (target_id, raw),
+            level="warning",
+        )
+    target_config = _normalize_scan_config(raw)
+    scope_config = _normalize_scan_config(getattr(scope, "scan_config", None) if scope else None)
+    org_config = _normalize_scan_config(getattr(organization, "scan_config", None) if organization else None)
+    result = _build_effective_display_from_config_dicts({}, target_config, scope_config, org_config)
+    result["worker"] = get_effective_worker_display(scope=scope)
+    return result
+
+
+def build_effective_params_display_from_configs(
+    org_config: dict[str, Any] | None = None,
+    scope_config: dict[str, Any] | None = None,
+    target_config: dict[str, Any] | None = None,
+    user_override: dict[str, Any] | None = None,
+    scope: Any | None = None,
+) -> dict[str, dict[str, Any]]:
+    """
+    Build effective params display from config dicts (e.g. draft form values + parent configs).
+
+    Priority: user_override > target_config > scope_config > org_config > default.
+    Used by the scan-params-effective-preview API for real-time effective block updates.
+    When scope is provided and user_override contains worker_id, the worker entry reflects
+    scan override; otherwise scope workers or "Local".
+    """
+    override = _normalize_scan_config(user_override) if user_override else {}
+    target_c = _normalize_scan_config(target_config) if target_config else {}
+    scope_c = _normalize_scan_config(scope_config) if scope_config else {}
+    org_c = _normalize_scan_config(org_config) if org_config else {}
+    result = _build_effective_display_from_config_dicts(override, target_c, scope_c, org_c)
+    worker_id = (user_override or {}).get("worker_id") if user_override else None
+    result["worker"] = get_effective_worker_display(worker_id=worker_id, scope=scope)
+    return result
+
+
+def _is_empty_dict_no_override(param: str, value: Any) -> bool:
+    """Treat empty dict for header, profiles, extra_config as 'no override' so parent is not overwritten."""
+    if param not in DICT_PARAM_KEYS_EMPTY_IS_NO_OVERRIDE:
+        return False
+    if not isinstance(value, dict):
+        return False
+    if param == "profiles":
+        return _is_profiles_dict_empty(value)
+    return len(value) == 0
+
+
+def _resolve_single_param(
+    param: str,
+    override: dict[str, Any],
+    target_config: dict[str, Any],
+    scope_config: dict[str, Any],
+    org_config: dict[str, Any],
+) -> Any:
+    # 1. User override (empty dict for header does not override)
+    if param in override and override[param] is not None and not _is_empty_dict_no_override(param, override[param]):
+        return override[param]
+
+    # 2. Target.scan_config
+    if (
+        param in target_config
+        and target_config[param] is not None
+        and not _is_empty_dict_no_override(param, target_config[param])
+    ):
+        return target_config[param]
+
+    # 3. Scope.scan_config
+    scope_val = scope_config.get(param)
+    if scope_val is not None and not _is_empty_dict_no_override(param, scope_val):
+        return scope_val
+
+    # 4. Organization.scan_config
+    org_val = org_config.get(param)
+    if org_val is not None and not _is_empty_dict_no_override(param, org_val):
+        return org_val
+
+    # 5. Default
+    return _get_default(param)
+
+
+def _resolve_profiles(
+    override: dict[str, Any],
+    target_config: dict[str, Any],
+    scope_config: dict[str, Any],
+    org_config: dict[str, Any],
+) -> list[str]:
+    # User override at scan launch can be a list: then it replaces all profiles.
+    raw_override = override.get("profiles")
+    if isinstance(raw_override, list) and raw_override:
+        return [p for p in raw_override if isinstance(p, str) and p]
+
+    # Merge by category: override (dict) -> target -> scope -> org per category.
+    override_profiles = _get_profiles_dict(override) if isinstance(raw_override, dict) else {}
+    merged, _ = _merge_profiles_by_category(override_profiles, target_config, scope_config, org_config)
+    return [merged[cat] for cat in _PROFILE_CATEGORIES if merged.get(cat)]
+
+
+def resolve_profiles_for_runner(profile_names: list[str]) -> list[str | dict[str, Any]]:
+    """
+    Convert profile names to runner payload: built-in profiles as inline dicts, others as names.
+
+    Built-in profiles are sent as full TemplateLoader-compatible dicts so the worker
+    does not need to resolve them by name (avoids version/path mismatch). Custom
+    profiles are sent as names and resolved from synced templates on the worker.
+    """
+    if not profile_names:
+        return []
+    result: list[str | dict[str, Any]] = []
+    for name in profile_names:
+        if not name or not isinstance(name, str):
+            continue
+        name = name.strip()
+        profile = SecatorProfile.objects.filter(name=name, is_active=True).first()
+        if profile is not None and profile.profile_type == "builtin":
+            result.append(profile.to_runner_dict())
+        else:
+            result.append(name)
+    return result
+
+
+def _resolve_worker_ids(scope: Any | None) -> list[int]:
+    """
+    Return active worker IDs for the scope. Caller (e.g. _merge_scope_params_into_config)
+    must ensure scope and target belong to the same project before using these IDs.
+    """
+    if scope is None:
+        return []
+    workers = SecatorWorker.objects.active().filter(scopes=scope)
+    return list(workers.values_list("id", flat=True))
+
+
+def _scope_allow_local(scope: Any | None) -> bool:
+    """Return True if Local is in the allowed list for the scope (backward compat: default True)."""
+    if scope is None:
+        return True
+    return bool(getattr(scope, "allow_local_worker", True))
+
+
+def scope_allow_local(scope: Any | None) -> bool:
+    """Public helper: True if Local is in the scope's allowed workers (for templates/views)."""
+    return _scope_allow_local(scope)
+
+
+def get_allowed_workers_for_scope(scope: Any | None) -> list[tuple[Any, str]]:
+    """
+    Return the list of allowed options for the scope as (id_or_None, display_name).
+
+    - If allow_local_worker: (None, "Local") is included.
+    - Plus all active SecatorWorker in scope.workers, ordered by name, as (w.id, w.name).
+    - If the list would be empty (no Local and no workers), returns [(None, "Local")] so
+      scans can still run (exclusive Local fallback).
+    """
+    if scope is None:
+        return [(None, "Local")]
+    allow_local = _scope_allow_local(scope)
+    remote = list(SecatorWorker.objects.active().filter(scopes=scope).order_by("name").values_list("id", "name"))
+    options: list[tuple[Any, str]] = []
+    if allow_local:
+        options.append((None, "Local"))
+    options.extend((wid, wname or str(wid)) for wid, wname in remote)
+    return options or [(None, "Local")]
+
+
+def get_default_worker_for_scope(scope: Any | None) -> int | None:
+    """
+    Return the default worker for the scope: None (Local) or worker id (int).
+
+    - No scope or allowed list empty -> None (Local).
+    - One allowed option -> that one (None or worker id).
+    - Two or more -> scope.default_worker_id if set and in allowed list, else None (Local).
+    """
+    if scope is None:
+        return None
+    options = get_allowed_workers_for_scope(scope)
+    if not options:
+        return None
+    if len(options) == 1:
+        return options[0][0]
+    default_fk = getattr(scope, "default_worker", None)
+    if default_fk is not None and default_fk.id is not None:
+        for opt_id, _ in options:
+            if opt_id is not None and opt_id == default_fk.id:
+                return opt_id
+    return None
+
+
+def get_scope_worker_ids(scope: Any | None) -> list[int]:
+    """
+    Return active worker IDs allowed for the scope (public helper for validation).
+
+    Use this when validating that a user-provided worker_id is allowed for the scope.
+    Returns empty list if scope is None or scope has no workers.
+    For "is Local allowed", use scope_allow_local_for_validation(scope) or
+    get_scope_worker_validation(scope).
+    """
+    return _resolve_worker_ids(scope)
+
+
+def get_scope_worker_validation(scope: Any | None) -> dict[str, Any]:
+    """
+    Return validation info for scope workers: allow_local (bool) and worker_ids (list[int]).
+
+    Use when validating user-provided worker_id: allowed if (allow_local and worker_id empty)
+    or (worker_id in worker_ids).
+    """
+    if scope is None:
+        return {"allow_local": True, "worker_ids": []}
+    return {
+        "allow_local": _scope_allow_local(scope),
+        "worker_ids": _resolve_worker_ids(scope),
+    }
+
+
+def resolve_worker_for_scope(
+    scope: Any | None,
+    requested_worker_id: int | None,
+) -> int | None:
+    """
+    Resolve worker id for a scope: validate requested_worker_id against scope rules and
+    fall back to the scope default when invalid or not provided.
+
+    Used by the API and the form builder so worker selection logic stays in one place.
+    Returns None for Local, or a valid worker id (int). When scope is None, returns
+    requested_worker_id unchanged.
+    """
+    if scope is None:
+        return requested_worker_id
+    validation = get_scope_worker_validation(scope)
+    allowed = (validation["allow_local"] and requested_worker_id is None) or (
+        requested_worker_id is not None and requested_worker_id in validation["worker_ids"]
+    )
+    if not allowed or requested_worker_id is None:
+        return get_default_worker_for_scope(scope)
+    return requested_worker_id
+
+
+def get_workers_for_scan_dropdown(
+    scope: Any | None = None,
+    allowed_worker_ids: list[int] | None = None,
+    allow_local: bool | None = None,
+) -> list[Any]:
+    """
+    Return the list of SecatorWorker instances to show in the "Run on worker" dropdown.
+
+    - If scope is given: returns active workers linked to that scope, ordered by name.
+      The template must show Local option when allow_local_worker is True (pass
+      scope_allow_local(scope) and default_worker_id separately).
+    - If allowed_worker_ids is given (e.g. scope add form): returns workers whose id
+      is in that list, ordered by name. allow_local is independent (for scope add).
+    - If neither scope nor allowed_worker_ids: returns all active workers (no scope).
+
+    Deterministic order: order_by("name") for consistent UX.
+    """
+    if scope is not None:
+        return list(SecatorWorker.objects.active().filter(scopes=scope).order_by("name"))
+    if allowed_worker_ids is not None:
+        if not allowed_worker_ids:
+            return []
+        return list(SecatorWorker.objects.active().filter(id__in=allowed_worker_ids).order_by("name"))
+    return list(SecatorWorker.objects.active().order_by("name"))
+
+
+def get_effective_worker_display(
+    worker_id: int | str | None = None,
+    scope: Any | None = None,
+) -> dict[str, Any]:
+    """
+    Build the effective worker entry for the scan params effective display.
+
+    Priority: explicit worker_id (scan override) > scope default worker > "Local".
+    When no override is provided and scope is set, uses get_default_worker_for_scope(scope).
+    Returns {"value": str, "source": "scan"|"scope"|"default"}.
+    """
+    if worker_id is not None:
+        try:
+            wid = int(worker_id)
+            worker = SecatorWorker.objects.filter(id=wid).first()
+            if worker:
+                return {"value": worker.name, "source": "scan"}
+        except (TypeError, ValueError):
+            pass
+    if scope is not None:
+        default_id = get_default_worker_for_scope(scope)
+        if default_id is not None:
+            if worker := SecatorWorker.objects.filter(id=default_id).first():
+                return {"value": worker.name, "source": "scope"}
+        if not _scope_allow_local(scope):
+            options = get_allowed_workers_for_scope(scope)
+            if options and options[0][0] is not None:
+                if first_worker := SecatorWorker.objects.filter(id=options[0][0]).first():
+                    return {"value": first_worker.name, "source": "scope"}
+        return {"value": "Local", "source": "scope"}
+    return {"value": "Local", "source": "default"}
+
+
+def _resolve_extra_config(
+    override: dict[str, Any],
+    target_config: dict[str, Any],
+    scope_config: dict[str, Any],
+    org_config: dict[str, Any],
+) -> dict[str, Any]:
+    base: dict[str, Any] = {}
+
+    org_extra = org_config.get("extra_config")
+    if isinstance(org_extra, dict):
+        base |= org_extra
+
+    scope_extra = scope_config.get("extra_config")
+    if isinstance(scope_extra, dict):
+        base.update(scope_extra)
+
+    target_extra = target_config.get("extra_config")
+    if isinstance(target_extra, dict):
+        base.update(target_extra)
+
+    override_extra = override.get("extra_config")
+    if isinstance(override_extra, dict):
+        base.update(override_extra)
+
+    return base
+
+
+def apply_resolved_to_secator_config(
+    secator_config: dict[str, Any],
+    resolved: dict[str, Any],
+) -> None:
+    """
+    Merge resolved scan params into a Secator config in place.
+
+    Single place for merge strategy; add new param handling here to avoid
+    divergence between resolve_scan_params output and what gets merged.
+
+    Strategy:
+    - Scalar params (PARAM_KEYS): set only when current value is None or "".
+    - profiles: set only when resolved has profiles and config has none.
+    - extra_config: merged (resolved keys take precedence over existing keys).
+    - worker_ids are not written here; caller should put them on the kwargs root.
+    """
+    for key in PARAM_KEYS:
+        value = resolved.get(key)
+        if value is None:
+            continue
+        if key == "header" and isinstance(value, dict) and len(value) == 0:
+            continue
+        existing = secator_config.get(key)
+        if existing is None or existing == "":
+            secator_config[key] = value
+
+    if resolved.get("profiles") and not secator_config.get("profiles"):
+        secator_config["profiles"] = resolved["profiles"]
+
+    extra = resolved.get("extra_config")
+    if isinstance(extra, dict) and extra:
+        existing_extra = secator_config.get("extra_config")
+        if isinstance(existing_extra, dict):
+            secator_config["extra_config"] = {**existing_extra, **extra}
+        else:
+            secator_config["extra_config"] = extra
+
+
+def flatten_profile_opts_into_config(config: dict[str, Any]) -> None:
+    """
+    Merge profile opts into config in place so the dict reflects effective values.
+
+    Used when building a snapshot for ScanHistory.scan_config so the persisted
+    values match what Secator will use (config + profile opts applied). Call this
+    on a copy of the runner config, not the one passed to the runner.
+
+    For each profile name in config["profiles"] (list or category dict), loads
+    opts and sets config[key] = opts[key] for each PARAM_KEYS key present in opts.
+    Later profiles override earlier ones for overlapping keys.
+    """
+    profile_names = _profiles_to_list(config.get("profiles"))
+    if not profile_names:
+        return
+    for name in profile_names:
+        opts = _get_profile_opts(name)
+        if not opts:
+            continue
+        for key in PARAM_KEYS:
+            if key in opts and opts[key] is not None:
+                config[key] = opts[key]
+
+
+def _prefixed(key: str, prefix: str) -> str:
+    return f"{prefix}{key}"
+
+
+def parse_scan_config_from_post(
+    post: QueryDict,
+    profiles_dict: dict[str, str] | None = None,
+    existing_config: dict[str, Any] | None = None,
+    prefix: str = TARGET_OVERRIDE_PREFIX,
+) -> tuple[dict[str, Any], list[str]]:
+    """
+    Parse scan_config from a POST payload.
+
+    Behaviour for empty / missing values:
+    - Scalar fields (threads, rate_limit, etc.): missing POST key -> leave as-is
+      (when existing_config is provided); present but value == '' -> clear override
+      (key removed from result).
+    - header: missing POST key -> leave as-is; present but value == ''
+      -> remove key (result.pop("header")) so it is not persisted as {}.
+    - profiles: when profiles_dict is provided and non-empty, result["profiles"] = profiles_dict;
+      when empty (all categories empty), key is removed so it is not persisted.
+
+    Empty means "no override": all callers (target/scope/org form views) treat a missing
+    key as no override; none rely on {} to mean "explicitly clear".
+
+    On header parse error, existing value is left unchanged and an error
+    is appended. Returns the full config (result), not a delta.
+
+    Returns:
+        (config_dict, list of user-facing error messages)
+    """
+    result: dict[str, Any] = dict(_normalize_scan_config(existing_config)) if existing_config else {}
+    errors: list[str] = []
+
+    scalar_params = INT_PARAM_KEYS + STR_PARAM_KEYS + FLOAT_PARAM_KEYS + BOOL_PARAM_KEYS
+    for param in scalar_params:
+        key = _prefixed(param, prefix)
+        if key not in post:
+            continue
+        raw = (post.get(key) or "").strip()
+        if raw == "":
+            result.pop(param, None)
+            continue
+        val = cast_param_value(param, raw)
+        if val is not None:
+            result[param] = val
+
+    headers_key = _prefixed("header", prefix)
+    if headers_key in post:
+        raw_headers = (post.get(headers_key) or "").strip()
+        if raw_headers == "":
+            result.pop("header", None)
+        else:
+            parsed, err = parse_header_value(raw_headers)
+            if err:
+                errors.append(err)
+            elif parsed is not None and len(parsed) > 0:
+                result["header"] = parsed
+            else:
+                result.pop("header", None)
+
+    if profiles_dict is not None:
+        if _is_profiles_dict_empty(profiles_dict):
+            result.pop("profiles", None)
+        else:
+            result["profiles"] = profiles_dict
+
+    return result, errors
+
+
+def parse_target_scan_override_from_post(
+    post: QueryDict,
+    profiles_dict: dict[str, str] | None = None,
+    existing_override: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
+    """Backward-compatible alias for parse_scan_config_from_post with default prefix."""
+    return parse_scan_config_from_post(
+        post,
+        profiles_dict=profiles_dict,
+        existing_config=existing_override,
+        prefix=TARGET_OVERRIDE_PREFIX,
+    )

@@ -1,0 +1,50 @@
+#
+# General
+#
+COMPOSE_PROJECT_NAME=rengine
+
+#
+# SSL specific configuration
+#
+AUTHORITY_NAME=reNgine-ng
+AUTHORITY_PASSWORD=nSrmNkwT
+COMPANY=reNgine-ng
+DOMAIN_NAME=rengine-ng.example.com
+COUNTRY_CODE=US
+STATE=Georgia
+CITY=Atlanta
+
+#
+# Database configurations
+#  /!\ POSTGRES_USER & PG_USER must be the same user or Celery will fail to start
+#
+POSTGRES_DB=rengine
+POSTGRES_USER=rengine
+PGUSER=rengine
+POSTGRES_PASSWORD=hE2a5@K&9nEY1fzgA6X
+POSTGRES_PORT=5432
+POSTGRES_HOST=db
+
+#
+# Celery Scaling Configurations
+#
+MIN_CONCURRENCY=5
+MAX_CONCURRENCY=30
+
+#
+# This section is for non-interactive installations only
+#
+INSTALL_TYPE=prebuilt
+DJANGO_SUPERUSER_USERNAME=rengine
+DJANGO_SUPERUSER_EMAIL=rengine@example.com
+DJANGO_SUPERUSER_PASSWORD=Sm7IJG.IfHAFw9snSKv
+
+#
+# GPU Configuration for Ollama LLM
+#
+GPU=0
+GPU_TYPE=none
+DOCKER_RUNTIME=none
+
+# Ollama Configuration
+#OLLAMA_INSTANCE=http://ollama:11434

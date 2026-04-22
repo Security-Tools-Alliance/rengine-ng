@@ -1,0 +1,7 @@
+{% comment %}
+  Error state for the effective scan parameters preview block.
+  Context: error_message (string). Keeps #scan-params-effective-container for JS replacement.
+{% endcomment %}
+<div id="scan-params-effective-container" class="scan-params-effective-wrapper">
+  <p class="text-muted small mb-0">{{ error_message|escape }}</p>
+</div>

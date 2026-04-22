@@ -12,146 +12,106 @@ jobs:
     permissions:
       issues: write
       contents: read
+      pull-requests: read
     steps:
       - name: Extract and close all linked issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          # Debug information
           echo "=== Debug Information ==="
-          echo "PR Number: ${{ github.event.pull_request.number }}"
+          echo "PR Number: $PR_NUMBER"
           echo "Source Branch: ${{ github.event.pull_request.head.ref }}"
-          echo "Target Branch: ${{ github.event.pull_request.base.ref }}"
-          echo "Repository: ${{ github.repository }}"
-          echo "Repository Owner: ${{ github.repository_owner }}"
-          echo "Repository Name: ${{ github.event.repository.name }}"
+          echo "Target Branch: $BASE_REF"
+          echo "Repository: $REPO"
           echo "========================="
           
-          # Get linked issues using GitHub's GraphQL API
-          # This matches exactly what GitHub shows in "Successfully merging this pull request may close these issues"
+          # Create GraphQL query file to avoid shell escaping issues
+          cat > query.json << 'EOF'
+          {
+            "query": "query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { closingIssuesReferences(first: 100) { nodes { number } } } } }",
+            "variables": {
+              "owner": "$OWNER",
+              "repo": "$REPO_NAME",
+              "number": $PR_NUM
+            }
+          }
+          EOF
+          
+          # Replace variables in the query file
+          OWNER="${REPO%/*}"
+          REPO_NAME="${REPO#*/}"
+          sed -i "s/\$OWNER/$OWNER/g; s/\$REPO_NAME/$REPO_NAME/g; s/\$PR_NUM/$PR_NUMBER/g" query.json
           
           echo "Fetching GitHub-linked issues..."
           
-          # Check if jq is installed
-          if ! command -v jq >/dev/null 2>&1; then
-            echo "Error: jq is not installed. Please install jq to run this script."
-            exit 1
-          fi
-          
-          # Use GraphQL to get the exact same data GitHub shows in the UI
-          graphql_response=$(curl -s -X POST \
-            -H "Accept: application/vnd.github.v4+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -d '{
-              "query": "query($owner: String!, $repo: String!, $number: Int!) { 
-                repository(owner: $owner, name: $repo) { 
-                  pullRequest(number: $number) { 
-                    closingIssuesReferences(first: 100) { 
-                      nodes { 
-                        number 
-                      } 
-                    } 
-                  } 
-                } 
-              }",
-              "variables": {
-                "owner": "${{ github.repository_owner }}",
-                "repo": "${{ github.event.repository.name }}",
-                "number": ${{ github.event.pull_request.number }}
-              }
-            }' \
+          # Query GraphQL API
+          response=$(curl -s -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @query.json \
             https://api.github.com/graphql)
           
-          # Debug: Show the raw GraphQL response
-          echo "GraphQL Response: $graphql_response"
+          echo "GraphQL Response: $response"
           
-          # Check for GraphQL errors or malformed response
-          if ! echo "$graphql_response" | jq . >/dev/null 2>&1; then
-            echo "Error: Malformed JSON response from GitHub GraphQL API"
-            echo "$graphql_response"
-            exit 1
-          fi
-
-          if [ "$(echo "$graphql_response" | jq '.errors')" != "null" ]; then
-            echo "Error(s) returned from GitHub GraphQL API:"
-            echo "$graphql_response" | jq '.errors'
-            exit 1
-          fi
+          # Extract issue numbers from GraphQL closingIssuesReferences
+          issue_numbers=$(echo "$response" | jq -r '.data.repository.pullRequest.closingIssuesReferences.nodes[]?.number // empty' 2>/dev/null | sort -u)
           
-          # Extract issue numbers from GraphQL response, handling null closingIssuesReferences
-          issue_numbers=$(echo "$graphql_response" | jq -r '
-            if .data.repository.pullRequest.closingIssuesReferences then 
-              .data.repository.pullRequest.closingIssuesReferences.nodes[].number 
-            else 
-              empty 
-            end' | sort -u)
+          # Also parse PR body for manual issue references as fallback
+          echo "Fetching PR body for manual parsing..."
+          pr_body=$(gh pr view $PR_NUMBER --repo $REPO --json body -q .body)
+          echo "PR Body: $pr_body"
           
-          if [ -z "$issue_numbers" ]; then
-            echo "No linked issues found via GraphQL. Trying fallback method..."
-            
-            # Fallback: Check PR description for closing keywords
-            pr_body="${{ github.event.pull_request.body }}"
-            echo "PR Body: $pr_body"
-            
-            # Extract issue numbers from PR body using common closing keywords and multiple formats
-            fallback_issues=$(echo "$pr_body" | grep -ioE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[: ]+((#[0-9]+([, ]+)?)+)' | grep -oE '#[0-9]+' | sed 's/#//' | sort -u)
-            
-            if [ -n "$fallback_issues" ]; then
-              echo "Found issues via fallback method: $fallback_issues"
-              issue_numbers="$fallback_issues"
-            else
-              echo "No linked issues found that would be closed by GitHub's automatic linking or PR body keywords"
-              exit 0
-            fi
+          # Extract issue numbers from patterns like "fix #123", "fixes #123", "close #123", "closes #123", "resolve #123", "resolves #123"
+          manual_issues=$(echo "$pr_body" | grep -oiE '(fix(es)?|close(s)?|resolve(s)?)\s+#[0-9]+' | grep -oE '[0-9]+' | sort -u)
+          
+          # Combine both sources
+          all_issues=$(echo -e "$issue_numbers\n$manual_issues" | grep -v '^$' | sort -u)
+          
+          if [ -z "$all_issues" ]; then
+            echo "No linked issues found. This PR will not automatically close any issues."
+            exit 0
           fi
           
-          echo "Found GitHub-linked issues: $issue_numbers"
+          echo "Found linked issues: $(echo $all_issues | tr '\n' ' ')"
           
-          # Close each issue individually
-          for issue_number in $issue_numbers; do
-            if [ -n "$issue_number" ]; then
-              echo "Closing issue #$issue_number"
+          # Close each issue
+          for issue_number in $all_issues; do
+            echo "Closing issue #$issue_number..."
+            
+            # Close the issue
+            close_response=$(curl -s -w "\n%{http_code}" -X PATCH \
+              -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/$REPO/issues/$issue_number" \
+              -d '{"state":"closed"}')
+            
+            http_code=$(echo "$close_response" | tail -n1)
+            
+            if [ "$http_code" = "200" ]; then
+              echo "✅ Successfully closed issue #$issue_number"
               
-              # Close the issue using robust HTTP response handling
-              close_tmpfile=$(mktemp)
-              close_headers=$(mktemp)
-              curl -s -D "$close_headers" -o "$close_tmpfile" -X PATCH \
+              # Add explanatory comment
+              comment_response=$(curl -s -w "\n%{http_code}" -X POST \
+                -H "Authorization: token $GH_TOKEN" \
                 -H "Accept: application/vnd.github.v3+json" \
-                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${{ github.repository }}/issues/$issue_number" \
-                -d '{"state":"closed"}'
-
-              close_http_code=$(awk 'NR==1 {print $2}' "$close_headers")
-
-              if [ "$close_http_code" = "200" ]; then
-                echo "✅ Successfully closed issue #$issue_number"
-                
-                # Add a comment to explain why the issue was closed using robust HTTP response handling
-                comment_tmpfile=$(mktemp)
-                comment_headers=$(mktemp)
-                curl -s -D "$comment_headers" -o "$comment_tmpfile" -X POST \
-                  -H "Accept: application/vnd.github.v3+json" \
-                  -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  "https://api.github.com/repos/${{ github.repository }}/issues/$issue_number/comments" \
-                  -d "{\"body\":\"This issue is being closed because the related PR #${{ github.event.pull_request.number }} has been merged into a release branch (\`${{ github.event.pull_request.base.ref }}\`).\"}"
-
-                comment_http_code=$(awk 'NR==1 {print $2}' "$comment_headers")
-
-                if [ "$comment_http_code" = "201" ]; then
-                  echo "✅ Added comment to issue #$issue_number"
-                else
-                  echo "⚠️ Failed to add comment to issue #$issue_number (HTTP $comment_http_code)"
-                  echo "Comment response: $(cat "$comment_tmpfile")"
-                fi
-                
-                # Clean up comment temp files
-                rm -f "$comment_tmpfile" "$comment_headers"
-              else
-                echo "❌ Failed to close issue #$issue_number (HTTP $close_http_code)"
-                echo "Close response: $(cat "$close_tmpfile")"
-              fi
+                "https://api.github.com/repos/$REPO/issues/$issue_number/comments" \
+                -d "{\"body\":\"This issue was automatically closed because PR #$PR_NUMBER was merged into release branch \`$BASE_REF\`.\"}")
               
-              # Clean up close temp files
-              rm -f "$close_tmpfile" "$close_headers"
+              comment_http_code=$(echo "$comment_response" | tail -n1)
+              
+              if [ "$comment_http_code" = "201" ]; then
+                echo "✅ Added comment to issue #$issue_number"
+              else
+                echo "⚠️ Failed to add comment to issue #$issue_number (HTTP $comment_http_code)"
+              fi
+            else
+              echo "❌ Failed to close issue #$issue_number (HTTP $http_code)"
+              echo "$close_response" | head -n-1
             fi
           done
+          
+          # Cleanup
+          rm -f query.json

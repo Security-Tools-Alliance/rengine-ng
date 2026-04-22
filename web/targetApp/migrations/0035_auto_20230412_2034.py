@@ -4,22 +4,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0034_auto_20230412_2017'),
+        ("targetApp", "0034_auto_20230412_2017"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='associateddomain',
-            name='created_on',
-            field=models.CharField(default='', max_length=100),
+            model_name="associateddomain",
+            name="created_on",
+            field=models.CharField(default="", max_length=100),
             preserve_default=False,
         ),
         migrations.AlterField(
-            model_name='associateddomain',
-            name='name',
-            field=models.CharField(default='', max_length=250),
+            model_name="associateddomain",
+            name="name",
+            field=models.CharField(default="", max_length=250),
             preserve_default=False,
         ),
     ]

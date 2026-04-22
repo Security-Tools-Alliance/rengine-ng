@@ -1,0 +1,79 @@
+---
+description: Core coding standards for reNgine-ng (Python/Django, JS, PostgreSQL) and high-level project guidelines.
+alwaysApply: true
+---
+
+You are an expert in Python/Django/JS/PostgreSQL development.
+You consistently deliver high-quality, non-duplicated code that strictly follows KISS, DRY and SOLID principles.
+
+The general mantras this project aims to follow are:
+
+- Do what is right
+- Security by design
+- Security by default
+- Doing the right thing should be easy
+- Batteries included – it just works
+- No-nonsense bingo – no time to waste
+- Better explicit than magical
+
+The project requires particular attention to:
+
+- Following existing patterns: study similar code in the project before proposing changes
+- Including type hints: all new code must have appropriate type annotations
+- Writing tests: every code change must include the corresponding tests
+
+All code and comments must be written in English.
+Do not add comments that describe the refactor itself (for example: “DRY principle”, “legacy function...”); only add comments that explain what the code does, and only when it is really necessary (not to narrate the change).
+
+The project must remain modular and respect these principles to avoid circular dependencies:
+    - Leaf modules (like `logger.py`, `db.py`, or `utils.py`) sit at the bottom.
+    - Core business logic (like services and repositories) sits in the middle.
+    - Orchestration layers (like `main.py`, entrypoint modules, or CLI files) sit at the top.
+
+Follow PEP8, and refer to the `pyproject.toml` file under `docker/web` for the exact Ruff rules to apply.
+
+## Mandatory implementation pre-flight
+
+Before writing code, perform this verification sequence:
+
+1. Locate existing shared abstractions/helpers for the target area and reuse them first.
+2. Avoid local duplication in templates/modules when a central helper already exists.
+3. For **tabbed entity UI** shared between **scan detail** (`startScan/detail_scan.html`) and **target summary** (`targetApp/target/summary.html`), put the tab body in `web/templates/base/_items/<feature>_tab_content.html` and include it from both pages (e.g. flags `detail_scan` / `target_summary`). Check existing partials before adding large HTML blocks to either page.
+4. For frontend DataTables changes, enforce central action rendering and URL wiring through shared datatable helpers; use lazy tab init where appropriate, define columns in `column_definitions.js` (`window.RENGINE_*_DATATABLE_COLUMNS`), and keep `DATATABLE_COLUMN_MAP_*` in `column_maps.py` aligned with the **column order** in that array. Reuse **`web/templates/base/_items/_datatable_advanced_search_block.html`** for the advanced-search bar (do not duplicate that markup); align `data-advanced-search` with `advanced_search_profiles.js` and `api/helpers/advanced_search.py` (see `rengine-ng-frontend.mdc`).
+5. **Backend IP / XOR / LLM attack surface**:
+   - For “IP in scan” checks use `reNgine.services.scan_finding_metrics` (and `reNgine.utilities.scan_lookups` wrappers), not ad-hoc `IpAddress` filters. `IpAddress` may carry an optional `scan_history` FK (`related_name="ip_rows"`); membership and metrics must stay consistent with existing M2M / endpoint links—reuse shared helpers instead of one-off filters.
+   - For mutually exclusive `subdomain_id` / `ip_address_id` (and list forms) use `api.helpers.subdomain_ip_xor` and `api.helpers.secator_scan_target_request`. For LLM endpoints that accept exactly one aggregate entity (`subdomain_id`, `ip_address_id`, `target_id`, `scope_id`, `organization_id`), use the same module’s `xor_attack_surface_entity_ids_error`, `attack_surface_entity_query_params_invalid_error`, and `resolve_attack_surface_entity_kind_and_pk`.
+   - Resolve entities for LLM attack-surface APIs only through `api.helpers.llm_attack_surface_access` (project membership; superusers bypass). Build large aggregate context for target/scope/organization in `reNgine.llm.attack_surface_context` (caps and truncation notices are defined there).
+   - Keep Python `ATTACK_SURFACE_KIND_*` in `api/helpers/subdomain_ip_xor.py` aligned with `RENGINE_ATTACK_SURFACE_ENTITY_*` in `web/static/custom/target_entity_kind.js`, and `RengineTargetEntityKind.datatableTargetAttackSurfaceUrlKey` with the `attackSurface` key from `get_datatable_action_urls()` in `api/helpers/datatables/actions.py`.
+6. Update or add tests that protect the new/changed shared contract.
+
+For Python/Django code quality and backend architecture, see the rule `rengine-ng-python-backend.mdc`.
+
+For JavaScript code quality, Datatables and the UI, see the rule `rengine-ng-frontend.mdc`.
+
+
+API calls from the web interface cannot be replayed directly with `curl` because a CSRF token is required.
+Use the User API key instead; for your tests you can use this API key:
+StkhUn8u.eabOMNVe9f9LqPShKDJjFXbILzR9wV0M
+
+To verify formatting and style, run Ruff with:
+- `make ruff-format` to format
+- `make ruff-fix` to apply autofixable lints
+There is no need to write extra markdown documentation once tasks are completed.
+
+## Scan config architecture
+
+Organization, Scope, Target, and ScanHistory each carry a `scan_config` JSONField with the same schema (profiles, threads, rate_limit, timeout, retries, delay, proxy, user_agent, request_headers, follow_redirect, depth, extra_config).
+
+- **Resolution hierarchy**: Organization → Scope → Target → Scan (user override). Only keys present in a lower-level `scan_config` act as overrides; missing keys inherit from the level above.
+- **Backend service**: `resolve_scan_params(target, scope, organization, user_override)` in `web/targetApp/services/scope_params.py` computes the effective config. `build_effective_params_display(scope, target, organization)` provides annotated display data for the UI.
+- **Shared UI**: All four forms (org, scope, target, scan) include `web/templates/shared/_scan_params_block.html` and load `web/static/custom/scan_params.js` (non-scan pages) or `secator_scan_core.js` (scan page). See `rengine-ng-frontend.mdc` for template details.
+- **POST parsing**: `parse_scan_config_from_post(post, prefix, profiles_dict, existing_config)` in `scope_params.py` converts form data into the JSON structure.
+
+For testing conventions (BaseTestCase, TestDataGenerator, positive/negative and security-related tests, centralised invalid data, anonymisation, determinism) and `make test` commands, see the rule `rengine-ng-tests.mdc`.
+
+For Secator usage (workflows, scans, tasks, documentation), see the rule `rengine-ng-secator.mdc` and the skill `rengine-ng-context`.
+
+Do not perform radical changes without explicit discussion.
+Do not add new dependencies without maintainer approval.
+Do not modify the CI/CD configuration without understanding the entire pipeline.

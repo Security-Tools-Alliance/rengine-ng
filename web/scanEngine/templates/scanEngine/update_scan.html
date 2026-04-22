@@ -1,0 +1,67 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}Update Scan{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
+<link rel="stylesheet" type="text/css" href="{% static 'plugins/switches/switches.min.css' %}">
+{{ form.media }}
+
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-edit"></i> Update Scan: {{ scan.name }}
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'scans' current_project.slug %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Scans
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <form method="post" id="scanForm">
+                        {% csrf_token %}
+                        {% include "scanEngine/_items/form_scan.html" %}
+                        
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {{ form.non_field_errors }}
+                            </div>
+                        {% endif %}
+                        
+                        <div class="form-group mt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Update Scan
+                            </button>
+                            <a href="{% url 'scans' current_project.slug %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Back to Scans
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_level_script %}
+<script type="text/javascript">
+$(document).ready(function() {
+    // Assign unique IDs to ACE editor container elements
+    $('.ace_editor').each(function(index) {
+        const uniqueId = 'ace-editor-container-' + Date.now() + '-' + index;
+        $(this).attr('id', uniqueId);
+    });
+});
+</script>
+{% endblock %}

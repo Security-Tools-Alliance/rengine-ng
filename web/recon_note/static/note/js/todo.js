@@ -54,8 +54,8 @@ const addTaskBtnListener = function(project) {
 
     $('.add-tsk').show();
     $('.edit-tsk').hide();
-    $('#addTaskModal').modal('show');
-    const ps = new PerfectScrollbar('.todo-box-scroll', {
+    if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_TASK);
+    new PerfectScrollbar('.todo-box-scroll', {
       suppressScrollX: true
     });
 
@@ -141,7 +141,7 @@ const addTaskPopupListener = function(project) {
         const $newTodo = $('<div class="todo-item all-list"></div>').append(todoHTML);
 
         $("#ct").prepend($newTodo);
-        $('#addTaskModal').modal('hide');
+        if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.ADD_TASK);
         checkBtnListener();
         todoItemListener();
         importantBtnListener();
@@ -204,6 +204,15 @@ const dynamicBadgeNotification = function(setTodoCategoryCount) {
   }
 }
 
+const getRequiredReconNoteUrl = function(key) {
+  const urls = window.RENGINE_PAGE_URLS || {};
+  const value = urls[key];
+  if (!value) {
+    throw new Error('Missing required page URL: ' + key);
+  }
+  return value;
+}
+
 const deleteBtnListener = function() {
   $('.actions-btn .delete-btn').click(async function() {
     const id = this.id.split('_')[1];
@@ -217,7 +226,14 @@ const deleteBtnListener = function() {
       padding: '2em',
       showLoaderOnConfirm: true,
       preConfirm: async function() {
-        const response = await fetch('/recon_note/delete_note', {
+        let deleteUrl;
+        try {
+          deleteUrl = getRequiredReconNoteUrl('reconNoteDelete');
+        } catch (error) {
+          swal('Configuration error', error.message, 'error');
+          return;
+        }
+        const response = await fetch(deleteUrl, {
           method: 'POST',
           credentials: "same-origin",
           headers: {
@@ -262,21 +278,26 @@ const checkBtnListener = function() {
     todoItem.toggleClass('todo-task-done'); // Toggle the done class
 
     new dynamicBadgeNotification('completedList');
-    await fetch('/recon_note/flip_todo_status', {
-      method: 'post',
-      headers: {
-        "X-CSRFToken": getCookie("csrftoken")
-      },
-      body: JSON.stringify({
-        'id': parseInt(this.id.split('_')[1]),
-      })
-    }).then(res => res.json());
+    try {
+      const flipTodoUrl = getRequiredReconNoteUrl('reconNoteFlipTodo');
+      await fetch(flipTodoUrl, {
+        method: 'post',
+        headers: {
+          "X-CSRFToken": getCookie("csrftoken")
+        },
+        body: JSON.stringify({
+          'id': parseInt(this.id.split('_')[1]),
+        })
+      }).then(res => res.json());
+    } catch (error) {
+      swal('Configuration error', error.message, 'error');
+    }
   });
 }
 
 const importantBtnListener = function() {
   $('.actions-btn .important-btn').click(async function() {
-    badge_id = this.id.split('_')[1];
+    const badge_id = this.id.split('_')[1];
     if(!$(this).parents('.todo-item').hasClass('todo-task-important')){
       $(this).parents('.todo-item').addClass('todo-task-important');
 
@@ -285,7 +306,7 @@ const importantBtnListener = function() {
       is_important_badge.classList.add("custom-dropdown-icon");
       is_important_badge.id = 'important-badge-' + this.id.split('_')[1];
 
-      badge = `
+      const badge = `
           <div class="dropdown p-dropdown">
             <span class="text-danger bs-tooltip" title="Important to-do">
               <i class="fa fa-exclamation-circle"></i>
@@ -301,15 +322,20 @@ const importantBtnListener = function() {
       $("#important-badge-"+badge_id).remove();
     }
     new dynamicBadgeNotification('importantList');
-    await fetch('/recon_note/flip_important_status', {
-      method: 'post',
-      headers: {
-        "X-CSRFToken": getCookie("csrftoken")
-      },
-      body: JSON.stringify({
-        'id': parseInt(this.id.split('_')[1]),
-      })
-    }).then(res => res.json());
+    try {
+      const flipImportantUrl = getRequiredReconNoteUrl('reconNoteFlipImportant');
+      await fetch(flipImportantUrl, {
+        method: 'post',
+        headers: {
+          "X-CSRFToken": getCookie("csrftoken")
+        },
+        body: JSON.stringify({
+          'id': parseInt(this.id.split('_')[1]),
+        })
+      }).then(res => res.json());
+    } catch (error) {
+      swal('Configuration error', error.message, 'error');
+    }
   });
 }
 
@@ -321,17 +347,21 @@ const todoItemListener = function() {
     const $todoDescription = $(this).find('.todo-text').text();
 
     $('.task-heading').text($_taskTitle);
-    $('.task-text').html(`<span class="text-success">${$_taskTarget}</span><br>` + htmlEncode($todoDescription));
+    $('.task-text').html(`<span class="text-success">${htmlEncode($_taskTarget)}</span><br>` + htmlEncode($todoDescription));
 
-    $('#todoShowListItem').modal('show');
+    if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.TODO_SHOW_LIST_ITEM);
   });
 }
 
 const populateScanHistory = function(project) {
   scan_history_select = document.getElementById('scanHistoryIDropdown');
-  $.getJSON(`/api/listScanHistory/?format=json&project=${project}`, function(data) {
-    for (var history in data){
-      history_object = data[history];
+  const baseUrl = (typeof window.RENGINE_API_LIST_SCAN_HISTORY_URL !== 'undefined' && window.RENGINE_API_LIST_SCAN_HISTORY_URL)
+    ? window.RENGINE_API_LIST_SCAN_HISTORY_URL
+    : '/api/listScanHistory/';
+  const url = baseUrl + '?format=json&project=' + encodeURIComponent(project || '');
+  $.getJSON(url, function(data) {
+    for (let history in data){
+      const history_object = data[history];
       const option = document.createElement('option');
       option.value = history_object['id'];
       option.innerHTML = history_object['domain']['name'] + ' - Scanned ' + moment.utc(history_object['start_scan_date']).fromNow();

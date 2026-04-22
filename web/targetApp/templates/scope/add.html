@@ -1,0 +1,47 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}
+Add Scope
+{% endblock title %}
+
+{% block custom_js_css_link %}
+{# Select2: same asset path and init pattern as organization add/update (data-toggle="select2"). #}
+<link rel="stylesheet" type="text/css" href="{% static 'plugins/select2/select2.min.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
+{% endblock custom_js_css_link %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'list_scope' current_project.slug %}">Scopes</a></li>
+<li class="breadcrumb-item active">Add Scope</li>
+{% endblock breadcrumb_title %}
+
+{% block page_title %}
+Add Scope
+{% endblock page_title %}
+
+{% block main_content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <p>A scope groups targets under an organization with shared scan parameters. Define a bug bounty program, an engagement, or any other scope.</p>
+        <form method="POST" id="scan-params-form" data-scope-worker-sync>
+          {% csrf_token %}
+          {% include "scope/_form.html" %}
+          <button class="btn btn-primary mt-3 float-end" type="submit">Add Scope</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock main_content %}
+
+{% block page_level_script %}
+<script src="{% static 'plugins/select2/select2.min.js' %}"></script>
+<script>
+$(document).ready(function(){
+  $('[data-toggle="select2"]').select2({closeOnSelect: false});
+});
+</script>
+{% endblock page_level_script %}

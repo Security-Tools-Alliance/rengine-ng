@@ -14,7 +14,11 @@ Detailed Scan
 <link rel="stylesheet" type="text/css" href="{% static 'plugins/gridzy/skins/gridzySkinBlank/style.css' %}">
 <link rel="stylesheet" type="text/css" href="{% static 'plugins/j-map/jquery-jvectormap.css' %}">
 <link href="{% static 'plugins/lightbox/css/lightbox.css' %}" rel="stylesheet" />
+<link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
 <script src="{% static 'plugins/gridzy/gridzy.js' %}"></script>
+<script>
+(function(){ if (window.Gridzy && Gridzy._defaultOptions) { Gridzy._defaultOptions.autoInitOnDomMutation = false; } })();
+</script>
 <script src="https://d3js.org/d3.v3.min.js"></script>
 <script src="https://cdn.rawgit.com/eligrey/canvas-toBlob.js/f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
 <script src="https://cdn.rawgit.com/eligrey/FileSaver.js/e9d941381475b5df8b7d7691013401e171014e89/FileSaver.min.js"></script>
@@ -24,7 +28,7 @@ Detailed Scan
 {% block breadcrumb_title %}
 <li class="breadcrumb-item"><a href="{% url 'scan_history' current_project.slug %}">Scan History</a></li>
 <li class="breadcrumb-item active">Summary</li>
-<li class="breadcrumb-item active" aria-current="page">{{history.domain.name}}</li>
+<li class="breadcrumb-item active" aria-current="page">{{ scan_display_name }}</li>
 {% endblock breadcrumb_title %}
 
 {% block page_title %}
@@ -32,31 +36,44 @@ Scan Findings
 {% endblock page_title %}
 
 {% block main_content %}
-<span aria-current="page" style="display: none">{{history.domain.name}}</span>
+{{ rengine_target_types|json_script:"rengine-target-types" }}
+<script>
+(function() {
+  const el = document.getElementById('rengine-target-types');
+  window.RENGINE_TARGET_TYPES = el ? JSON.parse(el.textContent) : {};
+})();
+</script>
+<span aria-current="page" style="display: none">{{ scan_display_name }}</span>
 <div class="row">
 	<div class="col-12">
 		<div class="card">
 			<ul class="nav nav-tabs nav-bordered m-1">
 				<li class="nav-item">
-					<a class="nav-link active" id="pills-summary-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#summary-tab">Home</a>
+					<a class="nav-link active" id="pills-summary-tab" data-bs-toggle="tab" aria-expanded="false" href="#summary-tab">Home</a>
 				</li>
 				<li class="nav-item">
-					<a class="nav-link" id="pills-subdomain-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#subdomain-tab">Subdomains</a>
+					<a class="nav-link" id="pills-domain-tab" data-bs-toggle="tab" aria-expanded="false" href="#domain-tab">Domains</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" id="pills-subdomain-tab" data-bs-toggle="tab" aria-expanded="false" href="#subdomain-tab">Subdomains</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" id="pills-ip-tab" data-bs-toggle="tab" aria-expanded="false" href="#ip-tab">IP Addresses</a>
 				</li>
 				{% if history.buckets.all %}
 				<li class="nav-item">
-					<a class="nav-link" id="pills-buckets-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#buckets-tab">S3 Buckets</a>
+					<a class="nav-link" id="pills-buckets-tab" data-bs-toggle="tab" aria-expanded="false" href="#buckets-tab">S3 Buckets</a>
 				</li>
 				{% endif %}
-				<li class="nav-item interesting-tab-show" style="display: none">
-					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#interesting-tab">Interesting Recon</a>
+				<li class="nav-item interesting-tab-show">
+					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" href="#interesting-tab">Interesting Recon</a>
 				</li>
 				<li class="nav-item recon-changes-tab-show" style="display: none">
-					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#recon-changes-tab">Recon Data Changes</a>
+					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" href="#recon-changes-tab">Recon Data Changes</a>
 				</li>
-				{% if 'screenshot' in history.tasks %}
+				{% if has_screenshots %}
 				<li class="nav-item">
-					<a class="nav-link" id="pills-screenshot-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#screenshot-tab">Screenshots</a>
+					<a class="nav-link" id="pills-screenshot-tab" data-bs-toggle="tab" aria-expanded="false" href="#screenshot-tab">Screenshots</a>
 				</li>
 				{% endif %}
 				{% if 'dir_file_fuzz' in history.tasks %}
@@ -64,31 +81,31 @@ Scan Findings
 					<a class="nav-link" id="pills-directories-tab" data-bs-toggle="tab" aria-expanded="false" href="#directories-tab">Directories</a>
 				</li>
 				{% endif %}
-				<li class="nav-item dropdown">
-					<a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">URLs&nbsp;<i class="fe-chevron-down"></i></a>
-					<ul class="dropdown-menu" style="width: 240px;">
-						<li><a class="dropdown-item" id="pills-endpoints-tab" href="#endpoints-tab" data-bs-toggle="tab" aria-expanded="false">All Endpoints</a></li>
-						{% if 'fetch_url' in history.tasks and history.used_gf_patterns %}
-						{% for key,value in matched_gf_count.items %}
-							{% if value > 0 %}
-							<li><a class="dropdown-item" id="pills-{{key}}-tab" href="#endpoints-tab" data-bs-toggle="tab" aria-expanded="false">{{key|upper}}<span class="badge-soft-danger float-end ms-1 ps-1 pe-1">{{value}}</span></a></li>
-							{% endif %}
-						{% endfor %}
-						{% endif %}
-					</ul>
+				<li class="nav-item">
+					<a class="nav-link" id="pills-endpoints-tab" data-bs-toggle="tab" aria-expanded="false" href="#endpoints-tab">URLs</a>
 				</li>
+				{% if history.get_exploit_count %}
+				<li class="nav-item">
+					<a class="nav-link" id="pills-exploits-tab" data-bs-toggle="tab" aria-expanded="false" href="#exploits-tab">Exploits</a>
+				</li>
+				{% endif %}
 				{% if total_vulnerability_count > 0 %}
 				<li class="nav-item">
-					<a class="nav-link" id="pills-vulnerabilities-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#vulnerabilities-tab">Vulnerabilities</a>
+					<a class="nav-link" id="pills-vulnerabilities-tab" data-bs-toggle="tab" aria-expanded="false" href="#vulnerabilities-tab">Vulnerabilities</a>
+				</li>
+				{% endif %}
+				{% if total_secret_count > 0 %}
+				<li class="nav-item">
+					<a class="nav-link" id="pills-secrets-tab" data-bs-toggle="tab" aria-expanded="false" href="#secrets-tab">Secret</a>
 				</li>
 				{% endif %}
 				{% if 'osint' in history.tasks %}
 				<li class="nav-item">
-					<a class="nav-link" id="pills-osint-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#osint-tab">OSINT</a>
+					<a class="nav-link" id="pills-osint-tab" data-bs-toggle="tab" aria-expanded="false" href="#osint-tab">OSINT</a>
 				</li>
 				{% endif %}
 				<li class="nav-item">
-					<a class="nav-link" id="pills-visualisation-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#visualisation-tab">Visualization</a>
+					<a class="nav-link" id="pills-visualisation-tab" data-bs-toggle="tab" aria-expanded="false" href="#visualisation-tab">Visualization</a>
 				</li>
 			</ul>
 		</div>
@@ -102,11 +119,14 @@ Scan Findings
 				<div class="card">
 					<div class="card-body">
 						<div class="d-flex align-items-start mb-3">
-							<div class="w-100">
+							<div class="w-100" data-scan-id="{{history.id}}">
 								<h5 class="mt-0 mb-0 font-15">
-									Scan Status for <span class="badge badge-soft-primary">{{history.domain.name}}</span>
+									Scan Status for <span class="badge badge-soft-primary">{{ scan_display_name }}</span>
+									{% if not history.is_legacy_scan %}
+									<span class="badge badge-soft-info ms-2">Secator</span>
+									{% endif %}
 								</h5>
-								<p class="mt-1 mb-0 text-muted font-14">
+								<p class="mt-1 mb-0 text-muted font-14 scan-status-badge">
 									{% if history.scan_status == -1 %}
 									<span class="mdi mdi-circle text-warning"></span>
 									<span class="badge badge-soft-warning">Pending</span>
@@ -114,10 +134,10 @@ Scan Findings
 									<span class="mdi mdi-circle text-danger"></span>
 									<span class="badge badge-soft-danger">Failed</span>
 									{% elif history.scan_status == 1 %}
-									<span class="mdi mdi-circle text-warning"></span>
-									<span class="badge badge-soft-warning">In Progress</span>
+									<span class="mdi mdi-circle text-info"></span>
+									<span class="badge badge-soft-info">In Progress</span>
 									{% if history.get_current_task %}
-									<br><small class="text-muted font-weight-bold">{{ history.get_current_task }}</small>
+									<br><small class="text-muted font-weight-bold scan-current-task">{{ history.get_current_task }}</small>
 									{% endif %}
 									{% elif history.scan_status == 2 %}
 									<span class="mdi mdi-circle text-success"></span>
@@ -129,7 +149,7 @@ Scan Findings
 									<span class="mdi mdi-circle text-info"></span>
 									<span class="badge badge-soft-info">Finalizing</span>
 									{% if history.get_current_task %}
-									<br><small class="text-muted font-weight-bold">{{ history.get_current_task }}</small>
+									<br><small class="text-muted font-weight-bold scan-current-task">{{ history.get_current_task }}</small>
 									{% endif %}
 									{% else %}
 									<span class="mdi mdi-circle text-danger"></span>
@@ -142,11 +162,11 @@ Scan Findings
 									<i class="fe-more-vertical"></i>
 								</a>
 								<div class="dropdown-menu" style="">
-									<a class="dropdown-item" href="javascript:download_subdomains({{scan_history_id}}, '{{history.domain.name}}')">Download All Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_endpoints({{scan_history_id}}, '{{history.domain.name}}')">Download All Endpoints</a>
-									<a class="dropdown-item" href="javascript:download_important_subdomains({{scan_history_id}}, '{{history.domain.name}}');">Download Important Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_interesting_subdomains({{scan_history_id}}, '{{history.domain.name}}');">Download Interesting Subdomains</a>
-									<a class="dropdown-item" href="javascript:download_interesting_endpoints({{scan_history_id}}, '{{history.domain.name}}');">Download Interesting Endpoints</a>
+									<a class="dropdown-item" href="javascript:download_subdomains({{scan_history_id}}, '{{ scan_display_name|escapejs }}')">Download All Subdomains</a>
+									<a class="dropdown-item" href="javascript:download_endpoints({{scan_history_id}}, '{{ scan_display_name|escapejs }}')">Download All Endpoints</a>
+									<a class="dropdown-item" href="javascript:download_important_subdomains({{scan_history_id}}, '{{ scan_display_name|escapejs }}');">Download Important Subdomains</a>
+									<a class="dropdown-item" href="javascript:download_interesting_subdomains({{scan_history_id}}, '{{ scan_display_name|escapejs }}');">Download Interesting Subdomains</a>
+									<a class="dropdown-item" href="javascript:download_interesting_endpoints({{scan_history_id}}, '{{ scan_display_name|escapejs }}');">Download Interesting Endpoints</a>
 								</div>
 							</div>
 						</div>
@@ -155,11 +175,43 @@ Scan Findings
 							<p class="text-danger">Scan failed due to ERROR: {{history.error_message}}</p>
 						{% endif %}
 						{% endif %}
-						<h6 class="font-13 text-muted text-uppercase">Scan Logs</h6>
-						<span><a href="javascript:get_logs_modal({{history.id}})"><i class="fe-file"></i> Logs</a></span>
-						<h6 class="font-13 text-muted text-uppercase">Scan Engine</h6>
-						<span class="badge badge-soft-primary">{{history.scan_type.engine_name}}</span>
-						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Duration </h6>
+						
+						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Name</h6>
+						<span class="badge badge-soft-primary" id="scan-name-display">{{ history.display_runner_type }}: {{ history.display_scan_name }}</span>
+
+						<h6 class="font-13 text-muted text-uppercase mt-3">Worker</h6>
+						<span class="badge badge-soft-secondary">{{ history.secator_worker_name|default:"Local" }}</span>
+
+						{% if scan_config_display %}
+						<h6 class="font-13 text-muted text-uppercase mt-3 mb-1">Scan config</h6>
+						<p class="mb-0">
+							<a class="text-primary text-decoration-none small" data-bs-toggle="collapse" href="#scan-config-collapse" aria-expanded="false" aria-controls="scan-config-collapse">
+								<i class="fe-chevron-down me-1"></i>Show scan parameters
+							</a>
+						</p>
+						<div class="collapse mt-1" id="scan-config-collapse">
+							<div class="small border rounded p-2 bg-light">
+								{% for key, value in scan_config_display.items %}
+								<div class="d-flex flex-wrap gap-1 mb-1">
+									<span class="text-muted fw-medium">{{ key }}:</span>
+									{% if value is None or value == "" %}
+									<span class="text-muted">—</span>
+									{% elif key == "profiles" and value %}
+									{% for p in value %}{% if not forloop.first %}, {% endif %}<span class="badge badge-soft-info">{{ p|escape }}</span>{% endfor %}
+									{% elif key == "header" or key == "extra_config" %}
+									<pre class="mb-0 small text-break">{{ value|escape }}</pre>
+									{% elif key == "follow_redirect" %}
+									<span>{{ value|yesno:"Yes,No" }}</span>
+									{% else %}
+									<span>{{ value|escape }}</span>
+									{% endif %}
+								</div>
+								{% endfor %}
+							</div>
+						</div>
+						{% endif %}
+
+						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Duration</h6>
 						{% if history.scan_status == -1 %}
 						<p class="mt-1 mb-0 text-warning font-14"><small class="text-center text-muted">Scan not yet started.</small></p>
 						{% elif history.scan_status == 0 %}
@@ -178,65 +230,109 @@ Scan Findings
 						<span class="mt-1 mb-0 text-info font-14">Finalizing - {{ history.get_elapsed_time }}</span>
 						{% endif %}
 
-
-						<h3 class="font-13 text-muted text-uppercase mb-2">Scan Progress</h3>
+						<h3 class="font-13 text-muted text-uppercase mt-3 mb-2">Scan Progress</h3>
 						<div class="progress mb-2 progress-md">
 							{% if history.scan_status == -1 %}
-							<div class="progress-bar bg-warning" role="progressbar" style="width: 10%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-warning scan-progress-bar" role="progressbar" style="width: 10%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="10">
 							</div>
 							{% elif history.scan_status == 0 %}
-							<div class="progress-bar bg-danger" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-danger scan-progress-bar" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ history.get_progress }}">
 							</div>
 							{% elif history.scan_status == 1 %}
-							<div class="progress-bar bg-primary progress-bar-striped progress-bar-animated" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-primary progress-bar-striped progress-bar-animated scan-progress-bar" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ history.get_progress }}">
 							</div>
 							{% elif history.scan_status == 2 %}
-							<div class="progress-bar bg-success" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-success scan-progress-bar" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
 							</div>
 							{% elif history.scan_status == 3 %}
-							<div class="progress-bar bg-danger" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-danger scan-progress-bar" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ history.get_progress }}">
 							</div>
 							{% elif history.scan_status == 4 %}
-							<div class="progress-bar bg-info progress-bar-striped progress-bar-animated" role="progressbar" style="width: 90%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-info progress-bar-striped progress-bar-animated scan-progress-bar" role="progressbar" style="width: 90%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="90">
 							</div>
 							{% else %}
 							<div class="progress">
-								<div class="progress-bar bg-danger" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100">
+								<div class="progress-bar bg-danger scan-progress-bar" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
 								</div>
 							</div>
 							{% endif %}
 						</div>
 
-						{% if  history.domain.get_organization %}
-						<h3 class="font-13 text-muted text-uppercase mb-2">Tagged to Organization</h3>
-						{% for organization in history.domain.get_organization %}
-						<span class="badge badge-soft-dark m-1" data-toggle="tooltip" data-placement="top" title="Domain {{domain.name}} belongs to organization {{organization.name}}">{{ organization.name }}</span>
+						{% if history.target.get_organization %}
+						<h3 class="font-13 text-muted text-uppercase mt-3 mb-2">Tagged to Organization</h3>
+						{% for organization in history.target.get_organization %}
+						<span class="badge badge-soft-dark m-1" data-toggle="tooltip" data-placement="top" title="Target belongs to organization {{ organization.name }}">{{ organization.name }}</span>
 						{% endfor %}
 						{% endif %}
 
+						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Logs</h6>
+						<span><a href="#" class="js-logs-modal-link" data-scan-id="{{ history.id }}" data-activity-id="" data-runner-id=""><i class="fe-file"></i> Logs</a></span>
+
+						{% if history.scan_status == 1 %}
+						<div class="mt-3 mb-2">
+							<a href="#" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id={{history.id}}, subscan_id=null, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-sm btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop Scan</a>
+						</div>
+						{% endif %}
+
 						<h6 class="font-13 text-muted text-uppercase mt-4 mb-2">Scan Timeline</h6>
-						<div data-simplebar style="max-height: 410px;" class="p-2">
+						<div data-simplebar style="max-height: 800px;" class="p-2 scan-timeline" data-scan-id="{{history.id}}">
 							<div class="track-order-list">
 								<ul class="list-unstyled">
-									{% for activity in scan_activity %}
-									<li class="completed">
-										<h5 class="mt-0 mb-1">{{activity.title}}
-											<span class="float-end badge {% if activity.status == 0 %}badge-soft-danger {% elif activity.status == 1 %}badge-soft-warning{% elif activity.status == 2 %}badge-soft-success{% endif %}">
-												{% if activity.status == 0 %}Failed
-												{% elif activity.status == 1 %}In progress<span class="active-dot dot"></span>
-												{% elif activity.status == 2 %}Completed
+									{% if history.is_legacy_scan %}
+										{% for activity in scan_activity %}
+										<li class="{% if activity.status == 2 %}completed{% elif activity.status == 1 %}running{% elif activity.status == 0 %}failed{% else %}pending{% endif %}">
+											<h5 class="mt-0 mb-1">{{activity.title}}
+												<span class="float-end mt-1 badge {% if activity.status == 0 %}badge-soft-danger {% elif activity.status == 1 %}badge-soft-info{% elif activity.status == 2 %}badge-soft-success{% endif %}">
+													{% if activity.status == 0 %}Failed
+													{% elif activity.status == 1 %}In progress<span class="active-dot dot"></span>
+													{% elif activity.status == 2 %}Completed
+													{% endif %}
+												</span>
+											</h5>
+											<p class="text-muted">{{activity.time|naturaltime}}<br><small class="text-muted">{{activity.time}}</small> </p>
+											{% if activity.status == 0 %}
+												{% if activity.error_message %}
+													<p class="badge badge-soft-danger">Error: {{activity.error_message}}</p>
 												{% endif %}
-											</span>
-										</h5>
-										<p class="text-muted">{{activity.time|naturaltime}}<br><small class="text-muted">{{activity.time}}</small> </p>
-										{% if activity.status == 0 %}
-											{% if activity.error_message %}
-												<p class="badge badge-soft-danger">Error: {{activity.error_message}}</p>
 											{% endif %}
+											<span><a href="#" class="js-logs-modal-link" data-scan-id="" data-activity-id="{{ activity.id }}" data-runner-id=""><i class="fe-file"></i> Logs</a></span>
+											{% if activity.status == 1 and activity.runner_id %}
+											<span class="float-end"><a href="#" onclick="stop_activity('{% url 'api:stop_activity' %}', activity_id={{activity.id}}, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop</a></span>
+											{% endif %}
+										</li>
+										{% endfor %}
+									{% else %}
+										{% for activity in scan_activity %}
+										{% if activity.runner_id %}
+										<li class="{% if activity.status_string == 'SUCCESS' %}completed{% elif activity.status_string == 'RUNNING' %}running{% elif activity.status_string == 'REVOKED' %}aborted{% elif activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}failed{% elif activity.status_string == 'SKIPPED' %}skipped{% else %}pending{% endif %}" data-runner-id="{{activity.runner_id.id}}">
+											<h5 class="mt-0 mb-1">{{activity.title}}
+												<span class="float-end mt-1 badge {% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}badge-soft-danger {% elif activity.status_string == 'RUNNING' %}badge-soft-info{% elif activity.status_string == 'SUCCESS' %}badge-soft-success{% elif activity.status_string == 'REVOKED' %}badge-soft-danger{% elif activity.status_string == 'SKIPPED' %}badge-soft-info{% else %}badge-soft-secondary{% endif %}">
+													{% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}Failed
+													{% elif activity.status_string == 'RUNNING' %}In progress<span class="active-dot dot"></span>
+													{% elif activity.status_string == 'SUCCESS' %}Completed
+													{% elif activity.status_string == 'REVOKED' %}Aborted
+													{% elif activity.status_string == 'SKIPPED' %}Skipped
+													{% else %}Pending
+													{% endif %}
+												</span>
+											</h5>
+											<p class="text-muted mb-0">{{activity.time|naturaltime}}<br><small class="text-muted">{{activity.time}}</small></p>
+											{% if activity.runner_id.runner_data.progress is not None %}
+												<p class="text-muted mb-0"><small>Progress: {{activity.runner_id.runner_data.progress}}%</small></p>
+											{% endif %}
+											{% if activity.status_string == 'RUNNING' %}
+												<span class="float-end"><a href="#" onclick="stop_activity('{% url 'api:stop_activity' %}', activity_id={{activity.id}}, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop</a></span>
+											{% endif %}
+											<span><a href="#" class="js-logs-modal-link" data-scan-id="" data-activity-id="{{ activity.id }}" data-runner-id="{{ activity.runner_id.id }}"><i class="fe-file"></i> Logs</a></span>
+											{% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}
+												{% if activity.error_message %}
+													<p class="badge badge-soft-danger">Error: {{activity.error_message}}</p>
+												{% endif %}
+											{% endif %}
+										</li>
 										{% endif %}
-										<span><a href="javascript:get_logs_modal(null, {{activity.id}})"><i class="fe-file"></i> Logs</a></span>
-									</li>
-									{% endfor %}
+										{% endfor %}
+									{% endif %}
 								</ul>
 							</div>
 						</div>
@@ -247,7 +343,7 @@ Scan Findings
 						<div class="d-flex align-items-start mb-3">
 							<div class="w-100">
 								<h5 class="mt-0 mb-0 font-15">
-									Recent Scans for <span class="badge badge-soft-primary">{{history.domain.name}}</span>
+									Recent Scans for <span class="badge badge-soft-primary">{{ scan_display_name }}</span>
 								</h5>
 								<div class="track-order-list mt-3">
 									<ul class="list-unstyled">
@@ -259,7 +355,7 @@ Scan Findings
 													<span class="active-dot dot"></span>
 													<span class="float-start badge badge-soft-primary ms-1 me-1">Current Scan</span>
 													{% endif %}
-													{{scan.scan_type.engine_name}}
+													{{scan.scan_name}}
 													{% if scan.scan_status == -1 %}
 													<span class="badge badge-soft-warning float-end">Pending</span>
 													{% elif scan.scan_status == 0 %}
@@ -309,7 +405,7 @@ Scan Findings
 						<div class="d-flex align-items-start mb-3">
 							<div class="w-100">
 								<h5 class="mt-0 mb-0 font-15">
-									<span id="sub_scan_history_count"></span> Sub Scan History for <span class="badge badge-soft-primary">{{history.domain.name}}</span>
+									<span id="sub_scan_history_count"></span> Sub Scan History for <span class="badge badge-soft-primary">{{ scan_display_name }}</span>
 								</h5>
 								<div data-simplebar style="max-height: 510px;" class="p-2">
 									<div id="subscan_history_widget">
@@ -322,51 +418,58 @@ Scan Findings
 			</div>
 			<div class="col-xl-9 col-lg-8">
 				<div class="row">
-					<div class="col-xl-3 col-lg-3 col-6">
-						<div class="card" id="tooltip-container">
-							<div class="card-body">
-								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Subdomains Discovered by reNgine during this scan"></i>
-								<h4 class="mt-0 font-16">Subdomains Discovered</h4>
-								<h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{subdomain_count|intcomma}}</span></h2>
-								<br>
-								<p class="mb-0"><span class="badge badge-soft-success">Alive Subdomains: {{alive_count}}</span></p>
+					<div class="col-xl-8 col-lg-9 col-12">
+						<div class="card" id="tooltip-container-surface-summary">
+							<div class="card-body" data-stats-panel="attack-surface-summary">
+								<div class="d-flex align-items-center justify-content-between mb-3">
+									<h4 class="mt-0 mb-0 font-16">Attack Surface Summary</h4>
+									<i class="fa fa-info-circle text-muted" data-bs-container="#tooltip-container-surface-summary" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Consolidated metrics for discovered subdomains, endpoints, vulnerabilities and IP addresses."></i>
+								</div>
+								<div class="row g-2">
+									<div class="col-xl-3 col-lg-6 col-12 border-end">
+										<div data-stats-panel="subdomains">
+											<h5 class="font-14 mb-1">Subdomains</h5>
+											<h3 class="text-primary mb-1"><span data-plugin="counterup" data-stat="subdomain-count">{{subdomain_count|intcomma}}</span></h3>
+											<p class="mb-0"><span class="badge badge-soft-success" data-stat="alive-count">Alive: {{alive_count}}</span></p>
+										</div>
+									</div>
+									<div class="col-xl-3 col-lg-6 col-12 border-end">
+										<div data-stats-panel="endpoints">
+											<h5 class="font-14 mb-1">Endpoints</h5>
+											<h3 class="text-primary mb-1"><span data-plugin="counterup" data-stat="endpoint-count">{{endpoint_count|intcomma}}</span></h3>
+											<p class="mb-0"><span class="badge badge-soft-success" data-stat="endpoint-alive-count">Alive Endpoints: {{endpoint_alive_count}}</span></p>
+										</div>
+									</div>
+									<div class="col-xl-3 col-lg-6 col-12 border-end">
+										<div data-stats-panel="vulnerabilities">
+											<h5 class="font-14 mb-1">Vulnerabilities</h5>
+											<h3 class="text-danger mb-1"><span data-plugin="counterup" data-stat="vulnerability-count">{{total_vulnerability_count|intcomma}}</span></h3>
+											<div data-stat="vulnerability-severity">
+												{% if total_vulnerability_count > 0 %}
+												<p class="text-muted mb-0 small">
+													<span class="w-title text-danger" data-stat="critical-count">{{critical_count}}</span> Critical, <span class="w-title text-danger" data-stat="high-count">{{high_count}}</span> High, <span class="w-title text-danger" data-stat="medium-count">{{medium_count}}</span> Medium
+													<br>
+													<span class="w-title text-primary" data-stat="low-count">{{low_count}}</span> Low, <span class="w-title text-primary" data-stat="info-count">{{info_count}}</span> Info, <span class="w-title text-primary" data-stat="unknown-count">{{unknown_count}}</span> Unknown
+												</p>
+												{% else %}
+												<p class="text-muted mb-0 small">No vulnerabilities found.</p>
+												{% endif %}
+											</div>
+										</div>
+									</div>
+									<div class="col-xl-3 col-lg-6 col-12">
+										<div data-stats-panel="ips">
+											<h5 class="font-14 mb-1">IP Addresses</h5>
+											<h3 class="text-primary mb-1"><span data-plugin="counterup" data-stat="ip-address-count">{{ip_address_count|intcomma}}</span></h3>
+											<p class="mb-0"><span class="badge badge-soft-success" data-stat="ip-alive-count">Alive IPs: {{ip_alive_count}}</span></p>
+										</div>
+									</div>
+								</div>
 							</div>
 						</div>
 					</div>
 
-					<div class="col-xl-3 col-lg-3 col-6">
-						<div class="card" id="tooltip-container1">
-							<div class="card-body">
-								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Endpoints discovered by reNgine during this scan. This includes any URLs discovered."></i>
-								<h4 class="mt-0 font-16">Endpoints Discovered</h4>
-								<h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{endpoint_count|intcomma}}</span></h2>
-								<br>
-								<p class="text-success mb-0"><span class="badge badge-soft-success">Alive Endpoints: {{endpoint_alive_count}}</span></p>
-							</div>
-						</div>
-					</div>
-
-					<div class="col-xl-3 col-lg-3 col-6">
-						<div class="card" id="tooltip-container2">
-							<div class="card-body">
-								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container2" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Vulnerabilities discovered by reNgine. This will be populated only if vulnerability scan is performed during this scan."></i>
-								<h4 class="mt-0 font-16">Vulnerabilities Discovered</h4>
-								<h2 class="text-danger my-3 text-center"><span data-plugin="counterup">{{total_vulnerability_count|intcomma}}</span></h2>
-								{% if total_vulnerability_count > 0 %}
-								<p class="text-muted mb-0">
-									<span class="w-title text-danger">{{critical_count}} Critical, {{high_count}} High, {{medium_count}} Medium</span>
-									<br>
-									<span class="w-title text-primary">{{low_count}} Low, {{info_count}} Info, and {{unknown_count}} Unknown Vulnerabilities</span>
-								</p>
-								{% else %}
-								<p class="text-muted mb-0 small">No vulnerabilities found.</p>
-								<br>
-								{% endif %}
-							</div>
-						</div>
-					</div>
-
-					<div class="col-xl-3 col-lg-3 col-6">
+					<div class="col-xl-4 col-lg-3 col-12">
 						<div class="card" id="tooltip-container3">
 							<div class="card-body">
 								<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="OSINT Results"></i>
@@ -398,366 +501,32 @@ Scan Findings
 							<i class="fe-trending-up me-2"></i> <span id="subdomain_changes_alert"></span> <a class="alert-link" id="recon-changes-tab-btn" href="#">Check it out!</a>
 						</div>
 					</div>
-					{% if history.domain.domain_info.related_domains.all %}
-					<div class="col-6 related-domains-tab-show">
-						<div class="alert alert-warning alert-dismissible fade show" role="alert">
-							<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-							<i class="fe-trending-up me-2"></i> reNgine identified {{history.domain.domain_info.related_domains.count}} domains related to {{history.domain}}. <a href="#" onclick="$('#v-pills-tab a:last').prev().tab('show');">Check it out!</a>
-						</div>
+				{% if target_domain and target_domain.domain_info and target_domain.domain_info.related_domains.all %}
+				<div class="col-6 related-domains-tab-show">
+					<div class="alert alert-warning alert-dismissible fade show" role="alert">
+						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+						<i class="fe-trending-up me-2"></i> reNgine identified {{ target_domain.domain_info.related_domains.count }} domains related to {{ scan_display_name }}. <a href="#" id="domain-tab-related-btn">Check it out!</a>
 					</div>
-					{% endif %}
-					{% if history.buckets.all %}
-					<div class="col-6 related-domains-tab-show">
-						<div class="alert alert-warning alert-dismissible fade show" role="alert">
-							<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-							<i class="fe-trending-up me-2"></i> reNgine identified {{history.buckets.count}} Buckets related to {{history.domain}}. <a class="" id="buckets-tab-btn" href="#">Check it out!</a>
-						</div>
+				</div>
+				{% endif %}
+				{% if history.buckets.all %}
+				<div class="col-6 related-domains-tab-show">
+					<div class="alert alert-warning alert-dismissible fade show" role="alert">
+						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+						<i class="fe-trending-up me-2"></i> reNgine identified {{ history.buckets.count }} Buckets related to {{ scan_display_name }}. <a class="" id="buckets-tab-btn" href="#">Check it out!</a>
 					</div>
-					{% endif %}
-					{% if history.domain.domain_info.related_tlds.all %}
-					<div class="col-6 related-domains-tab-show">
-						<div class="alert alert-warning alert-dismissible fade show" role="alert">
-							<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-							<i class="fe-trending-up me-2"></i>{{history.domain.name}} has {{history.domain.domain_info.related_tlds.count}} registered TLDs. <a href="#" onclick="$('#v-pills-tab a:last').tab('show');">Check it out!</a>
-						</div>
+				</div>
+				{% endif %}
+				{% if target_domain and target_domain.domain_info and target_domain.domain_info.related_tlds.all %}
+				<div class="col-6 related-domains-tab-show">
+					<div class="alert alert-warning alert-dismissible fade show" role="alert">
+						<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+						<i class="fe-trending-up me-2"></i>{{ scan_display_name }} has {{ target_domain.domain_info.related_tlds.count }} registered TLDs. <a href="#" id="domain-tab-tlds-btn">Check it out!</a>
 					</div>
-					{% endif %}
+				</div>
+				{% endif %}
 					<div class="col-xl-7 col-lg-7 col-12">
-						<div class="card" style="height: 95%">
-							<div class="card-body">
-								<div class="card-widgets">
-									<a href="javascript: fetch_whois('{% url 'api:whois' %}', '{{history.domain}}', true);" data-toggle="tooltip" title="Reload Whois"><i class="mdi mdi-refresh"></i></a>
-								</div>
-								<h4 class="header-title mb-0"><i class="fe-activity"></i>&nbsp;Target Information</h4>
-								<div class="row mt-3">
-									<div class="col-sm-3">
-										<div class="nav flex-column nav-pills nav-pills-tab" id="v-pills-tab" role="tablist" aria-orientation="vertical">
-											<a class="nav-link active show mb-1" id="v-pills-domain-tab" data-bs-toggle="pill" href="#v-pills-domain" role="tab" aria-controls="v-pills-domain-tab" aria-selected="true">Domain info</a>
-											<a class="nav-link mb-1" id="v-pills-whois-tab" data-bs-toggle="pill" href="#v-pills-whois" role="tab" aria-controls="v-pills-whois" aria-selected="false">Whois</a>
-											<a class="nav-link mb-1" id="v-pills-nameserver-tab" data-bs-toggle="pill" href="#v-pills-nameserver" role="tab" aria-controls="v-pills-nameserver" aria-selected="false">Nameservers</a>
-											<a class="nav-link mb-1" id="v-pills-dns-tab" data-bs-toggle="pill" href="#v-pills-dns" role="tab" aria-controls="v-pills-dns" aria-selected="false">DNS Records</a>
-											<a class="nav-link mb-1" id="v-pills-history-tab" data-bs-toggle="pill" href="#v-pills-history" role="tab" aria-controls="v-pills-history"aria-selected="false">Historical Ips</a>
-											<a class="nav-link mb-1" id="v-pills-related-tab" data-bs-toggle="pill" href="#v-pills-related" role="tab" aria-controls="v-pills-related" aria-selected="false">
-												Related Domains
-												{% if history.domain.domain_info.related_domains.count %}
-												<span class="badge badge-soft-primary float-end">{{history.domain.domain_info.related_domains.count}}</span>
-												{% endif %}
-											</a>
-											<a class="nav-link mb-1" id="v-pills-similar-tab" data-bs-toggle="pill" href="#v-pills-similar" role="tab" aria-controls="v-pills-similar-tld" aria-selected="false">
-												Related TLDs
-												{% if history.domain.domain_info.related_tlds.count %}
-												<span class="badge badge-soft-primary float-end">{{history.domain.domain_info.related_tlds.count}}</span>
-												{% endif %}
-											</a>
-										</div>
-									</div> <!-- end col-->
-									<div class="col-sm-9">
-										<div class="tab-content pt-0">
-											<div class="tab-pane fade" id="v-pills-dns" role="tabpanel" aria-labelledby="v-pills-dns-tab" data-simplebar style="min-height: 300px;">
-												<h4>A Records</h4>
-												{% for dns in history.domain.domain_info.dns_records.all %}
-													{% if dns.type == 'a' %}
-														<span class="badge badge-soft-primary me-1 mt-1">{{ dns }}</span>
-													{% endif %}
-												{% endfor %}
-												<h4>MX Records</h4>
-												{% for dns in history.domain.domain_info.dns_records.all %}
-													{% if dns.type == 'mx' %}
-														<span class="badge badge-soft-primary me-1 mt-1">{{ dns }}</span>
-													{% endif %}
-												{% endfor %}
-												<h4>TXT Records</h4>
-												{% for dns in history.domain.domain_info.dns_records.all %}
-													{% if dns.type == 'txt' %}
-														<span class="badge badge-soft-secondary me-1 mt-1">{{ dns }}</span>
-													{% endif %}
-												{% endfor %}
-											</div>
-											<div class="tab-pane fade active show" id="v-pills-domain" role="tabpanel" aria-labelledby="v-pills-domain-tab" data-simplebar style="min-height: 300px;">
-												{% if not history.domain.domain_info %}
-												<div class="alert alert-danger alert-dismissible fade show" role="alert" id="whois_not_fetched_alert">
-													<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-													WHOIS Record Has not been fetched, would you like to <a href="javascript: fetch_whois('{% url 'api:whois' %}', '{{history.domain}}', true);">fetch it now?</a>
-												</div>
-												{% endif %}
-												<div class="alert alert-info alert-dismissible fade show" role="alert" id="whois_fetching_alert" style="display: none">
-													Fetching WHOIS records, Please wait...
-													<div class="spinner-border spinner-border-sm float-end" role="status"></div>
-												</div>
-												<div class="alert alert-success alert-dismissible fade show" role="alert" id="whois_fetched_alert" style="display: none">
-													WHOIS Records have been fetched, please <a href="javascript:location.reload();">reload the page.</a>
-												</div>
-												<div class="row">
-													<div class="col-4">
-														<small class="sub-header">Domain</small>
-														<h5>{{history.domain.name}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Dnssec</small>
-														<h5>{{history.domain.domain_info.dnssec}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Geolocation</small>
-														<h5>{{history.domain.domain_info.geolocation_iso|upper}}<span class="ms-2 fi fi-{{history.domain.domain_info.geolocation_iso|lower}}"></span></h5>
-													</div>
-												</div>
-												<div class="row">
-													<div class="col-4">
-														<small class="sub-header">Created</small>
-														<h5>{{history.domain.domain_info.created}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Updated</small>
-														<h5>{{history.domain.domain_info.updated}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Expires</small>
-														<h5>{{history.domain.domain_info.expires}}</h5>
-													</div>
-												</div>
-												<div class="row">
-													<div class="col-6">
-														<small class="sub-header">Whois Server</small>
-														<h5>{{history.domain.domain_info.whois_server}}</h5>
-													</div>
-												</div>
-												<div class="row">
-													<div class="col-4">
-														<small class="sub-header">Registrar Name</small>
-														<h5>{{history.domain.domain_info.registrar.name}}</h5>
-													</div>
-													<div class="col-4">
-														<smal class="sub-header"l>Registrar Phone</small>
-														<h5>{{history.domain.domain_info.registrar.phone}}</h5>
-													</div>
-													<div class="col-4">
-														<small class="sub-header">Registrar Email</small>
-														<h5>{{history.domain.domain_info.registrar.email}}</h5>
-													</div>
-												</div>
-												{% for status in history.domain.domain_info.domain_statuses.all %}
-													{% if 'prohibited' in status.name %}
-														<span class="badge badge-soft-danger mt-1">{{status.name}}</span>
-													{% else %}
-														<span class="badge badge-soft-success mt-1">{{status.name}}</span>
-													{% endif %}
-												{% endfor %}
-											</div>
-											<div class="tab-pane fade" id="v-pills-whois" role="tabpanel" aria-labelledby="v-pills-whois-tab">
-												<ul class="nav nav-tabs nav-bordered nav-justified">
-													<li class="nav-item">
-														<a href="#registrant-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link active">
-															Registrant
-														</a>
-													</li>
-													<li class="nav-item">
-														<a href="#admin-tab" data-bs-toggle="tab" aria-expanded="true" class="nav-link">
-															Administrative
-														</a>
-													</li>
-													<li class="nav-item">
-														<a href="#technical-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-															Technical
-														</a>
-													</li>
-												</ul>
-												<div class="tab-content">
-													<div class="tab-pane active" id="registrant-tab">
-														<div class="table-responsive">
-															<table class="table mb-0">
-																<tbody>
-																	<tr class="table-info">
-																		<td><b>ID</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{history.domain.domain_info.registrant.id_str}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Name</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{history.domain.domain_info.registrant.name}}</td>
-																	</tr>
-																	<tr class="table-primary">
-																		<td><b>Organization</b></td>
-																		<td><span class="fe-briefcase"></span>&nbsp;{{history.domain.domain_info.registrant.organization}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Email</b></td>
-																		<td><span class="fe-mail"></span>&nbsp;{{history.domain.domain_info.registrant.email}}</td>
-																	</tr>
-																	<tr class="table-info">
-																		<td><b>Phone/Fax</b></td>
-																		<td>
-																			{% if history.domain.domain_info.registrant.phone %}
-																			<span class="fe-phone"></span>&nbsp;{{history.domain.domain_info.registrant.phone}}
-																			{% endif %}
-																			{% if history.domain.domain_info.registrant.fax %}
-																			<span class="fe-printer"></span>&nbsp;{{history.domain.domain_info.registrant.fax}}
-																		</td>
-																		{% endif %}
-																	</tr>
-																	<tr class="">
-																		<td><b>Address</b></td>
-																		<td><span class="fe-home"></span>&nbsp;{{history.domain.domain_info.registrant.address}}</td>
-																	</tr>
-																	<tr class="table-danger">
-																		<td><b>Address</b></td>
-																		<td><b>City: </b>{{history.domain.domain_info.registrant.city}} <b>State: </b>{{history.domain.domain_info.registrant.state}} <b>Zip Code: </b>{{history.domain.domain_info.registrant.zip_code}} <b>Country:
-																		</b>{{history.domain.domain_info.registrant.country}} </td>
-																	</tr>
-																</tbody>
-															</table>
-														</div>
-													</div>
-													<div class="tab-pane" id="admin-tab">
-														<div class="table-responsive">
-															<table class="table mb-0">
-																<tbody>
-																	<tr class="table-info">
-																		<td><b>ID</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{history.domain.domain_info.admin.id_str}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Name</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{history.domain.domain_info.admin.name}}</td>
-																	</tr>
-																	<tr class="table-primary">
-																		<td><b>Organization</b></td>
-																		<td><span class="fe-briefcase"></span>&nbsp;{{history.domain.domain_info.admin.organization}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Email</b></td>
-																		<td><span class="fe-mail"></span>&nbsp;{{history.domain.domain_info.admin.email}}</td>
-																	</tr>
-																	<tr class="table-info">
-																		<td><b>Phone/Fax</b></td>
-																		<td>
-																			{% if history.domain.domain_info.admin.phone %}
-																			<span class="fe-phone"></span>&nbsp;{{history.domain.domain_info.admin.phone}}
-																			{% endif %}
-																			{% if history.domain.domain_info.admin.fax %}
-																			<span class="fe-printer"></span>&nbsp;{{history.domain.domain_info.admin.fax}}
-																		</td>
-																		{% endif %}
-																	</tr>
-																	<tr class="">
-																		<td><b>Address</b></td>
-																		<td><span class="fe-home"></span>&nbsp;{{history.domain.domain_info.admin.address}}</td>
-																	</tr>
-																	<tr class="table-danger">
-																		<td><b>Address</b></td>
-																		<td><b>City: </b>{{history.domain.domain_info.admin.city}} <b>State: </b>{{history.domain.domain_info.admin.state}} <b>Zip Code: </b>{{history.domain.domain_info.admin.zip_code}} <b>Country:
-																		</b>{{history.domain.domain_info.admin.country}} </td>
-																	</tr>
-																</tbody>
-															</table>
-														</div>
-													</div>
-													<div class="tab-pane" id="technical-tab">
-														<div class="table-responsive">
-															<table class="table mb-0">
-																<tbody>
-																	<tr class="table-info">
-																		<td><b>ID</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{history.domain.domain_info.admin.id_str}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Name</b></td>
-																		<td><span class="fe-user"></span>&nbsp;{{history.domain.domain_info.admin.name}}</td>
-																	</tr>
-																	<tr class="table-primary">
-																		<td><b>Organization</b></td>
-																		<td><span class="fe-briefcase"></span>&nbsp;{{history.domain.domain_info.admin.organization}}</td>
-																	</tr>
-																	<tr class="">
-																		<td><b>Email</b></td>
-																		<td><span class="fe-mail"></span>&nbsp;{{history.domain.domain_info.admin.email}}</td>
-																	</tr>
-																	<tr class="table-info">
-																		<td><b>Phone/Fax</b></td>
-																		<td>
-																			{% if history.domain.domain_info.admin.phone %}
-																			<span class="fe-phone"></span>&nbsp;{{history.domain.domain_info.admin.phone}}
-																			{% endif %}
-																			{% if history.domain.domain_info.admin.fax %}
-																			<span class="fe-printer"></span>&nbsp;{{history.domain.domain_info.admin.fax}}
-																		</td>
-																		{% endif %}
-																	</tr>
-																	<tr class="">
-																		<td><b>Address</b></td>
-																		<td><span class="fe-home"></span>&nbsp;{{history.domain.domain_info.admin.address}}</td>
-																	</tr>
-																	<tr class="table-danger">
-																		<td><b>Address</b></td>
-																		<td><b>City: </b>{{history.domain.domain_info.tech.city}} <b>State: </b>{{history.domain.domain_info.tech.state}} <b>Zip Code: </b>{{history.domain.domain_info.tech.zip_code}} <b>Country:
-																		</b>{{history.domain.domain_info.tech.country}} </td>
-																	</tr>
-																</tbody>
-															</table>
-														</div>
-													</div>
-												</div>
-											</div>
-											<div class="tab-pane fade" id="v-pills-history" role="tabpanel" aria-labelledby="v-pills-history-tab" data-simplebar style="max-height: 300px; min-height: 300px;">
-												{% if history.domain.domain_info.historical_ips.all %}
-												<div class="alert alert-success">{{history.domain.domain_info.historical_ips.all.count}} Historical Ips</div>
-												<table id="basic-datatable" class="table dt-responsive w-100">
-													<thead>
-															<tr>
-																	<th>IP</th>
-																	<th>Location</th>
-																	<th>Owner</th>
-																	<th>Last Seen</th>
-															</tr>
-													</thead>
-													<tbody>
-														{% for ip in history.domain.domain_info.historical_ips.all %}
-														<tr>
-															<td><b>{{ip.ip}}</b></td>
-															<td>{{ip.location}}</td>
-															<td>{{ip.owner}}</td>
-															<td>{{ip.last_seen}}</td>
-														</tr>
-														{% endfor %}
-													</tbody>
-												</table>
-												{% else %}
-												<div class="alert alert-info">No historical IPs found!</div>
-												{% endif %}
-											</div>
-											<div class="tab-pane fade" id="v-pills-nameserver" role="tabpanel" aria-labelledby="v-pills-nameserver-tab" data-simplebar style="max-height: 300px; min-height: 300px;">
-												{% if history.domain.domain_info.name_servers.all %}
-													<div class="alert alert-success">{{history.domain.domain_info.name_servers.all.count}} NameServers identified</div>
-													{% for nameserver in history.domain.domain_info.name_servers.all %}
-														<span class="badge badge-soft-primary me-1 mt-1">{{ nameserver}}</span>
-													{% endfor %}
-												{% else %}
-													<div class="alert alert-info">No NameServers identified</div>
-												{% endif %}
-											</div>
-											<div class="tab-pane fade" id="v-pills-related" role="tabpanel" aria-labelledby="v-pills-related-tab" data-simplebar style="max-height: 300px; min-height: 300px;">
-												{% if history.domain.domain_info.related_domains.all %}
-													<div class="alert alert-success">{{history.domain.domain_info.related_domains.all.count}} Related Domains identified</div>
-													{% for domain in history.domain.domain_info.related_domains.all %}
-														<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add {{domain}} as target." onclick="add_target('{% url 'api:addTarget' %}', '{{current_project.slug}}', '{{domain}}')">{{domain}}</span>
-													{% endfor %}
-												{% else %}
-													<div class="alert alert-info">No Related Domains identified</div>
-												{% endif %}
-											</div>
-											<div class="tab-pane fade" id="v-pills-similar" role="tabpanel" aria-labelledby="v-pills-similar-tab" data-simplebar style="max-height: 300px; min-height: 300px;">
-												{% if history.domain.domain_info.related_tlds.all %}
-													<div class="alert alert-success">{{history.domain.domain_info.related_tlds.all.count}} Related TLDs identified</div>
-													{% for domain in history.domain.domain_info.related_tlds.all %}
-														<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add {{domain}} as target." onclick="add_target('{% url 'api:addTarget' %}', '{{current_project.slug}}', '{{domain}}')">{{domain}}</span>
-													{% endfor %}
-												{% else %}
-													<div class="alert alert-info">No Related TLDs identified</div>
-												{% endif %}
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
+						{% include 'base/_items/domain_summary_table.html' with domains=domains title="Domains" description="Domains discovered for this target (full details in the Domain tab)." card_style="height: 95%" %}
 					</div>
 					<div class="col-xl-5 col-lg-5 col-12">
 						<div class="card" style="height: 95%">
@@ -918,8 +687,14 @@ Scan Findings
 			</div>
 		</div>
 	</div>
+	<div class="tab-pane" id="domain-tab">
+		{% include 'base/_items/domain_cards_tab.html' with domains=domains %}
+	</div>
 	<div class="tab-pane" id="subdomain-tab">
 		{% include 'base/_items/subdomain_tab_content.html' with detail_scan=True%}
+	</div>
+	<div class="tab-pane" id="ip-tab">
+		{% include 'base/_items/ip_address_tab_content.html' with detail_scan=True %}
 	</div>
 	<div class="tab-pane" id="buckets-tab">
 		<div class="row">
@@ -941,39 +716,6 @@ Scan Findings
 									</tr>
 								</thead>
 								<tbody>
-									{% for bucket in history.buckets.all %}
-										<tr>
-											<td><h5 class="m-0 fw-normal">{{bucket.name}}</h5></td>
-											<td>{{bucket.region}}</td>
-											<td>{{bucket.provider}}</td>
-											<td>
-												<ul>
-													<li>ID: {{bucket.owner_id}}</li>
-													<li>Display Name: {{bucket.owner_display_name}}</li>
-												</ul>
-											</td>
-											<td>{{bucket.num_objects}}</td>
-											<td>{{bucket.size}}</td>
-											<td>
-												<ul>
-													{% if bucket.perm_auth_users_read == 1 %}<li><strong>READ</strong></li>{% endif %}
-													{% if bucket.perm_auth_users_write == 1 %}<li><strong>WRITE</strong></li>{% endif %}
-													{% if bucket.perm_auth_users_read_acl == 1 %}<li><strong>Read_ACP</strong></li>{% endif %}
-													{% if bucket.perm_auth_users_write_acl == 1 %}<li><strong>WRITE_ACP</strong></li>{% endif %}
-													{% if bucket.perm_auth_users_full_control == 1 %}<li><strong>FULL_CONTROL</strong></li>{% endif %}
-												</ul>
-											</td>
-											<td>
-												<ul>
-													{% if bucket.perm_all_users_read == 1 %}<li><strong>READ</strong></li>{% endif %}
-													{% if bucket.perm_all_users_write == 1 %}<li><strong>WRITE</strong></li>{% endif %}
-													{% if bucket.perm_all_users_read_acl == 1 %}<li><strong>Read_ACP</strong></li>{% endif %}
-													{% if bucket.perm_all_users_write_acl == 1 %}<li><strong>WRITE_ACP</strong></li>{% endif %}
-													{% if bucket.perm_all_users_full_control == 1 %}<li><strong>FULL_CONTROL</strong></li>{% endif %}
-												</ul>
-											</td>
-										</tr>
-									{% endfor %}
 								</tbody>
 							</table>
 						</div>
@@ -982,7 +724,7 @@ Scan Findings
 			</div>
 		</div>
 	</div>
-	{% if 'screenshot' in history.tasks %}
+	{% if has_screenshots %}
 	<div class="tab-pane" id="screenshot-tab">
 		<div class="col-lg-8 col-md-8 col-sm-9 filtered-list-search mx-auto">
 			<input type="text" class="form-control form-control-lg br-30 mb-3" id="screenshot-search" placeholder="">
@@ -1069,26 +811,49 @@ Scan Findings
 	{# directories section #}
 	{% if 'dir_file_fuzz' in history.tasks %}
 	<div class="tab-pane" id="directories-tab">
-		<div class="row">
-			<div class="col-12">
-				<div class="card">
-					<div class="card-body">
-						<button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown" data-bs-toggle="dropdown" aria-expanded="false">Display <span class="caret"></span></button>
-						<table id="directories-table" class="table dt-responsive w-100">
-							<thead>
-								<tr>
-									<th class="checkbox-column">Status</th>
-									<th>Subdomain</th>
-									<th>Status</th>
-									<th>Page Title</th>
-									<th>Directories</th>
-									<th>HTTP URL</th>
-									<th>Is Intereting</th>
-								</tr>
-							</thead>
-						</table>
-					</div>
-				</div>
+		{% include 'base/_items/files_tab_content.html' %}
+	</div>
+	{% endif %}
+
+	{# Exploits Section #}
+	{% if history.get_exploit_count %}
+	<div class="tab-pane" id="exploits-tab">
+		<div class="card">
+			<div class="card-body">
+				<h4 class="header-title mb-0">Exploits</h4>
+				{% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='exploitQuickSearch' %}
+				<table id="exploit_results" class="table dt-responsive w-100">
+					<thead>
+						<tr>
+							<th>ID</th>
+							<th>Name</th>
+							<th>Exploit ID</th>
+							<th>Provider</th>
+							<th>Discovered</th>
+							<th>URL</th>
+							<th>IP</th>
+							<th>Domain</th>
+							<th>CVE IDs</th>
+							<th>Tags</th>
+							<th>Extra</th>
+						</tr>
+					</thead>
+					<tfoot>
+						<tr>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="0" placeholder="ID" type="text"></th>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="1" placeholder="Name" type="text"></th>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="2" placeholder="Exploit ID" type="text"></th>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="3" placeholder="Provider" type="text"></th>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="4" placeholder="Discovered" type="text"></th>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="5" placeholder="URL" type="text"></th>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="6" placeholder="IP" type="text"></th>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="7" placeholder="Domain" type="text"></th>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="8" placeholder="CVE IDs" type="text"></th>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="9" placeholder="Tags" type="text"></th>
+							<th><input class="form-control form-control-sm datatable-column-search" data-column-index="10" placeholder="Extra" type="text"></th>
+						</tr>
+					</tfoot>
+				</table>
 			</div>
 		</div>
 	</div>
@@ -1098,6 +863,12 @@ Scan Findings
 	{% if total_vulnerability_count > 0 %}
 	<div class="tab-pane" id="vulnerabilities-tab">
 		{% include 'base/_items/vulnerability_tab_content.html' %}
+	</div>
+	{% endif %}
+
+	{% if total_secret_count > 0 %}
+	<div class="tab-pane" id="secrets-tab">
+		{% include 'base/_items/secret_tab_content.html' %}
 	</div>
 	{% endif %}
 
@@ -1128,7 +899,7 @@ Scan Findings
 							<span id="employees-count">
 								<span class="spinner-border spinner-border-sm me-1"></span>
 							</span>
-							Employees/People associated with {{history.domain.name}}
+							Employees/People associated with {{ scan_display_name }}
 						</h4>
 						<table class="table mt-3">
 							<thead class="table-light">
@@ -1247,7 +1018,7 @@ Scan Findings
 	</div>
 
 	{# Interesting Recon section #}
-	<div class="tab-pane interesting-tab-show" style="display: none" id="interesting-tab">
+	<div class="tab-pane interesting-tab-show" id="interesting-tab">
 		<div class="row">
 			<div class="col-xl-12">
 				<div class="card" id="interesting_subdomain_div">
@@ -1257,7 +1028,7 @@ Scan Findings
 								<i class="mdi mdi-dots-vertical"></i>
 							</a>
 							<div class="dropdown-menu dropdown-menu-end">
-								<a class="dropdown-item" href="javascript:download_interesting_subdomains({{scan_history_id}}, '{{history.domain.name}}');">Download Interesting Subdomains</a>
+								<a class="dropdown-item" href="javascript:download_interesting_subdomains({{scan_history_id}}, '{{ scan_display_name|escapejs }}');">Download Interesting Subdomains</a>
 							</div>
 						</div>
 						<h4 class="header-title mb-0"><span id="interesting_subdomain_count_badge"><span class="spinner-border spinner-border-sm me-1"></span></span> Interesting Subdomains</h4>
@@ -1284,7 +1055,7 @@ Scan Findings
 								<i class="mdi mdi-dots-vertical"></i>
 							</a>
 							<div class="dropdown-menu dropdown-menu-end">
-								<a class="dropdown-item" href="javascript:download_interesting_endpoints({{scan_history_id}}, '{{history.domain.name}}');">Download Interesting Endpoints</a>
+								<a class="dropdown-item" href="javascript:download_interesting_endpoints({{scan_history_id}}, '{{ scan_display_name|escapejs }}');">Download Interesting Endpoints</a>
 							</div>
 						</div>
 						<h4 class="header-title mb-0"><span id="interesting_endpoint_count_badge"><span class="spinner-border spinner-border-sm me-1"></span></span> Interesting Endpoints</h4>
@@ -1292,9 +1063,13 @@ Scan Findings
 							<thead>
 								<tr>
 									<th>URL</th>
-									<th>Title</th>
+									<th>Page Title</th>
 									<th>HTTP Status</th>
+									<th>Tags</th>
+									<th>Content Type</th>
 									<th>Content Length</th>
+									<th>Response Time</th>
+									<th>Screenshot</th>
 								</tr>
 							</thead>
 						</table>
@@ -1350,18 +1125,51 @@ Scan Findings
 {% include "base/_items/recon_note_modal.html" %}
 {% include "base/_items/subscan_modal.html" with detail_scan=True %}
 
-{# for passing subdomain id to initiate subtask scan #}
+{# for passing subdomain id, domain id, target id and scan_history_id to subscan modal and JS #}
 <input type="hidden" name="subtask_subdomain_id" id="subtask_subdomain_id" value="0">
+<input type="hidden" name="subtask_ip_address_id" id="subtask_ip_address_id" value="0">
+<input type="hidden" id="subscan_domain_id" value="{% if target_domain %}{{ target_domain.id }}{% else %}0{% endif %}">
+<input type="hidden" name="target_id" id="context_target_id" value="{{ context_target_id|default:'' }}">
+<input type="hidden" id="subscan_scan_history_id" value="{{ scan_history_id }}">
 
 {% endblock main_content %}
 
 {% block page_level_script %}
+<script>
+window.DETAIL_SCAN_VULN_ROW_GROUP_COOKIE_KEY = "{{ datatable_row_group_cookie_key_vuln|default:''|escapejs }}";
+window.DETAIL_SCAN_VULN_ROW_GROUP_SELECTOR = "{{ datatable_row_group_selector_vuln|default:'input[name=\'grouping_vuln_row\']'|escapejs }}";
+window.DETAIL_SCAN_API_ENDPOINTS_LIST = "{% url 'api:endpoints-list' %}";
+window.DETAIL_SCAN_API_VULNERABILITIES_LIST = "{% url 'api:vulnerabilities-list' %}";
+window.DETAIL_SCAN_API_DIRECTORIES_LIST = "{% url 'api:directories-list' %}";
+window.DETAIL_SCAN_API_CERTIFICATES_LIST = "{% url 'api:certificates_list' %}";
+window.DETAIL_SCAN_API_LIST_SUBSCANS = "{% url 'api:listSubScans' %}";
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.29.0/apexcharts.min.js" integrity="sha512-fe6OklXva8AWoqdwgkE7Ni4uWgHGWxFQWZx4lYehzY2Qrst5YfogjAbnLd6egsoTrnjGI9/LYt1Ont2cKNbP2A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://apexcharts.com/samples/assets/irregular-data-series.js"></script>
 <script src="https://apexcharts.com/samples/assets/ohlc.js"></script>
 <script src="{% static 'custom/todo.js' %}"></script>
 <script src="{% static 'note/js/todo.js' %}"></script>
 <script src="{% static 'custom/subdomain.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
+<script src="{% static 'custom/datatables/ip_scan_table_handlers.js' %}"></script>
+<script src="{% static 'custom/datatables/selection_helpers.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_detail_ip_table.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_target_subdomain_table.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_target_exploit_table.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_target_vulnerability_table.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_detail_secret_table.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_detail_directory_table.js' %}"></script>
+<script src="{% static 'custom/datatables/scan_detail_s3_buckets_table.js' %}"></script>
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
@@ -1369,25 +1177,35 @@ Scan Findings
 <script src="{% static 'plugins/select2/select2.min.js' %}"></script>
 <script src="{% static 'plugins/j-map/jquery-jvectormap.min.js' %}"></script>
 <script src="{% static 'plugins/j-map/maps/jquery-jvectormap-world-mill-en.js' %}"></script>
-<script src="{% static 'custom/vuln_datatables.js' %}"></script>
 {# search suggestions scripts #}
-<script src="{% static 'startScan/js/subdomains-suggestions.js' %}"></script>
-<script src="{% static 'startScan/js/endpoint-datatables-suggestions.js' %}"></script>
-<script src="{% static 'custom/subdomain_datatable.js' %}"></script>
-
-{% if total_vulnerability_count > 0 %}
-<script src="{% static 'startScan/js/vulnerability-datatables-suggestions.js' %}"></script>
-{% endif %}
+{% include 'shared/_advanced_search_scripts.html' %}
 
 {# visualisation libraries #}
 <script src="{% static 'custom/mitch.js' %}"></script>
+{{ ip_addresses_payload|json_script:"rengine-detail-scan-ip-addresses" }}
 
 <script type="text/javascript">
+const vuln_datatable_columns = window.RENGINE_VULN_DATATABLE_COLUMNS || [];
+const exploit_datatable_columns = window.RENGINE_EXPLOIT_DATATABLE_COLUMNS || [];
+const secret_datatable_columns = window.RENGINE_SECRET_DATATABLE_COLUMNS || [];
+const subdomain_datatable_columns = (window.RENGINE_SUBDOMAIN_DATATABLE_COLUMNS || []).map(function(col) {
+	if (col && col.name === 'vuln_count') return Object.assign({}, col, { visible: false });
+	return col;
+});
+const vuln_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
+const subdomain_datatable_length_menu = window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[10, 20, 30, 50, 100, 200, 500, 1000, -1], ["10", "20", "30", "50", "100", "200", "500", "1000", "All"]];
+
 $(document).ready(function() {
 	// Init
-	const ps = new PerfectScrollbar(document.querySelector('.mt-container'));
-	const ps1 = new PerfectScrollbar(document.querySelector('.endpoint-search'));
-	$('[data-toggle="tooltip"]').tooltip();
+	const mtContainer = document.querySelector('.mt-container');
+	if (mtContainer) {
+		new PerfectScrollbar(mtContainer);
+	}
+	const endpointSearch = document.querySelector('.endpoint-search');
+	if (endpointSearch) {
+		new PerfectScrollbar(endpointSearch);
+	}
+	if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('[data-toggle="tooltip"]'));
 	$('#addTaskModal select').css('width', '100%');
 	$("#todoSubdomainDropdown").select2({
 			dropdownParent: $('#addTaskModal')
@@ -1417,7 +1235,7 @@ $(document).ready(function() {
 		series: [{
 			name: 'Subdomains',
 			data: [{% for status in http_status_breakdown %}
-				{{status.http_status__count}},
+				{{ status.http_status__count|floatformat:0 }},
 				{% endfor %}]
 			}],
 			chart: {
@@ -1454,10 +1272,16 @@ $(document).ready(function() {
 						fontSize: '12px'
 					}
 				}
+			},
+			yaxis: {
+				labels: {
+					formatter: function(val) { return Math.round(val); }
+				}
 			}
-	};
+		};
 	var chart = new ApexCharts(document.querySelector("#http_status_chart"), options);
 	chart.render();
+
 	// vulnerability summary pie chart
 	{% if total_vulnerability_count > 0 %}
 		{% include 'base/_items/most_common_cve_cwe_tags.js' %}
@@ -1551,506 +1375,40 @@ $(document).ready(function() {
 
 		// vulnerability datatable
 		const ps2 = new PerfectScrollbar(document.querySelector('.vulnerability-search'));
-		$("#pills-vulnerabilities-tab").click(function() {
-			// prevent table loading twice
-			// https://datatables.net/manual/tech-notes/3
-			if ( $.fn.dataTable.isDataTable( '#vulnerability_results' ) ) {
-				return false;
-			}
-			var is_grouping = false;
-			var grouping_col = 3;
-			var vuln_ajax_url = '{% url 'api:vulnerabilities-list' %}?scan_history={{scan_history_id}}&format=datatables';
-			var vulnerability_table = $('#vulnerability_results').DataTable({
-				"destroy": true,
-				"oLanguage": {
-					"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-					"sInfo": "Showing page _PAGE_ of _PAGES_",
-					"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-					"sSearchPlaceholder": "Search...",
-					"sLengthMenu": "Results :  _MENU_",
-				},
-				"processing": true,
-				"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-				"<'table-responsive'tr>" +
-				"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
-				"stripeClasses": [],
-				"lengthMenu": vuln_datatable_length_menu,
-				"pageLength": vuln_datatable_page_length,
-				'serverSide': true,
-				"ajax": {
-						'url': vuln_ajax_url,
-				},
-				"rowGroup": {
-					"startRender": function(rows, group) {
-						return group + ' (' + rows.count() + ' Vulnerabilities)';
-					}
-				},
-				"order": [[ get_datatable_col_index('cvss_score', vuln_datatable_columns), "desc" ]],
-				"columns": vuln_datatable_columns,
-							"columnDefs": [
-			{ "orderable": false, "targets": [get_datatable_col_index('action', vuln_datatable_columns)]},
-			{
-				"targets": [
-					get_datatable_col_index('type', vuln_datatable_columns),
-					get_datatable_col_index('cvss_metrics', vuln_datatable_columns),
-					get_datatable_col_index('tags', vuln_datatable_columns),
-					get_datatable_col_index('hackerone_report_id', vuln_datatable_columns),
-					get_datatable_col_index('cvss_score', vuln_datatable_columns),
-					get_datatable_col_index('cve_ids', vuln_datatable_columns),
-					get_datatable_col_index('cwe_ids', vuln_datatable_columns),
-					get_datatable_col_index('description', vuln_datatable_columns),
-					get_datatable_col_index('references', vuln_datatable_columns),
-					get_datatable_col_index('discovered_date', vuln_datatable_columns),
-					get_datatable_col_index('extracted_results', vuln_datatable_columns),
-					get_datatable_col_index('curl_command', vuln_datatable_columns),
-					get_datatable_col_index('matcher_name', vuln_datatable_columns)
-				],
-				"visible": false,
-				"searchable": true,
-			},
-					{"className": "text-center", "targets": []},
-					{
-						"render": function ( data, type, row ) {
-							if(row['open_status']){
-								return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('{% url 'change_vuln_status' current_project.slug 0 %}\', this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
-							}
-							else{
-								return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('{% url 'change_vuln_status' current_project.slug 0 %}\', this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
-							}
-						},
-											"targets": get_datatable_col_index('id', vuln_datatable_columns),
-				},
-				{
-					"render": function ( data, type, row ) {
-						if (data) {
-							return `<span class="badge badge-outline-primary">&nbsp;&nbsp;${data.toUpperCase()}&nbsp;&nbsp;</span>`;
-						}
-					},
-					"targets": get_datatable_col_index('source', vuln_datatable_columns),
-				},
-				{
-					"render": function ( data, type, row ) {
-						if (data) {
-							return `<span class="badge badge-soft-primary">&nbsp;&nbsp;${data.toUpperCase()}&nbsp;&nbsp;</span>`;
-						}
-					},
-					"targets": get_datatable_col_index('type', vuln_datatable_columns),
-				},
-					{
-						"render": function ( data, type, row ) {
-							var tags = '';
-							var cvss_metrics_badge = '';
-							var cve_cwe_badge = '';
-							switch (row['severity']) {
-								case 'Info':
-								color = 'primary';
-								badge_color = 'soft-primary';
-								break;
-								case 'Low':
-								color = 'low';
-								badge_color = 'soft-warning';
-								break;
-								case 'Medium':
-								color = 'warning';
-								badge_color = 'soft-warning';
-								break;
-								case 'High':
-								color = 'danger';
-								badge_color = 'soft-danger';
-								break;
-								case 'Critical':
-								color = 'critical';
-								badge_color = 'critical';
-								break;
-								case 'Unknown':
-								color = 'info';
-								badge_color = 'soft-info';
-								break;
-								default:
-							}
-							if (row['tags']) {
-								tags = '<div>';
-								row['tags'].forEach(tag => {
-									tags += `<span class="badge badge-${badge_color} me-1 mt-1" data-toggle="tooltip" data-placement="top" title="Tags">${tag.name}</span>`;
-								});
-								tags += '</div>';
-							}
-							if (row['cvss_metrics']) {
-								cvss_metrics_badge = `<div><span class="badge badge-outline-primary mt-1" data-toggle="tooltip" data-placement="top" title="CVSS Metrics">${row['cvss_metrics']}</span></div>`;
-							}
-							if (row['cve_ids'] || row['cwe_ids']) {
-								cve_cwe_badge += '<br>';
-							}
-							if (row['cve_ids']) {
-								row['cve_ids'].forEach(cve => {
-									cve_cwe_badge += `<a href="#" onclick="get_and_render_cve_details('{% url 'api:cve_details' %}', '${cve.name.toUpperCase()}')" class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${cve.name.toUpperCase()}</a>`;
-								});
-							}
-							if (row['cwe_ids']) {
-								row['cwe_ids'].forEach(cwe => {
-									cve_cwe_badge += `<a href="https://google.com/search?q=${cwe.name.toUpperCase()}" target="_blank" class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CWE ID">${cwe.name.toUpperCase()}</a>`;
-								});
-							}
-							// if (cve_cwe_badge != "") {
-							// 	cve_cwe_badge
-							// }
-							hackerone_report = row['hackerone_report_id'] ? `<div><a class="badge badge-soft-danger mt-1 me-1" href="https://hackerone.com/reports/${row['hackerone_report_id']}" target="_blank">Reported to hackerone</a></div>` : "";
-							return `<b class="text-${color}">` + data + `</b>` + cvss_metrics_badge + cve_cwe_badge + tags + hackerone_report;
-						},
-						"targets": get_datatable_col_index('name', vuln_datatable_columns),
-					},
-					{
-						"render": function ( data, type, row ) {
-							return get_severity_badge(data);
-						},
-						"targets": get_datatable_col_index('severity', vuln_datatable_columns),
-					},
-					{
-						"render": function ( data, type, row ) {
-							if (data) {
-								if (data > 0.1 && data <= 3.9) {
-									badge = 'info';
-								}
-								else if (data > 3.9 && data <= 6.9) {
-									badge = 'warning';
-								}
-								else if (data > 6.9 && data <= 8.9) {
-									badge = 'danger';
-								}
-								else{
-									badge = 'danger';
-								}
-								return `<span class="badge badge-outline-${badge}" data-toggle="tooltip" data-placement="top" title="CVSS Score">${data}</span>`;
-							}
-							return '';
-						},
-						"targets": get_datatable_col_index('cvss_score', vuln_datatable_columns),
-					},
-					{
-						"render": function ( data, type, row ) {
-							if (data && data.includes('http')) {
-								return "<a href='"+htmlEncode(data)+"' target='_blank' class='text-danger'>"+split_into_lines(htmlEncode(data), 150)+"</a>";
-							}
-							return data || '';
-						},
-						"targets": get_datatable_col_index('http_url', vuln_datatable_columns),
-					},
-					{
-						"render": function ( data, type, row ) {
-							if (data){
-								return '<span class="badge badge-soft-danger">&nbsp;&nbsp;OPEN&nbsp;&nbsp;</span>'
-							}
-							else{
-								return '<span class="badge badge-soft-success">&nbsp;&nbsp;RESOLVED&nbsp;&nbsp;</span>'
-							}
-						},
-						"targets": get_datatable_col_index('open_status', vuln_datatable_columns),
-					},
-					{
-						"render": function ( data, type, row ) {
-							if (!data){
-								return `
-								<div class="btn-group mb-2 dropstart">
-								<a href="#" class="text-dark dropdown-toggle float-end" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-								<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-horizontal"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-								</a>
-								<div class="dropdown-menu" style="">
-								<a class="dropdown-item" href="javascript:fetch_llm_vuln_details('{% url 'api:llm_vulnerability_report_generator' %}', ${row['id']}, '${row['name']}');">Fetch LLM Vulnerability Details</a>
-								<a class="dropdown-item" href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${row['id']}, '${row['severity']}');">Report to Hackerone</a>
-								<a class="text-danger dropdown-item btn-delete-vulnerability" href="#" id="${row['id']}" data-url="{% url 'api:delete_vulnerability' %}">Delete Vulnerability</a>
-								</div>
-								</div>`;
-							}
-							else{
-								return '';
-							}
-						},
-						"targets": get_datatable_col_index('action', vuln_datatable_columns),
-					},
-				],
-				"initComplete": function(settings, json) {
-					api = this.api();
-					// column visibility
-					vulnerability_datatable_col_visibility(vulnerability_table);
-					$(".dtrg-group th:contains('No group')").remove();
-				},
-				drawCallback: function (settings) {
-					drawCallback_api = this.api();
-					$('.badge').tooltip({ template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' })
-					$('.bs-tooltip').tooltip();
-					setTimeout(function() {
-						$(".dtrg-group th:contains('No group')").remove();
-					}, 1);
-				},
-				createdRow: function( row, data, dataIndex ) {
-					if (!data['open_status']){
-						$(row).addClass('table-success text-strike');
-					}
-				},
-			});
-
-			var radioGroup = document.getElementsByName('grouping_vuln_row');
-			radioGroup.forEach(function(radioButton) {
-				radioButton.addEventListener('change', function() {
-					if (this.checked) {
-						var groupRows = document.querySelectorAll('tr.group');
-						var col_index = get_datatable_col_index(this.value, vuln_datatable_columns);
-						api.page.len(-1).draw();
-						api.order([col_index, 'asc']).draw();
-						vulnerability_table.rowGroup().dataSrc(this.value);
-						Snackbar.show({
-							text: 'Vulnerabilities grouped by ' + this.value,
-							pos: 'top-right',
-							duration: 2500
-						});
-					}
-				});
-			});
-
-			$('#reload_vulnerabilities_table_btn').click(function () {
-				vulnerability_table.ajax.reload();
-			});
-
-			$('#vulnerability-search-button').click(function () {
-				vulnerability_table.search($('#vulnerability-search').val()).draw() ;
-			});
-
-					$('input[name=vuln_source_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				vulnerability_table.column(get_datatable_col_index('source', vuln_datatable_columns)).visible(true);
-			} else {
-				vulnerability_table.column(get_datatable_col_index('source', vuln_datatable_columns)).visible(false);
-			}
-			window.localStorage.setItem('vuln_source_checkbox', $(this).is(':checked'));
+		window.registerDetailScanVulnerabilityTab({
+			ajaxUrl: '{% url "api:vulnerabilities-list" %}?scan_history={{scan_history_id}}&format=datatables',
+			columns: vuln_datatable_columns,
+			changeVulnStatusUrlTemplate: '{% url "change_vuln_status" current_project.slug 0 %}',
 		});
 
-		$('input[name=vuln_severity_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				vulnerability_table.column(get_datatable_col_index('severity', vuln_datatable_columns)).visible(true);
-			} else {
-				vulnerability_table.column(get_datatable_col_index('severity', vuln_datatable_columns)).visible(false);
-			}
-			window.localStorage.setItem('vuln_severity_checkbox', $(this).is(':checked'));
-		});
+	{% endif %}
 
-		$('input[name=vuln_vulnerable_url_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				vulnerability_table.column(get_datatable_col_index('http_url', vuln_datatable_columns)).visible(true);
-			} else {
-				vulnerability_table.column(get_datatable_col_index('http_url', vuln_datatable_columns)).visible(false);
-			}
-			window.localStorage.setItem('vuln_vulnerable_url_checkbox', $(this).is(':checked'));
+	{% if history.get_exploit_count %}
+		window.registerScanTargetExploitTab({
+			ajaxUrl: "{% url 'api:exploits-list' %}?scan_history={{ scan_history_id }}&format=datatables",
+			columns: exploit_datatable_columns,
 		});
+	{% endif %}
 
-		$('input[name=vuln_status_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				vulnerability_table.column(get_datatable_col_index('open_status', vuln_datatable_columns)).visible(true);
-			} else {
-				vulnerability_table.column(get_datatable_col_index('open_status', vuln_datatable_columns)).visible(false);
-			}
-			window.localStorage.setItem('vuln_status_checkbox', $(this).is(':checked'));
-		});
-
-			$('#vulnerability_results').on('click', 'tr' , function (e) {
-				if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('span')) {
-					return;
-				}
-				var data = vulnerability_table.row(this).data();
-				if (data) {
-					render_vuln_offcanvas(data);
-				}
-			});
+	{% if total_secret_count > 0 %}
+		window.registerScanDetailSecretTab({
+			ajaxUrl: "{% url 'api:secrets-list' %}?scan_history={{ scan_history_id }}&format=datatables",
+			columns: secret_datatable_columns,
 		});
 	{% endif %}
 
 	{% if 'dir_file_fuzz' in history.tasks %}
-		$("#pills-directories-tab").click(function() {
-			var interesting_keywords_array = [];
-			var directory_table = $('#directories-table').DataTable({
-				"destroy": true,
-				"oLanguage": {
-					"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-					"sInfo": "Showing page _PAGE_ of _PAGES_",
-					"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-					"sSearchPlaceholder": "Search...",
-					"sLengthMenu": "Results :  _MENU_",
-				},
-				"processing": true,
-				"stripeClasses": [],
-				"lengthMenu": [20, 50, 100, 500, 1000],
-				"pageLength": 20,
-				'serverSide': true,
-				"ajax": '/api/listDatatableSubdomain/?project={{current_project.slug}}&scan_id={{scan_history_id}}&format=datatables&only_directory',
-				"order": [[ 5, "desc" ]],
-				"columns": [
-					{'data': 'id'},
-					{'data': 'name'},
-					{'data': 'http_status'},
-					{'data': 'page_title'},
-					{'data': 'directories'},
-					{'data': 'http_url'},
-					{'data': 'is_interesting'},
-				],
-				"columnDefs": [
-					{
-						"targets": [ 5, 6],
-						"visible": false,
-						"searchable": false,
-					},
-					{
-						"targets":0, "width":"20px", "className":"", "orderable":!1, render:function(e, a, t, n) {
-							return'<div class="form-check ms-1 form-check-primary"><input type="checkbox" name="subdomain_checkbox['+ e + ']" class="float-start form-check-input subdomain_checkbox" value="' + e + '" onchange=toggleMultipleSubdomainButton()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>';
-						}},
-						{
-							"render": function ( data, type, row ) {
-								if (row['http_url']) {
-									interesting_badge = '';
-									if(row['is_interesting'])
-									{
-										interesting_badge = `<span class='me-1 badge badge-pills badge-soft-danger ms-1' data-toggle="tooltip" data-placement="top" title="Interesting Subdomain">Interesting</span>`;
-									}
-									return `<a href="`+row['http_url']+`" class="text-primary" target="_blank">`+data+`</a>`+interesting_badge+`<br>`;
-								}
-								return `<a href="https://`+data+`" class="text-primary" target="_blank">`+data+`</a>` + interesting_badge;
-							},
-							"targets": 1
-						},
-						{
-							"render": function ( data, type, row ) {
-								// display badge based on http status
-								// green for http status 2XX, orange for 3XX and warning for everything else
-								if (data >= 200 && data < 300) {
-									return "<span class='badge badge-pills badge-soft-success'>"+data+"</span>";
-								}
-								else if (data >= 300 && data < 400) {
-									return "<span class='badge badge-pills badge-soft-warning'>"+data+"</span>";
-								}
-								else if (data == 0){
-									// datatable throws error when no data is returned
-									return "";
-								}
-								return `<span class='badge badge-pills badge-soft-danger'>`+data+`</span>`;
-							},
-							"targets": 2,
-						},
-						{
-							"render": function ( data, type, row ) {
-								if (data){
-									return htmlEncode(data);
-								}
-								return "";
-							},
-							"targets": 3,
-						},
-						{
-						"render": function ( data, type, row ) {
-							if (data) {
-								data = data.reverse();
-								var html_treeview = '';
-								if (data.length > 1) {
-									// has been scanned multiple times
-									html_treeview += `<p class="text-dark">Directory Scan has been performed ${data.length} times.</p>`;
-								}
-								html_treeview += `<ul class="list-unstyled">`;
-								var item_pos = 0;
-								data.forEach(function(item){
-									var aria_expanded = 'false';
-									var show = '';
-									if (item_pos == 0) {
-										aria_expanded = 'true';
-										show = 'hide';
-									}
-									if(item['directory_files'].length == 0){
-										html_treeview += `<li class="mt-1"><span class="text-muted"><i class="fe-folder"></i> No Directories Discovered during the Scan Performed on ${item.scanned_date}</span></li>`;
-										html_treeview += `<div class="ml-2 collapse ${show}" id="dir_${item.formatted_date_for_id}_${item.id}">`;
-									}
-									else{
-										html_treeview += `<li class="mt-1"><a data-bs-toggle="collapse" href="#dir_${item.formatted_date_for_id}_${item.id}" aria-expanded="${aria_expanded}" aria-controls="dir_${item.formatted_date_for_id}_${item.id}"><i class="fe-folder-plus"></i> <span class="me-1 badge badge-soft-primary badge-link bs-tooltip" title="Directories">${item['directory_files'].length} <i class="far fa-folder"></i></span> found on ${item.scanned_date}</a></li>`;
-										html_treeview += `<div class="ml-2 collapse ${show}" id="dir_${item.formatted_date_for_id}_${item.id}">`;
-										var interesting_badge = '';
-										// console.log(item['directory_files'][i]['name']);
-										item['directory_files'].forEach(function(file){
-											interesting_keywords_array.forEach(function(keyword){
-												if (file.name.includes(keyword)) {
-													interesting_badge = '<span class="badge badge-soft-danger ms-1 me-1" data-toggle="tooltip" data-placement="top" title="Interesting Directory">Interesting</span>';
-													return;
-												}
-											});
-											// console.log(file);
-											var http_status_badge = '';
-											if (file.http_status >= 200 && file.http_status < 300) {
-												http_status_badge = `<span class='badge badge-pills badge-soft-success' data-toggle="tooltip" data-placement="top" title="HTTP Status">`+file.http_status+`</span>`;
-											}
-											else if (file.http_status >= 300 && file.http_status < 400) {
-												http_status_badge = `<span class='badge badge-pills badge-soft-warning' data-toggle="tooltip" data-placement="top" title="HTTP Status">`+file.http_status+`</span>`;
-											}
-											else{
-												http_status_badge = `<span class='badge badge-pills badge-soft-danger' data-toggle="tooltip" data-placement="top" title="HTTP Status">`+file.http_status+`</span>`;
-											}
-											var http_url = file.url;
-											var lines_word_content = '';
-											if (file.lines) {
-												lines_word_content += `${file.lines} Lines`;
-											}
-											if (file.words) {
-												lines_word_content += ` ${file.words} Words`
-											}
-											var lines_word_badge = ''
-											if (lines_word_content.length > 1) {
-												lines_word_badge = `<span class="badge badge-soft-secondary" data-toggle="tooltip" data-placement="top" title="Response Content Status">${lines_word_content}</span>`;
-											}
-											html_treeview += `<li class="mt-1"><a href="` + htmlEncode(http_url) + `" target="_blank">` + htmlEncode(atob(file.name)) + ` (` + file.length / 100 + ` Kb) <span class="badge badge-soft-primary" data-toggle="tooltip" data-placement="top" title="Content Type">(` + htmlEncode(file.content_type) + `)</span> ${http_status_badge}</a>${interesting_badge} ${lines_word_badge}</li>`;
-										});
-									}
-									item_pos++;
-									html_treeview += '</div>';
-								});
-								html_treeview += `</ul>`;
-								return html_treeview;
-							}
-							return '';
-						},
-						"targets": 4,
-					},
-				],
-				"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-				"<'table-responsive'tr>" +
-				"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
-				drawCallback: function () {
-				},
-				preDrawCallback: function () {
-					return fetch("/api/listInterestingKeywords")
-					.then(response => {
-						return response.json();
-					})
-					.then(data => {
-						interesting_keywords_array = data;
-					});
-				},
-				initComplete: function( settings, json ) {
-				},
-				'createdRow': function( row, data, dataIndex ) {
-					if (data['is_important']){
-						$(row).addClass('table-danger');
-					}
-				},
-				"rowCallback": function( row, data, index ) {
-					// console.log(data);
-					// var data = JSON.parse(data['directories']);
-					// if (!data['results'].length) {
-					// 	$(row).hide();
-					// }
-				},
-			});
+		window.registerScanDetailDirectoryTab({
+			ajaxUrl: '{% url "api:subdomain-datatable-list" %}?project={{ current_project.slug|escapejs }}&scan_id={{ scan_history_id }}&format=datatables&only_directory',
 		});
 	{% endif %}
 
-	{% if 'screenshot' in history.tasks %}
+	{% if has_screenshots %}
 		$("#pills-screenshot-tab").click(function() {
 			if($('#screenshots-table').children().length > 0) {
 				return false;
 			}
-			get_screenshot('{% url 'api:fetchScreenshots' %}', {{scan_history_id}});
+			get_screenshot('{% url "api:fetchScreenshots" %}', {{scan_history_id}});
 
 			//animate search placeholder
 			const words = ["Search by Page Title   ",
@@ -2062,23 +1420,50 @@ $(document).ready(function() {
 		});
 	{% endif %}
 
-	//populate widgets
-	get_important_subdomains('{% url 'api:querySubdomains' %}', target_id=null, scan_history_id={{scan_history_id}});
-	get_recon_notes('{% url 'api:listTodoNotes' %}', target_id=null, scan_history_id={{scan_history_id}});
+	// context target (Target id) and domain (Domain id) for API calls (detail_scan is scoped by scan_history_id; target_id/domain_id used where APIs support them)
+	var contextTargetIdEl = document.getElementById('context_target_id');
+	var contextTargetId = contextTargetIdEl && contextTargetIdEl.value ? parseInt(contextTargetIdEl.value, 10) : null;
+	var contextDomainIdEl = document.getElementById('subscan_domain_id');
+	var contextDomainId = contextDomainIdEl && contextDomainIdEl.value ? parseInt(contextDomainIdEl.value, 10) : null;
 
-	get_ips('{{ ip_addresses|safe }}', '{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
-	get_technologies('{% url 'api:listTechnologies' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
-	get_ports('{{ ip_addresses|safe }}', '{% url 'api:listIPs' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
+	//populate widgets (querySubdomains uses target_id as Target id; get_ips/get_technologies/get_ports use scan_id, domain_id optional)
+	get_important_subdomains('{% url "api:querySubdomains" %}', target_id=contextTargetId, scan_history_id={{scan_history_id}});
 
-	get_subdomain_changes('{% url 'api:subdomain-changes-list' %}', {{scan_history_id}});
-	get_endpoint_changes('{% url 'api:endpoint-changes-list' %}', {{scan_history_id}});
+	var rengineDetailScanIpAddresses = [];
+	var rengineDetailScanIpEl = document.getElementById("rengine-detail-scan-ip-addresses");
+	if (rengineDetailScanIpEl && rengineDetailScanIpEl.textContent) {
+		try {
+			rengineDetailScanIpAddresses = JSON.parse(rengineDetailScanIpEl.textContent);
+		} catch (e) {
+			console.error("Error parsing scan detail IP payload:", e);
+		}
+	}
+	get_ips(rengineDetailScanIpAddresses, '{% url "api:getIpDetails" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=contextDomainId);
+	get_technologies('{% url "api:listTechnologies" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=null);
+	get_ports(rengineDetailScanIpAddresses, '{% url "api:listIPs" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=contextDomainId);
 
-	get_interesting_subdomains('{% url 'api:interesting-subdomains-list' %}', project='{{current_project.slug}}', null, {{scan_history_id}});
-	get_interesting_endpoints('{% url 'api:interesting-endpoints-list' %}', project='{{current_project.slug}}', null, {{scan_history_id}});
+	get_subdomain_changes('{% url "api:subdomain-changes-list" %}', {{scan_history_id}});
+	get_endpoint_changes('{% url "api:endpoint-changes-list" %}', {{scan_history_id}});
 
-	loadSubscanHistoryWidget('{% url 'api:listSubScans' %}', scan_history_id={{scan_history_id}}, domain_id=null);
+	$('a[href="#interesting-tab"]').on('shown.bs.tab', function () {
+		if (window._interestingTablesInitialized) return;
+		window._interestingTablesInitialized = true;
+		get_interesting_subdomains('{% url "api:interesting-subdomains-list" %}', '{{ current_project.slug|escapejs }}', null, {{ scan_history_id }}, { querySubdomainsUrl: '{% url "api:querySubdomains" %}' });
+		get_interesting_endpoints('{% url "api:interesting-endpoints-list" %}', '{{ current_project.slug|escapejs }}', null, {{ scan_history_id }}, { endpointSubdomainUrl: '{% url "api:querySubdomains" %}' });
+	});
 
-	get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=false);
+	function loadDeferredWidgets() {
+		get_recon_notes('{% url "api:listTodoNotes" %}', target_id=contextTargetId, scan_history_id={{scan_history_id}});
+		loadSubscanHistoryWidget('{% url "api:listSubScans" %}', scan_history_id={{scan_history_id}}, domain_id=contextDomainId, 50);
+		get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=contextDomainId, ignore_info=false);
+		get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=contextDomainId, ignore_info=false);
+	}
+	if (typeof requestIdleCallback !== 'undefined') {
+		requestIdleCallback(function() { loadDeferredWidgets(); }, { timeout: 500 });
+	} else {
+		setTimeout(loadDeferredWidgets, 0);
+	}
+
 	// listener for info checkbox on most vulnerable target
 	$('#ignore_info_most_vuln_checkbox').change(function() {
 		if (this.checked) {
@@ -2087,7 +1472,7 @@ $(document).ready(function() {
 		else{
 			var text_msg = 'Informational Vulnerabilities included in Most Vulnerable Targets.';
 		}
-		get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=this.checked);
+		get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=contextDomainId, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',
@@ -2095,8 +1480,7 @@ $(document).ready(function() {
 		});
 	});
 
-	get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=false);
-	// listener for info checkbox on most vulnerable target
+	// listener for info checkbox on most common vulnerability
 	$('#ignore_info_most_common_vuln_checkbox').change(function() {
 		if (this.checked) {
 			var text_msg = 'Informational Vulnerabilities ignored for Most Common Vulnerabilities.';
@@ -2104,7 +1488,7 @@ $(document).ready(function() {
 		else{
 			var text_msg = 'Informational Vulnerabilities included for Most Common Vulnerabilities.';
 		}
-		get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=this.checked);
+		get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=contextDomainId, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',
@@ -2141,438 +1525,49 @@ $(document).ready(function() {
 	});
 
 	$("#pills-endpoints-tab").click(function() {
-		get_endpoints('{% url 'api:endpoints-list' %}', '{% url 'api:subdomains-list' %}', project='{{current_project.slug}}', scan_history={{scan_history_id}}, null, gf_tags=null);
+		get_endpoints('{% url "api:endpoints-list" %}', '{% url "api:subdomains-list" %}', project='{{current_project.slug}}', scan_history={{scan_history_id}}, null, gf_tags=null);
 	});
 
-	{% if 'fetch_url' in history.tasks and history.used_gf_patterns %}
-		{% for pattern in history.used_gf_patterns|split:"," %}
-			$("#pills-{{pattern}}-tab").click(function() {
-				get_endpoints('{% url 'api:endpoints-list' %}', '{% url 'api:subdomains-list' %}', project='{{current_project.slug}}', scan_history={{scan_history_id}}, domain_id=null, gf_tags='{{pattern}}');
-			});
-		{% endfor %}
-	{% endif %}
-
-	$("#pills-subdomain-tab").click(function() {
-		// prevent table loading twice
-		// https://datatables.net/manual/tech-notes/3
-		if ( $.fn.dataTable.isDataTable( '#subdomain_scan_results' ) ) {
-			return false;
+	$("#domain-tab-related-btn, #domain-tab-tlds-btn").on("click", function(e) {
+		e.preventDefault();
+		const domainTab = document.querySelector("#pills-domain-tab");
+		if (domainTab) {
+			new bootstrap.Tab(domainTab).show();
 		}
-		var subdomain_ajax_url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&scan_id={{scan_history_id}}&format=datatables';
-		var is_subd_grouping = false;
-		var subd_grouping_col = 8;
-		var subdomain_datatables = $('#subdomain_scan_results').DataTable({
-			"headerCallback": function(e, a, t, n, s) {
-				e.getElementsByTagName("th")[0].innerHTML='<div class="form-check ms-1 form-check-primary"><input type="checkbox" class="float-start form-check-input chk-parent" id="head_checkbox" onclick=mainCheckBoxSelected(this)>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>\n'
-			},
-			"destroy": true,
-			"processing": true,
-			"oLanguage": subdomain_oLanguage,
-			"fnCreatedRow": function (nRow, aData, iDataIndex) {
-				$(nRow).attr('id', 'subdomain_row_' + aData['id']);
-			},
-			"stripeClasses": [],
-			"lengthMenu": subdomain_datatable_length_menu,
-			"pageLength": subdomain_datatable_page_length,
-			'serverSide': true,
-			"ajax": {
-					'url': subdomain_ajax_url,
-			},
-			"rowGroup": {
-				"startRender": function(rows, group) {
-					return group + ' (' + rows.count() + ' Subdomains)';
-				}
-			},
-			"order": [[ get_datatable_col_index('content_length', subdomain_datatable_columns), "desc" ]],
-			"columns": subdomain_datatable_columns,
-			"columnDefs": [
-				{ 
-					"orderable": false, 
-					"targets": [
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns),
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns) + 1,
-						get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
-						get_datatable_col_index('ip_addresses', subdomain_datatable_columns) + 1,
-						get_datatable_col_index('content_length', subdomain_datatable_columns)
-					]
-				},
-				{
-					"targets": [ 
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns),
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns) + 1,
-						get_datatable_col_index('technologies', subdomain_datatable_columns),
-						get_datatable_col_index('http_url', subdomain_datatable_columns),
-						get_datatable_col_index('cname', subdomain_datatable_columns),
-						get_datatable_col_index('is_interesting', subdomain_datatable_columns),
-						get_datatable_col_index('info_count', subdomain_datatable_columns),
-						get_datatable_col_index('low_count', subdomain_datatable_columns),
-						get_datatable_col_index('medium_count', subdomain_datatable_columns),
-						get_datatable_col_index('high_count', subdomain_datatable_columns),
-						get_datatable_col_index('critical_count', subdomain_datatable_columns),
-						get_datatable_col_index('todos_count', subdomain_datatable_columns),
-						get_datatable_col_index('webserver', subdomain_datatable_columns),
-						get_datatable_col_index('content_type', subdomain_datatable_columns),
-						get_datatable_col_index('directories_count', subdomain_datatable_columns),
-						get_datatable_col_index('subscan_count', subdomain_datatable_columns),
-						get_datatable_col_index('waf', subdomain_datatable_columns),
-						get_datatable_col_index('attack_surface', subdomain_datatable_columns)
-					],
-					"visible": false,
-					"searchable": false,
-				},
-				{
-					"targets": [ 
-						get_datatable_col_index('technologies', subdomain_datatable_columns),
-						get_datatable_col_index('cname', subdomain_datatable_columns),
-						get_datatable_col_index('is_important', subdomain_datatable_columns),
-						get_datatable_col_index('webserver', subdomain_datatable_columns),
-						get_datatable_col_index('content_type', subdomain_datatable_columns)
-					],
-					"visible": false,
-					"searchable": true,
-				},
-				{
-					"className": "text-center", 
-					"targets": [
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns),
-						get_datatable_col_index('endpoint_count', subdomain_datatable_columns) + 1,
-						get_datatable_col_index('http_status', subdomain_datatable_columns),
-						get_datatable_col_index('content_length', subdomain_datatable_columns),
-						get_datatable_col_index('response_time', subdomain_datatable_columns)
-					]
-				},
-				// checkbox
-				{
-					"targets":0, "width":"20px", "className":"", "orderable":!1, render:function(e, a, t, n) {
-						return'<div class="form-check ms-1 form-check-primary"><input type="checkbox" name="subdomain_checkbox['+ e + ']" class="float-start form-check-input subdomain_checkbox" value="' + e + '" onchange=toggleMultipleSubdomainButton()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>';
-					}},
-					// subdomain Name
-					{
-						"render": function ( data, type, row ) {
-							var badges = '';
-							var tech_badge = '';
-							var interesting_badge = '';
-							var content_type = '';
-							var web_server = '';
-							var waf_badge = '';
-							if (row['technologies']){
-								tech_badge = '<div>' + parse_technology('{% url 'api:querySubdomains' %}', row['technologies'], "primary", scan_id={{scan_history_id}}, domain_id=null) + '</div>';
-							}
-							if(row['is_interesting'])
-							{
-								interesting_badge = `<div><span class='me-1 badge badge-soft-danger' data-toggle="tooltip" data-placement="top" title="Interesting Subdomain">Interesting</span></div>`;
-							}
+	});
+	window.registerScanTargetSubdomainTab({
+		mode: 'scan',
+		ajaxUrl: '{% url "api:subdomain-datatable-list" %}?project={{ current_project.slug|escapejs }}&scan_id={{ scan_history_id }}&format=datatables',
+		projectSlug: '{{ current_project.slug|escapejs }}',
+		columns: subdomain_datatable_columns,
+		lengthMenu: subdomain_datatable_length_menu,
+		nameColumnTarget: 1,
+		useInlineNote: true,
+		scanHistoryId: {{ scan_history_id }},
+		endpointModalScanId: {{ history.id }},
+		certificateScanId: {{ history.id }},
+		hasScreenshots: {% if has_screenshots %}true{% else %}false{% endif %},
+		urls: {
+			querySubdomains: '{% url "api:querySubdomains" %}',
+			endpointsList: '{% url "api:endpoints-list" %}',
+			vulnerabilitiesList: '{% url "api:vulnerabilities-list" %}',
+			directoriesList: '{% url "api:directories-list" %}',
+			listSubScans: '{% url "api:listSubScans" %}',
+			getIpDetails: '{% url "api:getIpDetails" %}',
+			listIPs: '{% url "api:listIPs" %}',
+		},
+	});
 
-							if (row['content_type']) {
-								content_type = `<div><span class='mt-1 badge badge-soft-blue bs-tooltip' title="Content Type">${row['content_type']}</span></div>`;
-							}
-
-							if (row['webserver']) {
-								web_server = `<div><span class='mt-1 badge badge-soft-info bs-tooltip' title="Web Server">${row['webserver']}</span></div>`;
-							}
-
-							if (interesting_badge) {
-								badges =   interesting_badge;
-							}
-
-							todo_icon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e7515a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`;
-							todo_badge = '';
-
-							if (row['todos_count']) {
-								todo_badge = `<span class="text-danger badge badge-link badge-soft-danger float-end mt-1" onclick="list_subdomain_todos(${row['id']}, '${row['name']}')">${todo_icon}&nbsp;${row['todos_count']} Todos&nbsp;</span>`
-							}
-
-							endpoint_count_badge = '';
-							if (row['endpoint_count']) {
-								endpoint_count_badge = `<span class="pl-2 pr-2 me-1 badge badge-soft-primary badge-link bs-tooltip" title="Endpoints" onclick="get_endpoint_modal('{% url 'api:endpoints-list' %}', '{{current_project.slug}}', {{history.id}}, ${row['id']}, '${row['name']}')">${row['endpoint_count']} <i class=" fas fa-link"></i></span>`;
-							}
-
-							if(row['waf'].length){
-								waf_badge = `<div><span class="pl-2 pr-2 my-1 badge badge-soft-danger" bs-tooltip" title="WAF Detected by wafw00f!""><i class="fe-cloud-lightning mx-1"></i>WAF Detected</span></div>`;
-								for (var waf in row['waf']) {
-									var waf_object = row['waf'][waf];
-									waf_badge += `<div><span class="mb-1 badge badge-soft-danger" bs-tooltip">${waf_object.manufacturer}: ${waf_object.name.substring(0, 40)}${waf_object.name.length > 40 ? '...' : ''}</span></div>`;
-								}
-							}
-
-							vuln_count_badge = '';
-							total_vuln_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link' title="All Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id={{history.id}}, severity=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count']} <i class="fas fa-bug"></i></span>`;
-							info_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-info bs-tooltip badge-link' title="Informational Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id={{history.id}}, severity=0, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count']} Info</span>`;
-							low_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-low bs-tooltip badge-link' title=" Low Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id={{history.id}}, severity=1, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['low_count']} Low</span>`;
-							medium_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-warning bs-tooltip badge-link' title="Medium Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id={{history.id}}, severity=2, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['medium_count']} Med</span>`;
-							high_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-danger bs-tooltip badge-link' title="High Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id={{history.id}}, severity=3, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['high_count']} High</span>`;
-							critical_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link' title="Critical Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id={{history.id}}, severity=4, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['critical_count']} Critical</span>`;
-							vuln_count_badge = `<div class="">` + (row['info_count'] > 0? info_badge : '') + (row['low_count'] > 0? low_badge : '') + (row['medium_count'] > 0? medium_badge : '') + (row['high_count'] > 0? high_badge : '') + (row['critical_count'] > 0? critical_badge : '') + `</div>`;
-
-							vuln_count_badge = (row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count'] > 0? total_vuln_badge : '') + vuln_count_badge;
-
-							copy_icon = `
-							<a href="javascript:;" data-clipboard-action="copy" class="action-icon copyable" data-toggle="tooltip" data-placement="top" title="Copy Subdomain!" data-clipboard-target="#subdomain-${row['id']}" id="#subdomain-${row['id']}" onclick="setTooltip(this.id, 'Copied!')"> <i class="text-primary mdi mdi-content-copy"></i></a>
-							`;
-
-							var directory_count_badge = '';
-							if (row['directories_count']){
-								directory_count_badge = `<span class="me-1 badge badge-soft-primary badge-link bs-tooltip" title="Directories" onclick="get_directory_modal('{% url 'api:directories-list' %}', scan_id={{history.id}}, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['directories_count']} <i class="far fa-folder"></i></span>`;
-							}
-
-							var subscan_count_badge = '';
-							if (row['subscan_count']){
-								subscan_count_badge = `<span class="badge me-1 badge-soft-blue badge-link bs-tooltip" title="SubScans" onclick="get_and_render_subscan_history('{% url 'api:listSubScans' %}', ${row['id']}, '${row['name']}')">${row['subscan_count']} <i class="fas fa-history"></i></span>`;
-							}
-
-							tech_badge += content_type;
-							tech_badge += web_server;
-
-							end_vuln_badge = '<div class="">' + subscan_count_badge + endpoint_count_badge + directory_count_badge + vuln_count_badge + '</div>';
-
-							if (row['http_url']) {
-								if (row['cname']) {
-									cname_badge = `<div><span class="text-dark">CNAME<br><span class="text-warning"> ❯ </span>` + row['cname'].replace(',', '<br><span class="text-warning"> ❯ </span>') + `</div>`;
-									return badges + `<div class="clipboard copy-txt"><a href="`+row['http_url']+`" class="text-primary" target="_blank"><span id='subdomain-${row['id']}'>` + data  +`${copy_icon} </span></a>`+ `</div>` + cname_badge + waf_badge  + end_vuln_badge + tech_badge + todo_badge;
-								}
-								return badges + `<div class="clipboard copy-txt"><a href="`+row['http_url']+`" class="text-primary" target="_blank"><span id='subdomain-${row['id']}'>` + data + `${copy_icon} </span></a>` + `</div>` + waf_badge + end_vuln_badge + tech_badge + todo_badge;
-							}
-							return badges + `<div class="clipboard copy-txt"><a href="https://`+data+`" class="text-primary" target="_blank"><span id='subdomain-${row['id']}'>` + data + `${copy_icon} </span></a>` + `</div>` + waf_badge + end_vuln_badge + tech_badge + todo_badge;
-						},
-						"targets": 1
-					},
-					// vulnerability count
-					{
-						"render": function ( data, type, row ) {
-							if (row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count'] > 0) {
-								return `<span class='badge badge-critical bs-tooltip badge-link' title="All Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id={{history.id}}, severity=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count']} <i class="fas fa-bug"></i></span>`;
-							}
-							return "";
-						},
-						"targets": get_datatable_col_index('vuln_count', subdomain_datatable_columns),
-					},
-					// http_status
-					{
-						"render": function ( data, type, row ) {
-							// display badge based on http status
-							// green for http status 2XX, orange for 3XX and warning for everything else
-							if (data >= 200 && data < 300) {
-								return "<span class='badge bg-success'>"+data+"</span>";
-							}
-							else if (data >= 300 && data < 400) {
-								return "<span class='badge bg-warning'>"+data+"</span>";
-							}
-							else if (data == 0){
-								// datatable throws error when no data is returned
-								return "";
-							}
-							return `<span class='badge bg-danger'>`+data+`</span>`;
-						},
-						"targets": get_datatable_col_index('http_status', subdomain_datatable_columns),
-					},
-					// page title
-					{
-						"render": function ( data, type, row ) {
-							if (data){
-								return htmlEncode(data);
-							}
-							return "";
-						},
-						"targets": get_datatable_col_index('page_title', subdomain_datatable_columns),
-					},
-					// ip address
-					{
-						"render": function ( data, type, row ) {
-							ip_badge = ''
-							if (data)
-							{
-								Object.entries(data).forEach(([key, value]) => {
-									if (value['is_cdn']) {
-										ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
-									}
-									else{
-											ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
-									}
-								});
-								return ip_badge;
-							}
-							return "";
-						},
-					"targets": get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
-					},
-					// open ports
-					{
-						"render": function ( data, type, row ) {
-							return renderBadge(data, {
-								api_ips_url: '{% url 'api:listIPs' %}',
-								api_subdomains_url: '{% url 'api:querySubdomains' %}',
-								scan_id: {{scan_history_id}},
-								domain_id: null
-							});
-						},
-				"targets": get_datatable_col_index('ip_addresses', subdomain_datatable_columns) + 1,
-					},
-					{
-						"render": function ( data, type, row ) {
-							if (data){
-								//return lightbox with caption as http link
-								return data;
-							}
-							return 0;
-						},
-				"targets": get_datatable_col_index('content_length', subdomain_datatable_columns),
-					},
-
-					// response_time
-					{
-						"render": function ( data, type, row ) {
-							if (data){
-								return get_response_time_text(data);
-							}
-							return "";
-						},
-					"targets": get_datatable_col_index('response_time', subdomain_datatable_columns),
-					},
-					// Action
-					{
-						"render": function ( data, type, row ) {
-							const cms_detector_http_url = row['http_url'] ? row['http_url'] : 'https://' + row['name'];
-							return `
-							<div class="btn-group mt-2">
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal('{% url 'api:llm_get_possible_attacks' %}', ${row['id']})"><i class="fe-eye"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" class="btn btn-primary btn-scan-subdomain me-1" id="${row['id']}"><i class="fe-zap"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" class="btn btn-primary me-1" id="${row['id']}" onclick="add_note_for_subdomain(${row['id']}, '${row['name']}', '{{current_project.slug}}')"><i class="fe-file-plus"></i></button>
-							<button class="btn btn-primary me-1 dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-horizontal"></i></button>
-							<div class="dropdown-menu dropdown-menu-end">
-							<a class="dropdown-item" href="#" onclick="mark_important_subdomain('{% url 'api:toggle_subdomain' %}', this, ${row['id']})" id="${row['id']}"><i class="mdi mdi-alert-rhombus-outline me-2 text-muted font-18 vertical-middle"></i>Mark Important Subdomain</a>
-							<a class="dropdown-item detect_subdomain_cms_link" href="#" data-http-status="${row['http_status']}" data-cms-url="${cms_detector_http_url}" data-url="{% url 'api:cms_detector' %}"><i class="fe-grid me-2 text-muted font-18 vertical-middle"></i>Detect CMS</a>
-							<a class="text-danger dropdown-item btn-delete-subdomain" href="#" id="${row['id']}"><i class="text-danger mdi mdi-delete-forever-outline me-2 font-18 vertical-middle"></i>Delete Subdomain</a>
-							</div>
-							</div>
-							`;
-						},
-						"targets": get_datatable_col_index('action', subdomain_datatable_columns),
-					},
-				],
-				"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-				"<'table-responsive'tr>" +
-				"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
-				"initComplete": function(settings, json) {
-					api = this.api();
-					subdomain_datatable_col_visibility(subdomain_datatables);
-					$(".dtrg-group th:contains('No group')").remove();
-				},
-				"drawCallback": function () {
-					$('.badge').tooltip({ template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' })
-					$('.bs-tooltip').tooltip();
-					$('.dtrg-group').remove();
-					drawCallback_api = this.api();
-					setTimeout(function() {
-						$(".dtrg-group th:contains('No group')").remove();
-					}, 1);
-				},
-				"rowCallback": function( row, data, dataIndex ) {
-					if (data['is_important']){
-						$(row).addClass('table-danger');
-					}
-				},
-			});
-
-			var radioGroup = document.getElementsByName('grouping_subd_row');
-			radioGroup.forEach(function(radioButton) {
-				radioButton.addEventListener('change', function() {
-					if (this.checked) {
-						var groupRows = document.querySelectorAll('tr.group');
-						var col_index = get_datatable_col_index(this.value, subdomain_datatable_columns);
-						api.page.len(-1).draw();
-						api.order([col_index, 'asc']).draw();
-						subdomain_datatables.rowGroup().dataSrc(this.value);
-						Snackbar.show({
-							text: 'Subdomains grouped by ' + this.value,
-							pos: 'top-right',
-							duration: 2500
-						});
-					}
-				});
-			});
-
-			$('#reload_subdomain_table_btn').click(function () {
-				subdomain_datatables.ajax.reload();
-			});
-
-			$('#subdomain-search-button').click(function () {
-				subdomain_datatables.search($("#subdomains-search").val()).draw() ;
-			});
-
-			$('#load_important_subdomain_table_btn').click(function() {
-				subdomain_datatables.search('is_important=true').draw();
-			});
-
-			// Use the helper function from subdomain_datatable.js
-			subdomain_datatable_col_visibility(subdomain_datatables);
-
-			$("#subdomain_scan_results").on('click', '.btn-delete-subdomain', function () {
-				var subdomain_id = $(this).attr('id');
-				var data = {'subdomain_ids': [subdomain_id]};
-				var row = this;
-				Swal.fire({
-					showCancelButton: true,
-					title: 'Delete Subdomain!',
-					text: 'Do you really want to delete this subdomain? This action cannot be undone.',
-					icon: 'error',
-					confirmButtonText: 'Delete',
-				}).then((result) => {
-					if (result.isConfirmed) {
-						Swal.fire({
-							title: 'Deleting Subdomain...',
-							allowOutsideClick: false
-						});
-						swal.showLoading();
-						fetch('/api/action/subdomain/delete/', {
-							method: 'POST',
-							credentials: "same-origin",
-							headers: {
-								"X-CSRFToken": getCookie("csrftoken"),
-								'Content-Type': 'application/json'
-							},
-							body: JSON.stringify(data)
-						})
-						.then(response => response.json())
-						.then(function (response) {
-							swal.close();
-							if (response['status']) {
-								$(row).parent().parent().parent().parent().remove();
-								Snackbar.show({
-									text: 'Subdomain successfully deleted!',
-									pos: 'top-right',
-									duration: 2500
-								});
-							}
-							else{
-								Swal.fire({
-									title:  'Could not delete Subdomain!',
-									icon: 'error',
-								});
-							}
-						});
-					}
-				});;
-				$('a[data-toggle="tooltip"]').tooltip("hide")
-			});
-
-			$("#subdomain_scan_results").on('click', '.btn-scan-subdomain', function () {
-				$('input[type=checkbox]').prop('checked',false);
-				$('#subscan-modal').modal('show');
-				var subdomain_id = $(this).attr('id');
-				$('a[data-toggle="tooltip"]').tooltip("hide")
-				$('#subtask_subdomain_id').val(subdomain_id);
-				// to distinguish multiple subscan or single, put a extra attribute on button
-				$('#btn-initiate-subtask').attr('multiple-subscan', false);
-			});
-
-			// if screenshot is not taken remove screenshot row
-			var column = subdomain_datatables.column('9');
-			{% if 'screenshot' in history.tasks %}
-			column.visible(true);
-			{% else %}
-			column.visible(false);
-			{% endif %}
-		});
+		window.registerDetailScanLazyIpTab({
+			tableSelector: '#ip_scan_results',
+			ajaxUrl: '{% url "api:listIPs" %}?scan_id={{ scan_history_id }}&format=datatables',
+			scanHistoryId: {{ scan_history_id }},
+			projectSlug: '{{ current_project.slug|escapejs }}',
+			getIpDetailsUrl: '{% url "api:getIpDetails" %}',
+			querySubdomainsUrl: '{% url "api:querySubdomains" %}',
+			listIPsUrl: '{% url "api:listIPs" %}',
+			downloadFilename: 'selected-ips-{{ scan_history_id }}.txt',
+		}, { registerShowIpEndpointsNav: true });
 
 	// filters for checkbox
 	var filter_cols = [
@@ -2603,7 +1598,7 @@ $(document).ready(function() {
 
 	var countriesData = {
 		{% for country in asset_countries %}
-			"{{country.iso}}": {{country.count}},
+			"{{country.iso}}": {{country.count}}{% if not forloop.last %},{% endif %}
 		{% endfor %}
 	};
 
@@ -2638,23 +1633,74 @@ $(document).ready(function() {
 		}
 	});
 
-	// s3buckets datatable
-	var s3_table = $('#s3-datatable').DataTable({
-		"order": [[0, 'asc']],
-		"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-			"<'table-responsive'tr>" +
-			"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
-		"oLanguage": {
-			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-			"sSearchPlaceholder": "Search...",
-			"sLengthMenu": "Results :  _MENU_",
-		},
-		"stripeClasses": [],
-		"lengthMenu": [[50, 100, 200, 300, 400, -1], [50, 100, 200, 300, 400, 'All']],
-		"pageLength": 50,
-	});
+	// Set API URLs for scan status functions
+	window.scanStatusApiUrls = {
+		scanStatusUrl: '{% url "api:scan_status" %}',
+		stopScanUrl: '{% url "api:stop_scan" %}',
+		stopActivityUrl: '{% url "api:stop_activity" %}',
+		fetchSubscanUrl: '{% url "api:fetch_subscan_results" %}'
+	};
+
+	// Connect to WebSocket for real-time scan status updates
+	if (typeof connectScanStatusWebSocket === 'function') {
+		connectScanStatusWebSocket({{history.id}}, null, {
+			updateDetail: function(data) {
+				updateScanDetailPage(data);
+			},
+			scanStatusUrl: '{% url "api:scan_status" %}',
+			stopScanUrl: '{% url "api:stop_scan" %}',
+			stopActivityUrl: '{% url "api:stop_activity" %}',
+			fetchSubscanUrl: '{% url "api:fetch_subscan_results" %}'
+		});
+	}
+
+	// S3 buckets server-side DataTable
+	var s3_ajax_url = '{% url "api:listS3Buckets" %}' + '?scan_history=' + {{ history.id }};
+	var s3TableColumns = [
+		{ data: 'name', name: 'name' },
+		{ data: 'region', name: 'region' },
+		{ data: 'provider', name: 'provider' },
+		{ data: 'owner', name: 'owner' },
+		{ data: 'objects_count', name: 'objects_count' },
+		{ data: 'bucket_size', name: 'bucket_size' },
+		{ data: 'auth_users_permission', name: 'auth_users_permission' },
+		{ data: 'all_users_permission', name: 'all_users_permission' },
+	];
+	var s3TableOrder = window.getRengineDatatableOrderFromNames(s3TableColumns, [['name', 'asc']]);
+	var s3FilterParamsEl = document.getElementById('s3-datatable-filter-params');
+	var s3FilterSelectToParam = {};
+	if (s3FilterParamsEl) {
+		try {
+			s3FilterSelectToParam = JSON.parse(s3FilterParamsEl.textContent) || {};
+		} catch (e) {
+			if (typeof console !== 'undefined' && console.error) {
+				console.error('Failed to parse s3-datatable-filter-params JSON', e);
+			}
+		}
+	}
+	var s3Table = window.initServerSideDataTable('#s3-datatable', window.getRengineDatatableConfig('#s3-datatable', {
+		ajax: {
+      url: s3_ajax_url,
+      data: function(d) {
+        if (window.buildDatatableFilterPayload) {
+          var payload = window.buildDatatableFilterPayload(s3FilterSelectToParam);
+          Object.keys(payload).forEach(function(key) {
+            d[key] = payload[key];
+          });
+        }
+      }
+    },
+		columns: s3TableColumns,
+		order: s3TableOrder,
+		scrollY: '60vh',
+		initComplete: function() {
+			if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('#s3-datatable [data-toggle="tooltip"]'));
+		}
+		}));
+
+  if (window.attachDatatableFilters) {
+    window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('s3_buckets', s3Table, { onApply: function() { s3Table.draw(); } }));
+  }
 
 });
 </script>

@@ -1,0 +1,182 @@
+{% load custom_filters %}
+{% if domains %}
+<div class="row">
+	{% for domain in domains %}
+	<div class="col-12 col-xl-6 col-xxl-4 mb-3">
+		<div class="card h-100">
+			<div class="card-body">
+				<h4 class="header-title mb-0"><i class="fe-activity"></i>&nbsp;{{ domain.name }} information</h4>
+				{% with domain_info=domain.domain_info %}
+				<div class="row mt-3">
+					<div class="col-sm-3">
+						<div class="nav flex-column nav-pills nav-pills-tab" id="domain-card-{{ domain.id }}-v-pills-tab" role="tablist" aria-orientation="vertical">
+							<a class="nav-link active show mb-1" id="domain-card-{{ domain.id }}-v-pills-domain-tab" data-bs-toggle="pill" href="#domain-card-{{ domain.id }}-v-pills-domain" role="tab" aria-controls="domain-card-{{ domain.id }}-v-pills-domain" aria-selected="true">Domain info</a>
+							<a class="nav-link mb-1" id="domain-card-{{ domain.id }}-v-pills-whois-tab" data-bs-toggle="pill" href="#domain-card-{{ domain.id }}-v-pills-whois" role="tab" aria-controls="domain-card-{{ domain.id }}-v-pills-whois" aria-selected="false">Whois</a>
+							<a class="nav-link mb-1" id="domain-card-{{ domain.id }}-v-pills-dns-tab" data-bs-toggle="pill" href="#domain-card-{{ domain.id }}-v-pills-dns" role="tab" aria-controls="domain-card-{{ domain.id }}-v-pills-dns" aria-selected="false">DNS Records</a>
+							<a class="nav-link mb-1" id="domain-card-{{ domain.id }}-v-pills-nameserver-tab" data-bs-toggle="pill" href="#domain-card-{{ domain.id }}-v-pills-nameserver" role="tab" aria-controls="domain-card-{{ domain.id }}-v-pills-nameserver" aria-selected="false">Nameservers</a>
+							<a class="nav-link mb-1" id="domain-card-{{ domain.id }}-v-pills-history-tab" data-bs-toggle="pill" href="#domain-card-{{ domain.id }}-v-pills-history" role="tab" aria-controls="domain-card-{{ domain.id }}-v-pills-history" aria-selected="false">Historical Ips</a>
+						</div>
+					</div>
+					<div class="col-sm-9">
+						<div class="tab-content pt-0">
+							<div class="tab-pane fade active show" id="domain-card-{{ domain.id }}-v-pills-domain" role="tabpanel" aria-labelledby="domain-card-{{ domain.id }}-v-pills-domain-tab" data-simplebar style="min-height: 260px;">
+								{% if not domain_info %}
+								<div class="alert alert-info mb-0">WHOIS not fetched. Run a scan that includes WHOIS (e.g. domain_recon) to populate this.</div>
+								{% else %}
+								<div class="row">
+									<div class="col-12">
+										<small class="sub-header">Registrant</small>
+										<h6>{% if domain_info.registrant %}{{ domain_info.registrant.name|default:"—" }}{% else %}—{% endif %}</h6>
+									</div>
+									<div class="col-12">
+										<small class="sub-header">Registrar</small>
+										<h6>{% if domain_info.registrar %}{{ domain_info.registrar.name|default:"—" }}{% else %}—{% endif %}</h6>
+									</div>
+									<div class="col-6">
+										<small class="sub-header">Created</small>
+										<h6 class="font-13">{{ domain_info.created|default:"—" }}</h6>
+									</div>
+									<div class="col-6">
+										<small class="sub-header">Expires</small>
+										<h6 class="font-13">{{ domain_info.expires|default:"—" }}</h6>
+									</div>
+									{% if domain_info.status.all %}
+									<div class="col-12 mt-1">
+										{% for status in domain_info.status.all %}
+										{% if 'prohibited' in status.name %}
+										<span class="badge badge-soft-danger mt-1">{{ status.name }}</span>
+										{% else %}
+										<span class="badge badge-soft-success mt-1">{{ status.name }}</span>
+										{% endif %}
+										{% endfor %}
+									</div>
+									{% endif %}
+								</div>
+								{% endif %}
+							</div>
+							<div class="tab-pane fade" id="domain-card-{{ domain.id }}-v-pills-whois" role="tabpanel" aria-labelledby="domain-card-{{ domain.id }}-v-pills-whois-tab" data-simplebar style="min-height: 260px;">
+								{% if domain_info %}
+								<ul class="nav nav-tabs nav-bordered nav-justified">
+									<li class="nav-item">
+										<a href="#domain-card-{{ domain.id }}-registrant-tab" data-bs-toggle="tab" class="nav-link active">Registrant</a>
+									</li>
+									<li class="nav-item">
+										<a href="#domain-card-{{ domain.id }}-admin-tab" data-bs-toggle="tab" class="nav-link">Administrative</a>
+									</li>
+									<li class="nav-item">
+										<a href="#domain-card-{{ domain.id }}-technical-tab" data-bs-toggle="tab" class="nav-link">Technical</a>
+									</li>
+									<li class="nav-item">
+										<a href="#domain-card-{{ domain.id }}-raw-whois-tab" data-bs-toggle="tab" class="nav-link">Raw response</a>
+									</li>
+								</ul>
+								<div class="tab-content mt-2">
+									<div class="tab-pane active" id="domain-card-{{ domain.id }}-registrant-tab">
+										{% if domain_info.registrant %}
+										<div class="table-responsive">
+											<table class="table table-sm mb-0">
+												<tbody>
+													<tr><td><b>Name</b></td><td>{{ domain_info.registrant.name|default:"—" }}</td></tr>
+													<tr><td><b>Organization</b></td><td>{{ domain_info.registrant.organization|default:"—" }}</td></tr>
+													<tr><td><b>Email</b></td><td>{{ domain_info.registrant.email|default:"—" }}</td></tr>
+													<tr><td><b>Country</b></td><td>{{ domain_info.registrant.country|default:"—" }}</td></tr>
+												</tbody>
+											</table>
+										</div>
+										{% else %}
+										<div class="alert alert-info mb-0">No registrant data.</div>
+										{% endif %}
+									</div>
+									<div class="tab-pane" id="domain-card-{{ domain.id }}-admin-tab">
+										{% if domain_info.admin %}
+										<div class="table-responsive">
+											<table class="table table-sm mb-0">
+												<tbody>
+													<tr><td><b>Name</b></td><td>{{ domain_info.admin.name|default:"—" }}</td></tr>
+													<tr><td><b>Organization</b></td><td>{{ domain_info.admin.organization|default:"—" }}</td></tr>
+													<tr><td><b>Email</b></td><td>{{ domain_info.admin.email|default:"—" }}</td></tr>
+													<tr><td><b>Country</b></td><td>{{ domain_info.admin.country|default:"—" }}</td></tr>
+												</tbody>
+											</table>
+										</div>
+										{% else %}
+										<div class="alert alert-info mb-0">No admin data.</div>
+										{% endif %}
+									</div>
+									<div class="tab-pane" id="domain-card-{{ domain.id }}-technical-tab">
+										{% if domain_info.tech %}
+										<div class="table-responsive">
+											<table class="table table-sm mb-0">
+												<tbody>
+													<tr><td><b>Name</b></td><td>{{ domain_info.tech.name|default:"—" }}</td></tr>
+													<tr><td><b>Organization</b></td><td>{{ domain_info.tech.organization|default:"—" }}</td></tr>
+													<tr><td><b>Email</b></td><td>{{ domain_info.tech.email|default:"—" }}</td></tr>
+													<tr><td><b>Country</b></td><td>{{ domain_info.tech.country|default:"—" }}</td></tr>
+												</tbody>
+											</table>
+										</div>
+										{% else %}
+										<div class="alert alert-info mb-0">No technical data.</div>
+										{% endif %}
+									</div>
+									<div class="tab-pane" id="domain-card-{{ domain.id }}-raw-whois-tab">
+										{% if domain_info.extra_data and domain_info.extra_data.raw_whois %}
+										<pre class="mb-0 p-2 bg-light border rounded font-13">{{ domain_info.extra_data.raw_whois|escape }}</pre>
+										{% else %}
+										<div class="alert alert-info mb-0">No raw WHOIS data.</div>
+										{% endif %}
+									</div>
+								</div>
+								{% else %}
+								<div class="alert alert-info mb-0">WHOIS not fetched. Run a scan that includes WHOIS (e.g. domain_recon) to populate this.</div>
+								{% endif %}
+							</div>
+							<div class="tab-pane fade" id="domain-card-{{ domain.id }}-v-pills-dns" role="tabpanel" aria-labelledby="domain-card-{{ domain.id }}-v-pills-dns-tab" data-simplebar style="min-height: 260px;">
+								{% if domain_info and domain_info.dns_records.all %}
+								<h6 class="font-13">A Records</h6>
+								{% for dns in domain_info.dns_records.all %}{% if dns.type|lower == 'a' %}<span class="badge badge-soft-primary me-1 mt-1">{{ dns.name }}</span>{% endif %}{% endfor %}
+								<h6 class="font-13 mt-2">MX Records</h6>
+								{% for dns in domain_info.dns_records.all %}{% if dns.type|lower == 'mx' %}<span class="badge badge-soft-primary me-1 mt-1">{{ dns.name }}</span>{% endif %}{% endfor %}
+								<h6 class="font-13 mt-2">TXT Records</h6>
+								{% for dns in domain_info.dns_records.all %}{% if dns.type|lower == 'txt' %}<span class="badge badge-soft-secondary me-1 mt-1">{{ dns.name }}</span>{% endif %}{% endfor %}
+								{% else %}
+								<div class="alert alert-info mb-0">No DNS records.</div>
+								{% endif %}
+							</div>
+							<div class="tab-pane fade" id="domain-card-{{ domain.id }}-v-pills-nameserver" role="tabpanel" aria-labelledby="domain-card-{{ domain.id }}-v-pills-nameserver-tab" data-simplebar style="min-height: 260px;">
+								{% if domain_info and domain_info.name_servers.all %}
+								{% for nameserver in domain_info.name_servers.all %}
+								<span class="badge badge-soft-primary me-1 mt-1">{{ nameserver.name }}</span>
+								{% endfor %}
+								{% else %}
+								<div class="alert alert-info mb-0">No nameservers.</div>
+								{% endif %}
+							</div>
+							<div class="tab-pane fade" id="domain-card-{{ domain.id }}-v-pills-history" role="tabpanel" aria-labelledby="domain-card-{{ domain.id }}-v-pills-history-tab" data-simplebar style="min-height: 260px;">
+								{% if domain_info and domain_info.historical_ips.all %}
+								<div class="table-responsive">
+									<table class="table table-sm mb-0">
+										<thead class="table-light"><tr><th>IP</th><th>Location</th><th>Last Seen</th></tr></thead>
+										<tbody>
+											{% for ip in domain_info.historical_ips.all %}
+											<tr><td><b>{{ ip.ip }}</b></td><td>{{ ip.location|default:"—" }}</td><td>{{ ip.last_seen|default:"—" }}</td></tr>
+											{% endfor %}
+										</tbody>
+									</table>
+								</div>
+								{% else %}
+								<div class="alert alert-info mb-0">No historical IPs.</div>
+								{% endif %}
+							</div>
+						</div>
+					</div>
+				</div>
+				{% endwith %}
+			</div>
+		</div>
+	</div>
+	{% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">No domains discovered for this target yet. Run a scan to discover domains.</div>
+{% endif %}

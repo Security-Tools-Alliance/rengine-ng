@@ -4,16 +4,15 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0032_domaininfo_whois_server'),
+        ("targetApp", "0032_domaininfo_whois_server"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='nameserver',
-            name='name',
-            field=models.CharField(default='', max_length=500),
+            model_name="nameserver",
+            name="name",
+            field=models.CharField(default="", max_length=500),
             preserve_default=False,
         ),
     ]

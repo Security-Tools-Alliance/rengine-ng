@@ -1,0 +1,146 @@
+---
+description: Frontend and Datatables conventions for reNgine-ng, including JavaScript style, URL handling, responsive design, and server-side DataTables usage.
+alwaysApply: false
+---
+
+# reNgine-ng frontend & Datatables conventions
+
+## Scope
+
+Apply these guidelines when working on frontend code:
+
+- JavaScript files under `web/`
+- Django templates rendering frontend HTML/JS
+- Datatables configuration (JS and templates)
+
+## Shared tab content partials
+
+- Primary tab bodies (Subdomains, URLs, Vulnerabilities, **IP Addresses**, etc.) that appear on both **scan detail** and **target summary** must live in **`web/templates/base/_items/<feature>_tab_content.html`** (for example `ip_address_tab_content.html`, `subdomain_tab_content.html`).
+- Page templates (`startScan/detail_scan.html`, `targetApp/target/summary.html`) should only wrap the tab pane (`<div class="tab-pane" id="...">`) and **`{% include %}`** the partial with context flags such as `detail_scan` / `target_summary` where behaviour differs.
+- Do **not** embed large duplicated tab markup directly in a single page template when the same tab exists in more than one place.
+
+### Advanced search bar (DataTable tabs)
+
+- The shared markup for the **advanced search** row (input, Search button, autocomplete box, hint text mentioning **Build filter**) must come from **`web/templates/base/_items/_datatable_advanced_search_block.html`**. Pass `wrapper_id`, `advanced_search_context` (must match `data-advanced-search` and a key in `advanced_search_profiles.js`), `input_id`, `button_id`, `autocom_box_id`, `placeholder`, `aria_label`, and optionally `autocom_box_extra_classes` (e.g. `endpoint-search`, `vulnerability-search`).
+- When adding a new DataTable tab that uses advanced search, register a profile in **`web/static/custom/datatables/advanced_search_profiles.js`** and add the same context to **`web/api/helpers/advanced_search.py`** (`_ADVANCED_SEARCH_FIELD_DEFS`) and, if distinct values are needed, **`build_*` queryset wiring in `web/api/helpers/advanced_search_values.py`** (and `api/helpers/query.py` when the list view’s filters should stay the single source of truth).
+
+## JavaScript style
+
+- Always use `const` or `let` instead of `var`.
+- Prefer function expressions assigned to variables instead of function declarations at top-level when working inside blocks.
+- Do not hardcode URLs in JS:
+  - Use Django routes passed from templates (for example, via `data-*` attributes or JSON config).
+
+### Example – avoid hardcoded URLs
+
+```javascript
+// ❌ Bad
+const url = "/api/targets/42/";
+
+// ✅ Good – injected from template
+const url = document.querySelector("#target-table").dataset.apiUrl;
+```
+
+## Datatables
+
+- All DataTables must use **server-side processing** (`serverSide: true`).
+- Construction is centralised: backend column/order maps in `web/api/helpers/datatables/column_maps.py` (and related helpers under `web/api/helpers/datatables/`), frontend in `web/static/custom/datatables/`. Do not add scattered init logic or duplicate helpers in app-specific JS.
+
+### Mandatory pre-flight before any DataTable change
+
+Before adding or changing a DataTable action/column/rendering flow, run this checklist in order:
+
+1. Check whether a shared renderer/helper already exists in `web/static/custom/datatables/` (especially `actions.js`, `column_definitions.js`, `init.js`, `filters.js`).
+2. If a shared renderer exists, reuse/extend it instead of writing inline HTML render logic in templates.
+3. If a new action renderer is required, add it to `actions.js` and expose it through `window.RengineDatatableActionRenderers`.
+4. Wire URLs through `get_datatable_action_urls()` in `web/api/helpers/datatables/actions.py` and consume via `window.RENGINE_DATATABLE_ACTION_URLS`. That helper exposes `attackSurface` (LLM attack-surface API) on `subdomain`, `ip`, and `target` dicts; the IP map may include `toggleIpImportant`, `unlinkScanIps`, `unlinkTargetIps`, `getIpDetails`, `querySubdomains`. Omit keys you do not inject so `actions.js` hides the matching buttons.
+5. Keep templates focused on DataTable composition and configuration; avoid feature logic duplication in template JS blocks.
+6. Add/adjust tests for datatable action URL contracts in `web/api/tests/test_datatables.py`.
+
+### Frontend modules (`web/static/custom/datatables/`)
+
+Load order in `base.html` must be respected (escape first, then layout, cookies, columns, rowgroup, filters, config, actions, init, tooltips, column_definitions). On **`detail_scan.html`** and **`target/summary.html`** (IP tab), load `ip_scan_table_handlers.js`, then `selection_helpers.js`, then `scan_detail_ip_table.js`, before page-specific JS that calls `initDetailScanIpDataTable`.
+
+- **escape.js** – Canonical escaping for renderers and dynamic HTML: `safeText`, `safeAttr`, `safeBadge`, `safeLink`, `safeTooltipTitle`. Use these for any content from the server or user (see also `rengine-ng-security.mdc`).
+- **layout.js** – Scroller options, length menu, page length, `getRengineDatatableLayoutFull`.
+- **cookies.js** – Cookie read/write for row-group and preferences.
+- **columns.js** – `getColumnIndexByName`, `rengineColumnByName`, `getRengineDatatableOrderFromNames`.
+- **rowgroup.js** – `getRengineRowGroupInitialState`, row-group selector attachment.
+- **filters.js** – `getRengineDatatableFilterParams`, `buildRengineDatatableAjaxData`, `attachDatatableFilters`, multi-select and reset.
+- **config.js** – Central element IDs: `RENGINE_DATATABLE_FILTER_PARAMS_SCRIPT_ID`, `RENGINE_DATATABLE_ROW_GROUP_CONFIG_SCRIPT_ID`. Row-group helpers: `getRengineRowGroupConfigFromScript`, `getRengineRowGroupConfig`.
+- **actions.js** – Action column renderers (subdomain, **IP**, vulnerability, target), `confirmDeleteRow`, `renderScanSummaryBadges`. Uses `safeAttr`/`safeText` from escape.js. **`renderIpActions`**: omit attack-surface / mark-important / unlink controls when the corresponding key is missing from `RENGINE_DATATABLE_ACTION_URLS.ip`; subtask scan and recon-note buttons do not need those URLs. Prefer `data-*` + delegated handlers over inline `onclick` for dynamic text (e.g. `.js-add-note-ip` in `detail_scan.js`).
+- **target_entity_kind.js** – Included from `base.html`; defines attack-surface entity kind constants and `RengineTargetEntityKind` (including `datatableTargetAttackSurfaceUrlKey`). Must match `ATTACK_SURFACE_KIND_*` in `api/helpers/subdomain_ip_xor.py` and the `attackSurface` key shape from `get_datatable_action_urls()`.
+- **init.js** – `getRengineDatatableConfig`, `initServerSideDataTable`, **`initRengineServerSideDataTable`** (one-call entry point).
+- **tooltips.js** – `getRengineDatatableDrawCallbackTooltips` for drawCallback tooltip refresh.
+- **column_definitions.js** – Shared column arrays and default order/row-group metadata (`RENGINE_VULN_DATATABLE_COLUMNS`, `RENGINE_SUBDOMAIN_DATATABLE_COLUMNS`, `RENGINE_IP_DATATABLE_COLUMNS`, `RENGINE_DATATABLE_IP_DEFAULT_ORDER`, `RENGINE_DATATABLE_IP_ROW_GROUP_GROUPS`, etc.) and factories such as `getScanIpTableColumnDefs`. Single source of truth; keep in sync with backend column maps. IP table init: `scan_detail_ip_table.js` (`initDetailScanIpDataTable`), used with `ListIPs` DataTables mode from **`detail_scan.html`** ( `scan_id` ) and **`target/summary.html`** ( `target_id` + optional `domainId` in column defs).
+- **selection_helpers.js** – `createRengineDatatableIdSelection` for numeric row-id sets, selection count badge, and disabling bulk buttons when empty (used by the IP tab; reuse for similar tables).
+- **ip_scan_table_handlers.js** – Delegated click handlers for IP row actions (loaded by scan detail and target summary when the IP DataTable is used).
+
+### Backend contract (`web/api/helpers/datatables/`)
+
+- Column index → order field mapping lives in `column_maps.py` (`DATATABLE_COLUMN_MAP_*`). Keys are the **zero-based DataTables column index** as sent in `order[0][column]`; values are queryset `order_by` fields. Filter param names and other helpers may live in sibling modules under the same package.
+- When you add, move, or remove a column:
+  - Update the corresponding `DATATABLE_COLUMN_MAP_*` in `column_maps.py`.
+  - Update the serializer and viewset ordering if needed.
+  - Update the `columns` array and `columnDefs` in JS/template so indices and `name` stay in sync.
+- Every column definition must set **`name`** (e.g. `{ data: "id", name: "id" }`). `getColumnIndexByName` and `rengineColumnByName` rely on it; missing `name` yields -1 and breaks visibility/order.
+- **Cross-reference**: Datatable serializers, viewsets, and relevant API views (e.g. S3, wordlist, scan engine, `ListIPs`) include a short docstring with "Consuming template: ..." and "Column map: DATATABLE_COLUMN_MAP_*". When changing columns or fields, check that docstring to update the right template and frontend column definitions.
+
+### Heavy DataTables inside tabbed UI (pills)
+
+- Initialise **non-default** tabs with large server-side tables on **first user activation** of that tab (e.g. click on the pill), and guard with `DataTable.isDataTable(...)` so the table is not initialised twice. Match the pattern used for the subdomain tab on `detail_scan.html`, unless product requirements demand immediate load.
+- Attach **delegated handlers and init logic for a table only with that table’s init** (or a module dedicated to that table). Do not wire one tab’s table handlers from another tab’s initialisation path.
+
+### Filter and script element IDs
+
+- Use **`window.RENGINE_DATATABLE_FILTER_PARAMS_SCRIPT_ID`** and **`window.RENGINE_DATATABLE_ROW_GROUP_CONFIG_SCRIPT_ID`** (from config.js) instead of hardcoding `'datatable-filter-params'` or `'datatable-row-group-config'`. Reduces silent breakage when renaming.
+- Filter select IDs (`filterByOrganization`, `filterByScanStatus`, `filterByTarget`, etc.) are defined by the backend `FILTER_CONTEXT_*` in `web/api/helpers/datatables.py`. The keys of that mapping must match the `id` attribute of the corresponding `<select>` in filter partials (`web/templates/base/_items/datatables_filters/`). When adding or renaming a filter, update both the backend FILTER_CONTEXT_* and the filter partial.
+
+### List-page setup (filters, row group, tooltips)
+
+- **Filters**: Use a filter partial from `web/templates/base/_items/datatables_filters/` and pass `filterParamsElId: window.RENGINE_DATATABLE_FILTER_PARAMS_SCRIPT_ID` (or `filterSelectToParam` from `getRengineDatatableFilterParams(...)`) so the filter payload is merged into `ajax.data`. For custom payloads, use `buildRengineDatatableAjaxData(filterSelectToParam, extraData)` as `ajax.data`.
+- **Row group**: Pass `rowGroup: { selector, groups, columns, defaultOrderWhenDisabled, cookieKey, rowGroupBaseOpts, snackbarMessage }` to `initRengineServerSideDataTable`. Use `window.RENGINE_DATATABLE_ROW_GROUP_CONFIG_SCRIPT_ID` for the backend json_script id when using `getRengineRowGroupConfigFromScript`. Backend can inject row-group config via json_script; then `getRengineRowGroupConfig(backendConfig, templateOpts)` builds the full option.
+- **One-call init**: Use **`initRengineServerSideDataTable(tableSelector, options)`** with `filterParamsElId`, `drawCallbackTooltips: true`, and optional `rowGroup` / `orderFromColumns`. Do not manually chain `getRengineDatatableConfig`, `initServerSideDataTable`, and `attachRengineDatatableRowGroupSelector` unless you have a specific reason.
+
+### Template JS and extraction
+
+- Prefer **extracting long DataTables init blocks** (e.g. in history.html, detail_scan.html, summary.html, vulnerabilities.html) into **static JS modules** under `web/static/custom/` or app-specific static. Templates stay declarative: pass only dynamic config (URLs, slug, permissions) via a single `data-*` object or a small inline script that sets a config object and calls an init function from the module. Keeps JS testable and reusable, and avoids huge inline scripts.
+
+## Scan parameters UI (`_scan_params_block.html` & `scan_params.js`)
+
+Organization, Scope, Target, and Scan forms share a single template block and JS module for scan config editing (see `rengine-ng-coding.mdc` for the backend architecture).
+
+### Shared template
+
+`web/templates/shared/_scan_params_block.html` renders profile selectors, numeric fields, and advanced config. Include it with:
+
+```django
+{% include "shared/_scan_params_block.html" with field_prefix="scope" effective_params=effective_params profiles_dict=profiles_dict %}
+```
+
+Context variables:
+- **`field_prefix`** – HTML name prefix (`org`, `scope`, `target`, or `scan`); maps to `parse_scan_config_from_post(post, prefix, ...)` on submit.
+- **`effective_params`** – output of `build_effective_params_display()`; each key has `value`, `source`, and `inherited` so the template can show provenance badges.
+- **`profiles_dict`** – dict of `{ slug: { name, description } }` for the profile checkboxes.
+
+### JavaScript
+
+- **Non-scan pages** (org, scope, target): load `web/static/custom/scan_params.js`. Handles profile toggle, show/hide advanced fields, and prefix-aware field naming.
+- **Scan page**: uses `web/static/custom/secator/secator_scan_core.js` which has its own profile and parameter management. Do not load both on the same page.
+
+### Profile hidden fields
+
+Each selected profile is stored as a hidden `<input name="{prefix}_profiles" value="{slug}">`. The JS module manages add/remove on checkbox change. On submit, `parse_scan_config_from_post` collects all values for the `{prefix}_profiles` key.
+
+## Responsive design
+
+- All UI changes must respect responsive design for proper display on different screen sizes.
+
+## Security cross-reference
+
+- For HTML/JS injection and XSS-related rules, also see the security rule `rengine-ng-security.mdc` (HTML escaping, `htmlEncode`, URL validation).
+
+## Recon note AJAX routes (`recon_note`)
+
+- Prefer slug-prefixed URLs: `/<slug>/list_note`, `/<slug>/flip_todo_status`, `/<slug>/flip_important_status`, `/<slug>/delete_note` (see `web/recon_note/urls.py`). Non-prefixed paths exist for backward compatibility. Frontend code (`web/recon_note/static/note/js/todo.js`) must build requests with the project `slug` in the path when using the prefixed routes.
+

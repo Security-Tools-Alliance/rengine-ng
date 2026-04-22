@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0066_move_screenshot_to_endpoint'),
+        ("startScan", "0066_move_screenshot_to_endpoint"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='port',
-            name='service_name',
+            model_name="port",
+            name="service_name",
             field=models.CharField(blank=True, max_length=255, null=True),
         ),
         migrations.AlterField(
-            model_name='scanhistory',
-            name='results_dir',
+            model_name="scanhistory",
+            name="results_dir",
             field=models.CharField(blank=True, max_length=255),
         ),
     ]

@@ -7,147 +7,132 @@ Scan Engine
 {% endblock title %}
 
 {% block custom_js_css_link %}
+<style>
+#scan_engine_table {
+  table-layout: auto;
+}
+
+
+        #scan_engine_table th:nth-child(1),
+        #scan_engine_table td:nth-child(1) {
+          width: 25%; /* Name */
+          min-width: 200px;
+          padding-left: 25px;
+        }
+
+#scan_engine_table th:nth-child(2),
+#scan_engine_table td:nth-child(2) {
+  width: 100px; /* Engine Type */
+  text-align: center;
+}
+
+#scan_engine_table th:nth-child(3),
+#scan_engine_table td:nth-child(3) {
+  width: 120px; /* Scan Type */
+  text-align: center;
+}
+
+#scan_engine_table th:nth-child(4),
+#scan_engine_table td:nth-child(4) {
+  width: 35%; /* Tasks */
+  min-width: 250px;
+  max-width: 400px;
+  text-align: center;
+}
+
+        #scan_engine_table th:nth-child(5),
+        #scan_engine_table td:nth-child(5) {
+          width: 80px !important; /* Action */
+          max-width: 80px !important;
+          min-width: 80px !important;
+          text-align: center;
+        }
+
+
+@media (max-width: 768px) {
+  #scan_engine_table th:nth-child(1),
+  #scan_engine_table td:nth-child(1) {
+    width: 50px;
+  }
+  
+  #scan_engine_table th:nth-child(2),
+  #scan_engine_table td:nth-child(2) {
+    min-width: 150px;
+  }
+  
+  #scan_engine_table th:nth-child(5),
+  #scan_engine_table td:nth-child(5) {
+    min-width: 200px;
+    max-width: 300px;
+  }
+  
+  .task-badge {
+    font-size: 0.65rem;
+    padding: 2px 4px;
+  }
+}
+</style>
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
-<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' %}">Engines</a></li>
+<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' current_project.slug %}">Engines</a></li>
 <li class="breadcrumb-item active">All Scan Engines</li>
 {% endblock breadcrumb_title %}
 
 {% block page_title %}
-Scan Engines
+Scan Engines <small class="text-muted">(Legacy)</small>
 {% endblock page_title %}
 
 {% block main_content %}
 <div class="row">
   <div class="col-12">
+    <!-- Legacy Warning Alert -->
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      <strong>Legacy Feature:</strong> Scan Engines are deprecated in favor of the new Secator system. 
+      Please use <a href="{% url 'scans' current_project.slug %}" class="alert-link">Scans</a>, 
+      <a href="{% url 'workflows' current_project.slug %}" class="alert-link">Workflows</a>, and 
+      <a href="{% url 'tasks' current_project.slug %}" class="alert-link">Tasks</a> instead.
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    
     <div class="card">
-      <div class="p-2">
-        <div class="row">
-          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+      <!-- Scan Type Filter Buttons -->
+      <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-secondary scan-type-filter" data-filter="all">
+              <i class="fas fa-list me-1"></i>All
+            </button>
+            <button type="button" class="btn btn-sm btn-info scan-type-filter" data-filter="internet">
+              <i class="fas fa-globe me-1"></i>Internet
+            </button>
+            <button type="button" class="btn btn-sm btn-warning scan-type-filter" data-filter="internal_network">
+              <i class="fas fa-network-wired me-1"></i>Internal Network
+            </button>
           </div>
-          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
-            {% if user|can:'add_modify_scan_settings' %}
-            <a class="btn btn-soft-primary float-end ms-1" href="{% url 'add_engine' %}" data-toggle="tooltip" data-placement="top" title="Add New Scan Engine">Add Scan Engine</a>
-            {% endif %}
+          <div>
+            {% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_scan_engine.html' id_prefix='scanEngine' filtering_text_id='scanEngineFilteringTextHidden' %}
+            <div id="scanEngineFilteringText" class="w-100 d-flex flex-wrap gap-1 mt-2"></div>
           </div>
         </div>
       </div>
-    </div>
-  </div>
-</div>
-<div class="row">
-  <div class="col-12">
-    <div class="card">
-      <table id="scan_engine_table" class="table dt-responsive w-100">
+      <div class="card-body">
+        <table id="scan_engine_table" class="table dt-responsive w-100">
         <thead>
           <tr>
             <th>ID</th>
             <th>Name</th>
-            <th class="text-center">Type</th>
-            <th class="text-center">Subdomain Discovery</th>
-            <th class="text-center">WAF Detection</th>
-            <th class="text-center">Screenshot</th>
-            <th class="text-center">OSINT</th>
-            <th class="text-center">Port Scan</th>
-            <th class="text-center">Directory & Files Discovery</th>
-            <th class="text-center">Fetch URLs</th>
-            <th class="text-center">Vulnerability Scan</th>
+            <th class="text-center">Engine Type</th>
+            <th class="text-center">Scan Type</th>
+            <th class="text-center">Tasks</th>
             <th class="text-center">Action</th>
           </tr>
         </thead>
         <tbody>
-          {% for engine in engine_type %}
-          <tr>
-            <td>{{engine.id}}</td>
-            <td class="text-primary">
-              <a href="{% url 'update_engine' engine.id %}" class="open-domain">
-                {{engine.engine_name}}
-              </a>
-            </td>
-            <td class="text-center">
-              {% if engine.default_engine %}
-              <span class="badge badge-soft-primary p-1">Default</span>
-              {% else %}
-              <span class="badge badge-soft-danger p-1">Custom</span>
-              {% endif %}
-            </td>
-            <td class="text-center">
-              {% if 'subdomain_discovery' in engine.tasks %}
-              {% include 'base/_items/green_tick.html' %}
-              {% else %}
-              {% include 'base/_items/red_cross.html' %}
-              {%endif%}
-            </td>
-            <td class="text-center">
-              {% if 'waf_detection' in engine.tasks %}
-              {% include 'base/_items/green_tick.html' %}
-              {% else %}
-              {% include 'base/_items/red_cross.html' %}
-              {%endif%}
-            </td>
-            <td class="text-center">
-              {% if 'screenshot' in engine.tasks %}
-              {% include 'base/_items/green_tick.html' %}
-              {% else %}
-              {% include 'base/_items/red_cross.html' %}
-              {%endif%}
-            </td>
-            <td class="text-center">
-              {% if 'osint' in engine.tasks %}
-              {% include 'base/_items/green_tick.html' %}
-              {% else %}
-              {% include 'base/_items/red_cross.html' %}
-              {%endif%}
-            </td>
-            <td class="text-center">
-              {% if 'port_scan' in engine.tasks %}
-              {% include 'base/_items/green_tick.html' %}
-              {% else %}
-              {% include 'base/_items/red_cross.html' %}
-              {%endif%}
-            </td>
-            <td class="text-center">
-              {% if 'dir_file_fuzz' in engine.tasks %}
-              {% include 'base/_items/green_tick.html' %}
-              {% else %}
-              {% include 'base/_items/red_cross.html' %}
-              {%endif%}
-            </td>
-            <td class="text-center">
-              {% if 'fetch_url' in engine.tasks %}
-              {% include 'base/_items/green_tick.html' %}
-              {% else %}
-              {% include 'base/_items/red_cross.html' %}
-              {%endif%}
-            </td>
-            <td class="text-center">
-              {% if 'vulnerability_scan' in engine.tasks %}
-              {% include 'base/_items/green_tick.html' %}
-              {% else %}
-              {% include 'base/_items/red_cross.html' %}
-              {%endif%}
-            </td>
-            <td class="text-center">
-              {% if user|can:'add_modify_scan_settings' %}
-                <a href="{% url 'update_engine' engine.id %}" class="open-domain" data-toggle="tooltip" data-placement="top" title="Edit Engine">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-edit feather-edit-2">
-                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-                  </svg>
-                </a>
-                <a onclick="delete_api({{ engine.id }}, '{{ engine.engine_name }}', 'scanEngine')" class="btnDelDomain text-danger" href="#" data-toggle="tooltip" data-placement="top" title="Delete {{engine.engine_name}} Engine">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-delete feather-x-circle">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                  </svg>
-                </a>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </div>
@@ -156,30 +141,106 @@ Scan Engines
 
 {% block page_level_script %}
 <script src="{% static 'scanEngine/js/custom_scan_engine.js' %}"></script>
-<script type="text/javascript">
-  $(document).ready(function() {
-    var scan_engine_table = $('#scan_engine_table').DataTable({
-      "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center mt-sm-0 mt-3'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" +
-      "<'table-responsive'tr>" +
-      "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
-      "oLanguage": {
-        "oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-        "sInfo": "Showing page _PAGE_ of _PAGES_",
-        "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-        "sSearchPlaceholder": "Search...",
-        "sLengthMenu": "Results :  _MENU_",
+{{ datatable_filter_select_to_param|json_script:"datatable-filter-params" }}
+        <script type="text/javascript">
+          function checkDarkMode() {
+            if (localStorage.getItem('rengine-theme') === 'dark') {
+              $('body').addClass('dark-theme');
+            } else {
+              $('body').removeClass('dark-theme');
+            }
+          }
+          
+          checkDarkMode();
+          
+          $('#dark-mode-check').on('change', function() {
+            setTimeout(checkDarkMode, 100); // Small delay to allow time for the change
+          });
+          
+          $(document).ready(function() {
+    var scan_engine_ajax_url = '{% url "api:listScanEngines" %}';
+    var scanEngineFilter = 'all';
+    var scan_engine_columns = [
+      { data: 'id', name: 'id' },
+      { data: 'engine_name_display', name: 'engine_name' },
+      { data: 'engine_type_display', name: 'engine_type_display' },
+      { data: 'scan_type_display', name: 'scan_type_display' },
+      { data: 'tasks_html', name: 'tasks_html', orderable: false },
+      { data: 'action', name: 'action', orderable: false }
+    ];
+    var scanEngineFilterParamsEl = document.getElementById('datatable-filter-params');
+    var scanEngineFilterSelectToParam = scanEngineFilterParamsEl ? JSON.parse(scanEngineFilterParamsEl.textContent) : {};
+    var scan_engine_table = window.initServerSideDataTable('#scan_engine_table', window.getRengineDatatableConfig('#scan_engine_table', {
+      ajax: {
+        url: scan_engine_ajax_url,
+        data: function(d) {
+          d.filter_scan_type = scanEngineFilter;
+          if (window.buildDatatableFilterPayload) {
+            var payload = window.buildDatatableFilterPayload(scanEngineFilterSelectToParam);
+            Object.keys(payload).forEach(function(key) {
+              d[key] = payload[key];
+            });
+          }
+        }
       },
-      "columnDefs":[
-      { 'visible': false, 'targets': [0] },
+      columns: scan_engine_columns,
+      order: window.getRengineDatatableOrderFromNames(scan_engine_columns, [['engine_name', 'asc']]),
+      lengthMenu: [20, 30, 40, 50],
+      columnDefs: [
+        { targets: 'id:name', visible: false },
+        { targets: 'engine_name:name', width: '30%', render: function(data) { return data || ''; } },
+        { targets: 'engine_type_display:name', width: '100px', className: 'text-center' },
+        { targets: 'scan_type_display:name', width: '120px', className: 'text-center' },
+        { targets: 'tasks_html:name', width: '40%', className: 'text-center', render: function(data) { return data || ''; } },
+        { targets: 'action:name', width: '80px', className: 'text-center', render: function(data) { return data || ''; } }
       ],
-      "order": [[ 1, "asc" ]],
-      "stripeClasses": [],
-      "lengthMenu": [20, 30, 40, 50],
-      "pageLength": 20,
-      "initComplete": function(settings, json) {
-        $('[data-toggle="tooltip"]').tooltip();
+      initComplete: function() {
+        if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('[data-toggle="tooltip"]'), { html: true, container: 'body' });
       }
+    }));
+
+    scan_engine_table.on('draw.dt', function() {
+      if (typeof window.rengineSafeTooltipInit === 'function') window.rengineSafeTooltipInit($('#scan_engine_table [data-toggle="tooltip"]'), { html: true, container: 'body' });
     });
+
+    function applyFilter(filter) {
+      $('.scan-type-filter').removeClass('active');
+      $('.scan-type-filter[data-filter="' + filter + '"]').addClass('active');
+      scanEngineFilter = filter;
+      try {
+        if (window.rengineStorage && typeof window.rengineStorage.set === 'function') {
+          window.rengineStorage.set('scan_engine_filter', filter);
+        }
+      } catch (e) {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn('Failed to persist scan_engine_filter', e);
+        }
+      }
+      scan_engine_table.ajax.reload();
+    }
+
+    $('.scan-type-filter').on('click', function() {
+      applyFilter($(this).data('filter'));
+    });
+
+    var savedFilter = null;
+    try {
+      if (window.rengineStorage && typeof window.rengineStorage.get === 'function') {
+        savedFilter = window.rengineStorage.get('scan_engine_filter');
+      }
+    } catch (e) {
+      savedFilter = null;
+    }
+    if (savedFilter && ['all', 'internet', 'internal_network'].indexOf(savedFilter) !== -1) {
+      applyFilter(savedFilter);
+    } else {
+      applyFilter('all');
+    }
+
+    if (window.attachDatatableFilters) {
+      window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('scan_engine_list', scan_engine_table, { onApply: function() { scan_engine_table.draw(); } }));
+    }
   });
+
 </script>
 {% endblock page_level_script %}

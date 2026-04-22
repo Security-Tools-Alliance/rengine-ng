@@ -14,11 +14,31 @@ All Projects
 {% endblock page_title %}
 
 {% block breadcrumb_title %}
+{% if current_project %}
 <li class="breadcrumb-item"><a href="{% url 'dashboardIndex' current_project.slug %}">Dashboard</a></li>
+{% endif %}
 <li class="breadcrumb-item active">Projects</li>
 {% endblock breadcrumb_title %}
 
 {% block main_content %}
+{% if is_oauth_user and not has_projects %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body text-center py-5">
+        <div class="mb-3">
+          <i class="mdi mdi-folder-alert-outline text-warning" style="font-size: 48px;"></i>
+        </div>
+        <h4 class="text-muted">No Projects Assigned</h4>
+        <p class="text-muted mb-3">
+          Your OAuth account (<strong>{{ request.user.username }}</strong>) has not been assigned to any projects yet.<br>
+          An administrator needs to add you to a project before you can access scan data.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
 <div class="row">
   <div class="col-12">
     <div class="card">
@@ -65,6 +85,7 @@ All Projects
     </div>
   </div>
 </div>
+{% endif %}
 {% endblock main_content %}
 
 

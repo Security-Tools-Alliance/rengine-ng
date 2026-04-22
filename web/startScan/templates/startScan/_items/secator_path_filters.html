@@ -1,0 +1,18 @@
+{# Path Filters card #}
+{# Params: domain_name (string), id_prefix (string, optional) #}
+<div class="col-lg-6 mb-4">
+  <div class="card border-0 bg-soft-info h-100">
+    <div class="card-body">
+      <h5 class="card-title">
+        <i class="fas fa-filter text-info me-2"></i>
+        Path Filters
+      </h5>
+      <p class="card-text small">
+        Filter on a specific path for <b>{{ domain_name }}</b>.
+      </p>
+      
+      <label for="{{ id_prefix|default:'' }}filterPath" class="form-label small">Path filter</label>
+      <textarea class="form-control" id="{{ id_prefix|default:'' }}filterPath" name="filterPath" rows="4" spellcheck="false"></textarea>
+    </div>
+  </div>
+</div>

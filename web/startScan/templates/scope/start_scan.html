@@ -1,0 +1,142 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}
+Initiating Scan for Scope
+{% endblock title %}
+
+{% block custom_js_css_link %}
+<link href="{% static 'plugins/accordions/custom-accordions.css' %}" rel="stylesheet" type="text/css" />
+<link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
+<style>
+.scan-type-card {
+  border: 3px solid #e9ecef;
+  border-radius: 12px;
+  padding: 25px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #fff;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.execution-mode-card {
+  border: 3px solid #e9ecef;
+  border-radius: 12px;
+  padding: 25px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #fff;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.execution-mode-card:hover, .scan-type-card:hover {
+  border-color: #007bff;
+  box-shadow: 0 8px 25px rgba(0, 123, 255, 0.15);
+  transform: translateY(-2px);
+}
+.execution-mode-card.selected, .scan-type-card[data-selected="true"] {
+  border-color: #007bff;
+  background: linear-gradient(135deg, rgba(0, 123, 255, 0.05) 0%, rgba(0, 123, 255, 0.1) 100%);
+  box-shadow: 0 8px 25px rgba(0, 123, 255, 0.2);
+}
+.scan-type-card[data-selected="true"]::before {
+  content: "✓";
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: #007bff;
+  color: white;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 16px;
+}
+.scan-type-icon { font-size: 3.5rem; margin-bottom: 20px; color: #6c757d; transition: all 0.3s ease; }
+.scan-type-card:hover .scan-type-icon { color: #007bff; transform: scale(1.1); }
+.scan-type-card[data-selected="true"] .scan-type-icon { color: #007bff; }
+.scan-type-content h5 { font-size: 1.5rem; font-weight: 700; color: #495057; margin-bottom: 10px; }
+.scan-type-content p { color: #6c757d; margin-bottom: 20px; line-height: 1.5; }
+.scan-type-features { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: auto; }
+.scan-type-features .badge { font-size: 0.75rem; padding: 4px 8px; border-radius: 6px; font-weight: 500; }
+.bg-soft-light { background-color: rgba(248, 249, 250, 0.8) !important; }
+.form-check-input:checked { background-color: #007bff; border-color: #007bff; }
+.form-check-input:focus { border-color: #007bff; outline: 0; box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); }
+@media (max-width: 768px) {
+  .scan-type-card { padding: 20px 15px; }
+  .scan-type-icon { font-size: 2.5rem; margin-bottom: 15px; }
+  .scan-type-content h5 { font-size: 1.25rem; }
+  .scan-type-features { gap: 5px; }
+  .scan-type-features .badge { font-size: 0.7rem; padding: 3px 6px; }
+}
+</style>
+{% endblock custom_js_css_link %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'list_scope' current_project.slug %}">Scope</a></li>
+<li class="breadcrumb-item active">Initiate Scan</li>
+<li class="breadcrumb-item active" aria-current="page">{{ scope.name }}</li>
+{% endblock breadcrumb_title %}
+
+{% block page_title %}
+Initiating scan for scope {{ scope.name }}
+{% endblock page_title %}
+
+{% block main_content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        {% include 'startScan/_items/quick_scan_form_content.html' %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock main_content %}
+
+{% block page_level_script %}
+<script>
+  window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
+  window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
+  window.SCAN_PARAMS_EFFECTIVE_PREVIEW_URL = "{% url 'api:get_scan_params_effective_preview' %}";
+</script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
+<script type="text/javascript">
+$(function(){
+  $('.scan-type-card').click(function() {
+    $('.scan-type-card').removeAttr('data-selected');
+    $('.scan-type-card input[type="radio"]').prop('checked', false);
+    $(this).attr('data-selected', 'true');
+    $(this).find('input[type="radio"]').prop('checked', true);
+  });
+  $("input[name='scan_type']").change(function() {
+    var scanType = $(this).val();
+    $('.scan-type-card').removeAttr('data-selected');
+    $('.scan-type-card[data-scan-type="' + scanType + '"]').attr('data-selected', 'true');
+  });
+});
+</script>
+{% endblock page_level_script %}

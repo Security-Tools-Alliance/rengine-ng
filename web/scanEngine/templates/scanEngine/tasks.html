@@ -1,0 +1,159 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}Tasks{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-tasks"></i> Tasks
+                    </h3>
+                    <div class="card-tools">
+                        <button type="button" class="btn btn-success btn-sm" onclick="loadBuiltinTasks()">
+                            <i class="fas fa-download"></i> Load Built-in
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <!-- Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <select class="form-control" id="filterSelect">
+                                <option value="all" {% if filter_type == 'all' %}selected{% endif %}>All Tasks</option>
+                                <option value="builtin" {% if filter_type == 'builtin' %}selected{% endif %}>Built-in</option>
+                                <option value="custom" {% if filter_type == 'custom' %}selected{% endif %}>Custom</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" id="searchInput" placeholder="Search tasks..." value="{{ search_query|default:'' }}">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-secondary btn-block" onclick="clearFilters()">
+                                <i class="fas fa-times"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Tasks Table -->
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="tasksTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Tags</th>
+                                    <th>Description</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tasksTableBody">
+                                {% include "scanEngine/_tasks_table_body.html" with tasks=tasks %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}
+
+{% block page_level_script %}
+<script src="{% static 'scanEngine/js/secator.js' %}"></script>
+<script>
+const TASKS_PARTIAL_URL = '{% url "tasks_table_partial" %}';
+const SEARCH_DEBOUNCE_MS = 300;
+
+function getTasksTableCols() {
+    return document.querySelectorAll('#tasksTable thead th').length;
+}
+
+function getCookie(name) {
+    return (typeof Secator !== 'undefined' && Secator.getCookie) ? Secator.getCookie(name) : null;
+}
+
+function refreshTasksTable() {
+    window.refreshSecatorTable(TASKS_PARTIAL_URL, 'filterSelect', 'searchInput', 'tasksTableBody', getTasksTableCols, 'Error loading tasks. Please refresh the page.');
+}
+
+const onSearchInput = window.debouncedRefreshSecatorTable(SEARCH_DEBOUNCE_MS, TASKS_PARTIAL_URL, 'filterSelect', 'searchInput', 'tasksTableBody', getTasksTableCols, 'Error loading tasks. Please refresh the page.');
+
+function clearFilters() {
+    document.getElementById('filterSelect').value = 'all';
+    document.getElementById('searchInput').value = '';
+    refreshTasksTable();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('filterSelect').addEventListener('change', refreshTasksTable);
+    document.getElementById('searchInput').addEventListener('input', onSearchInput);
+});
+
+function loadBuiltinTasks() {
+    Swal.fire({
+        title: 'Load Built-in Tasks?',
+        text: 'This will load built-in Secator tasks. Continue?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, load them!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Loading...',
+                text: 'Please wait while we load the tasks',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch('{% url "api:load_builtin_tasks" %}', {
+                method: 'POST',
+                credentials: "same-origin",
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json().then(data => ({ ok: response.ok, status: response.status, data: data })))
+            .then(({ ok, data }) => {
+                if (ok && data.status === 'success') {
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Built-in tasks loaded. Please refresh the page in a few moments.',
+                        icon: 'success'
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to load built-in tasks');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'Error loading built-in tasks',
+                    icon: 'error'
+                });
+            });
+        }
+    });
+}
+</script>
+{% endblock %}

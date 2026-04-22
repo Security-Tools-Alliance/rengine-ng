@@ -28,11 +28,11 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.*/
 function visualise_scan_results(scan_id)
 {
   // Set the dimensions and margins of the diagram
-  var screen_width = window.innerWidth
+  let screen_width = window.innerWidth
   || document.documentElement.clientWidth
   || document.body.clientWidth;
 
-  var screen_height = window.innerHeight
+  let screen_height = window.innerHeight
   || document.documentElement.clientHeight
   || document.body.clientHeight;
 
@@ -41,7 +41,7 @@ function visualise_scan_results(scan_id)
     $('#visualisation-filter').show();
     
     // Check if data is an array and get the first element
-    var treeData = Array.isArray(data) ? data[0] : data;
+    let treeData = Array.isArray(data) ? data[0] : data;
 
     // Check if treeData exists and has children
     if (!treeData || !treeData.children || treeData.children.length === 0) {
@@ -50,51 +50,51 @@ function visualise_scan_results(scan_id)
     }
 
     // Calculate total nodes, max label length
-    var totalNodes = 0;
-    var maxLabelLength = 0;
+    let totalNodes = 0;
+    let maxLabelLength = 0;
     // variables for drag/drop
-    var selectedNode = null;
-    var draggingNode = null;
+    let selectedNode = null;
+    let draggingNode = null;
     // panning variables
-    var panSpeed = 200;
-    var panBoundary = 20; // Within 20px from edges will pan when dragging.
+    let panSpeed = 200;
+    let panBoundary = 20; // Within 20px from edges will pan when dragging.
     // Misc. variables
-    var i = 0;
-    var duration = 750;
-    var root;
+    let i = 0;
+    let duration = 750;
+    let root;
 
     // Find the 'Subdomains' node in the children
-    var subdomainsNode = treeData.children.find(child => child.description === 'Subdomains');
-    var subdomain_count = subdomainsNode ? subdomainsNode.children.length : 0;
+    let subdomainsNode = treeData.children.find(child => child.description === 'Subdomains');
+    let subdomain_count = subdomainsNode ? subdomainsNode.children.length : 0;
 
     // size of the diagram
-    var viewerWidth = screen_width  - 100;
-    var viewerHeight = screen_height + 500;
+    let viewerWidth = screen_width  - 100;
+    let viewerHeight = screen_height + 500;
 
-    var tree = d3.layout.tree()
+    let tree = d3.layout.tree()
     .size([viewerHeight, viewerWidth]);
 
     // define a d3 diagonal projection for use by the node paths later on.
-    var diagonal = d3.svg.diagonal()
+    let diagonal = d3.svg.diagonal()
     .projection(function(d) {
       return [d.y, d.x];
     });
 
     // A recursive helper function for performing some setup by walking through all nodes
 
-    function visit(parent, visitFn, childrenFn) {
+    const visit = function (parent, visitFn, childrenFn) {
       if (!parent) return;
 
       visitFn(parent);
 
-      var children = childrenFn(parent);
+      let children = childrenFn(parent);
       if (children) {
-        var count = children.length;
-        for (var i = 0; i < count; i++) {
+        let count = children.length;
+        for (let i = 0; i < count; i++) {
           visit(children[i], visitFn, childrenFn);
         }
       }
-    }
+    };
 
     // Call visit function to establish maxLabelLength
     visit(treeData, function(d) {
@@ -107,8 +107,8 @@ function visualise_scan_results(scan_id)
 
     // TODO: Pan function, can be better implemented.
 
-    function pan(domNode, direction) {
-      var speed = panSpeed;
+    const pan = function (domNode, direction) {
+      let speed = panSpeed;
       if (panTimer) {
         clearTimeout(panTimer);
         translateCoords = d3.transform(svgGroup.attr("transform"));
@@ -130,20 +130,20 @@ function visualise_scan_results(scan_id)
           pan(domNode, speed, direction);
         }, 50);
       }
-    }
+    };
 
     // Define the zoom function for the zoomable tree
 
-    function zoom() {
+    const zoom = function () {
       svgGroup.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
-    }
+    };
 
 
     // define the zoomListener which calls the zoom function on the "zoom" event constrained within the scaleExtents
-    var zoomListener = d3.behavior.zoom().scaleExtent([0.1, 3]).on("zoom", zoom);
+    let zoomListener = d3.behavior.zoom().scaleExtent([0.1, 3]).on("zoom", zoom);
 
     // define the baseSvg, attaching a class for styling and the zoomListener
-    var baseSvg = d3.select("#visualisation").append("svg")
+    let baseSvg = d3.select("#visualisation").append("svg")
     .attr("id", "visualisation-svg")
     .attr("width", viewerWidth)
     .attr("height", viewerHeight)
@@ -151,34 +151,34 @@ function visualise_scan_results(scan_id)
 
     // Helper functions for collapsing and expanding nodes.
 
-    function collapse(d) {
+    const collapse = function (d) {
       if (d.children) {
         d._children = d.children;
         d._children.forEach(collapse);
         d.children = null;
       }
-    }
+    };
 
-    function expand(d) {
+    const expand = function (d) {
       if (d._children) {
         d.children = d._children;
         d.children.forEach(expand);
         d._children = null;
       }
-    }
+    };
 
-    var overCircle = function(d) {
+    let overCircle = function(d) {
       selectedNode = d;
       updateTempConnector();
     };
-    var outCircle = function(d) {
+    let outCircle = function(d) {
       selectedNode = null;
       updateTempConnector();
     };
 
     // Function to update the temporary connector indicating dragging affiliation
-    var updateTempConnector = function() {
-      var data = [];
+    let updateTempConnector = function() {
+      let data = [];
       if (draggingNode !== null && selectedNode !== null) {
         // have to flip the source coordinates since we did this for the existing connectors on the original tree
         data = [{
@@ -192,7 +192,7 @@ function visualise_scan_results(scan_id)
           }
         }];
       }
-      var link = svgGroup.selectAll(".templink").data(data);
+      let link = svgGroup.selectAll(".templink").data(data);
 
       link.enter().append("path")
       .attr("class", "templink")
@@ -206,7 +206,7 @@ function visualise_scan_results(scan_id)
 
     // Function to center node when clicked/dropped so node doesn't get lost when collapsing/moving with large amount of children.
 
-    function centerNode(source) {
+    const centerNode = function (source) {
       scale = zoomListener.scale();
       x = -source.y0;
       y = -source.x0;
@@ -217,11 +217,11 @@ function visualise_scan_results(scan_id)
       .attr("transform", "translate(" + x + "," + y + ")scale(" + scale + ")");
       zoomListener.scale(scale);
       zoomListener.translate([x, y]);
-    }
+    };
 
     // Toggle children function
 
-    function toggleChildren(d) {
+    const toggleChildren = function (d) {
       if (d.children) {
         d._children = d.children;
         d.children = null;
@@ -230,23 +230,23 @@ function visualise_scan_results(scan_id)
         d._children = null;
       }
       return d;
-    }
+    };
 
     // Toggle children on click.
 
-    function click(d) {
+    const click = function (d) {
       if (d3.event.defaultPrevented) return; // click suppressed
       d = toggleChildren(d);
       update(d);
       centerNode(d);
-    }
+    };
 
-    function update(source) {
+    const update = function (source) {
       // Compute the new height, function counts total children of root node and sets tree height accordingly.
       // This prevents the layout looking squashed when new nodes are made visible or looking sparse when nodes are removed
       // This makes the layout more consistent.
-      var levelWidth = [1];
-      var childCount = function(level, n) {
+      let levelWidth = [1];
+      let childCount = function(level, n) {
 
         if (n.children && n.children.length > 0) {
           if (levelWidth.length <= level + 1) levelWidth.push(0);
@@ -258,11 +258,11 @@ function visualise_scan_results(scan_id)
         }
       };
       childCount(0, root);
-      var newHeight = d3.max(levelWidth) * 25; // 25 pixels per line
+      let newHeight = d3.max(levelWidth) * 25; // 25 pixels per line
       tree = tree.size([newHeight, viewerWidth]);
 
       // Compute the new tree layout.
-      var nodes = tree.nodes(root).reverse(),
+      let nodes = tree.nodes(root).reverse(),
       links = tree.links(nodes);
 
       // Set widths between levels based on maxLabelLength.
@@ -280,7 +280,7 @@ function visualise_scan_results(scan_id)
       });
 
       // Enter any new nodes at the parent's previous position.
-      var nodeEnter = node.enter().append("g")
+      let nodeEnter = node.enter().append("g")
       .attr("class", "node")
       .attr("transform", function(d) {
         return "translate(" + source.y0 + "," + source.x0 + ")";
@@ -339,7 +339,7 @@ function visualise_scan_results(scan_id)
       }).attr('cursor', 'pointer');;
 
       // Transition nodes to their new position.
-      var nodeUpdate = node.transition()
+      let nodeUpdate = node.transition()
       .duration(duration)
       .attr("transform", function(d) {
         return "translate(" + d.y + "," + d.x + ")";
@@ -350,7 +350,7 @@ function visualise_scan_results(scan_id)
       .style("fill-opacity", 1);
 
       // Transition exiting nodes to the parent's new position.
-      var nodeExit = node.exit().transition()
+      let nodeExit = node.exit().transition()
       .duration(duration)
       .attr("transform", function(d) {
         return "translate(" + source.y + "," + source.x + ")";
@@ -364,7 +364,7 @@ function visualise_scan_results(scan_id)
       .style("fill-opacity", 0);
 
       // Update the links…
-      var link = svgGroup.selectAll("path.link")
+      let link = svgGroup.selectAll("path.link")
       .data(links, function(d) {
         return d.target.id;
       });
@@ -373,7 +373,7 @@ function visualise_scan_results(scan_id)
       link.enter().insert("path", "g")
       .attr("class", "link")
       .attr("d", function(d) {
-        var o = {
+        let o = {
           x: source.x0,
           y: source.y0
         };
@@ -392,7 +392,7 @@ function visualise_scan_results(scan_id)
       link.exit().transition()
       .duration(duration)
       .attr("d", function(d) {
-        var o = {
+        let o = {
           x: source.x,
           y: source.y
         };
@@ -408,10 +408,10 @@ function visualise_scan_results(scan_id)
         d.x0 = d.x;
         d.y0 = d.y;
       });
-    }
+    };
 
     // Append a group which holds all nodes and which the zoom Listener can act upon.
-    var svgGroup = baseSvg.append("g");
+    let svgGroup = baseSvg.append("g");
 
     // Define the root
     root = treeData;
@@ -422,12 +422,12 @@ function visualise_scan_results(scan_id)
     update(root);
     centerNode(root);
 
-    function expandAll(){
+    const expandAll = function () {
       update(root);
       centerNode(root);
-    }
+    };
 
-    var checkbox = document.querySelector("input[name=expand-nodes-checkbox]");
+    let checkbox = document.querySelector("input[name=expand-nodes-checkbox]");
 
     checkbox.addEventListener('change', function() {
       if (this.checked) {
@@ -439,93 +439,92 @@ function visualise_scan_results(scan_id)
     });
 
     // source: view-source:https://www.demo2s.com/javascript/javascript-d3.js-save-svg-to-png-image-demo-b1a10.htm
-
-    d3.select('#saveButton').on('click', function(){
-      // get domain name
-      var domain = $("[aria-current]").text();
-      var svgString = getSVGString(d3.select('#visualisation-svg').node());
-      svgString2Image( svgString, 2*viewerWidth, 2*viewerHeight, 'png', save ); // passes Blob and filesize String to the callback
-      function save( dataBlob, filesize ){
-        saveAs( dataBlob, domain + '_visualisation.png' ); // FileSaver.js function
-      }
-    });
-
-    // Below are the functions that handle actual exporting:
-    // getSVGString ( svgNode ) and svgString2Image( svgString, width, height, format, callback )
-    function getSVGString( svgNode ) {
-      svgNode.setAttribute('xlink', 'http://www.w3.org/1999/xlink');
-      var cssStyleText = getCSSStyles( svgNode );
-      appendCSS( cssStyleText, svgNode );
-      var serializer = new XMLSerializer();
-      var svgString = serializer.serializeToString(svgNode);
-      svgString = svgString.replace(/(\w+)?:?xlink=/g, 'xmlns:xlink='); // Fix root xlink without namespace
-      svgString = svgString.replace(/NS\d+:href/g, 'xlink:href'); // Safari NS namespace fix
-      return svgString;
-      function getCSSStyles( parentElement ) {
-        var selectorTextArr = [];
-        // Add Parent element Id and Classes to the list
-        selectorTextArr.push( '#'+parentElement.id );
-        for (var c = 0; c < parentElement.classList.length; c++)
-        if ( !contains('.'+parentElement.classList[c], selectorTextArr) )
-        selectorTextArr.push( '.'+parentElement.classList[c] );
-        // Add Children element Ids and Classes to the list
-        var nodes = parentElement.getElementsByTagName("*");
-        for (var i = 0; i < nodes.length; i++) {
-          var id = nodes[i].id;
-          if ( !contains('#'+id, selectorTextArr) )
-          selectorTextArr.push( '#'+id );
-          var classes = nodes[i].classList;
-          for (var c = 0; c < classes.length; c++)
-          if ( !contains('.'+classes[c], selectorTextArr) )
-          selectorTextArr.push( '.'+classes[c] );
+    const getSVGString = function (svgNode) {
+      const contains = function (str, arr) {
+        return arr.indexOf(str) === -1 ? false : true;
+      };
+      const getCSSStyles = function (parentElement) {
+        let selectorTextArr = [];
+        selectorTextArr.push('#' + parentElement.id);
+        for (let c = 0; c < parentElement.classList.length; c++) {
+          if (!contains('.' + parentElement.classList[c], selectorTextArr)) {
+            selectorTextArr.push('.' + parentElement.classList[c]);
+          }
         }
-        // Extract CSS Rules
-        var extractedCSSText = "";
-        for (var i = 0; i < document.styleSheets.length; i++) {
-          var s = document.styleSheets[i];
+        let nodes = parentElement.getElementsByTagName("*");
+        for (let i = 0; i < nodes.length; i++) {
+          let id = nodes[i].id;
+          if (!contains('#' + id, selectorTextArr)) {
+            selectorTextArr.push('#' + id);
+          }
+          let classes = nodes[i].classList;
+          for (let c = 0; c < classes.length; c++) {
+            if (!contains('.' + classes[c], selectorTextArr)) {
+              selectorTextArr.push('.' + classes[c]);
+            }
+          }
+        }
+        let extractedCSSText = "";
+        for (let i = 0; i < document.styleSheets.length; i++) {
+          let s = document.styleSheets[i];
           try {
-            if(!s.cssRules) continue;
-          } catch( e ) {
-            if(e.name !== 'SecurityError') throw e; // for Firefox
+            if (!s.cssRules) continue;
+          } catch (e) {
+            if (e.name !== 'SecurityError') throw e;
             continue;
           }
-          var cssRules = s.cssRules;
-          for (var r = 0; r < cssRules.length; r++) {
-            if ( contains( cssRules[r].selectorText, selectorTextArr ) )
-            extractedCSSText += cssRules[r].cssText;
+          let cssRules = s.cssRules;
+          for (let r = 0; r < cssRules.length; r++) {
+            if (contains(cssRules[r].selectorText, selectorTextArr)) {
+              extractedCSSText += cssRules[r].cssText;
+            }
           }
         }
         return extractedCSSText;
-        function contains(str,arr) {
-          return arr.indexOf( str ) === -1 ? false : true;
-        }
-      }
-      function appendCSS( cssText, element ) {
-        var styleElement = document.createElement("style");
-        styleElement.setAttribute("type","text/css");
+      };
+      const appendCSS = function (cssText, element) {
+        let styleElement = document.createElement("style");
+        styleElement.setAttribute("type", "text/css");
         styleElement.innerHTML = cssText;
-        var refNode = element.hasChildNodes() ? element.children[0] : null;
-        element.insertBefore( styleElement, refNode );
-      }
-    }
-    function svgString2Image( svgString, width, height, format, callback ) {
-      var format = format ? format : 'png';
-      var imgsrc = 'data:image/svg+xml;base64,'+ btoa( unescape( encodeURIComponent( svgString ) ) ); // Convert SVG string to data URL
-      var canvas = document.createElement("canvas");
-      var context = canvas.getContext("2d");
+        let refNode = element.hasChildNodes() ? element.children[0] : null;
+        element.insertBefore(styleElement, refNode);
+      };
+      svgNode.setAttribute('xlink', 'http://www.w3.org/1999/xlink');
+      let cssStyleText = getCSSStyles(svgNode);
+      appendCSS(cssStyleText, svgNode);
+      let serializer = new XMLSerializer();
+      let svgString = serializer.serializeToString(svgNode);
+      svgString = svgString.replace(/(\w+)?:?xlink=/g, 'xmlns:xlink=');
+      svgString = svgString.replace(/NS\d+:href/g, 'xlink:href');
+      return svgString;
+    };
+
+    const svgString2Image = function (svgString, width, height, _format, callback) {
+      let imgsrc = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
+      let canvas = document.createElement("canvas");
+      let context = canvas.getContext("2d");
       canvas.width = width;
       canvas.height = height;
-      var image = new Image();
-      image.onload = function() {
-        context.clearRect ( 0, 0, width, height );
+      let image = new Image();
+      image.onload = function () {
+        context.clearRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
-        canvas.toBlob( function(blob) {
-          var filesize = Math.round( blob.length/1024 ) + ' KB';
-          if ( callback ) callback( blob, filesize );
+        canvas.toBlob(function (blob) {
+          let filesize = Math.round(blob.length / 1024) + ' KB';
+          if (callback) callback(blob, filesize);
         });
       };
       image.src = imgsrc;
-    }
+    };
+
+    d3.select('#saveButton').on('click', function () {
+      let domain = $("[aria-current]").text();
+      const save = function (dataBlob, filesize) {
+        saveAs(dataBlob, domain + '_visualisation.png');
+      };
+      let svgString = getSVGString(d3.select('#visualisation-svg').node());
+      svgString2Image(svgString, 2 * viewerWidth, 2 * viewerHeight, 'png', save);
+    });
 
   }).fail(function(){
     $('#visualisation-loader').empty();

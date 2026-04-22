@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0047_subdomain_attack_surface'),
+        ("startScan", "0047_subdomain_attack_surface"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='endpoint',
-            name='source',
+            model_name="endpoint",
+            name="source",
             field=models.CharField(blank=True, max_length=200, null=True),
         ),
     ]

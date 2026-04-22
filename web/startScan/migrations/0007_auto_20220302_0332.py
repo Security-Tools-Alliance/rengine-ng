@@ -4,24 +4,23 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0006_auto_20220228_2000'),
+        ("startScan", "0006_auto_20220228_2000"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='ipaddress',
-            name='subscan_ids',
+            model_name="ipaddress",
+            name="subscan_ids",
         ),
         migrations.AddField(
-            model_name='ipaddress',
-            name='ip_subscan_ids',
-            field=models.ManyToManyField(related_name='ip_subscan_ids', to='startScan.SubScan'),
+            model_name="ipaddress",
+            name="ip_subscan_ids",
+            field=models.ManyToManyField(related_name="ip_subscan_ids", to="startScan.SubScan"),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='vuln_subscan_ids',
-            field=models.ManyToManyField(related_name='vuln_subscan_ids', to='startScan.SubScan'),
+            model_name="vulnerability",
+            name="vuln_subscan_ids",
+            field=models.ManyToManyField(related_name="vuln_subscan_ids", to="startScan.SubScan"),
         ),
     ]

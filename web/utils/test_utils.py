@@ -1,62 +1,64 @@
 """
-This file contains the test cases 
+This file contains the test cases
 """
 
-import logging
+from datetime import timedelta
 import json
+import logging
 
-from django.utils import timezone
-from django.test import override_settings
-from django.template.loader import get_template
 from django.template import Template
+from django.template.loader import get_template
+from django.test import override_settings
+from django.utils import timezone
 
 from dashboard.models import Project, SearchHistory
 from recon_note.models import TodoNote
 from scanEngine.models import (
     EngineType,
     Hackerone,
-    InstalledExternalTool,
     InterestingLookupModel,
     Proxy,
     VulnerabilityReportSetting,
     Wordlist,
 )
-
 from startScan.models import (
     Command,
+    CountryISO,
     DirectoryFile,
     DirectoryScan,
-    Dork,
-    Email,
-    EndPoint,
-    Employee,
-    IpAddress,
-    ScanActivity,
-    ScanHistory,
-    SubScan,
-    Subdomain,
-    Technology,
-    Vulnerability,
-    Port,
-    CountryISO,
-    MetaFinderDocument,
-)
-
-from targetApp.models import (
     DNSRecord,
     Domain,
     DomainInfo,
     DomainRegistration,
+    Dork,
+    Email,
+    Employee,
+    EndPoint,
     HistoricalIP,
+    IpAddress,
+    MetaFinderDocument,
     NameServer,
-    Organization,
+    Port,
     Registrar,
     RelatedDomain,
+    ScanActivity,
+    ScanHistory,
+    ScanSchedule,
+    Subdomain,
+    SubScan,
+    Technology,
+    Vulnerability,
     WhoisStatus,
 )
+from targetApp.models import Organization, Scope, Target
+
+
 __all__ = [
-    'TestDataGenerator'
+    "BadPathSamples",
+    "BadUrlSamples",
+    "TestDataGenerator",
 ]
+
 
 class TestDataGenerator:
     """
@@ -64,19 +66,20 @@ class TestDataGenerator:
     Replaces Django fixtures with clean, maintainable object creation.
     """
 
-
-    subscans = []
-    vulnerabilities = []
+    def __init__(self):
+        # Lists must be instance-scoped to avoid leaking state across tests.
+        self.subscans: list[SubScan] = []
+        self.vulnerabilities: list[Vulnerability] = []
 
     # Disable logging for tests
     logging.disable(logging.CRITICAL)
-
 
     def create_project_base(self):
         """Create a basic project setup with essential objects."""
         # Create engine type FIRST to avoid foreign key issues
         self.create_engine_type()
         self.create_project()
+        self.create_target()
         self.create_domain()
         self.create_scan_history()
         self.create_subdomain()
@@ -89,16 +92,17 @@ class TestDataGenerator:
         # Start with engine type to ensure it exists for scan_history
         self.create_engine_type()
         self.create_project()
+        self.create_target()
         self.create_domain()
         self.create_scan_history()
         self.create_subdomain()
         self.create_endpoint()
-        
+
         # Create subscan before IP address so they can be linked properly
         self.create_subscan()
         self.create_ip_address()
         self.create_port()
-        
+
         # Add full features
         self.create_vulnerability()
         self.create_directory_scan()
@@ -122,77 +126,137 @@ class TestDataGenerator:
         self.create_metafinder_document()
         self.create_scan_activity()
         self.create_command()
-        self.create_installed_external_tool()
         self.create_wordlist()
         self.create_proxy()
         self.create_hackerone()
         self.create_report_setting()
-        self.create_external_tool()
 
     def create_project(self):
         """Create and return a test project."""
-        self.project = Project.objects.create(
-            name="Test Project",
-            insert_date=timezone.now(),
-            slug="test-project"
+        import uuid
+
+        unique_id = str(uuid.uuid4())[:8]
+        self.project, created = Project.objects.get_or_create(
+            slug=f"test-project-{unique_id}",
+            defaults={
+                "name": f"Test Project {unique_id}",
+                "insert_date": timezone.now(),
+            },
         )
         return self.project
 
-    def create_domain(self):
-        """Create and return a test domain."""
-        self.domain = Domain.objects.create(
-            name="example.com",
+    def create_target(self):
+        """Create and return a test target (type host). Requires project to exist."""
+        import uuid
+
+        unique_id = str(uuid.uuid4())[:8]
+        value = f"example-{unique_id}.com"
+        self.target = Target.objects.create(
             project=self.project,
-            insert_date=timezone.now()
+            value=value,
+            target_type="host",
+            insert_date=timezone.now(),
+        )
+        return self.target
+
+    def create_domain(self, scan_history=None):
+        """Create and return a test domain. Optionally linked to a scan (scan_history).
+        Target must exist for create_scan_history; call create_target() after create_project().
+        If target is missing, create_target() is called first.
+        """
+        import uuid
+
+        if not getattr(self, "target", None):
+            self.create_target()
+        unique_id = str(uuid.uuid4())[:8]
+        name = f"example-{unique_id}.com"
+        self.domain = Domain.objects.create(
+            name=name,
+            insert_date=timezone.now(),
+            scan_history=scan_history,
         )
         return self.domain
 
-    def create_scan_history(self):
-        """Create and return a test scan history."""
-        # Use the engine type created earlier instead of hardcoded ID
-        scan_type = getattr(self, 'engine_type', None)
-        if not scan_type:
-            # Fallback: create engine type if not exists
-            scan_type = self.create_engine_type()
-            
-        self.scan_history = ScanHistory.objects.create(
-            domain=self.domain,
-            start_scan_date=timezone.now(),
-            scan_type=scan_type,
-            scan_status=2,
-            tasks=[
-                'fetch_url',
-                'subdomain_discovery',
-                'port_scan',
-                'vulnerability_scan',
-                'osint',
-                'dir_file_fuzz',
-                'screenshot',
-                'waf_detection',
-                'nuclei_scan',
-                'endpoint_scan'
-            ]
-        )
+    def create_scan_history(self, is_legacy=False):
+        """Create and return a test scan history.
+
+        Args:
+            is_legacy: If True, create a legacy scan with scan_type. If False, create a Secator scan without scan_type.
+        """
+        # All new scans are Secator scans by default (scan_type=None)
+        scan_kwargs = {
+            "start_scan_date": timezone.now(),
+            "scan_status": 2,
+            "is_legacy_scan": is_legacy,
+        }
+        scan_kwargs["target"] = getattr(self, "target", None)
+
+        # Only assign scan_type for legacy scans
+        if is_legacy:
+            scan_type = getattr(self, "engine_type", None)
+            if not scan_type:
+                scan_type = self.create_engine_type()
+            scan_kwargs["scan_type"] = scan_type
+
+        scan_kwargs["tasks"] = [
+            "fetch_url",
+            "subdomain_discovery",
+            "port_scan",
+            "vulnerability_scan",
+            "osint",
+            "dir_file_fuzz",
+            "screenshot",
+            "waf_detection",
+            "nuclei_scan",
+            "endpoint_scan",
+        ]
+
+        self.scan_history = ScanHistory.objects.create(**scan_kwargs)
+        if getattr(self, "domain", None) and not self.domain.scan_history_id:
+            self.domain.scan_history = self.scan_history
+            self.domain.save(update_fields=["scan_history_id"])
         return self.scan_history
 
-    def create_subdomain(self, name="admin.example.com"):
-        """Create and return a test subdomain."""
-        self.subdomain = Subdomain.objects.create(
-            name=name,
-            target_domain=self.domain,
-            scan_history=self.scan_history,
-        )
+    def create_subdomain(self, name=None, scan_history=None, domain=None, **kwargs):
+        """Create and return a test subdomain with customizable parameters."""
+
+        # Use provided values or defaults
+        if name is None:
+            # Use fixed name for consistent testing
+            name = "admin.example.com"
+
+        subdomain_data = {
+            "name": name,
+            "domain": domain or self.domain,
+            "scan_history": scan_history or self.scan_history,
+        }
+        subdomain_data.update(kwargs)
+
+        self.subdomain = Subdomain.objects.create(**subdomain_data)
         return self.subdomain
 
-    def create_endpoint(self, name="endpoint"):
-        """Create and return a test endpoint."""
-        self.endpoint = EndPoint.objects.create(
-            target_domain=self.domain,
-            subdomain=self.subdomain,
-            scan_history=self.scan_history,
-            discovered_date=timezone.now(),
-            http_url=f"https://admin.example.com/{name}",
-        )
+    def create_endpoint(self, name=None, http_url=None, subdomain=None, scan_history=None, domain=None, **kwargs):
+        """Create and return a test endpoint with customizable parameters."""
+
+        # Use provided values or defaults
+        if name is None:
+            # Use fixed name for consistent testing
+            name = "endpoint"
+
+        if http_url is None:
+            subdomain_name = subdomain.name if subdomain else "admin.example.com"
+            http_url = f"https://{subdomain_name}/{name}"
+
+        endpoint_data = {
+            "domain": domain or self.domain,
+            "subdomain": subdomain or self.subdomain,
+            "scan_history": scan_history or self.scan_history,
+            "discovered_date": timezone.now(),
+            "http_url": http_url,
+        }
+        endpoint_data.update(kwargs)
+
+        self.endpoint = EndPoint.objects.create(**endpoint_data)
         return self.endpoint
 
     def create_vulnerability(self):
@@ -202,7 +266,7 @@ class TestDataGenerator:
                 name="Common Vulnerability",
                 severity=1,
                 discovered_date=timezone.now(),
-                target_domain=self.domain,
+                domain=self.domain,
                 subdomain=self.subdomain,
                 scan_history=self.scan_history,
                 endpoint=self.endpoint,
@@ -212,36 +276,23 @@ class TestDataGenerator:
 
     def create_directory_scan(self):
         """Create and return a test directory scan."""
-        self.directory_scan = DirectoryScan.objects.create(
-            command_line="Test Command",
-            scanned_date=timezone.now()
-        )
+        self.directory_scan = DirectoryScan.objects.create(command_line="Test Command", scanned_date=timezone.now())
         return self.directory_scan
 
     def create_directory_file(self, name="admin", url="https://example.com/admin", http_status=200, **kwargs):
         """Create and return a test directory file with comprehensive fuzzing data.
-        
+
         Args:
             name (str): File/directory name (default: "admin")
-            url (str): Full URL (default: "https://example.com/admin") 
+            url (str): Full URL (default: "https://example.com/admin")
             http_status (int): HTTP status code (default: 200)
             **kwargs: Additional fields (length, words, lines, content_type)
         """
         # Set default values for fuzzing-specific fields
-        defaults = {
-            'length': 1024,
-            'words': 50,
-            'lines': 25,
-            'content_type': 'text/html'
-        }
+        defaults = {"length": 1024, "words": 50, "lines": 25, "content_type": "text/html"}
         defaults.update(kwargs)
-        
-        self.directory_file = DirectoryFile.objects.create(
-            name=name,
-            url=url,
-            http_status=http_status,
-            **defaults
-        )
+
+        self.directory_file = DirectoryFile.objects.create(name=name, url=url, http_status=http_status, **defaults)
         return self.directory_file
 
     def create_subscan(self):
@@ -255,17 +306,6 @@ class TestDataGenerator:
             )
         )
         return self.subscans
-
-    def create_installed_external_tool(self):
-        """Create and return a test installed external tool."""
-        self.installed_external_tool = InstalledExternalTool.objects.create(
-            name="OneForAll",
-            github_url="https://github.com/shmilylty/OneForAll",
-            update_command="git pull",
-            install_command="git clone https://github.com/shmilylty/OneForAll",
-            github_clone_path="/home/rengine/tools/.github/OneForAll"
-        )
-        return self.installed_external_tool
 
     def create_todo_note(self):
         """Create and return a test todo note."""
@@ -305,28 +345,152 @@ class TestDataGenerator:
 
     def create_organization(self):
         """Create and return a test organization."""
-        self.organization = Organization.objects.create(
-            name="Test Organization",
-            description="Test Description",
-            insert_date=timezone.now(),
-            project=self.project,
+        import uuid
+
+        unique_id = str(uuid.uuid4())[:8]
+        self.organization, created = Organization.objects.get_or_create(
+            name=f"Test Organization {unique_id}",
+            defaults={
+                "description": "Test Description",
+                "insert_date": timezone.now(),
+                "project": self.project,
+            },
         )
-        self.organization.domains.add(self.domain)
+        if created and getattr(self.domain, "scan_history_id", None) and self.domain.scan_history.target_id:
+            self.organization.targets.add(self.domain.scan_history.target)
         return self.organization
 
-    def create_employee(self):
-        """Create and return a test employee."""
-        self.employee = Employee.objects.create(name="Test Employee")
-        self.scan_history.employees.add(self.employee)
+    _SCOPE_SCAN_CONFIG_KEYS = frozenset(
+        {
+            "threads",
+            "rate_limit",
+            "timeout",
+            "retries",
+            "delay",
+            "proxy",
+            "user_agent",
+            "header",
+            "follow_redirect",
+            "depth",
+            "default_profiles",
+            "extra_config",
+            "profiles",
+        }
+    )
+
+    def create_scope(self, scope_type="engagement_external", **kwargs):
+        """Create and return a test scope linked to an organization.
+
+        Accepts scan config params as top-level kwargs for convenience
+        (e.g. ``threads=5``). They are collected into ``scan_config``.
+        ``default_profiles`` is mapped to ``scan_config["profiles"]``.
+        An explicit ``scan_config`` kwarg is merged on top of extracted params.
+        """
+        import uuid
+
+        if not getattr(self, "organization", None):
+            self.create_organization()
+
+        extracted_config: dict = {}
+        for key in self._SCOPE_SCAN_CONFIG_KEYS:
+            if key in kwargs:
+                value = kwargs.pop(key)
+                config_key = "profiles" if key == "default_profiles" else key
+                extracted_config[config_key] = value
+
+        explicit_config = kwargs.pop("scan_config", None)
+        if isinstance(explicit_config, dict):
+            extracted_config.update(explicit_config)
+
+        unique_id = str(uuid.uuid4())[:8]
+        defaults = {
+            "organization": self.organization,
+            "name": f"Test Scope {unique_id}",
+            "scope_type": scope_type,
+            "description": "Test scope description",
+        }
+        if extracted_config:
+            defaults["scan_config"] = extracted_config
+        defaults.update(kwargs)
+        self.scope = Scope.objects.create(**defaults)
+        if getattr(self, "target", None):
+            self.scope.targets.add(self.target)
+        return self.scope
+
+    def create_employee(self, name=None, username=None, designation=None, **kwargs):
+        """Create and return a test employee with customizable parameters."""
+        import uuid
+
+        # Use provided values or defaults
+        if name is None:
+            unique_id = str(uuid.uuid4())[:8]
+            name = f"employee-{unique_id}"
+
+        # Generate username if not provided
+        if username is None:
+            username = f"user-{str(uuid.uuid4())[:8]}"
+
+        employee_data = {
+            "name": name,
+            "username": username,  # ← S'assurer que username est bien défini
+        }
+
+        if designation:
+            employee_data["designation"] = designation
+
+        employee_data.update(kwargs)
+
+        self.employee = Employee.objects.create(**employee_data)
+
+        # Don't auto-add to scan_history, let tests do it explicitly
         return self.employee
 
-    def create_email(self):
-        """Create and return a test email."""
-        self.email = Email.objects.create(
-            address="test@example.com",
-            password="password"
-        )
-        self.scan_history.emails.add(self.email)
+    def create_exploit(self, name=None, **kwargs):
+        """Create and return a test exploit."""
+        import uuid
+
+        from startScan.models import Exploit
+
+        if name is None:
+            unique_id = str(uuid.uuid4())[:8]
+            name = f"exploit-{unique_id}"
+
+        exploit_data = {
+            "name": name,
+            "discovered_date": timezone.now(),
+        }
+        exploit_data.update(kwargs)
+
+        self.exploit = Exploit.objects.create(**exploit_data)
+        return self.exploit
+
+    def create_domain_info(self, **kwargs):
+        """Create and return a test DomainInfo with customizable parameters."""
+        from django.utils import timezone
+
+        domain_info_data = {
+            "domain": self.domain,
+            "created": timezone.now(),
+        }
+        domain_info_data.update(kwargs)
+
+        self.domain_info = DomainInfo.objects.create(**domain_info_data)
+        return self.domain_info
+
+    def create_email(self, address=None, **kwargs):
+        """Create and return a test Email with customizable parameters."""
+        import uuid
+
+        if address is None:
+            unique_id = str(uuid.uuid4())[:8]
+            address = f"user-{unique_id}@example.com"
+
+        email_data = {
+            "address": address,
+        }
+        email_data.update(kwargs)
+
+        self.email = Email.objects.create(**email_data)
         return self.email
 
     def create_dork(self):
@@ -334,25 +498,6 @@ class TestDataGenerator:
         self.dork = Dork.objects.create(type="Test Dork", url="https://example.com")
         self.scan_history.dorks.add(self.dork)
         return self.dork
-
-    def create_domain_info(self):
-        """Create and return a test domain info."""
-        self.domain_info = DomainInfo.objects.create(
-            created=timezone.now(),
-            updated=timezone.now(),
-            expires=timezone.now(),
-            geolocation_iso="US",
-            registrant=self.domain_registration,
-            admin=self.domain_registration,
-            tech=self.domain_registration,
-        )
-        self.domain_info.name_servers.add(self.name_server)
-        self.domain_info.dns_records.add(self.dns_record)
-        self.domain_info.related_domains.add(self.related_domain)
-        self.domain_info.related_tlds.add(self.related_domain)
-        self.domain_info.similar_domains.add(self.related_domain)
-        self.domain_info.historical_ips.add(self.historical_ip)
-        return self.domain_info
 
     def create_whois_status(self):
         """Create and return a test WHOIS status."""
@@ -385,9 +530,7 @@ class TestDataGenerator:
 
     def create_domain_registration(self):
         """Create and return a test domain registration."""
-        self.domain_registration = DomainRegistration.objects.create(
-            name="Test Domain Registration"
-        )
+        self.domain_registration = DomainRegistration.objects.create(name="Test Domain Registration")
         return self.domain_registration
 
     def create_registrar(self):
@@ -413,20 +556,40 @@ class TestDataGenerator:
         self.country_iso = CountryISO.objects.create(iso="US")
         return self.country_iso
 
-    def create_ip_address(self):
-        """Create and return a test IP address."""
-        self.ip_address = IpAddress.objects.create(address="1.1.1.1")
-        self.subdomain.ip_addresses.add(self.ip_address)
+    def create_ip_address(self, address=None, is_private=None, version=None, **kwargs):
+        """Create and return a test IP address with customizable parameters."""
+        import uuid
+
+        # Use provided values or defaults
+        if address is None:
+            # Generate random IP for uniqueness
+            unique_id = str(uuid.uuid4()).split("-")[0]
+            address = f"192.168.{int(unique_id[:2], 16) % 256}.{int(unique_id[2:4], 16) % 256}"
+
+        ip_data = {
+            "address": address,
+        }
+
+        if is_private is not None:
+            ip_data["is_private"] = is_private
+        if version is not None:
+            ip_data["version"] = version
+
+        ip_data.update(kwargs)
+
+        self.ip_address = IpAddress.objects.create(**ip_data)
+
+        # Don't auto-add to subdomain, let tests do it explicitly
         return self.ip_address
 
     def create_port(self):
         """Create and return a test port."""
         self.port = Port.objects.create(
-            number=80, 
-            service_name="http", 
-            description="open", 
+            number=80,
+            service_name="http",
+            description="open",
             is_uncommon=True,
-            ip_address=self.ip_address if hasattr(self, 'ip_address') else None
+            ip_address=self.ip_address if hasattr(self, "ip_address") else None,
         )
         return self.port
 
@@ -440,7 +603,7 @@ class TestDataGenerator:
             creation_date=timezone.now(),
             modified_date=timezone.now(),
             scan_history=self.scan_history,
-            target_domain=self.domain,
+            domain=self.domain,
             subdomain=self.subdomain,
         )
         return self.metafinder_document
@@ -448,21 +611,14 @@ class TestDataGenerator:
     def create_scan_activity(self):
         """Create and return a test scan activity."""
         self.scan_activity = ScanActivity.objects.create(
-            name="Test Activity",
-            title="Test Type",
-            time=timezone.now(),
-            scan_of=self.scan_history,
-            status=1
+            name="Test Activity", title="Test Type", time=timezone.now(), scan_of=self.scan_history, status=1
         )
         return self.scan_activity
 
     def create_command(self):
         """Create and return a test command."""
         self.command = Command.objects.create(
-            command="test command",
-            time=timezone.now(),
-            scan_history=self.scan_history,
-            activity=self.scan_activity
+            command="test command", time=timezone.now(), scan_history=self.scan_history, activity=self.scan_activity
         )
         return self.command
 
@@ -470,21 +626,30 @@ class TestDataGenerator:
         """
         Create a test wordlist.
         """
-        self.wordlist = Wordlist.objects.create(name='Test Wordlist', short_name='test', count=100)
+        import uuid
+
+        unique_id = str(uuid.uuid4())[:8]
+        self.wordlist, created = Wordlist.objects.get_or_create(
+            short_name=f"test-{unique_id}",
+            defaults={
+                "name": f"Test Wordlist {unique_id}",
+                "count": 100,
+            },
+        )
         return self.wordlist
 
     def create_proxy(self):
         """
         Create a test proxy.
         """
-        self.proxy = Proxy.objects.create(use_proxy=True, proxies='127.0.0.1')
+        self.proxy = Proxy.objects.create(use_proxy=True, proxies="127.0.0.1")
         return self.proxy
 
     def create_hackerone(self):
         """
         Create a test hackerone.
         """
-        self.hackerone = Hackerone.objects.create(username='test', api_key='testkey')
+        self.hackerone = Hackerone.objects.create(username="test", api_key="testkey")
         return self.hackerone
 
     def create_report_setting(self):
@@ -492,19 +657,9 @@ class TestDataGenerator:
         Create a test report setting.
         """
         self.report_setting = VulnerabilityReportSetting.objects.create(
-            primary_color='#000000',
-            secondary_color='#FFFFFF'
+            primary_color="#000000", secondary_color="#FFFFFF"
         )
         return self.report_setting
-
-    def create_external_tool(self):
-        """
-        Create a test external tool.
-        """
-        self.external_tool = InstalledExternalTool.objects.create(
-            name='Test Tool',
-            github_url='https://github.com/test/tool')
-        return self.external_tool
 
     def create_minimal_auth_setup(self):
         """
@@ -512,11 +667,9 @@ class TestDataGenerator:
         Creates essential permissions and a test user programmatically.
         """
         from django.contrib.auth import get_user_model
-        from django.contrib.auth.models import Permission, Group
-        from django.contrib.contenttypes.models import ContentType
-        
-        User = get_user_model()
-        
+
+        User = get_user_model()  # noqa: N806
+
         # Create test user if not exists
         if not User.objects.filter(username="rengine").exists():
             self.test_user = User.objects.create_user(
@@ -525,11 +678,11 @@ class TestDataGenerator:
                 password="testpassword123",
                 is_superuser=True,
                 is_staff=True,
-                is_active=True
+                is_active=True,
             )
         else:
             self.test_user = User.objects.get(username="rengine")
-        
+
         return self.test_user
 
     def create_essential_scan_engine_setup(self):
@@ -537,8 +690,8 @@ class TestDataGenerator:
         Create essential scan engine setup instead of scanEngine.json fixture.
         Creates minimal EngineType objects needed for testing.
         """
-        from scanEngine.models import EngineType, InstalledExternalTool
-        
+        from scanEngine.models import EngineType
+
         # Create default engine type if not exists
         if not EngineType.objects.filter(engine_name="Test Engine").exists():
             self.default_engine = EngineType.objects.create(
@@ -552,68 +705,180 @@ subdomain_discovery: {
 }
 http_crawl: {}
 """,
-                default_engine=True
+                default_engine=True,
             )
         else:
             self.default_engine = EngineType.objects.filter(engine_name="Test Engine").first()
-        
-        # Create essential external tool
-        if not InstalledExternalTool.objects.filter(name="subfinder").exists():
-            self.subfinder_tool = InstalledExternalTool.objects.create(
-                name="subfinder",
-                description="Test subfinder tool",
-                github_url="https://github.com/projectdiscovery/subfinder",
-                version_lookup_command="subfinder -version",
-                update_command="go install subfinder@latest",
-                install_command="go install subfinder@latest",
-                is_default=True,
-                is_subdomain_gathering=True,
-                is_github_cloned=False
-            )
-        else:
-            self.subfinder_tool = InstalledExternalTool.objects.filter(name="subfinder").first()
-        
+
         return self.default_engine
 
     def create_minimal_celery_setup(self):
         """
-        Create minimal Celery Beat setup instead of django_celery_beat.json fixture.
+        No-op: scan scheduling uses ScanSchedule and run_scheduled_scans (CRON).
+        Kept for test compatibility; tests that need a schedule can create ScanSchedule explicitly.
         """
-        try:
-            from django_celery_beat.models import IntervalSchedule, PeriodicTask
-            
-            # Create minimal interval schedule
-            if not IntervalSchedule.objects.filter(every=1, period='minutes').exists():
-                self.test_interval = IntervalSchedule.objects.create(
-                    every=1,
-                    period='minutes'
-                )
-            else:
-                self.test_interval = IntervalSchedule.objects.filter(every=1, period='minutes').first()
-            
-            return self.test_interval
-        except ImportError:
-            # Django celery beat not installed, skip
-            return None
+        self.test_interval = None
+        return None
 
     def link_ip_to_subscans(self):
         """Link IP addresses to subscans for proper API filtering."""
-        if hasattr(self, 'ip_address') and hasattr(self, 'subscans') and self.subscans:
+        if hasattr(self, "ip_address") and hasattr(self, "subscans") and self.subscans:
             # Get fresh subscans from database to avoid stale references
             from startScan.models import SubScan
+
             fresh_subscans = SubScan.objects.filter(pk__in=[s.pk for s in self.subscans if s.pk])
-            
+
             for subscan in fresh_subscans:
                 # Only link if not already linked
                 if not self.ip_address.ip_subscan_ids.filter(pk=subscan.pk).exists():
                     try:
                         self.ip_address.ip_subscan_ids.add(subscan)
                     except Exception:
-                        # Ignore linking errors in test environment 
+                        # Ignore linking errors in test environment
                         pass
 
-class TestValidation:
+    def create_secator_workflow(self):
+        """Create and return a test SecatorWorkflow."""
+        import uuid
 
+        from scanEngine.models import SecatorWorkflow
+
+        unique_id = str(uuid.uuid4())[:8]
+        self.secator_workflow = SecatorWorkflow.objects.create(
+            name=f"Test Workflow {unique_id}",
+            description="Test workflow for unit tests",
+            yaml_configuration="tasks:\n  prompt: {}\n",
+            is_active=True,
+        )
+        return self.secator_workflow
+
+    def create_secator_task(self):
+        """Create and return a test SecatorTask."""
+        import uuid
+
+        from scanEngine.models import SecatorTask
+
+        unique_id = str(uuid.uuid4())[:8]
+        self.secator_task = SecatorTask.objects.create(
+            name=f"test_task_{unique_id}",
+            task_type=f"test_task_{unique_id}",
+            description="Test task for unit tests",
+            is_active=True,
+        )
+        return self.secator_task
+
+    def create_secator_scan(self):
+        """Create and return a test SecatorScan."""
+        from scanEngine.models import SecatorScan
+
+        self.secator_scan, _created = SecatorScan.objects.get_or_create(
+            name="domain",
+            defaults={
+                "description": "Domain scan",
+                "scan_type": "internet",
+                "scan_config_type": "builtin",
+                "is_active": True,
+            },
+        )
+        return self.secator_scan
+
+    def build_scan_schedule(
+        self,
+        target,
+        initiated_by,
+        *,
+        schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
+        next_run=None,
+        one_off=False,
+        **overrides,
+    ):
+        """
+        Build a valid ScanSchedule instance (unsaved) for tests.
+
+        Centralizes required fields so tests do not break when model constraints
+        change. Caller can mutate the instance then save() to test validation.
+        """
+        if next_run is None:
+            next_run = timezone.now() + timedelta(days=1)
+        kwargs = {
+            "name": "Test schedule",
+            "target": target,
+            "initiated_by": initiated_by,
+            "schedule_mode": schedule_mode,
+            "next_run": next_run,
+            "one_off": one_off,
+            "enabled": True,
+        }
+        if schedule_mode == ScanSchedule.SCHEDULE_MODE_PERIODIC:
+            kwargs["frequency_value"] = 30
+            kwargs["frequency_type"] = ScanSchedule.FREQUENCY_MINUTES
+        else:
+            kwargs["scheduled_time"] = next_run
+        kwargs.update(overrides)
+        return ScanSchedule(**kwargs)
+
+    def create_scan_schedule(
+        self,
+        target,
+        initiated_by,
+        *,
+        schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
+        next_run=None,
+        one_off=False,
+        **overrides,
+    ):
+        """
+        Create and save a valid ScanSchedule for tests.
+
+        Centralizes required fields so tests do not break when model constraints
+        or migrations change. For unsaved instances (e.g. to test validation),
+        use build_scan_schedule() instead.
+        """
+        schedule = self.build_scan_schedule(
+            target,
+            initiated_by,
+            schedule_mode=schedule_mode,
+            next_run=next_run,
+            one_off=one_off,
+            **overrides,
+        )
+        schedule.save()
+        return schedule
+
+
+class BadPathSamples:
+    """
+    Centralised path strings for testing path traversal and safe path handling.
+
+    Use these constants in tests instead of hardcoding; this is the single
+    reference for invalid or malicious path inputs. See rengine-ng-tests.mdc.
+    """
+
+    TRAVERSAL_DOTDOT = ".."
+    TRAVERSAL_PARENT = "../etc"
+    TRAVERSAL_MIDDLE = "a/../b"
+    TRAVERSAL_MIDDLE_FILE = "a/../b/file.png"
+    TRAVERSAL_SCAN_RESULTS = "scan_1/../results"
+    TRAVERSAL_FOO_BAR = "foo/../bar"
+    TRAVERSAL_REPORTS_PUBLIC = "reports/../public"
+    ABSOLUTE_LEADING_SLASH = "/etc/passwd"
+    EMPTY = ""
+    BLANK = "   "
+
+
+class BadUrlSamples:
+    """
+    Centralised URL strings for testing URL validation (dangerous schemes, etc.).
+
+    Use these constants in tests instead of hardcoding; this is the single
+    reference for invalid or malicious URL inputs. See rengine-ng-tests.mdc.
+    """
+
+    JAVASCRIPT_SCHEME = "javascript:alert(1)"
+    DATA_SCHEME_HTML = "data:text/html,<script>alert(1)</script>"
+
+
+class TestValidation:
     def is_json(self, value):
         try:
             json.loads(value)
@@ -621,10 +886,11 @@ class TestValidation:
         except ValueError:
             return False
 
+
 class MockTemplate:
     """
-    mock_template is a decorator designed to mock a specific Django template during unit tests. 
-    It temporarily overrides the template settings to return a mock template when the specified 
+    mock_template is a decorator designed to mock a specific Django template during unit tests.
+    It temporarily overrides the template settings to return a mock template when the specified
     template name is requested, allowing for controlled testing of views that rely on that template.
     Args:
         template_name (str): The name of the template to be mocked.
@@ -637,32 +903,40 @@ class MockTemplate:
         def test_my_view(self):
         ...
     """
+
     @staticmethod
     def mock_template(template_name):
         """
         Decorator to mock a specific Django template during unit tests.
         """
+
         def decorator(test_func):
             """
             Decorator function to wrap the test function and apply the mock template settings.
             """
+
             def wrapper(*args, **kwargs):
-                with override_settings(TEMPLATES=[{
-                    'BACKEND': 'django.template.backends.django.DjangoTemplates',
-                    'DIRS': [],
-                    'APP_DIRS': True,
-                    'OPTIONS': {
-                        'context_processors': [
-                                'django.template.context_processors.debug',
-                                'django.template.context_processors.request',
-                                'django.contrib.auth.context_processors.auth',
-                                'django.contrib.messages.context_processors.messages',
-                            ],
-                        },
-                    }]):
+                with override_settings(
+                    TEMPLATES=[
+                        {
+                            "BACKEND": "django.template.backends.django.DjangoTemplates",
+                            "DIRS": [],
+                            "APP_DIRS": True,
+                            "OPTIONS": {
+                                "context_processors": [
+                                    "django.template.context_processors.debug",
+                                    "django.template.context_processors.request",
+                                    "django.contrib.auth.context_processors.auth",
+                                    "django.contrib.messages.context_processors.messages",
+                                ],
+                            },
+                        }
+                    ]
+                ):
                     original_get_template = get_template
+
                     def mock_get_template(name):
-                        return Template('') if name == template_name else original_get_template(name)
+                        return Template("") if name == template_name else original_get_template(name)
 
                     get_template.patched = mock_get_template
                     try:

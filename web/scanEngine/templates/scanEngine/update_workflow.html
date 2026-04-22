@@ -1,0 +1,69 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}
+Update Workflow
+{% endblock title %}
+
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" type="text/css" href="{% static 'plugins/switches/switches.min.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
+{{ form.media }}
+
+{% endblock custom_js_css_link %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'workflows' current_project.slug %}">Workflows</a></li>
+<li class="breadcrumb-item active">Update Workflow</li>
+{% endblock breadcrumb_title %}
+
+{% block page_title %}
+Update Workflow
+{% endblock page_title %}
+
+{% block main_content %}
+<div class="row">
+	<div class="col-xl-12">
+		<div class="card">
+			<div class="card-body">
+				<h4 class="header-title">Update Workflow</h4>
+				<div class="alert alert-info">
+					<h6><i class="fas fa-info-circle"></i> Workflow Configuration Help</h6>
+					<p>
+						For detailed information on creating workflow configurations, see the 
+						<a href="https://docs.freelabz.com/for-developers/writing-workflows" target="_blank" class="alert-link">
+							<i class="fas fa-external-link-alt"></i> Secator workflows documentation
+						</a>.
+					</p>
+				</div>
+				<form method="POST">
+					{% csrf_token %}
+					{% include "scanEngine/_items/form_workflow.html" %}
+					<div class="mt-3">
+						<button class="btn btn-primary submit-fn" type="submit">
+							<i class="fas fa-save"></i> Update Workflow
+						</button>
+						<a href="{% url 'workflows' current_project.slug %}" class="btn btn-secondary">
+							<i class="fas fa-arrow-left"></i> Back to Workflows
+						</a>
+					</div>
+				</form>
+			</div>
+		</div>
+	</div>
+</div>
+
+{% endblock main_content %}
+
+{% block page_level_script %}
+<script type="text/javascript">
+$(document).ready(function() {
+  // Generate unique IDs for ACE editors to avoid conflicts
+  $('.ace_text-input').each(function(index) {
+    const uniqueId = 'ace-editor-' + Date.now() + '-' + index;
+    $(this).attr('id', uniqueId);
+  });
+});
+</script>
+{% endblock page_level_script %}

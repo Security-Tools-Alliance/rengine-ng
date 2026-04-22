@@ -1,0 +1,58 @@
+{% comment %}
+  Shared content for organization and scope quick scan forms.
+  Requires: target_list, target_ids, quick_scan_entity_label, quick_scan_entity_name, quick_scan_id_prefix,
+  quick_scan_scan_params_level, quick_scan_scan_params_organization_id, quick_scan_scan_params_scope_id (optional),
+  quick_scan_target_collapse_threshold, scan_params_effective, default_profiles, custom_profiles_by_category,
+  secator_workers, and other keys from build_scan_params_form_context (scan_params_section_title, etc.).
+  current_project from context processor.
+{% endcomment %}
+<h4 class="heading-title">{{ target_list|length }} Target{{ target_list|length|pluralize }} associated with {{ quick_scan_entity_label }} {{ quick_scan_entity_name }}</h4>
+{% with threshold=quick_scan_target_collapse_threshold|default:15 %}
+  {% if target_list|length <= threshold %}
+    {% for target in target_list %}
+      <span class="badge bg-dark m-1">{{ target.value }}</span>
+    {% endfor %}
+  {% else %}
+    {% for target in target_list %}
+      {% if forloop.counter <= threshold %}
+        <span class="badge bg-dark m-1">{{ target.value }}</span>
+      {% endif %}
+    {% endfor %}
+    <div class="accordion mt-2" id="quick-scan-extra-targets-accordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#quick-scan-extra-targets-collapse" aria-expanded="false" aria-controls="quick-scan-extra-targets-collapse">
+            + {{ quick_scan_extra_target_count }} more target{{ quick_scan_extra_target_count|pluralize }}
+          </button>
+        </h2>
+        <div id="quick-scan-extra-targets-collapse" class="accordion-collapse collapse" data-bs-parent="#quick-scan-extra-targets-accordion">
+          <div class="accordion-body">
+            {% for target in target_list %}
+              {% if forloop.counter > threshold %}
+                <span class="badge bg-dark m-1">{{ target.value }}</span>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+{% endwith %}
+<form method="POST" id="{{ quick_scan_id_prefix }}-form" data-secator-id-prefix="{{ quick_scan_id_prefix }}" data-multi-target="true" data-scan-params-level="scan" data-scan-params-organization-id="{{ quick_scan_scan_params_organization_id|default:'' }}" data-scan-params-scope-id="{{ quick_scan_scan_params_scope_id|default:'' }}" data-scan-params-project-slug="{{ current_project.slug|default:'' }}" data-scan-params-preview-url="{% url 'api:get_scan_params_effective_preview' %}">
+  {% csrf_token %}
+  {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix=quick_scan_id_prefix|add:'_' %}
+  {% include 'startScan/_items/secator_profile_hidden_fields.html' with id_prefix=quick_scan_id_prefix|add:'_' %}
+  <div class="form-row">
+    <div class="col-md-12 mb-4">
+      <h4>Choose Execution Mode</h4>
+      {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_title='Scan' embed_selection_container=False %}
+      {% include 'startScan/_items/secator_view_toggle.html' with id_prefix=quick_scan_id_prefix %}
+      {% include 'startScan/_items/secator_selection_layout.html' with id_prefix=quick_scan_id_prefix %}
+      {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=quick_scan_entity_name id_prefix=quick_scan_id_prefix|add:'_' id_suffix='_'|add:quick_scan_id_prefix %}
+      {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix=quick_scan_id_prefix|add:'_' show_random_proxy=False %}
+      {% include "shared/_scan_params_effective_display.html" with scan_params_effective=scan_params_effective scan_params_effective_ordered=scan_params_effective_ordered scan_params_level=quick_scan_scan_params_level %}
+      {% include 'startScan/_items/secator_start_scan_button.html' %}
+    </div>
+  </div>
+  <input type="hidden" name="list_of_target_id" value="{{ target_ids }}">
+</form>

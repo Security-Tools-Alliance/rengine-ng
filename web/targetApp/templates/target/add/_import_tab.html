@@ -1,0 +1,20 @@
+<div class="tab-pane fade" id="{{ tab_id }}" role="tabpanel" aria-labelledby="{{ tab_id }}">
+  <div class="row">
+    <div class="col-12">
+      <div class="alert {{ alert_class }} border-0 mb-4" role="alert">
+        {{ alert_content|safe }}
+      </div>
+      <form method="post" class="add-target-form" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="targetDescription" class="global-field-desc">
+        <input type="hidden" name="targetH1TeamHandle" class="global-field-h1">
+        <input type="hidden" name="targetOrganization" class="global-field-org">
+        <div class="mb-3">
+          <input type="file" class="form-control" id="{{ file_input_id }}" required accept="{{ file_accept }}" name="{{ file_input_name }}" onchange="showname(this, '{{ selected_file_el_selector }}')">
+          <h6 id="{{ selected_file_el_id }}" class="text-primary"></h6>
+        </div>
+        <input type="submit" class="btn btn-primary float-right mt-5 mb-2" value="{{ submit_value }}" name="{{ submit_name }}">
+      </form>
+    </div>
+  </div>
+</div>

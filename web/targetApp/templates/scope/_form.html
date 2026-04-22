@@ -1,0 +1,198 @@
+{% load static %}
+{# Select2 CSS: same path as organization add/update; init in add.html/update.html with data-toggle="select2". #}
+<link rel="stylesheet" type="text/css" href="{% static 'plugins/select2/select2.min.css' %}">
+
+<div class="row">
+  <div class="col-md-6">
+    <div class="mb-1">
+      <label for="id_name" class="form-label mt-1">Scope Name *</label>
+      {{ form.name }}
+      {% if form.errors.name %}
+      <div class="text-danger small mt-1">{{ form.errors.name|striptags }}</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="mb-1">
+      <label for="id_organization" class="form-label mt-1">Organization *</label>
+      {{ form.organization }}
+      {% if form.errors.organization %}
+      <div class="text-danger small mt-1">{{ form.errors.organization|striptags }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-4">
+    <div class="mb-1">
+      <label for="id_scope_type" class="form-label mt-1">Scope Type *</label>
+      {{ form.scope_type }}
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="mb-1">
+      <label for="id_start_date" class="form-label mt-1">Start Date</label>
+      {{ form.start_date }}
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="mb-1">
+      <label for="id_end_date" class="form-label mt-1">End Date</label>
+      {{ form.end_date }}
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-12">
+    <div class="mb-1">
+      <label for="id_description" class="form-label mt-1">Description</label>
+      {{ form.description }}
+    </div>
+  </div>
+</div>
+
+<div class="row mb-2">
+  <div class="col-12">
+    <div class="card border-secondary">
+      <div class="card-header py-2" id="scope-normalizer-heading">
+        <button class="btn btn-link btn-sm text-decoration-none p-0" type="button" data-bs-toggle="collapse" data-bs-target="#scope-normalizer-collapse" aria-expanded="false" aria-controls="scope-normalizer-collapse">
+          Scope normalizer
+        </button>
+      </div>
+      <div id="scope-normalizer-collapse" class="collapse" aria-labelledby="scope-normalizer-heading">
+        <div class="card-body">
+          <p class="form-text small">Paste a raw scope list (hosts and/or IPs, comma or newline separated). Normalize to preview domain targets, IP targets, and allowed hosts. Apply to form fills the restriction options and records which targets to create; when you save the scope, those targets will be created and added automatically.</p>
+          <textarea id="scope-normalizer-raw" class="form-control mb-2" rows="4" placeholder="sub.example.com, www.example.com&#10;10.0.0.1"></textarea>
+          <div class="mb-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="scope-normalizer-btn">Normalize</button>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="scope-normalizer-apply-btn">Apply to form</button>
+          </div>
+          <div id="scope-normalizer-result" class="small text-muted" style="display:none;"></div>
+          <div id="scope-normalizer-error" class="small text-danger" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="hidden" name="pending_normalizer_targets" id="pending_normalizer_targets" value="">
+<div id="scope-normalizer-pending-preview" class="alert alert-info small py-2 mb-2" style="display:none;" role="status">
+  <strong>Preview:</strong> When you save this scope, the following targets will be created and added to it: <span id="scope-normalizer-pending-summary"></span>
+</div>
+<div class="row">
+  <div class="col-12">
+    <div class="mb-1">
+      <label for="id_targets" class="form-label mt-1">Targets</label>
+      {{ form.targets }}
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-12">
+    <div class="mb-1">
+      <label for="id_workers" class="form-label mt-1">Workers</label>
+      <div class="mb-1">
+        <div class="form-text">When checked, scans can run on this server. Uncheck to allow only the remote workers selected below.</div>
+        <div class="form-check mb-1">
+          {{ form.allow_local_worker }}
+          <label class="form-check-label" for="id_allow_local_worker">Allow Local worker</label>
+        </div>
+      </div>
+      {% if form.workers.help_text %}
+      <div class="form-text">{{ form.workers.help_text }}</div>
+      {% endif %}
+      {{ form.workers }}
+      {% if form.errors.workers %}
+      <div class="text-danger small mt-1">{{ form.errors.workers|striptags }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% if form.errors.default_worker %}
+<div class="row">
+  <div class="col-12">
+    <div class="text-danger small mt-1">{{ form.errors.default_worker|striptags }}</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="row mt-2">
+  <div class="col-12">
+    <div class="mb-1">
+      <div class="form-check">
+        {{ form.restrict_findings_to_target }}
+        <label class="form-check-label" for="id_restrict_findings_to_target">Restrict findings to target</label>
+      </div>
+      <div class="form-text">When checked and this scope is active for a scan, only findings whose domain (or host for subdomains) is the target or in the allowed list below are created. Reduces out-of-scope domains from WHOIS, etc.</div>
+    </div>
+  </div>
+</div>
+<div class="row" id="scope-allowed-finding-domains-block">
+  <div class="col-12">
+    <div class="mb-1">
+      <label for="id_allowed_finding_domains" class="form-label mt-1">Allowed domains (in addition to target)</label>
+      {% if form.allowed_finding_domains.help_text %}
+      <div class="form-text">{{ form.allowed_finding_domains.help_text }}</div>
+      {% endif %}
+      {{ form.allowed_finding_domains }}
+      {% if form.errors.allowed_finding_domains %}
+      <div class="text-danger small mt-1">{{ form.errors.allowed_finding_domains|striptags }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<div class="row" id="scope-allowed-finding-hosts-block">
+  <div class="col-12">
+    <div class="mb-1">
+      <label for="id_allowed_finding_hosts" class="form-label mt-1">Allowed hosts</label>
+      {% if form.allowed_finding_hosts.help_text %}
+      <div class="form-text">{{ form.allowed_finding_hosts.help_text }}</div>
+      {% endif %}
+      {{ form.allowed_finding_hosts }}
+      {% if form.errors.allowed_finding_hosts %}
+      <div class="text-danger small mt-1">{{ form.errors.allowed_finding_hosts|striptags }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>
+(function() {
+  var cb = document.getElementById('id_restrict_findings_to_target');
+  var blockDomains = document.getElementById('scope-allowed-finding-domains-block');
+  var blockHosts = document.getElementById('scope-allowed-finding-hosts-block');
+  if (!cb) return;
+  function toggle() {
+    var show = cb.checked;
+    if (blockDomains) blockDomains.style.display = show ? '' : 'none';
+    if (blockHosts) blockHosts.style.display = show ? '' : 'none';
+  }
+  cb.addEventListener('change', toggle);
+  toggle();
+})();
+</script>
+<script src="{% static 'custom/scope_normalizer.js' %}"></script>
+{% with project_slug=current_project.slug|default:slug %}
+<script>
+(function() {
+  if (typeof initScopeNormalizer === 'function') {
+    initScopeNormalizer({
+      normalizeUrl: '{% url "scope_normalize" slug=project_slug %}'
+    });
+  }
+})();
+</script>
+{% endwith %}
+
+<hr>
+{% include "startScan/_items/secator_advanced_config_accordion.html" with id_prefix="scope_" worker_select_name="default_worker" include_scan_params_section=True show_profiles=False show_simple_options=False scan_params_section_collapse_id=section_collapse_id scan_params_section_form_id="scan-params-form" scan_params_prefix="" scan_params_level=scan_params_level scan_params_effective=scan_params_effective scan_params_values=scan_params_values scan_params_section_title=scan_params_section_title scan_params_section_help_text=scan_params_section_help_text scan_params_section_configure_button_label=scan_params_section_configure_button_label entity_profile_categories=entity_profile_categories default_profiles=default_profiles custom_profiles_by_category=custom_profiles_by_category header_initial=header_initial scan_params_show_use_random_proxy=False %}
+
+{% if form.non_field_errors %}
+<div class="alert alert-danger mt-2">
+  {% for error in form.non_field_errors %}
+  <p>{{ error }}</p>
+  {% endfor %}
+</div>
+{% endif %}

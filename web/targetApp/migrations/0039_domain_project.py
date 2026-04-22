@@ -5,16 +5,15 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('dashboard', '0005_alter_project_slug'),
-        ('targetApp', '0038_rename_associateddomain_relateddomain'),
+        ("dashboard", "0005_alter_project_slug"),
+        ("targetApp", "0038_rename_associateddomain_relateddomain"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='domain',
-            name='project',
-            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, to='dashboard.project'),
+            model_name="domain",
+            name="project",
+            field=models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, to="dashboard.project"),
         ),
     ]

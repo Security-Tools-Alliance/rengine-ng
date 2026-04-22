@@ -7,6 +7,7 @@
     <title>{% block title %} {% endblock title %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <link rel="shortcut icon" href="/staticfiles/img/favicon.png">
     <link href="{% static 'bootstrap/bootstrap.min.css' %}" rel="stylesheet" type="text/css" id="bootstrap-stylesheet" />
     <link href="{% static 'assets/css/app.min.css' %}" rel="stylesheet" type="text/css" id="main-stylesheet" />
@@ -17,10 +18,8 @@
     <link href="{% static 'plugins/sweetalert2/sweetalert2.min.css' %}" rel="stylesheet" type="text/css" />
     <link href="{% static 'plugins/switches/switches.min.css' %}" rel="stylesheet" type="text/css" />
     <link href="{% static 'custom/custom.css' %}" rel="stylesheet" type="text/css" />
-    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-    <link rel="stylesheet" type="text/css" href="{% static 'plugins/datatable/global.css' %}">
-    <!-- <link rel="stylesheet" type="text/css" href="{% static 'plugins/datatable/custom.css' %}"> -->
-    <link href="https://cdn.datatables.net/rowgroup/1.4.0/css/rowGroup.dataTables.min.css" rel="stylesheet" type="text/css" />
+    <link href="{% static 'custom/badges.css' %}" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="{% static 'plugins/datatables/datatables.min.css' %}">
     <style media="screen">
       @font-face {
         font-family: "Cerebri Sans,sans-serif";
@@ -57,7 +56,37 @@
     {% endblock custom_js_css_link %}
   </head>
 
-  <body class="loading" data-layout-mode="horizontal">
+  <body class="loading" data-layout-mode="horizontal" data-project-slug="{{ current_project.slug|default:'' }}" data-project-slug-from-url="{{ project_slug_from_url|default:'' }}">
+    <script>
+      (function () {
+        try {
+          var el = document.body;
+          var fromUrl = el && el.getAttribute("data-project-slug-from-url");
+          var key = "rengine-current-project-slug";
+          var current = "";
+          try { current = window.sessionStorage.getItem(key) || ""; } catch (e1) { current = ""; }
+
+          if (fromUrl && typeof fromUrl === "string") {
+            fromUrl = fromUrl.trim();
+            if (fromUrl.length) {
+              window.sessionStorage.setItem(key, fromUrl);
+              return;
+            }
+          }
+
+          // Pages without URL slug: do not overwrite an existing tab context.
+          if (!current) {
+            var slug = el && el.getAttribute("data-project-slug");
+            if (slug && typeof slug === "string") {
+              slug = slug.trim();
+              if (slug.length) {
+                window.sessionStorage.setItem(key, slug);
+              }
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
     <!-- Topbar begins -->
     {% include 'base/_items/top_bar.html' %}
     {# topbar ends #}
@@ -65,6 +94,7 @@
       {# top nav begins #}
       {% include 'base/_items/top_nav.html' %}
       {# top nav ends #}
+      {% include 'base/_items/datatables_action_urls_script.html' %}
       <div class="content-page">
         <div class="content">
           <div class="container-fluid">
@@ -83,6 +113,21 @@
             </div>
             {% block main_content %}
             {% endblock main_content %}
+
+            {# Persistent OAuth info banner for OAuth users without project access #}
+            {% if is_oauth_user %}
+              {% if not current_project|default:"" %}
+              <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <i class="mdi mdi-shield-account me-2"></i>
+                <strong>OAuth Account</strong> &mdash;
+                Your account is managed via OAuth. An administrator needs to assign you to a project before you can access scan features.
+                <a href="https://github.com/Security-Tools-Alliance/rengine-ng/wiki/usage-oauth" target="_blank" class="alert-link">
+                  <i class="mdi mdi-open-in-new"></i> Learn more on the Wiki
+                </a>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+              {% endif %}
+            {% endif %}
           </div>
           <div id="additional-content"></div>
         </div>
@@ -90,24 +135,84 @@
         {% include 'base/_items/xl_scrollable_modal.html' %}
         {% include 'base/_items/offcanvas.html' %}
       </div>
+      <div class="rightbar-overlay" aria-hidden="true"></div>
       {% include 'base/_items/right_bar.html' %}
       {% include 'base/_items/footer.html' %}
-    </div>
+    <script>
+      (function(){ try { window.sessionStorage.setItem('_UBOLD_VISITED_', '1'); } catch (e) {} })();
+    </script>
     <script src="{% static 'assets/js/vendor.min.js' %}"></script>
-    <script src="https://unpkg.com/@popperjs/core@2"></script>
-    <script src="https://unpkg.com/tippy.js@6"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.3.8/purify.min.js"></script>
+    <script src="{% static 'plugins/popperjs/popper.min.js' %}"></script>
+    <script src="{% static 'plugins/tippyjs/tippy.min.js' %}"></script>
+    <script src="{% static 'plugins/dompurify/purify.min.js' %}"></script>
     <script src="{% static 'assets/js/app.min.js' %}"></script>
+    <script src="{% static 'custom/modal_manager.js' %}"></script>
+    {{ dompurify_sanitize_config|json_script:"rengine-dompurify-sanitize-config" }}
+    <script>
+      (function(){ var el = document.getElementById('rengine-dompurify-sanitize-config'); window.VULN_DOMPURIFY_CONFIG = el ? JSON.parse(el.textContent) : {}; })();
+    </script>
+    <script src="{% static 'custom/target_entity_kind.js' %}"></script>
     <script src="{% static 'custom/custom.js' %}"></script>
-    <script src="{% static 'custom/toolbox.js' %}"></script>
+    <script src="{% static 'custom/scan_params.js' %}"></script>
+    {{ RENGINE_SCAN_STATUS|json_script:"rengine-scan-status" }}
+    <script src="{% static 'custom/command_log_helpers.js' %}"></script>
+    <script src="{% static 'custom/scan_status_websocket.js' %}"></script>
     <script src="{% static 'custom/right_sidebar.js' %}"></script>
+    <script src="{% static 'custom/screenshot-display.js' %}"></script>
+    <script src="{% static 'custom/rengine_console_warn_keys.js' %}"></script>
+    <script src="{% static 'custom/rengine_datatable_port_endpoint_pure.js' %}"></script>
     <script src="{% static 'custom/port_display.js' %}"></script>
+    <script src="{% static 'custom/rengine_storage.js' %}"></script>
     <script src="{% static 'plugins/snackbar/snackbar.min.js' %}"></script>
     <script src="{% static 'plugins/sweetalert2/sweetalert2.all.min.js' %}"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-    <script src="https://cdn.datatables.net/rowgroup/1.4.0/js/dataTables.rowGroup.min.js"></script>
+    <script src="{% static 'plugins/datatables/datatables.min.js' %}"></script>
+    {{ datatables_page_length_menu_values|json_script:"rengine-datatable-length-menu" }}
     <script type="text/javascript">
+      window.RENGINE_DATATABLE_USE_SCROLLER = {{ use_datatables_scroller|yesno:"true,false" }};
+      window.RENGINE_DATATABLE_PAGE_LENGTH = {{ datatables_page_length|default:30 }};
+      (function(){
+        var el = document.getElementById('rengine-datatable-length-menu');
+        window.RENGINE_DATATABLE_LENGTH_MENU_VALUES = el ? JSON.parse(el.textContent) : {{ datatables_page_length_menu_values }};
+      })();
+      window.RENGINE_DATATABLE_LAYOUT_FULL_CLASSIC = {
+        topStart: 'pageLength',
+        topEnd: ['info', 'paging'],
+        bottomStart: 'pageLength',
+        bottomEnd: ['info', 'paging']
+      };
+      window.RENGINE_DATATABLE_LAYOUT_FULL_SCROLLER = {
+        topStart: 'pageLength',
+        topEnd: 'paging',
+        bottomStart: 'pageLength',
+        bottomEnd: 'paging'
+      };
+      window.RENGINE_DATATABLE_LAYOUT_FULL = window.RENGINE_DATATABLE_USE_SCROLLER
+        ? window.RENGINE_DATATABLE_LAYOUT_FULL_SCROLLER
+        : window.RENGINE_DATATABLE_LAYOUT_FULL_CLASSIC;
+      window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH_CLASSIC = {
+        topStart: 'search',
+        topEnd: 'pageLength',
+        bottomStart: 'info',
+        bottomEnd: 'paging'
+      };
+      window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH_SCROLLER = {
+        topStart: 'search',
+        topEnd: 'pageLength',
+        bottomStart: 'pageLength',
+        bottomEnd: 'paging'
+      };
+      window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH = window.RENGINE_DATATABLE_USE_SCROLLER
+        ? window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH_SCROLLER
+        : window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH_CLASSIC;
+      if (typeof $.fn.DataTable !== "undefined") {
+        $.fn.DataTable.defaults.language = {
+          paginate: { previous: "←", next: "→" },
+          info: "Showing page _PAGE_ of _PAGES_",
+          search: "",
+          searchPlaceholder: "Search...",
+          lengthMenu: "Results :  _MENU_"
+        };
+      }
       $(document).ready(function(){
         // for tabs with urls, we need to append the hash in the url
         $('a[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
@@ -117,12 +222,66 @@
           }
         });
         $(window).on('hashchange', handleHashInUrl);
-        render_search_history('{{current_project.slug}}');
+
+        // Only call project-specific helpers when a project is selected
+        var currentProjectSlug = '{{ current_project.slug|default:""|escapejs }}';
+        if (currentProjectSlug) {
+          render_search_history(currentProjectSlug);
+          getScanStatusSidebar('{% url 'api:scan_status' %}', '{% url 'api:stop_scan' %}', '{% url 'api:fetch_subscan_results' %}', project=currentProjectSlug, reload=false);
+        }
 
         // reNgine-ng will also check everyday if update exists for reNgine-ng
         checkForUpdates(false);
 
-        getScanStatusSidebar('{% url 'api:scan_status' %}', '{% url 'api:stop_scan' %}', '{% url 'api:fetch_subscan_results' %}', project='{{current_project.slug}}', reload=false);
+        // Set API URLs for scan status functions
+        window.scanStatusApiUrls = {
+          scanStatusUrl: '{% url "api:scan_status" %}',
+          stopScanUrl: '{% url "api:stop_scan" %}',
+          stopActivityUrl: '{% url "api:stop_activity" %}',
+          fetchSubscanUrl: '{% url "api:fetch_subscan_results" %}'
+        };
+
+        window.RENGINE_SEARCH_PROJECT_QS = "{{ project_nav_a|escapejs }}";
+        window.RENGINE_API_URLS = window.RENGINE_API_URLS || {};
+        Object.assign(window.RENGINE_API_URLS, {
+          vulnerabilityReport: '{% url "api:vulnerability_report" %}',
+          getFileContents: '{% url "api:getFileContents" %}',
+          querySubdomains: '{% url "api:querySubdomains" %}',
+          queryInterestingSubdomains: '{% url "api:queryInterestingSubdomains" %}',
+          queryEndpoints: '{% url "api:queryEndpoints" %}',
+          queryDorks: '{% url "api:queryDorks" %}',
+          listIPs: '{% url "api:listIPs" %}',
+          interestingEndpointsList: '{% url "api:interesting-endpoints-list" %}',
+          listTodoNotes: '{% url "api:listTodoNotes" %}',
+          listSubScans: '{% url "api:listSubScans" %}',
+          listTechnologies: '{% url "api:listTechnologies" %}',
+          fetchScreenshots: '{% url "api:fetchScreenshots" %}',
+          uncommonWebPorts: '{% url "api:uncommonWebPorts" %}',
+          toolOllama: '{% url "api:ollama_manager" %}',
+          searchHistory: '{% url "api:search_history" %}'
+        });
+
+        window.RENGINE_PAGE_URLS = window.RENGINE_PAGE_URLS || {};
+        Object.assign(window.RENGINE_PAGE_URLS, {
+          apiVault: '{% if current_project %}{% url "api_vault" current_project.slug %}{% else %}{% url "api_vault" %}{% endif %}',
+          llmToolkit: '{% if current_project %}{% url "llm_toolkit" current_project.slug %}{% else %}{% url "llm_toolkit" %}{% endif %}',
+          reconNoteDelete: '{% if current_project %}{% url "delete_note" current_project.slug %}{% else %}{% url "delete_note" %}{% endif %}',
+          reconNoteFlipTodo: '{% if current_project %}{% url "flip_todo_status" current_project.slug %}{% else %}{% url "flip_todo_status" %}{% endif %}',
+          reconNoteFlipImportant: '{% if current_project %}{% url "flip_important_status" current_project.slug %}{% else %}{% url "flip_important_status" %}{% endif %}'
+        });
+
+        getScanStatusSidebar('{% url "api:scan_status" %}', '{% url "api:stop_scan" %}', '{% url "api:stop_activity" %}', '{% url "api:fetch_subscan_results" %}', { project: '{{ current_project.slug }}', reload: false });
+        
+        // Connect to WebSocket for real-time right sidebar updates
+        if (typeof connectScanStatusWebSocket === 'function') {
+          connectScanStatusWebSocket(null, '{{current_project.slug}}', {
+            updateSidebar: true,
+            scanStatusUrl: '{% url "api:scan_status" %}',
+            stopScanUrl: '{% url "api:stop_scan" %}',
+            stopActivityUrl: '{% url "api:stop_activity" %}',
+            fetchSubscanUrl: '{% url "api:fetch_subscan_results" %}'
+          });
+        }
         if (localStorage.getItem('rengine-theme') == "dark") {
           $('#dark-mode-check').prop("checked", true).change();
         }
@@ -132,17 +291,34 @@
         handleHashInUrl();
       });
 
+      function buildSearchHistoryItem(query, projectQueryString) {
+        var anchor = document.createElement("a");
+        var span = document.createElement("span");
+        var safeQuery = query == null ? "" : String(query);
+        var href = "{% url 'search' %}?query=" + encodeURIComponent(safeQuery) + projectQueryString;
+        anchor.setAttribute("href", href);
+        anchor.setAttribute("class", "dropdown-item notify-item");
+        span.textContent = safeQuery;
+        anchor.appendChild(span);
+        return anchor;
+      }
+
       function render_search_history(slug){
-        fetch('/api/search/history/')
+        fetch((window.RENGINE_API_URLS && window.RENGINE_API_URLS.searchHistory) || '/api/search/history/')
         .then(response => response.json())
         .then(function (response) {
           if (response.status) {
-            for (var history in response.results) {
-              $('#search-history-items').append(`
-                <a href="{% url 'search' %}?query=${response.results[history].query}" class="dropdown-item notify-item">
-                  <span>${response.results[history].query}</span>
-                </a>
-              `);
+            var projQsRaw = window.RENGINE_SEARCH_PROJECT_QS || "";
+            var projQs = projQsRaw
+              ? (projQsRaw.charAt(0) === "&" ? projQsRaw : "&" + projQsRaw)
+              : "";
+            var historyContainer = document.getElementById("search-history-items");
+            if (!historyContainer) {
+              return;
+            }
+            for (var hi = 0; hi < response.results.length; hi++) {
+              var row = response.results[hi];
+              historyContainer.appendChild(buildSearchHistoryItem(row.query, projQs));
             }
           }
           else{
@@ -257,6 +433,24 @@
         content: 'Scan Activity',
       });
     </script>
+    {% comment %}
+    DataTables helper stack: load order must be preserved (see web/static/custom/datatables/README.md).
+    Order: escape → layout → cookies → columns → rowgroup → filters → config → actions → init → tooltips → column_definitions.
+    {% endcomment %}
+    <script src="{% static 'custom/datatables/escape.js' %}"></script>
+    <script src="{% static 'custom/datatables/layout.js' %}"></script>
+    <script src="{% static 'custom/datatables/cookies.js' %}"></script>
+    <script src="{% static 'custom/datatables/columns.js' %}"></script>
+    <script src="{% static 'custom/datatables/rowgroup.js' %}"></script>
+    <script src="{% static 'custom/datatables/filters.js' %}"></script>
+    <script src="{% static 'custom/datatables/config.js' %}"></script>
+    <script src="{% static 'custom/datatables/filter_ids.js' %}"></script>
+    <script src="{% static 'custom/datatables/page_wiring.js' %}"></script>
+    <script src="{% static 'custom/datatables/actions.js' %}"></script>
+    <script src="{% static 'custom/datatables/init.js' %}"></script>
+    <script src="{% static 'custom/datatables/tooltips.js' %}"></script>
+    <script src="{% static 'custom/datatables/column_definitions.js' %}"></script>
+    <script src="{% static 'custom/datatables/renderers_subdomain_endpoint.js' %}"></script>
     {% if messages %}
       {% for message in messages %}
         <script type="text/javascript">
@@ -266,10 +460,11 @@
             {% if message.tags == 'error'%}
               actionTextColor: '#fff',
               backgroundColor: '#e7515a',
+              duration: 8000,
             {% else %}
             actionTextColor: '#42A5F5',
+            duration: 5000,
             {% endif %}
-            duration: 2500
           });
         </script>
       {% endfor %}

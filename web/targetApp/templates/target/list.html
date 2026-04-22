@@ -25,30 +25,42 @@ Targets
 		<div class="card">
 			<div class="p-2">
 				<div class="row">
-					<div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
-						<button type="button" class="btn btn-primary dropdown-toggle mt-1" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" id="filterMenu">
-							Filter <i class="fe-filter"></i>
-						</button>
-						<div class="dropdown-menu" style="width: 30%">
-							<div class="px-4 py-3">
-								<h4 class="headline-title">Filters</h4>
-								<label for="filterByOrganization" class="form-label">Filter by Organization</label>
-								<select class="form-control" id="filterByOrganization">
-								</select>
+					<div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center flex-wrap gap-1">
+						{% include 'base/_items/datatables_filters/quick_search.html' with quick_search_input_id='targetListQuickSearch' %}
+						{% include 'base/_items/datatables_filters/dropdown_shell.html' with inner_template='base/_items/datatables_filters/filters_target_list.html' id_prefix='targetList' filtering_text_id='targetListFilteringTextHidden' %}
+						<div class="btn-group ms-1 dropstart">
+							<button type="button" class="btn btn-soft-info dropdown-toggle" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="Target grouping">
+								<i class="fe-layout"></i>
+							</button>
+							<div class="dropdown-menu">
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="radio" id="target_group_none" name="grouping_target_row" class="form-check-input" value="" checked>
+										<label class="form-check-label" for="target_group_none">None</label>
+									</div>
+								</div>
+								<div class="dropdown-item">
+									<div class="form-check">
+										<input type="radio" id="target_group_scope" name="grouping_target_row" class="form-check-input" value="scope_group">
+										<label class="form-check-label" for="target_group_scope">Scope</label>
+									</div>
+								</div>
 							</div>
-							<div class="dropdown-divider"></div>
-							<a href="#" class="dropdown-ite text-primary float-end" id="resetFilters">Reset Filters</a>
 						</div>
+						<div id="targetListFilteringText" class="w-100 d-flex flex-wrap gap-1 mt-2"></div>
 					</div>
-					<div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+					<div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12 d-flex align-items-center justify-content-end flex-wrap gap-1">
+            <span class="small text-muted me-1">Bulk actions:</span>
+						<div class="btn-group" role="group">
+							{% if user|can:'initiate_scans_subscans' %}
+							<a class="btn btn-sm btn-soft-info disabled" href="#" id="scan_multiple_button" onclick="scanMultipleTargets('{% url 'start_multiple_scan' current_project.slug %}'); return false;" data-toggle="tooltip" title="Scan multiple targets" aria-label="Scan multiple targets"><i class="fe-zap"></i></a>
+							{% endif %}
+							{% if user|can:'modify_targets' %}
+							<a class="btn btn-sm btn-soft-danger disabled" href="#" id="delete_multiple_button" onclick="deleteMultipleTargets('{% url 'delete_multiple_targets' current_project.slug %}'); return false;" data-toggle="tooltip" title="Delete multiple targets" aria-label="Delete multiple targets"><i class="fe-trash-2"></i></a>
+							{% endif %}
+						</div>
 						{% if user|can:'modify_targets' %}
-						<a class="btn btn-soft-danger float-end disabled ms-1 mt-1" href="#" onclick="deleteMultipleTargets('{% url 'delete_multiple_targets' current_project.slug %}')" id="delete_multiple_button">Delete Multiple Targets</a>
-						{% endif %}
-						{% if user|can:'initiate_scans_subscans' %}
-						<a class="btn btn-soft-info float-end disabled ms-1 mt-1" href="#" onclick="scanMultipleTargets('{% url 'start_multiple_scan' current_project.slug %}')" id="scan_multiple_button">Scan Multiple Targets</a>
-						{% endif %}
-						{% if user|can:'modify_targets' %}
-						<a class="btn btn-soft-primary float-end ms-1 mt-1" href="{% url 'add_target' current_project.slug %}" data-toggle="tooltip" data-placement="top" title="Add New Targets">Add Targets</a>
+						<a class="btn btn-sm btn-soft-primary ms-1" href="{% url 'add_target' current_project.slug %}" data-toggle="tooltip" data-placement="top" title="Add New Targets" aria-label="Add targets">Add Targets</a>
 						{% endif %}
 					</div>
 				</div>
@@ -59,22 +71,41 @@ Targets
 <div class="row">
 	<div class="col-12">
 		<div class="card">
-			<form method="POST" id="multiple_targets_form" action="{% url 'start_multiple_scan' current_project.slug %}">
-				{% csrf_token %}
-				<table id="list_target_table" class="table dt-responsive w-100">
-					<thead>
-						<tr>
-							<th class="checkbox-column text-center">Serial Number</th>
-							<th>Serial Number</th>
-							<th>Target</th>
-							<th>Description</th>
-							<th class="text-center">Added On</th>
-							<th class="text-center">Last Scanned</th>
-							<th class="text-center">Action</th>
-						</tr>
-					</thead>
-				</table>
-			</form>
+			<div class="card-body">
+				<form method="POST" id="multiple_targets_form" action="{% url 'start_multiple_scan' current_project.slug %}">
+					{% csrf_token %}
+					<table id="list_target_table" class="table dt-responsive w-100">
+						<thead>
+							<tr>
+								<th class="checkbox-column text-center">Serial Number</th>
+								<th class="d-none" aria-hidden="true">Serial Number</th>
+								<th>Target</th>
+								<th>Description</th>
+								<th class="text-center">Summary</th>
+								<th class="text-center">Added On</th>
+								<th class="text-center">Last Scanned</th>
+								<th class="text-center">Action</th>
+							</tr>
+						</thead>
+						<tfoot>
+							<tr>
+								<th></th>
+								<th class="d-none" aria-hidden="true"></th>
+								<th>
+									<input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="2" placeholder="Search target" />
+								</th>
+								<th>
+									<input type="text" class="form-control form-control-sm datatable-column-search" data-column-index="3" placeholder="Search description" />
+								</th>
+								<th></th>
+								<th></th>
+								<th></th>
+								<th></th>
+							</tr>
+						</tfoot>
+					</table>
+				</form>
+			</div>
 		</div>
 	</div>
 </div>
@@ -82,185 +113,158 @@ Targets
 
 
 {% block page_level_script %}
-<script src="{% static 'custom/custom.js' %}"></script>
 <script src="{% static 'targetApp/js/custom_domain.js' %}"></script>
 <script>
+window.RENGINE_DATATABLE_ACTION_OPTIONS = window.RENGINE_DATATABLE_ACTION_OPTIONS || {};
+window.RENGINE_DATATABLE_ACTION_OPTIONS.showFullTargetActions = {{ show_full_target_actions|yesno:"true,false" }};
+</script>
+{{ datatable_row_group_config|json_script:"datatable-row-group-config" }}
+{{ datatable_filter_select_to_param|json_script:"datatable-filter-params" }}
+<script>
 $(document).ready(function(){
-	var table = $('#list_target_table').DataTable({
-		"headerCallback": function(e, a, t, n, s) {
-			e.getElementsByTagName("th")[0].innerHTML='<div class="form-check mb-2 form-check-primary"><input type="checkbox" class="float-start form-check-input chk-parent" id="head_checkbox" onclick=mainCheckBoxSelected()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>\n'
+	const colDefs = window.RengineDatatableColumnDefs;
+	const targetListColumns = [
+		{'data': 'id', 'name': 'checkbox'},
+		{'data': 'id', 'name': 'id'},
+		{'data': 'name', 'name': 'name'},
+		{'data': 'description', 'name': 'description'},
+		{'data': 'domain_count', 'name': 'domain_count'},
+		{'data': 'id', 'name': 'id_added'},
+		{'data': 'start_scan_date', 'name': 'start_scan_date'},
+		{'data': 'id', 'name': 'action'},
+		{'data': 'organization', 'name': 'organization'},
+		{'data': 'most_recent_scan', 'name': 'most_recent_scan'},
+		{'data': 'insert_date', 'name': 'insert_date'},
+		{'data': 'insert_date_humanized', 'name': 'insert_date_humanized'},
+		{'data': 'start_scan_date_humanized', 'name': 'start_scan_date_humanized'},
+		{'data': 'scope_group', 'name': 'scope_group'},
+		{'data': 'has_scan', 'name': 'has_scan'},
+	];
+	const targetListRowGroupBaseOpts = { dataSrc: 'scope_group', rowLabel: 'Targets', emptyGroupLabel: 'No scope' };
+	const targetListGroups = [
+		{ value: '', label: 'None' },
+		{ value: 'scope_group', label: 'Scope', orderWhenActive: [['scope_group', 'asc'], ['id', 'desc']] }
+	];
+	const targetBackendRowGroup = typeof window.getRengineRowGroupConfigFromScript === 'function' ? window.getRengineRowGroupConfigFromScript('datatable-row-group-config') : null;
+	const targetRowGroupOpts = targetBackendRowGroup && typeof window.getRengineRowGroupConfig === 'function'
+		? window.getRengineRowGroupConfig(targetBackendRowGroup, {
+			groups: targetListGroups,
+			columns: targetListColumns,
+			defaultOrderWhenDisabled: [['id', 'desc']],
+			rowGroupBaseOpts: targetListRowGroupBaseOpts,
+			snackbarMessage: window.getRengineRowGroupSnackbarMessage('Grouping cleared', 'Grouped by {label}')
+		})
+		: null;
+	var table = window.initRengineServerSideDataTable('#list_target_table', {
+		filterParamsElId: 'datatable-filter-params',
+		headerCallback: function(e) {
+			e.getElementsByTagName("th")[0].innerHTML='<div class="form-check mb-2 form-check-primary"><input type="checkbox" class="float-start form-check-input chk-parent" id="head_checkbox" onclick=mainCheckBoxSelected()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>\n';
 		},
-		"destroy": true,
-		"processing": true,
-		"dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center mt-sm-0 mt-3'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" +
-		"<'table-responsive'tr>" +
-		"<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
-		"oLanguage": {
-			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-			"sSearchPlaceholder": "Search...",
-			"sLengthMenu": "Results :  _MENU_",
+		destroy: true,
+		stripeClasses: [],
+		ajax: {
+			url: '/api/listTargets/?format=datatables&slug={{ current_project.slug|escapejs }}',
+			data: function(d) {}
 		},
-		"fnCreatedRow": function(nRow, aData, iDataIndex) {
+		fnCreatedRow: function(nRow, aData) {
 			$(nRow).attr('id', 'target_row_' + aData['id']);
 		},
-		"stripeClasses": [],
-			"lengthMenu": [5, 10, 20, 30, 40, 50, 100, 500, 1000],
-			"pageLength": 20,
-			'serverSide': true,
-			"ajax": '/api/listTargets/?format=datatables&slug={{current_project.slug}}',
-			"order": [
-				[1, "desc"]
-			],
-			"columns": [
-				{
-					'data': 'id'
-				},
-				{
-					'data': 'id'
-				},
-				{
-					'data': 'name'
-				},
-				{
-					'data': 'description'
-				},
-				{
-					'data': 'id'
-				},
-				{
-					'data': 'start_scan_date'
-				},
-				{
-					'data': 'id'
-				},
-				{
-					'data': 'organization'
-				},
-				{
-					'data': 'most_recent_scan'
-				},
-				{
-					'data': 'insert_date'
-				},
-				{
-					'data': 'insert_date_humanized'
-				},
-				{
-					'data': 'start_scan_date_humanized'
-				},
-			],
-			"columnDefs":[
-				{ 'orderable': false, 'targets': [0, 3, 6]},
-				{ 'visible': false, 'targets': [1, 7, 8, 9, 10, 11] },
-				{
-					"targets":0, "width":"20px", "className":"", "orderable":!1, render:function(e, a, t, n) {
-					return'<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input targets_checkbox" value="' + e + '" onchange=toggleMultipleTargetButton()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>'
+		columns: targetListColumns,
+		rowGroup: targetRowGroupOpts,
+		columnDefs: [
+			{ orderable: false, targets: ['checkbox:name', 'description:name', 'domain_count:name', 'action:name'] },
+			{ visible: false, targets: ['id:name', 'organization:name', 'most_recent_scan:name', 'insert_date:name', 'insert_date_humanized:name', 'start_scan_date_humanized:name', 'scope_group:name', 'has_scan:name'] },
+			colDefs.getCheckboxColumnDef('checkbox:name', function(e, a, t, n) {
+				return '<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox[' + e + ']" class="float-start form-check-input targets_checkbox" value="' + e + '" onchange=toggleMultipleTargetButton()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>';
+			}),
+			{
+				render: function(data, type, row) {
+					var content = '';
+					content += '<b>' + window.safeText(data || '') + '</b>';
+					if (row.organization) {
+						content += '<br>';
+						for (var org in row.organization) {
+							var orgLabel = window.safeText(row.organization[org]);
+							var targetLabel = window.safeText(data || '');
+							content += '<span class="badge badge-soft-primary me-1 mb-1" data-toggle="tooltip" data-placement="top" title="Target ' + targetLabel + ' belongs to organization ' + orgLabel + '"><i class="fe-briefcase me-1"></i>' + orgLabel + '</span>';
+						}
 					}
+					if (row.scope_group) {
+						content += '<br>';
+						content += `<span class="badge badge-soft-info me-1 mb-1" data-toggle="tooltip" data-placement="top" title="Scope: ${window.safeAttr(row.scope_group)}"><i class="fe-crosshair me-1"></i>${window.safeText(row.scope_group)}</span>`;
+					}
+					if (row.most_recent_scan) {
+						const detailScanUrl = `{{ detail_scan_url|slice:":-1" }}${row.most_recent_scan}`;
+						content += `<br><a href="${detailScanUrl}" class="text-primary">Recent Scan&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>`;
+					}
+					return content;
 				},
-				{
-					"render": function(data, type, row) {
-						var content = '';
-						content += `<b>${data}</b>&nbsp;&nbsp;<a href="#" onclick="get_target_whois('{% url 'api:whois' %}', '${data}')">(view whois)</a>`;
-						if (row.organization) {
-							content += '<br>';
-							for (var org in row.organization) {
-								content += `<span class="badge badge-soft-primary me-1 mb-1" data-toggle="tooltip" data-placement="top" title="Domain ${data} belongs to organization ${row.organization[org]}">${row.organization[org]}</span>`;
-							}
-						}
-
-						if (row.most_recent_scan) {
-							const detailScanUrl = `{{ detail_scan_url|slice:":-1" }}${row.id}`;
-							content += `<br><a href="${detailScanUrl}" class="text-primary">Recent Scan&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>`;
-						}
-
-						return content;
-					},
-					"targets": 2,
-				},
-				{
-					"render": function(data, type, row) {
-						var content = '<div class="text-center">';
-
-						content += `
-							<span class="badge badge-soft-primary">${row.insert_date}, ${row.insert_date_humanized}</span>
-						`;
-
-						content += '</div>';
-
-						return content;
-					},
-					"targets": 4,
-				},
-				{
-					"render": function(data, type, row) {
-						var content = '<div class="text-center">';
-
-						if (data) {
-							content += `<span class="badge badge-soft-primary">${row.start_scan_date_humanized}</span>`;
-						}
-						else{
-							content += '<span class="badge badge-soft-warning">Never Scanned Before</span>';
-						}
-
-						content += '</div>';
-
-						return content;
-					},
-					"targets": 5,
-				},
-				{
-					"render": function(data, type, row) {
-						var content = '';
-						const startScanUrl = `{{ start_scan_url|slice:":-1" }}${row.id}`;
-						const scheduleScanUrl = `{{ schedule_scan_url|slice:":-1" }}${row.id}`;
-						const updateTargetUrl = `{{ update_target_url|slice:":-1" }}${row.id}`;
-						const targetSummaryUrl = `{{ target_summary_url|slice:":-1" }}${row.id}`;
-						const deleteTargetUrl = `{{ delete_target_url|slice:":-1" }}${row.id}`;
-
-						{% if user|has_role:'penetration_tester' or user|has_role:'admin'%}
-						content += `
-						<div class="btn-group float-end">
-						<a class="btn btn-soft-primary" href="${targetSummaryUrl}"><i class="fe-info"></i>&nbsp;&nbsp;Target Summary</a>
-						<a href="${startScanUrl}" class="btn btn-soft-primary"><i class="fe-zap"></i>&nbsp;&nbsp;Initiate Scan</a>
-						<div class="btn-group dropstart" role="group">
-						<button type="button" class="btn btn-soft-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-						<i class="mdi mdi-chevron-right"></i>
-						</button>
-						<div class="dropdown-menu" style="">
-						<a class="dropdown-item" href="${scheduleScanUrl}"><i class="fe-clock"></i>&nbsp;&nbsp;Schedule Scan</a>
-						<div class="dropdown-divider"></div>
-						<a class="dropdown-item" href="${updateTargetUrl}"><i class="fe-edit-2"></i>&nbsp;&nbsp;Edit Target</a>
-						<a class="dropdown-item text-danger" href="#" onclick="delete_target('${deleteTargetUrl}', '${row.name}')"><i class="fe-trash-2"></i>&nbsp;&nbsp;Delete target</a>
-						</div>
-						</div>
-						</div>
-						`;
-						{% else %}
-						content += `
-						<div class="btn-group float-end">
-						<a class="btn btn-soft-primary" href="${targetSummaryUrl}"><i class="fe-info"></i>&nbsp;&nbsp;Target Summary</a>
-						</div>
-						</div>
-						</div>
-						`;
-						{% endif %}
-
-						return content;
-					},
-					"targets": 6,
-				},
-			],
-			drawCallback: function() {
-				$('.badge').tooltip({
-					template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>'
-				})
-				$('.bs-tooltip').tooltip();
+				targets: 'name:name',
 			},
+			{
+				render: function(data, type, row) {
+					return typeof window.renderScanSummaryBadges === 'function'
+						? window.renderScanSummaryBadges({
+							domainCount: row.domain_count != null ? row.domain_count : 0,
+							subdomainCount: row.subdomain_count != null ? row.subdomain_count : 0,
+							endpointCount: row.endpoint_count != null ? row.endpoint_count : 0,
+							vulnerabilityCount: row.vulnerability_count != null ? row.vulnerability_count : 0,
+							ipAddressCount: row.ip_address_count != null ? row.ip_address_count : 0,
+							ipAliveCount: row.ip_alive_count != null ? row.ip_alive_count : 0,
+							secretCount: row.secret_count != null ? row.secret_count : 0,
+							exploitCount: row.exploit_count != null ? row.exploit_count : 0,
+							vulnTooltip: 'Vulnerabilities'
+						})
+						: '';
+				},
+				targets: 'domain_count:name',
+			},
+			{
+				render: function(data, type, row) {
+					var content = '<div class="text-center">';
+					content += '<span class="badge badge-soft-primary">' + row.insert_date + ', ' + row.insert_date_humanized + '</span>';
+					content += '</div>';
+					return content;
+				},
+				targets: 'id_added:name',
+			},
+			{
+				render: function(data, type, row) {
+					var content = '<div class="text-center">';
+					if (data) {
+						content += '<span class="badge badge-soft-primary">' + row.start_scan_date_humanized + '</span>';
+					} else {
+						content += '<span class="badge badge-soft-warning">Never Scanned Before</span>';
+					}
+					content += '</div>';
+					return content;
+				},
+				targets: 'start_scan_date:name',
+			},
+			{
+				render: function(data, type, row) {
+					return window.RengineDatatableActionRenderers.renderTargetActions(row, {
+						urls: window.RENGINE_DATATABLE_ACTION_URLS.target,
+						showFullActions: window.RENGINE_DATATABLE_ACTION_OPTIONS.showFullTargetActions
+					});
+				},
+				targets: 'action:name',
+			},
+		],
+		drawCallbackTooltips: { tooltipTemplate: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' }
+	});
+	if (window.attachDatatableQuickSearch) {
+		window.attachDatatableQuickSearch(table, {
+			inputSelector: '#targetListQuickSearch',
+      tableId: 'target_list'
 		});
-		multiCheck(table);
-		// Handle form submission event
+	}
+	if (window.attachDatatableColumnSearch) {
+		window.attachDatatableColumnSearch(table, { tableSelector: '#list_target_table', delayMs: 400, tableId: 'target_list' });
+	}
+	multiCheck(table);
+
+	// Handle form submission event
 		$('#frm-example').on('submit', function(e){
 			var form = this;
 			table.$('input[type="checkbox"]').each(function(){
@@ -278,50 +282,48 @@ $(document).ready(function(){
 			e.preventDefault();
 		});
 
-		// filter organization populate
-		$.getJSON(`/api/listOrganizations?&format=json`, function(data) {
-			data = data['organizations']
-			for (organization in data) {
-				name = htmlEncode(data[organization]['name']);
-				select = document.getElementById('filterByOrganization');
-				var option = document.createElement('option');
-				option.value = name;
-				option.innerHTML = name;
-				select.appendChild(option);
-			}
-		}).fail(function(){
-		});
-
-		var a = document.getElementById('filterByOrganization');
-		a.addEventListener('click', function() {
-			table.search(this.value).draw();
-			document.getElementById('filteringText').innerHTML = `<span class="badge badge-primary m-2">Organization: ${this.value}
-			<span id="clearFilterChip" class="badge-link" onclick="document.getElementById('resetFilters').click()">X</span>
-			</span>`;
-			Snackbar.show({
-				text: `Filtering by organization ${this.value}`,
-				pos: 'top-center'
+		// filter organization populate (project-scoped)
+		var filterOrgsUrl = "{% url 'api:listOrganizations' %}?format=json&project={{ current_project.slug|escapejs }}";
+		$.getJSON(filterOrgsUrl, function(data) {
+			var orgs = data.organizations || [];
+			var selectEl = document.getElementById('filterByOrganization');
+			if (selectEl) orgs.forEach(function(org) {
+				var opt = document.createElement('option');
+				opt.value = org.name;
+				opt.textContent = org.name;
+				selectEl.appendChild(opt);
 			});
-		}, false);
+		}).fail(function() {});
 
-		// reset filtering
-		var reset_filter = document.getElementById('resetFilters');
-		reset_filter.addEventListener('click', function() {
-			resetFilters(table);
-		}, false);
+		// filter scope populate (project-scoped)
+		var filterScopesUrl = "{% url 'api:listScopes' %}?format=json&project={{ current_project.slug|escapejs }}";
+		$.getJSON(filterScopesUrl, function(data) {
+			var scopes = data.scopes || [];
+			var selectEl = document.getElementById('filterByScope');
+			if (selectEl) scopes.forEach(function(s) {
+				var opt = document.createElement('option');
+				opt.value = s.name;
+				opt.textContent = s.name;
+				selectEl.appendChild(opt);
+			});
+		}).fail(function() {});
 
-		$('[data-toggle=tooltip]').tooltip();
+		if (window.attachDatatableFilters) {
+			window.attachDatatableFilters(window.getRengineDatatableFilterAttachOpts('target_list', table, { filteringTextId: 'targetListFilteringText', onApply: function() { table.draw(); } }));
+		} else {
+			document.getElementById('filterByOrganization').addEventListener('change', function() { table.draw(); }, false);
+			document.getElementById('filterByScope').addEventListener('change', function() { table.draw(); }, false);
+			var resetEl = document.getElementById('targetListResetFilters');
+			if (resetEl) resetEl.addEventListener('click', function(e) { e.preventDefault(); table.draw(); }, false);
+		}
+
+		if (typeof window.rengineSafeTooltipInit === 'function') {
+			window.rengineSafeTooltipInit(
+				$('[data-toggle=tooltip]').not('#list_target_table [data-toggle=tooltip]').not('[data-bs-toggle=dropdown], [data-toggle=dropdown]')
+			);
+		}
 
 	});
-
-	function resetFilters(table_obj) {
-		table_obj.search("").draw();
-		Snackbar.show({
-			text: `Filters Reset`,
-			pos: 'top-center'
-		});
-		document.getElementById('filteringText').innerHTML = '';
-	}
 
 </script>
 {% endblock page_level_script %}

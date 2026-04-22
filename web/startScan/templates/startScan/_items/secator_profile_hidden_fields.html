@@ -1,0 +1,6 @@
+{# Profile hidden inputs for scan launch forms (start scan, schedule scan). #}
+{# When the form includes shared/_scan_params_block.html, profile inputs come from there. #}
+<input type="hidden" name="speed_profile" id="{{ id_prefix|default:'' }}speed_profile" value="">
+<input type="hidden" name="stealth_profile" id="{{ id_prefix|default:'' }}stealth_profile" value="">
+<input type="hidden" name="general_profile" id="{{ id_prefix|default:'' }}general_profile" value="">
+<input type="hidden" name="network_profile" id="{{ id_prefix|default:'' }}network_profile" value="">

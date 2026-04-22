@@ -2,7 +2,7 @@ function checkedCount() {
   // this function will count the number of boxes checked
   item = document.getElementsByClassName("subdomain_checkbox");
   count = 0;
-  for (var i = 0; i < item.length; i++) {
+  for (let i = 0; i < item.length; i++) {
     if (item[i].checked) {
       count++;
     }
@@ -21,7 +21,7 @@ function mainCheckBoxSelected(checkbox) {
 }
 
 function toggleMultipleSubdomainButton() {
-  var checked_count = checkedCount();
+  let checked_count = checkedCount();
   if (checked_count > 0) {
     $("[data-button=subdomain_btns]").removeClass("disabled");
     $('#subdomain_selected_count').text(checked_count + ' Subdomains Selected x');
