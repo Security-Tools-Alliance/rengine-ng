@@ -3,6 +3,12 @@
 Authoritative coding guidelines for this repository.
 All AI agents should follow these rules regardless of the editor or tool being used.
 
+## Mandatory reading order
+
+Before doing any work in this repository, read this file (`AGENTS.md`) in full. This is the single source of truth for all coding guidelines, architecture rules, security rules, and testing conventions. Only then begin analysis, planning, or implementation.
+
+Skipping this step is not permitted, regardless of how simple the task appears.
+
 ## Stack summary
 
 | Layer        | Technology |
