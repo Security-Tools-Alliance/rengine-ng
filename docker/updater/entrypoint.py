@@ -16,16 +16,16 @@ Environment variables:
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import json
 import os
+from pathlib import Path
 import subprocess
 import sys
-import time
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from channels_redis.core import RedisChannelLayer
+
 
 # ---------------------------------------------------------------------------
 # Configuration from environment
@@ -111,14 +111,17 @@ async def run_update(install_type: str, channel_layer: RedisChannelLayer) -> Non
     started_at = datetime.now(tz=timezone.utc).isoformat()
 
     async def step(index: int, step_name: str, message: str) -> None:
-        await _publish(channel_layer, {
-            "step": step_name,
-            "step_index": index,
-            "total_steps": total,
-            "message": message,
-            "status": "running",
-            "started_at": started_at,
-        })
+        await _publish(
+            channel_layer,
+            {
+                "step": step_name,
+                "step_index": index,
+                "total_steps": total,
+                "message": message,
+                "status": "running",
+                "started_at": started_at,
+            },
+        )
 
     async def done(new_version: str) -> None:
         payload = {
@@ -129,12 +132,14 @@ async def run_update(install_type: str, channel_layer: RedisChannelLayer) -> Non
             "started_at": started_at,
         }
         await _publish(channel_layer, payload)
-        _write_status({
-            "status": "complete",
-            "new_version": new_version,
-            "freshly_updated": True,
-            "completed_at": datetime.now(tz=timezone.utc).isoformat(),
-        })
+        _write_status(
+            {
+                "status": "complete",
+                "new_version": new_version,
+                "freshly_updated": True,
+                "completed_at": datetime.now(tz=timezone.utc).isoformat(),
+            }
+        )
 
     async def fail(step_name: str, message: str) -> None:
         payload = {
@@ -144,12 +149,14 @@ async def run_update(install_type: str, channel_layer: RedisChannelLayer) -> Non
             "started_at": started_at,
         }
         await _publish(channel_layer, payload)
-        _write_status({
-            "status": "error",
-            "step": step_name,
-            "message": message,
-            "failed_at": datetime.now(tz=timezone.utc).isoformat(),
-        })
+        _write_status(
+            {
+                "status": "error",
+                "step": step_name,
+                "message": message,
+                "failed_at": datetime.now(tz=timezone.utc).isoformat(),
+            }
+        )
 
     # ------------------------------------------------------------------
     # Step 1: validate (git fetch to confirm connectivity)
@@ -242,21 +249,25 @@ async def main() -> None:
 
             print(f"[updater] Trigger detected. install_type={install_type!r}", flush=True)
 
-            _write_status({
-                "status": "running",
-                "install_type": install_type,
-                "started_at": datetime.now(tz=timezone.utc).isoformat(),
-            })
+            _write_status(
+                {
+                    "status": "running",
+                    "install_type": install_type,
+                    "started_at": datetime.now(tz=timezone.utc).isoformat(),
+                }
+            )
 
             try:
                 await run_update(install_type, channel_layer)
             except Exception as exc:  # noqa: BLE001
                 print(f"[updater] Unexpected error: {exc}", file=sys.stderr, flush=True)
-                _write_status({
-                    "status": "error",
-                    "message": "Unexpected error during update.",
-                    "failed_at": datetime.now(tz=timezone.utc).isoformat(),
-                })
+                _write_status(
+                    {
+                        "status": "error",
+                        "message": "Unexpected error during update.",
+                        "failed_at": datetime.now(tz=timezone.utc).isoformat(),
+                    }
+                )
 
         await asyncio.sleep(POLL_INTERVAL)
 
