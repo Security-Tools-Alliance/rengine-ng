@@ -248,16 +248,13 @@ fix_project_ownership() {
 check_gpu_support() {
     log "Checking for GPU support..." $COLOR_CYAN
     
-    # Execute GPU detection with error handling (do not write to .env here; main() does a single remove+append)
-    if ! GPU_TYPE=$(./scripts/gpu_support.sh 2>/dev/null); then
-        log "GPU detection script failed, continuing with CPU-only setup" $COLOR_YELLOW
-        GPU_TYPE=none
-        return 1
-    fi
+    # Execute GPU detection. Exit code 1 means "no GPU found" (still valid); only
+    # treat it as a real failure if the output is empty or not a recognised value.
+    GPU_TYPE=$(./scripts/gpu_support.sh 2>/dev/null) || true
 
     # Validate GPU_TYPE output
     if [[ ! "$GPU_TYPE" =~ ^(nvidia|amd|none)$ ]]; then
-        log "Invalid GPU type detected: $GPU_TYPE, continuing with CPU-only setup" $COLOR_YELLOW
+        log "GPU detection script failed, continuing with CPU-only setup" $COLOR_YELLOW
         GPU_TYPE=none
         return 1
     fi
@@ -464,6 +461,13 @@ main() {
                 ;;
         esac
     fi
+  else
+    # No supported GPU — write CPU-only defaults so .env stays complete
+    {
+      echo "GPU=0"
+      echo "GPU_TYPE=none"
+      echo "DOCKER_RUNTIME=none"
+    } >> .env
   fi
 
   if [ $isNonInteractive = false ]; then
