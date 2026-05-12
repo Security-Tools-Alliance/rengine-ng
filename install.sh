@@ -369,8 +369,11 @@ usageFunction()
 main() {
   cat web/art/reNgine.txt
 
-  log "\r\nBefore running this script, please make sure Docker is installed and running, and you have made changes to the '.env' file." $COLOR_RED
-  log "Changing the PostgreSQL username & password in the '.env' is highly recommended.\r\n" $COLOR_RED
+  log "" $COLOR_RED
+  log "Before running this script, please make sure Docker is installed and running," $COLOR_RED
+  log "and you have made changes to the '.env' file." $COLOR_RED
+  log "Changing the PostgreSQL username & password in the '.env' is highly recommended." $COLOR_RED
+  log "" $COLOR_RED
 
   log "Please note that this installation script is only intended for Linux" $COLOR_RED
   log "x86_64 and arm64 platform (compatible with Apple Mx series) are supported" $COLOR_RED
@@ -596,7 +599,8 @@ main() {
   ensure_secator_api_key_in_env ".env" "$(pwd)"
 
   log "reNgine-ng is successfully installed and started!" $COLOR_GREEN
-  log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN
+  log "" $COLOR_GREEN
+  log "Thank you for installing reNgine-ng, happy recon!" $COLOR_GREEN
 
   # Get domain name from .env file
   domain_name=$(grep "^DOMAIN_NAME=" .env 2>/dev/null | cut -d'=' -f2)
@@ -604,11 +608,15 @@ main() {
     domain_name="rengine-ng.example.com"
   fi
   
-  log "\r\nreNgine-ng is available at: https://$domain_name/" $COLOR_GREEN
-  log "\r\n⚠️  IMPORTANT CSRF Configuration Warning:" $COLOR_YELLOW
-  log "Due to Django's CSRF protection, you MUST access reNgine-ng using the configured hostname." $COLOR_YELLOW
-  log "If you haven't configured your DNS or /etc/hosts file to point '$domain_name' to this server," $COLOR_YELLOW
-  log "you will encounter CSRF errors. Please update your configuration accordingly." $COLOR_YELLOW
+  log "" $COLOR_GREEN
+  log "reNgine-ng is available at: https://$domain_name/" $COLOR_GREEN
+  log "" $COLOR_YELLOW
+  log "⚠️  IMPORTANT CSRF Configuration Warning:" $COLOR_YELLOW
+  log "Due to Django's CSRF protection, you MUST access reNgine-ng" $COLOR_YELLOW
+  log "using the configured hostname: $domain_name" $COLOR_YELLOW
+  log "If you haven't set up DNS or /etc/hosts to point that hostname" $COLOR_YELLOW
+  log "to this server, you will encounter CSRF errors." $COLOR_YELLOW
+  log "Please update your configuration accordingly." $COLOR_YELLOW
 }
 
 # Run the main installation process
