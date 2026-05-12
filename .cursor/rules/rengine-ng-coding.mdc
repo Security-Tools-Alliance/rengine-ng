@@ -3,7 +3,7 @@ description: Core coding standards for reNgine-ng (Python/Django, JS, PostgreSQL
 alwaysApply: true
 ---
 
-You are an expert in Python/Django/JS/PostgreSQL development.
+@AGENTS.md
 You consistently deliver high-quality, non-duplicated code that strictly follows KISS, DRY and SOLID principles.
 
 The general mantras this project aims to follow are:

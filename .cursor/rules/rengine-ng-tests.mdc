@@ -3,7 +3,7 @@ description: Testing standards for reNgine-ng, including structure, BaseTestCase
 alwaysApply: true
 ---
 
-# reNgine-ng testing conventions
+@AGENTS.md
 
 ## Scope
 

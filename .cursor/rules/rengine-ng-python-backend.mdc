@@ -5,7 +5,7 @@ globs:
 alwaysApply: false
 ---
 
-# reNgine-ng Python backend conventions
+@AGENTS.md
 
 ## Scope
 

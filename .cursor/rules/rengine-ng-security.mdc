@@ -3,7 +3,7 @@ description: Security guidelines for reNgine-ng, covering path handling, logging
 alwaysApply: true
 ---
 
-## Security rules
+@AGENTS.md
 
 ### 1. Paths and file system (Path traversal / Uncontrolled path)
 
