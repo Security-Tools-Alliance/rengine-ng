@@ -412,13 +412,6 @@ main() {
     merge_env_from_dist_at_root "$(pwd)"
   fi
 
-  log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
-
-  install_curl
-  install_make
-  check_docker
-  check_docker_compose
-
   # Add GPU support check here (always normalize .env: remove any existing GPU block then write once)
   if [ -f .env ]; then
     sed -i '/^GPU=/d' .env
