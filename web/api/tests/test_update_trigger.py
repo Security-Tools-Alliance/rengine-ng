@@ -5,8 +5,8 @@ UpdateProgressConsumer WebSocket consumer.
 
 import json
 import os
-import tempfile
 from pathlib import Path
+import tempfile
 from unittest import mock
 
 from channels.layers import get_channel_layer
@@ -22,7 +22,7 @@ from utils.test_base import BaseTestCase
 # ---------------------------------------------------------------------------
 
 TRIGGER_URL = "/api/rengine/update/trigger/"
-STATUS_URL  = "/api/rengine/update/status/"
+STATUS_URL = "/api/rengine/update/status/"
 
 
 class _ShareDirMixin:
@@ -32,9 +32,7 @@ class _ShareDirMixin:
         super().setUp()  # type: ignore[misc]
         self._share_tmpdir = tempfile.TemporaryDirectory()
         self._share_dir = self._share_tmpdir.name
-        self._env_patch = mock.patch.dict(
-            os.environ, {"RENGINE_UPDATE_SHARE_DIR": self._share_dir}
-        )
+        self._env_patch = mock.patch.dict(os.environ, {"RENGINE_UPDATE_SHARE_DIR": self._share_dir})
         self._env_patch.start()
 
     def tearDown(self) -> None:
@@ -140,11 +138,13 @@ class TestRengineUpdateStatus(_ShareDirMixin, BaseTestCase):
 
     def test_returns_complete_status_from_file(self) -> None:
         self._status_path().write_text(
-            json.dumps({
-                "status": "complete",
-                "new_version": "3.1.0",
-                "freshly_updated": True,
-            }),
+            json.dumps(
+                {
+                    "status": "complete",
+                    "new_version": "3.1.0",
+                    "freshly_updated": True,
+                }
+            ),
             encoding="utf-8",
         )
         response = self._get()
@@ -178,9 +178,7 @@ class TestRengineUpdateStatus(_ShareDirMixin, BaseTestCase):
 # ---------------------------------------------------------------------------
 
 
-@override_settings(
-    CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
-)
+@override_settings(CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}})
 class TestUpdateProgressConsumer(BaseTestCase):
     """UpdateProgressConsumer joins the update-progress group and forwards events."""
 
