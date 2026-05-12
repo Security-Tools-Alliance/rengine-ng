@@ -394,7 +394,60 @@ Replace `"workflow"` with `"scan"` or `"task"` as needed.
 
 ---
 
-## Reference
+## Stack reference
 
-- Full stack and key modules: [.github/ai/reference.md](.github/ai/reference.md)
-- Secator tools list: [.github/ai/secator-tools.md](.github/ai/secator-tools.md)
+### Core technologies
+
+- **Django** 5.x — ORM, REST API, auth, permissions
+- **Python** 3.12 — backend logic, type hints
+- **Secator** 0.25.1+ — async scan execution, workflow orchestration via Redis/Celery
+- **PostgreSQL** 17 — persistent storage; **PgBouncer** — connection pooling
+- **HTML5, CSS3** (Bootstrap), **JavaScript** ES6+, AJAX, DataTables (server-side)
+- **Uvicorn** (prod), **Daphne** (dev), **Nginx** — reverse proxy, SSL, static files
+- **Docker** / Docker Compose
+- **Ruff** — lint and format; config in `docker/web/pyproject.toml`
+
+### Key modules
+
+- **targetApp** — Organizations, Scopes, Targets. Models carry `scan_config` JSONField (same schema on all three). Services in `web/targetApp/services/scope_params.py`: `resolve_scan_params()`, `build_effective_params_display()`, `parse_scan_config_from_post()`.
+- **startScan** — `ScanHistory.scan_config` JSONField stores user overrides at scan launch. Scan page uses `secatar_scan_core.js` for parameter/profile management.
+- **Workers** — remote deployment, SSH, health checks.
+- **UI** — responsive, real-time, DataTables, charts; shared `_scan_params_block.html` + `scan_params.js`.
+
+### Learning resources
+
+- [Django](https://docs.djangoproject.com/) · [DRF](https://www.django-rest-framework.org/) · [Python](https://docs.python.org/)
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/) · [Docker](https://docs.docker.com/)
+- [Secator docs](https://github.com/freelabz/secator-docs) · [Secator repo](https://github.com/freelabz/secator)
+
+---
+
+## Secator tools
+
+Tools integrated in Secator. List configurations with `get_configs_by_type("workflow" | "scan" | "task")` inside the web container.
+
+| Category | Tool | Description |
+|----------|------|-------------|
+| recon/dns | dnsx | Fast multi-purpose DNS toolkit (queries) |
+| recon/dns | dnsxbrute | Same as dnsx, bruteforce mode |
+| recon/dns | subfinder | Fast subdomain finder |
+| recon/ip | fping | Find alive hosts on local networks |
+| recon/ip | mapcidr | Expand CIDR ranges into IPs |
+| recon/port | naabu | Fast port discovery tool |
+| recon/user | maigret | Hunt for user accounts across many websites |
+| http | httpx | Fast HTTP prober |
+| http/crawler | cariddi | Fast crawler, endpoint secrets/API keys/tokens matcher |
+| http/crawler | gau | Offline URL crawler (Alien Vault, Wayback, Common Crawl, URLScan) |
+| http/crawler | gospider | Fast web spider (Go) |
+| http/crawler | katana | Next-generation crawling and spidering framework |
+| http/fuzzer | dirsearch | Web path discovery |
+| http/fuzzer | feroxbuster | Fast recursive content discovery (Rust) |
+| http/fuzzer | ffuf | Fast web fuzzer (Go) |
+| osint | h8mail | Email OSINT and breach hunting |
+| vuln/code | grype | Vulnerability scanner for container images and filesystems |
+| vuln/http | dalfox | XSS scanning and parameter analysis |
+| vuln/http | msfconsole | Metasploit Framework CLI |
+| vuln/multi | wpscan | WordPress security scanner |
+| vuln/multi | nmap | Port/vuln scanning with NSE scripts |
+| vuln/multi | nuclei | Fast configurable vuln scanner (YAML DSL) |
+| tagger | gf | Wrapper around grep for common patterns |
