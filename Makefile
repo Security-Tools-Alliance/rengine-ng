@@ -113,7 +113,7 @@ endef
 .PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword makemigrations migrate down stop restart remove_images test test-app test-only test-verbose test-app-verbose test-scripts ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list secator-init secator-key secator-load secator-check secator-health update-check
 
 pull:			## Pull pre-built Docker images from repository.
-	${DOCKER_COMPOSE_FILE_CMD} pull
+	${DOCKER_COMPOSE_FILE_CMD} pull ${SERVICES}
 
 images:			## Show all Docker images for reNgine services.
 	@docker images --filter=reference='ghcr.io/security-tools-alliance/rengine-ng:*' --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}"
