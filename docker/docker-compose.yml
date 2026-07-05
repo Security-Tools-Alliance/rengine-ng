@@ -39,7 +39,7 @@ services:
       - MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN:-200}
       - DEFAULT_POOL_SIZE=${PGBOUNCER_DEFAULT_POOL_SIZE:-30}
       - SERVER_RESET_QUERY=${PGBOUNCER_SERVER_RESET_QUERY:-DISCARD ALL}
-    command: ["/bin/sh", "-c", "sed -i \"s/^user = postgres/user = $$POSTGRES_USER/\" /etc/pgbouncer/pgbouncer.ini; exec pgbouncer /etc/pgbouncer/pgbouncer.ini"]
+    command: ["/bin/sh", "-c", "exec pgbouncer /etc/pgbouncer/pgbouncer.ini"]
     restart: unless-stopped
     depends_on:
       db:
