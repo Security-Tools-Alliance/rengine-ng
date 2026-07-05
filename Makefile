@@ -52,7 +52,7 @@ COMPOSE_FILE_BUILD	  := docker/docker-compose.build.yml
 COMPOSE_FILE_DEV      := docker/docker-compose.dev.yml
 COMPOSE_FILE_SETUP    := docker/docker-compose.setup.yml
 COMPOSE_FILE_GPU      := docker/docker-compose.gpu.yml
-SERVICES              := db pgbouncer web proxy redis worker ollama
+SERVICES              := db pgbouncer web proxy redis worker
 
 # Check if 'docker compose' command is available, otherwise check for 'docker-compose'
 DOCKER_COMPOSE := $(shell if command -v docker > /dev/null && docker compose version > /dev/null 2>&1; then echo "docker compose"; elif command -v docker-compose > /dev/null; then echo "docker-compose"; else echo ""; fi)
