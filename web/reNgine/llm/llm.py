@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import os
 from typing import Any, Dict, Optional
 
 from langchain_ollama import OllamaLLM as Ollama
@@ -189,6 +190,10 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
             raise ValueError("OpenAI API Key not set")
 
         openai.api_key = self.api_key
+        if os.getenv("OPENAI_API_BASE"):
+            openai.api_base = os.getenv("OPENAI_API_BASE")
+        else:
+            openai.api_base = "https://api.openai.com/v1"
 
         # Only forward supported OpenAI parameters
         provider_config = self._get_provider_config()
@@ -363,6 +368,10 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
             raise ValueError("OpenAI API Key not set")
 
         openai.api_key = self.api_key
+        if os.getenv("OPENAI_API_BASE"):
+            openai.api_base = os.getenv("OPENAI_API_BASE")
+        else:
+            openai.api_base = "https://api.openai.com/v1"
 
         response = openai.ChatCompletion.create(
             model=model_name or self.model_name,
