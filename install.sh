@@ -384,7 +384,10 @@ main() {
 
   isNonInteractive=false
   # Get args from sudo or directly
-  args="${@:-${SUDO_COMMAND#*/install.sh }}"
+  args="$@"
+  if [ -z "$args" ] && [[ "$SUDO_COMMAND" == *"install.sh"* ]]; then
+    args="${SUDO_COMMAND#*/install.sh }"
+  fi
   for arg in $args
   do
     case $arg in
