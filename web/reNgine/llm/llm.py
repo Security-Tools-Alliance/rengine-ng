@@ -204,7 +204,7 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
         from openai import OpenAI
         client_kwargs = {
             "api_key": self.api_key,
-            "http_client": httpx.Client(),
+            "http_client": httpx.Client(timeout=None),
         }
         if os.getenv("OPENAI_API_BASE"):
             client_kwargs["base_url"] = os.getenv("OPENAI_API_BASE")
@@ -217,6 +217,8 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
         for key in ["max_tokens", "temperature"]:
             if key in provider_config:
                 openai_supported_kwargs[key] = provider_config[key]
+        if os.getenv("OPENAI_API_BASE"):
+            openai_supported_kwargs.pop("max_tokens", None)
 
         response = client.chat.completions.create(
             model=model_name or self.model_name,
@@ -398,12 +400,16 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
         from openai import OpenAI
         client_kwargs = {
             "api_key": self.api_key,
-            "http_client": httpx.Client(),
+            "http_client": httpx.Client(timeout=None),
         }
         if os.getenv("OPENAI_API_BASE"):
             client_kwargs["base_url"] = os.getenv("OPENAI_API_BASE")
 
         client = OpenAI(**client_kwargs)
+
+        chat_kwargs = dict(openai_chat_kwargs)
+        if os.getenv("OPENAI_API_BASE"):
+            chat_kwargs.pop("max_tokens", None)
 
         response = client.chat.completions.create(
             model=model_name or self.model_name,
@@ -411,6 +417,6 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": description},
             ],
-            **openai_chat_kwargs,
+            **chat_kwargs,
         )
         return response.choices[0].message.content or ""
