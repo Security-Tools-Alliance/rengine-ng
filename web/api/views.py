@@ -522,7 +522,10 @@ class OllamaDetailManager(APIView):
             return Response({"status": False, "message": "Model name is required"}, status=400)
 
         try:
+            import os
             use_ollama = all(model["name"] != model_name for model in DEFAULT_GPT_MODELS)
+            if os.getenv("OPENAI_API_BASE"):
+                use_ollama = False
 
             OllamaSettings.objects.update_or_create(
                 id=1, defaults={"selected_model": model_name, "use_ollama": use_ollama}
@@ -5942,6 +5945,15 @@ class LLMModelsManager(APIView):
             # Get currently selected model
             selected_model = OllamaSettings.objects.first()
             selected_model_name = selected_model.selected_model if selected_model else "gpt-3.5-turbo"
+
+            # If the selected model is custom (not in default or local lists), append it to the list
+            if all_models and all(model["name"] != selected_model_name for model in all_models):
+                all_models.append({
+                    "name": selected_model_name,
+                    "description": "Custom configured model",
+                    "installed": True,
+                    "is_local": True,
+                })
 
             # Mark selected model
             for model in all_models:

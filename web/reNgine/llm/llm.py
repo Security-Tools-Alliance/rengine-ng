@@ -33,7 +33,7 @@ class BaseLLMGenerator(ABC):
 
     def __init__(self, provider: Optional[LLMProvider] = None):
         """Initialize the LLM generator with optional provider"""
-        self.api_key = get_open_ai_key()
+        self.api_key = get_open_ai_key() or (os.getenv("OPENAI_API_BASE") and "dummy")
         self.config = LLM_CONFIG
         self.model_name = self._get_model_name()
         self.provider = provider or self._get_default_provider()
@@ -77,7 +77,18 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
         return get_default_llm_model()
 
     def _get_default_provider(self) -> LLMProvider:
-        """Get default provider based on model requirements"""
+        """Get default provider based on configuration or model requirements"""
+        if os.getenv("OPENAI_API_BASE"):
+            return LLMProvider.OPENAI
+
+        try:
+            from dashboard.models import OllamaSettings
+            ollama_settings = OllamaSettings.objects.first()
+            if ollama_settings and not ollama_settings.use_ollama:
+                return LLMProvider.OPENAI
+        except Exception:
+            pass
+
         model_name = self._get_model_name()
         if model_name in self.config["providers"]["openai"]["models"]:
             return LLMProvider.OPENAI
@@ -189,11 +200,16 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
         if not self.api_key:
             raise ValueError("OpenAI API Key not set")
 
-        openai.api_key = self.api_key
+        import httpx
+        from openai import OpenAI
+        client_kwargs = {
+            "api_key": self.api_key,
+            "http_client": httpx.Client(),
+        }
         if os.getenv("OPENAI_API_BASE"):
-            openai.api_base = os.getenv("OPENAI_API_BASE")
-        else:
-            openai.api_base = "https://api.openai.com/v1"
+            client_kwargs["base_url"] = os.getenv("OPENAI_API_BASE")
+
+        client = OpenAI(**client_kwargs)
 
         # Only forward supported OpenAI parameters
         provider_config = self._get_provider_config()
@@ -202,12 +218,12 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
             if key in provider_config:
                 openai_supported_kwargs[key] = provider_config[key]
 
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model=model_name or self.model_name,
             messages=[{"role": "system", "content": prompt}, {"role": "user", "content": description}],
             **openai_supported_kwargs,
         )
-        return response["choices"][0]["message"]["content"]
+        return response.choices[0].message.content or ""
 
 
 class LLMAttackSuggestionGenerator(BaseLLMGenerator):
@@ -218,7 +234,18 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
         return get_default_llm_model()
 
     def _get_default_provider(self) -> LLMProvider:
-        """Get default provider based on model requirements"""
+        """Get default provider based on configuration or model requirements"""
+        if os.getenv("OPENAI_API_BASE"):
+            return LLMProvider.OPENAI
+
+        try:
+            from dashboard.models import OllamaSettings
+            ollama_settings = OllamaSettings.objects.first()
+            if ollama_settings and not ollama_settings.use_ollama:
+                return LLMProvider.OPENAI
+        except Exception:
+            pass
+
         model_name = self._get_model_name()
         if model_name in self.config["providers"]["openai"]["models"]:
             return LLMProvider.OPENAI
@@ -359,7 +386,7 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
     def _get_openai_response(
         self,
         description: str,
-        model_name: str,
+        model_name: str | None,
         system_prompt: str,
         openai_chat_kwargs: Dict[str, Any],
     ) -> str:
@@ -367,13 +394,18 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
         if not self.api_key:
             raise ValueError("OpenAI API Key not set")
 
-        openai.api_key = self.api_key
+        import httpx
+        from openai import OpenAI
+        client_kwargs = {
+            "api_key": self.api_key,
+            "http_client": httpx.Client(),
+        }
         if os.getenv("OPENAI_API_BASE"):
-            openai.api_base = os.getenv("OPENAI_API_BASE")
-        else:
-            openai.api_base = "https://api.openai.com/v1"
+            client_kwargs["base_url"] = os.getenv("OPENAI_API_BASE")
 
-        response = openai.ChatCompletion.create(
+        client = OpenAI(**client_kwargs)
+
+        response = client.chat.completions.create(
             model=model_name or self.model_name,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -381,4 +413,4 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
             ],
             **openai_chat_kwargs,
         )
-        return response["choices"][0]["message"]["content"]
+        return response.choices[0].message.content or ""
