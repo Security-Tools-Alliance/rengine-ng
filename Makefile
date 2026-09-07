@@ -10,6 +10,10 @@ export HOST_GID=$(if $(SUDO_USER),$(shell id -g $(SUDO_USER)),$(shell id -g))
 RENGINE_VERSION := $(shell cat web/reNgine/version.txt)
 export RENGINE_VERSION
 
+# Allow production migrations to select a restored PostgreSQL volume.
+POSTGRES_VOLUME_NAME ?= rengine_postgres_data
+export POSTGRES_VOLUME_NAME
+
 # Define RENGINE_FOLDER
 RENGINE_FOLDER := /home/rengine/rengine
 export RENGINE_FOLDER
@@ -31,13 +35,6 @@ DOCKER_COMPOSE := $(shell if command -v docker > /dev/null && docker compose ver
 
 ifeq ($(DOCKER_COMPOSE),)
 $(error Docker Compose not found. Please install Docker Compose)
-endif
-
-# Check if user is in docker group or is root
-DOCKER_GROUP_CHECK := $(shell if [ -n "$$(getent group docker)" ]; then echo "yes"; else echo "no"; fi)
-
-ifeq ($(DOCKER_GROUP_CHECK),no)
-$(error This command must be run with sudo or by a user in the docker group)
 endif
 
 $(info Using: $(DOCKER_COMPOSE))

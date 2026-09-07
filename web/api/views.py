@@ -13,6 +13,7 @@ import requests
 import validators
 from django.urls import reverse
 from django.core.cache import cache
+from django.db import transaction
 from dashboard.models import OllamaSettings, Project, SearchHistory, OpenAiAPIKey
 from django.db.models import CharField, Count, F, Q, Value
 from django.shortcuts import get_object_or_404
@@ -27,6 +28,7 @@ from rest_framework.views import APIView
 from rest_framework.status import HTTP_400_BAD_REQUEST
 from rest_framework.parsers import JSONParser
 from rest_framework.decorators import api_view
+from rolepermissions.checkers import has_permission
 
 from recon_note.models import TodoNote
 from reNgine.celery import app
@@ -41,7 +43,8 @@ from reNgine.definitions import (
 	NUCLEI_SEVERITY_MAP,
 	RUNNING_TASK,
 	SUCCESS_TASK,
-	FAILED_TASK
+	FAILED_TASK,
+	PERM_MODIFY_TARGETS,
 )
 from reNgine.llm.config import (
     OLLAMA_INSTANCE,
@@ -131,6 +134,33 @@ from asgiref.sync import async_to_sync
 import threading
 
 logger = logging.getLogger(__name__)
+
+
+def _authorized_projects(user):
+    if user.is_superuser:
+        return Project.objects.all()
+    return Project.objects.filter(users=user)
+
+
+def _can_delete(user):
+    return user.is_superuser or has_permission(user, PERM_MODIFY_TARGETS)
+
+
+def _parse_delete_ids(values):
+    if not isinstance(values, (list, tuple)) or not values:
+        raise ValueError
+    ids = []
+    for value in values:
+        if isinstance(value, bool):
+            raise ValueError
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            raise ValueError
+        if value <= 0:
+            raise ValueError
+        ids.append(value)
+    return ids
 
 
 class OllamaManager(APIView):
@@ -1202,19 +1232,28 @@ class ListSubScans(APIView):
 
 
 class DeleteMultipleRows(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
-        req = self.request
-        data = req.data
-        subscan_ids = get_data_from_post_request(request, 'rows')
         try:
-            if data['type'] == 'subscan':
-                subscan_ids = [int(id) for id in subscan_ids]
-                SubScan.objects.filter(id__in=subscan_ids).delete()
-                return Response({'status': True})
+            if request.data.get('type') != 'subscan':
+                return Response({'status': False, 'message': 'Invalid row type'}, status=400)
+            subscan_ids = _parse_delete_ids(get_data_from_post_request(request, 'rows'))
         except ValueError:
             return Response({'status': False, 'message': 'Invalid subscan ID provided'}, status=400)
-        except Exception as e:
-            return Response({'status': False, 'message': logger.debug(e)}, status=500)
+
+        if not _can_delete(request.user):
+            return Response(status=404)
+
+        with transaction.atomic():
+            subscans = SubScan.objects.filter(
+                id__in=set(subscan_ids),
+                scan_history__domain__project__in=_authorized_projects(request.user),
+            )
+            if subscans.count() != len(set(subscan_ids)):
+                return Response(status=404)
+            subscans.delete()
+        return Response({'status': True})
 
 class StopScan(APIView):
     def post(self, request):
@@ -1309,33 +1348,52 @@ class InitiateSubTask(APIView):
 
 
 class DeleteSubdomain(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
-        subdomain_ids = get_data_from_post_request(request, 'subdomain_ids')
         try:
-            subdomain_ids = [int(id) for id in subdomain_ids]
-            Subdomain.objects.filter(id__in=subdomain_ids).delete()
-            return Response({'status': True})
+            subdomain_ids = _parse_delete_ids(
+                get_data_from_post_request(request, 'subdomain_ids')
+            )
         except ValueError:
             return Response({'status': False, 'message': 'Invalid subdomain ID provided'}, status=400)
-        except Exception as e:
-            return Response({'status': False, 'message': logger.debug(e)}, status=500)
+
+        if not _can_delete(request.user):
+            return Response(status=404)
+
+        subdomains = Subdomain.objects.filter(
+            id__in=set(subdomain_ids),
+            target_domain__project__in=_authorized_projects(request.user),
+        )
+        with transaction.atomic():
+            if subdomains.count() != len(set(subdomain_ids)):
+                return Response(status=404)
+            subdomains.delete()
+        return Response({'status': True})
 
 class DeleteVulnerability(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         vulnerability_ids = get_data_from_post_request(request, 'vulnerability_ids')
 
-        # Check if vulnerability_ids is iterable
-        if not isinstance(vulnerability_ids, (list, tuple)):
-            return Response({'status': False, 'message': 'vulnerability_ids must be a list or tuple'}, status=400)
-
         try:
-            # Convert to integers
-            vulnerability_ids = [int(id) for id in vulnerability_ids]
-            # Delete vulnerabilities
-            Vulnerability.objects.filter(id__in=vulnerability_ids).delete()
-            return Response({'status': True})
+            vulnerability_ids = _parse_delete_ids(vulnerability_ids)
         except ValueError:
             return Response({'status': False, 'message': 'Invalid vulnerability ID provided'}, status=400)
+
+        if not _can_delete(request.user):
+            return Response(status=404)
+
+        vulnerabilities = Vulnerability.objects.filter(
+            id__in=set(vulnerability_ids),
+            target_domain__project__in=_authorized_projects(request.user),
+        )
+        with transaction.atomic():
+            if vulnerabilities.count() != len(set(vulnerability_ids)):
+                return Response(status=404)
+            vulnerabilities.delete()
+        return Response({'status': True})
 
 class ListInterestingKeywords(APIView):
     def get(self, request, format=None):

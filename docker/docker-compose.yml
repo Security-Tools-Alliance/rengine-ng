@@ -176,7 +176,7 @@ volumes:
   tool_config:
     name: rengine_tool_config
   postgres_data:
-    name: rengine_postgres_data
+    name: ${POSTGRES_VOLUME_NAME:-rengine_postgres_data}
   gf_patterns:
     name: rengine_gf_patterns
   nuclei_templates:

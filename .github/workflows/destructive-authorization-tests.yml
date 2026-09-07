@@ -1,0 +1,120 @@
+# Manual run trigger for PR #8
+name: Destructive authorization tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "web/api/views.py"
+      - "web/api/tests/test_destructive_authorization.py"
+      - ".github/workflows/destructive-authorization-tests.yml"
+  push:
+    branches:
+      - "copilot/fix-resolve-id-validation"
+    paths:
+      - "web/api/views.py"
+      - "web/api/tests/test_destructive_authorization.py"
+      - ".github/workflows/destructive-authorization-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: destructive-authorization-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  django-tests:
+    name: Django authorization tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: rengine_test
+          POSTGRES_USER: rengine
+          POSTGRES_PASSWORD: rengine-ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rengine -d rengine_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      POSTGRES_DB: rengine_test
+      POSTGRES_USER: rengine
+      POSTGRES_PASSWORD: rengine-ci-password
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      CELERY_BROKER: redis://localhost:6379/0
+      UI_DEBUG: "0"
+      CELERY_DEBUG: "0"
+
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends             gcc             libpq-dev             libcairo2             libgdk-pixbuf-2.0-0             libpango-1.0-0             libpangoft2-1.0-0             shared-mime-info
+
+      - name: Install Poetry and project dependencies
+        working-directory: docker/web
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "poetry==2.1.4"
+          poetry install --no-root --no-interaction
+          poetry run python -m pip install "setuptools<81"
+
+      - name: Prepare runtime directories
+        run: |
+          rengine_home="${RUNNER_TEMP}/rengine-home"
+          rengine_results="${RUNNER_TEMP}/scan-results"
+          rengine_custom_engines="${RUNNER_TEMP}/custom-engines"
+          rengine_wordlists="${RUNNER_TEMP}/wordlists"
+          rengine_tool_path="${RUNNER_TEMP}/tools"
+          {
+            echo "RENGINE_HOME=${rengine_home}"
+            echo "RENGINE_RESULTS=${rengine_results}"
+            echo "RENGINE_CUSTOM_ENGINES=${rengine_custom_engines}"
+            echo "RENGINE_WORDLISTS=${rengine_wordlists}"
+            echo "RENGINE_TOOL_PATH=${rengine_tool_path}"
+          } >> "${GITHUB_ENV}"
+          mkdir -p \
+            "${rengine_home}/reNgine" \
+            "${rengine_results}" \
+            "${rengine_custom_engines}" \
+            "${rengine_wordlists}" \
+            "${rengine_tool_path}"
+          printf '%s\n' "2.2.1" > "${rengine_home}/reNgine/version.txt"
+          mkdir -p "${HOME}/.config/nuclei"
+          printf '%s\n' "{}" > "${HOME}/.config/nuclei/config.yaml"
+
+      - name: Run focused destructive authorization tests
+        working-directory: docker/web
+        run: poetry run python ../../web/manage.py test api.tests.test_destructive_authorization --verbosity 2
+
+      - name: Run API test suite
+        working-directory: docker/web
+        run: poetry run python ../../web/manage.py test api --verbosity 2

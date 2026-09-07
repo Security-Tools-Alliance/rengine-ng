@@ -13,10 +13,19 @@ COLOR_DEFAULT=$COLOR_WHITE # Use white as default for clarity
 
 # Log messages in different colors
 log() {
-  local color=${2:-$COLOR_DEFAULT}  # Use default color if $2 is not set
-  if [ "$color" -ne $COLOR_DEFAULT ]; then
+  local message=$1
+  local color=${2:-$COLOR_DEFAULT}
+  local use_color=false
+
+  if [ -t 1 ] && command -v tput >/dev/null 2>&1 && [ -n "${TERM:-}" ]; then
+    use_color=true
+  fi
+
+  if [ "$use_color" = true ] && [ "$color" -ne "$COLOR_DEFAULT" ]; then
     tput setaf "$color"
   fi
-  printf "$1\r\n"
-  tput sgr0  # Reset text color
+  printf '%b\r\n' "$message"
+  if [ "$use_color" = true ]; then
+    tput sgr0
+  fi
 }

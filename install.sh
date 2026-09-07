@@ -1,18 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 # Import common functions
-source "$(pwd)/scripts/common_functions.sh" # Open the file if you want to know the meaning of each color
-
-# Import GPU support script
-source "$(pwd)/scripts/gpu_support.sh"
-
-# Fetch the internal and external IP address
-external_ip=$(curl -s https://ipecho.net/plain)
-internal_ips=$(ip -4 -br addr | awk '$2 == "UP" {print $3} /^lo/ {print $3}' | cut -d'/' -f1)
-formatted_ips=""
-for ip in $internal_ips; do
-    formatted_ips="${formatted_ips}https://$ip\n"
-done
+source "$SCRIPT_DIR/scripts/common_functions.sh"
 
 # Check Docker installation
 check_docker_installation() {
@@ -130,6 +121,98 @@ install_package() {
   fi
 }
 
+read_env_value() {
+  local key=$1
+  awk -v key="$key" '
+    $0 !~ /^[[:space:]]*#/ && index($0, key "=") == 1 {
+      sub(/^[^=]*=/, "")
+      sub(/\r$/, "")
+      print
+      exit
+    }
+  ' .env
+}
+
+load_installer_env() {
+  if [ ! -f .env ]; then
+    log "Error: .env file not found. Copy .env-dist to .env and review its values before installing." "$COLOR_RED"
+    return 1
+  fi
+
+  INSTALL_TYPE=$(read_env_value INSTALL_TYPE)
+  GPU_ENABLED=$(read_env_value GPU)
+  DJANGO_SUPERUSER_USERNAME=$(read_env_value DJANGO_SUPERUSER_USERNAME)
+  DJANGO_SUPERUSER_EMAIL=$(read_env_value DJANGO_SUPERUSER_EMAIL)
+  DJANGO_SUPERUSER_PASSWORD=$(read_env_value DJANGO_SUPERUSER_PASSWORD)
+
+  export INSTALL_TYPE DJANGO_SUPERUSER_USERNAME DJANGO_SUPERUSER_EMAIL
+  export DJANGO_SUPERUSER_PASSWORD
+}
+
+validate_required_env() {
+  local key
+  local value
+  local postgres_user
+  local pg_user
+  local required_keys=(
+    POSTGRES_DB
+    POSTGRES_USER
+    PGUSER
+    POSTGRES_PASSWORD
+    POSTGRES_HOST
+  )
+
+  for key in "${required_keys[@]}"; do
+    value=$(read_env_value "$key")
+    if [ -z "$value" ]; then
+      log "Error: $key must be set in .env." "$COLOR_RED"
+      return 1
+    fi
+  done
+
+  postgres_user=$(read_env_value POSTGRES_USER)
+  pg_user=$(read_env_value PGUSER)
+  if [ "$postgres_user" != "$pg_user" ]; then
+    log "Error: POSTGRES_USER and PGUSER must have the same value in .env." "$COLOR_RED"
+    return 1
+  fi
+}
+
+update_env_value() {
+  local key=$1
+  local value=$2
+  local temp_file
+
+  temp_file=$(mktemp)
+  awk -v key="$key" -v value="$value" '
+    BEGIN { updated = 0 }
+    index($0, key "=") == 1 {
+      if (!updated) {
+        print key "=" value
+        updated = 1
+      }
+      next
+    }
+    { print }
+    END {
+      if (!updated) {
+        print key "=" value
+      }
+    }
+  ' .env > "$temp_file"
+  cat "$temp_file" > .env
+  rm -f "$temp_file"
+}
+
+set_gpu_environment() {
+  local enabled=$1
+  local gpu_type=$2
+
+  update_env_value GPU "$enabled"
+  update_env_value GPU_TYPE "$gpu_type"
+  update_env_value DOCKER_RUNTIME "$gpu_type"
+}
+
 # Install nano text editor
 install_nano() {
   install_package "nano"
@@ -162,16 +245,16 @@ remove_old_images() {
     "rengine-celery"
     "rengine-celery-beat"
     "docker.pkg.github.com/yogeshojha/rengine/rengine"
-    "rengine-certs",
-    "nginx",
-    "postgres",
+    "rengine-certs"
+    "nginx"
+    "postgres"
     "redis"
   )
 
   local failed_removals=false
   
   for image in "${old_images[@]}"; do
-    if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${image}$"; then
+    if docker images --format "{{.Repository}}:{{.Tag}}" | grep -qE "^${image}(:|$)"; then
       log "Removing old image: $image" $COLOR_YELLOW
       if ! docker rmi -f "$image"; then
         log "Failed to remove image: $image" $COLOR_RED
@@ -194,7 +277,7 @@ remove_old_images() {
 
 fix_volumes_permissions() {
   local user_id=$1
-  local group_id=$1
+  local group_id=${2:-$1}
   
   log "Fixing permissions for Docker volumes..." $COLOR_CYAN
   
@@ -225,13 +308,13 @@ fix_volumes_permissions() {
 
 fix_project_ownership() {
   local user_id=$1
-  local group_id=$1
+  local group_id=${2:-$1}
   
   log "Setting correct ownership of the project directory..." $COLOR_CYAN
   project_dir=$(pwd)
   
   # Set ownership for both hidden and regular files in one command
-  if ! find "$project_dir" \( -name ".*" -o -true \) -exec chown ${user_id}:${group_id} {} +; then
+  if ! find "$project_dir" -exec chown "${user_id}:${group_id}" {} +; then
       log "Failed to set ownership of project directory to $user_id" $COLOR_RED
       return 1
   fi
@@ -246,31 +329,19 @@ check_gpu_support() {
     # Execute GPU detection with error handling
     if ! GPU_TYPE=$(./scripts/gpu_support.sh 2>/dev/null); then
         log "GPU detection script failed, continuing with CPU-only setup" $COLOR_YELLOW
-        # Add default GPU configuration
-        {
-            echo "GPU=0"
-            echo "GPU_TYPE=none"
-            echo "DOCKER_RUNTIME=none"
-        } >> .env
         return 1
     fi
     
     # Validate GPU_TYPE output
     if [[ ! "$GPU_TYPE" =~ ^(nvidia|amd|none)$ ]]; then
         log "Invalid GPU type detected: $GPU_TYPE, continuing with CPU-only setup" $COLOR_YELLOW
-        # Add default GPU configuration
-        {
-            echo "GPU=0"
-            echo "GPU_TYPE=none"
-            echo "DOCKER_RUNTIME=none"
-        } >> .env
         return 1
     fi
     
     case $GPU_TYPE in
         "nvidia")
             log "NVIDIA GPU detected" $COLOR_GREEN
-            if ! command -v nvidia-container-toolkit &> /dev/null; then
+            if ! command -v nvidia-ctk &> /dev/null; then
                 log "Installing NVIDIA Container Toolkit..." $COLOR_CYAN
                 
                 # Add NVIDIA repository key
@@ -346,7 +417,7 @@ check_gpu_support() {
                 fi
                 
                 # Configure user groups
-                if ! sudo usermod -aG render $USER || ! sudo usermod -aG video $USER; then
+                if ! sudo usermod -aG render "$SUDO_USER" || ! sudo usermod -aG video "$SUDO_USER"; then
                     log "Failed to configure user groups" $COLOR_RED
                     return 1
                 fi
@@ -363,32 +434,81 @@ check_gpu_support() {
     esac
 }
 
-# Check for root privileges
-if [ $EUID -eq 0 ]; then
-  if [ "$SUDO_USER" = "root" ] || [ "$SUDO_USER" = "" ]; then
-    log "Error: Do not run this script as root user. Use 'sudo' with a non-root user." $COLOR_RED
-    log "Example: 'sudo ./install.sh'" $COLOR_RED
-    exit 1
+check_privileges() {
+  if [ "$EUID" -eq 0 ]; then
+    if [ "${SUDO_USER:-}" = "root" ] || [ -z "${SUDO_USER:-}" ]; then
+      log "Error: Do not run this script as root user. Use 'sudo' with a non-root user." "$COLOR_RED"
+      log "Example: 'sudo ./install.sh'" "$COLOR_RED"
+      return 1
+    fi
+  elif [ -z "${SUDO_USER:-}" ]; then
+    log "Error: This script must be run with sudo." "$COLOR_RED"
+    log "Example: 'sudo ./install.sh'" "$COLOR_RED"
+    return 1
   fi
-fi
+}
 
-# Check if the script is run with sudo
-if [ -z "$SUDO_USER" ]; then
-  log "Error: This script must be run with sudo." $COLOR_RED
-  log "Example: 'sudo ./install.sh'" $COLOR_RED
-  exit 1
-fi
+show_access_urls() {
+  local external_ip=""
+  local internal_ips=""
+  local formatted_ips=""
+  local ip_address
+
+  external_ip=$(curl --fail --silent --show-error --max-time 10 https://ipecho.net/plain 2>/dev/null || true)
+  if command -v ip >/dev/null 2>&1; then
+    internal_ips=$(ip -4 -br addr | awk '$2 == "UP" || $1 == "lo" {print $3}' | cut -d/ -f1)
+  elif command -v hostname >/dev/null 2>&1; then
+    internal_ips=$(hostname -I 2>/dev/null || true)
+  fi
+
+  for ip_address in $internal_ips; do
+    formatted_ips="${formatted_ips}https://${ip_address}\n"
+  done
+
+  if [ -n "$formatted_ips" ]; then
+    log "\r\nFor a local installation, reNgine-ng should be available at:\n$formatted_ips" "$COLOR_GREEN"
+  fi
+  if [ -n "$external_ip" ]; then
+    log "For a server installation, reNgine-ng should be available at: https://$external_ip/" "$COLOR_GREEN"
+  fi
+}
 
 usageFunction()
 {
-  log "Usage: $0 (-n) (-h)" $COLOR_GREEN
-  log "\t-n Non-interactive installation (Optional)" $COLOR_GREEN
-  log "\t-h Show usage" $COLOR_GREEN
-  exit 1
+  local exit_code=${1:-1}
+  log "Usage: $0 [-n|--non-interactive] [-h|--help]" "$COLOR_GREEN"
+  log "\t-n, --non-interactive  Run without interactive prompts" "$COLOR_GREEN"
+  log "\t-h, --help             Show usage" "$COLOR_GREEN"
+  return "$exit_code"
 }
 
 # Main installation process
 main() {
+  local isNonInteractive=false
+  local arg
+
+  for arg in "$@"; do
+    case $arg in
+      -n|--non-interactive)
+        isNonInteractive=true
+        ;;
+      -h|--help)
+        usageFunction 0
+        return 0
+        ;;
+      *)
+        log "Unknown argument: $arg" "$COLOR_RED"
+        usageFunction 1
+        return 1
+        ;;
+    esac
+  done
+
+  if ! check_privileges; then
+    return 1
+  fi
+
+  cd "$SCRIPT_DIR" || return 1
   cat web/art/reNgine.txt
 
   log "\r\nBefore running this script, please make sure Docker is installed and running, and you have made changes to the '.env' file." $COLOR_RED
@@ -399,132 +519,90 @@ main() {
 
   log "Raspberry Pi is not recommended, all install tests have failed" $COLOR_RED
   log ""
-  tput setaf 1;
 
-  isNonInteractive=false
-  # Get args from sudo or directly
-  args="${@:-${SUDO_COMMAND#*/install.sh }}"
-  for arg in $args
-  do
-    case $arg in
-      -n|--non-interactive)
-        isNonInteractive=true
-        ;;
-      -h|--help)
-        usageFunction
-        ;;
-      ./install.sh)
-        # Skip the script name
-        ;;
-      *)
-        log "Unknown argument: $arg" $COLOR_RED
-        usageFunction
-        ;;
-    esac
-  done
+  if ! load_installer_env; then
+    return 1
+  fi
+  if ! validate_required_env; then
+    return 1
+  fi
 
   log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
 
-  install_curl
-  install_make
+  if ! install_curl || ! install_make; then
+    return 1
+  fi
   check_docker
   check_docker_compose
 
   # Add GPU support check here
   if check_gpu_support; then
-    if [ $isNonInteractive = true ]; then
-        # Load existing GPU configuration from .env
-        if [ -f .env ]; then
-            GPU_ENABLED=$(grep "^GPU=" .env | cut -d '=' -f2)
+    if [ "$isNonInteractive" = true ]; then
             if [ "$GPU_ENABLED" = "1" ]; then
-                # Remove existing GPU-related configurations
-                sed -i '/^GPU=/d' .env
-                sed -i '/^GPU_TYPE=/d' .env
-                sed -i '/^DOCKER_RUNTIME=/d' .env
-                
-                # Add GPU configuration to environment
-                {
-                    echo "GPU=1"
-                    echo "GPU_TYPE=$GPU_TYPE"
-                    echo "DOCKER_RUNTIME=$GPU_TYPE"
-                } >> .env
+                set_gpu_environment 1 "$GPU_TYPE"
                 log "GPU support has been enabled from existing configuration" $COLOR_GREEN
             else
+                set_gpu_environment 0 none
                 log "GPU support is disabled in .env" $COLOR_YELLOW
             fi
-        fi
     else
         log "Do you want to enable GPU support for Ollama? (recommended for better LLM performance) [y/n] " $COLOR_CYAN
         read -p "" gpu_choice
         case $gpu_choice in
             [Yy]* )
-                # Remove existing GPU-related configurations
-                sed -i '/^GPU=/d' .env
-                sed -i '/^GPU_TYPE=/d' .env
-                sed -i '/^DOCKER_RUNTIME=/d' .env
-                
-                # Add GPU configuration to environment
-                {
-                    echo "GPU=1"
-                    echo "GPU_TYPE=$GPU_TYPE"
-                    echo "DOCKER_RUNTIME=$GPU_TYPE"
-                } >> .env
+                set_gpu_environment 1 "$GPU_TYPE"
                 log "GPU support will be enabled" $COLOR_GREEN
                 ;;
             * )
-                # Remove existing GPU-related configurations
-                sed -i '/^GPU=/d' .env
-                sed -i '/^GPU_TYPE=/d' .env
-                sed -i '/^DOCKER_RUNTIME=/d' .env
-                # Add default GPU configuration
-                {
-                    echo "GPU=0"
-                    echo "GPU_TYPE=none"
-                    echo "DOCKER_RUNTIME=none"
-                } >> .env
+                set_gpu_environment 0 none
                 log "Continuing without GPU support" $COLOR_YELLOW
                 ;;
         esac
     fi
+  else
+    set_gpu_environment 0 none
   fi
 
-  if [ $isNonInteractive = false ]; then
+  if [ "$isNonInteractive" = false ]; then
     read -p "Are you sure you made changes to the '.env' file (y/n)? " answer
     case ${answer:0:1} in
         y|Y|yes|YES|Yes )
           log "\nContinuing installation!\n" $COLOR_GREEN
         ;;
         * )
-          install_nano
-          nano .env
+          if ! install_nano || ! nano .env; then
+            log "Failed to edit .env." "$COLOR_RED"
+            return 1
+          fi
         ;;
     esac
+    if ! load_installer_env; then
+      return 1
+    fi
+    if ! validate_required_env; then
+      return 1
+    fi
   fi
-
-  log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
-
-  install_curl
-  install_make
-  check_docker
-  check_docker_compose
 
   # Remove old Docker images from version 2.0.7
   remove_old_images
 
   if [ -n "$SUDO_USER" ]; then
     current_id=$(id -u "$SUDO_USER")
+    current_gid=$(id -g "$SUDO_USER")
   else
     current_id=$(id -u)
+    current_gid=$(id -g)
   fi
 
   # Fix project directory ownership
-  if ! fix_project_ownership "$current_id"; then
+  if ! fix_project_ownership "$current_id" "$current_gid"; then
       log "Failed to fix project directory ownership" $COLOR_RED
       exit 1
   fi
 
   # Fix Docker volumes permissions
-  if ! fix_volumes_permissions "$current_id"; then
+  if ! fix_volumes_permissions "$current_id" "$current_gid"; then
       log "Failed to fix Docker volumes permissions" $COLOR_RED
       exit 1
   fi
@@ -560,14 +638,6 @@ main() {
 
   # Non-interactive install
   if [ "$isNonInteractive" = true ]; then
-    # Load and verify .env file
-    if [ -f .env ]; then
-        export $(grep -v '^#' .env | xargs)
-    else
-        log "Error: .env file not found, copy/paste the .env-dist file to .env and edit it" $COLOR_RED
-        exit 1
-    fi
-
     if [ -z "$DJANGO_SUPERUSER_USERNAME" ] || [ -z "$DJANGO_SUPERUSER_EMAIL" ] || [ -z "$DJANGO_SUPERUSER_PASSWORD" ]; then
       log "Error: DJANGO_SUPERUSER_USERNAME, DJANGO_SUPERUSER_EMAIL, and DJANGO_SUPERUSER_PASSWORD must be set in .env for non-interactive installation" $COLOR_RED
       exit 1
@@ -617,28 +687,39 @@ main() {
     target_path="/home/rengine/.config/$target"
     source_path="${config_files[$target]}"
     
-    if [ ! -f "$target_path" ]; then
+    if ! docker exec -u rengine rengine-celery-1 test -f "$target_path"; then
       log "Copying $target configuration..." $COLOR_CYAN
-      docker exec -u rengine rengine-celery-1 mkdir -p "$(dirname "$target_path")"
-      docker cp "$(pwd)/$source_path" "rengine-celery-1:$target_path"
-      docker exec -u rengine rengine-celery-1 chmod 644 "$target_path"
+      if ! docker exec -u rengine rengine-celery-1 mkdir -p "$(dirname "$target_path")" ||
+         ! docker cp "$(pwd)/$source_path" "rengine-celery-1:$target_path" ||
+         ! docker exec -u root rengine-celery-1 chown rengine:rengine "$target_path" ||
+         ! docker exec -u rengine rengine-celery-1 chmod 644 "$target_path"; then
+        log "Failed to install configuration file $target" $COLOR_RED
+        return 1
+      fi
     else
       log "Configuration file $target already exists, skipping..." $COLOR_YELLOW
     fi
   done
 
   # Create symbolic link for theHarvester if it doesn't exist
-  docker exec -u rengine rengine-celery-1 bash -c '[ ! -L "/home/rengine/.theHarvester" ] && ln -s /home/rengine/.config/theHarvester /home/rengine/.theHarvester || true'
+  if ! docker exec -u rengine rengine-celery-1 bash -c '[ -L "/home/rengine/.theHarvester" ] || ln -s /home/rengine/.config/theHarvester /home/rengine/.theHarvester'; then
+    log "Failed to create theHarvester configuration link" $COLOR_RED
+    return 1
+  fi
 
   log "Creating an account..." $COLOR_CYAN
-  make superuser_create isNonInteractive=$isNonInteractive
+  if ! make superuser_create isNonInteractive="$isNonInteractive"; then
+    log "Failed to create the reNgine-ng administrator account" $COLOR_RED
+    return 1
+  fi
 
   log "reNgine-ng is successfully installed and started!" $COLOR_GREEN
   log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN
 
-  log "\r\nIn case you're running this locally, reNgine-ng should be available at one of the following IPs:\n$formatted_ips" $COLOR_GREEN
-  log "In case you're running this on a server, reNgine-ng should be available at: https://$external_ip/" $COLOR_GREEN
+  show_access_urls
 }
 
 # Run the main installation process
-main
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

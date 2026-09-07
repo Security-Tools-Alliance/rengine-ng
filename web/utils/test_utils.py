@@ -65,8 +65,9 @@ class TestDataGenerator:
     """
 
 
-    subscans = []
-    vulnerabilities = []
+    def __init__(self):
+        self.subscans = []
+        self.vulnerabilities = []
 
     # Disable logging for tests
     logging.disable(logging.CRITICAL)
